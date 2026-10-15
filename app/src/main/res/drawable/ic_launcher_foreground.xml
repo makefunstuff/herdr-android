@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Three stacked panes with status dots: a herd of terminals. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path android:fillColor="#7DD3B6" android:pathData="M34,36h40a4,4 0,0 1,4 4v6a4,4 0,0 1,-4 4h-40a4,4 0,0 1,-4 -4v-6a4,4 0,0 1,4 -4z" />
+    <path android:fillColor="#7DD3B6" android:pathData="M34,54h40a4,4 0,0 1,4 4v6a4,4 0,0 1,-4 4h-40a4,4 0,0 1,-4 -4v-6a4,4 0,0 1,4 -4z" android:fillAlpha="0.7" />
+    <path android:fillColor="#EF7B70" android:pathData="M40,43m-3,0a3,3 0,1 1,6 0a3,3 0,1 1,-6 0" />
+    <path android:fillColor="#E2B64A" android:pathData="M40,61m-3,0a3,3 0,1 1,6 0a3,3 0,1 1,-6 0" />
+    <path android:fillColor="#0F5141" android:pathData="M48,41h22v4h-22z" />
+    <path android:fillColor="#0F5141" android:pathData="M48,59h16v4h-16z" />
+</vector>
