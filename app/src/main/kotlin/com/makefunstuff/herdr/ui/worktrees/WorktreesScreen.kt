@@ -456,13 +456,15 @@ private fun SheetAction(text: String, danger: Boolean = false, onClick: () -> Un
 @Composable
 private fun AddRepoDialog(onDismiss: () -> Unit, onAdd: (path: String) -> Unit) {
     var path by remember { mutableStateOf("") }
+    // Keep what the user types, spaces and all; only trim when the path is used.
+    val clean = path.trim()
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Open a repository") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
-                    path, { path = it.trim() },
+                    path, { path = it },
                     label = { Text("Folder inside the repository") },
                     placeholder = { Text("/home/you/src/project") },
                     singleLine = true,
@@ -475,7 +477,7 @@ private fun AddRepoDialog(onDismiss: () -> Unit, onAdd: (path: String) -> Unit) 
                 )
             }
         },
-        confirmButton = { TextButton(onClick = { onAdd(path) }, enabled = path.startsWith("/")) { Text("Show worktrees") } },
+        confirmButton = { TextButton(onClick = { onAdd(clean) }, enabled = clean.startsWith("/")) { Text("Show worktrees") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
 }

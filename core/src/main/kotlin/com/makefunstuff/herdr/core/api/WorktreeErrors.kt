@@ -9,11 +9,15 @@ object WorktreeErrors {
     /** The checkout has changes; removing it anyway needs `force`. */
     fun needsForce(t: Throwable): Boolean = (t as? HerdrApiException)?.code == DIRTY
 
-    /** Git won't work in the repository until the user vouches for it (an ownership or safe.directory check). */
+    /**
+     * Git refuses to work in a repository it doesn't own, and herdr passes Git's own message through.
+     * Match only Git's wording: a branch or folder whose name merely contains "trust" is not a trust
+     * problem, and must not be turned into an ownership prompt.
+     */
     fun needsTrust(t: Throwable): Boolean {
         val e = t as? HerdrApiException ?: return false
-        val text = "${e.code} ${e.message}".lowercase()
-        return "trust" in text || "dubious ownership" in text || "safe.directory" in text
+        val text = "${e.code} ${e.detail}".lowercase()
+        return "dubious ownership" in text || "unsafe repository" in text || "safe.directory" in text
     }
 
     fun describe(t: Throwable): String {

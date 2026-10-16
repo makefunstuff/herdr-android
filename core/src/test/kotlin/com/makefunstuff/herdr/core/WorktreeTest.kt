@@ -111,8 +111,17 @@ class WorktreeApiTest {
             "That folder isn't inside a Git repository.",
             WorktreeErrors.describe(HerdrApiException("not_git_worktree", "Herdr worktree actions require a path inside a Git work tree")),
         )
-        val unsafe = HerdrApiException("git_failed", "fatal: detected dubious ownership in repository at '/srv/repo'")
-        assertTrue(WorktreeErrors.needsTrust(unsafe))
+        val untrusted = HerdrApiException(
+            "worktree_list_failed",
+            "fatal: detected dubious ownership in repository at '/srv/repo'\n" +
+                "To add an exception for this directory, call:\n\n\tgit config --global --add safe.directory /srv/repo",
+        )
+        assertTrue(WorktreeErrors.needsTrust(untrusted))
+        assertEquals("Git doesn't trust this repository yet, usually because another user owns the folder.", WorktreeErrors.describe(untrusted))
+        assertTrue(WorktreeErrors.needsTrust(HerdrApiException("worktree_list_failed", "fatal: unsafe repository ('/srv/repo' is owned by someone else)")))
+        // A branch, folder or word that merely contains "trust" is not an ownership problem.
+        assertFalse(WorktreeErrors.needsTrust(HerdrApiException("worktree_create_failed", "fatal: a branch named 'trust-review' already exists")))
+        assertFalse(WorktreeErrors.needsTrust(HerdrApiException("worktree_create_failed", "fatal: cannot create directory '/home/u/trust me/wt': File exists")))
         assertEquals("Branch already exists", WorktreeErrors.describe(HerdrApiException("worktree_create_failed", "fatal: branch already exists")))
         assertEquals("timed out", WorktreeErrors.describe(IOException("timed out")))
     }

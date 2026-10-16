@@ -92,7 +92,7 @@ fun CreateWorktreeSheet(
             )
             OutlinedTextField(label, { label = it }, label = { Text("Workspace name (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
             OutlinedTextField(
-                path, { path = it.trim() },
+                path, { path = it },
                 label = { Text("Folder (absolute path, optional)") },
                 placeholder = { Text("herdr's worktree folder") },
                 singleLine = true,
@@ -108,7 +108,7 @@ fun CreateWorktreeSheet(
                                 cwd = repo.cwd,
                                 branch = branch.ifBlank { null },
                                 base = base.ifBlank { null },
-                                path = path.ifBlank { null },
+                                path = path.trim().ifBlank { null },
                                 label = label.ifBlank { null },
                                 trustRepository = repo.trusted,
                             )
