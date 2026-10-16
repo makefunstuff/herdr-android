@@ -93,6 +93,7 @@ data class AgentInfo(
     val focused: Boolean = false,
     @SerialName("state_change_seq") val stateChangeSeq: Long = 0,
     val cwd: String? = null,
+    @SerialName("agent_session") val agentSession: AgentSessionRef? = null,
 ) {
     val agentStatus: AgentStatus get() = AgentStatus.of(agentStatusRaw)
 
@@ -106,6 +107,18 @@ data class AgentInfo(
 
     val statusLabel: String get() = stateLabels[agentStatusRaw] ?: agentStatusRaw
 }
+
+/**
+ * Where an agent keeps its conversation, as its herdr integration reports it: a transcript file
+ * path, or a session id that the agent's own storage layout turns into one.
+ */
+@Serializable
+data class AgentSessionRef(
+    val agent: String = "",
+    val kind: String = "",
+    val value: String = "",
+    val source: String = "",
+)
 
 @Serializable
 data class LayoutRect(val x: Int = 0, val y: Int = 0, val width: Int = 0, val height: Int = 0)

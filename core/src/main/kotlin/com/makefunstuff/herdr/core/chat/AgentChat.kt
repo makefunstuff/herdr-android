@@ -1,0 +1,160 @@
+package com.makefunstuff.herdr.core.chat
+
+import com.makefunstuff.herdr.core.api.AgentInfo
+import com.makefunstuff.herdr.core.api.AgentSessionRef
+import com.makefunstuff.herdr.core.api.AgentStatus
+import com.makefunstuff.herdr.core.host.HostSession
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+
+/**
+ * The conversation with one agent, kept live while a chat screen is open.
+ *
+ * The messages come from the agent's own transcript when herdr knows where it is (claude, codex,
+ * pi and omp report their sessions through herdr's integrations). Otherwise the chat falls back to
+ * the agent's screen text. When the agent is blocked, its screen is read for the question and the
+ * choices it offers.
+ */
+@OptIn(ExperimentalCoroutinesApi::class)
+class AgentChat(private val host: HostSession, val paneId: String, private val scope: CoroutineScope) {
+
+    enum class Source { Loading, Transcript, Screen }
+
+    data class State(
+        val source: Source = Source.Loading,
+        val items: List<ChatItem> = emptyList(),
+        /** True when only the end of a long transcript was loaded. */
+        val truncated: Boolean = false,
+        /** The agent's recent screen text, in [Source.Screen] mode or while it is blocked. */
+        val screen: String = "",
+        val prompt: BlockedPrompt? = null,
+        /** Prompts sent from the app that the transcript doesn't show yet. */
+        val pending: List<String> = emptyList(),
+    )
+
+    private val _state = MutableStateFlow(State())
+    val state: StateFlow<State> = _state.asStateFlow()
+
+    private var jobs: List<Job> = emptyList()
+
+    private fun agent(): AgentInfo? = host.state.value.snapshot?.agents?.firstOrNull { it.paneId == paneId }
+
+    fun start() {
+        if (jobs.isNotEmpty()) return
+        jobs = listOf(
+            scope.launch { followTranscript() },
+            scope.launch { watchScreen() },
+        )
+    }
+
+    fun close() {
+        jobs.forEach { it.cancel() }
+        jobs = emptyList()
+    }
+
+    /** Shows a prompt the app just sent until the transcript catches up with it. */
+    fun addPending(text: String) {
+        _state.update { it.copy(pending = it.pending + text) }
+    }
+
+    private suspend fun followTranscript() {
+        host.state
+            .map { s -> s.snapshot?.agents?.firstOrNull { it.paneId == paneId }?.let { it.agent to it.agentSession } }
+            .distinctUntilChanged()
+            .collectLatest { pair ->
+                val kind = pair?.first
+                val ref = pair?.second
+                val transcript = kind?.let { Transcript.forAgent(ref?.agent?.ifEmpty { null } ?: it) }
+                if (ref == null || transcript == null || ref.value.isEmpty()) {
+                    // No transcript for this agent: show its screen. An agent that just started
+                    // reports its session a moment later, which restarts this block.
+                    if (pair != null || host.state.value.snapshot != null) _state.update { it.copy(source = Source.Screen) }
+                    return@collectLatest
+                }
+                followLoop(ref, kind)
+            }
+    }
+
+    private suspend fun followLoop(ref: AgentSessionRef, kind: String) {
+        var failures = 0
+        while (true) {
+            val transcript = Transcript.forAgent(ref.agent.ifEmpty { kind }) ?: return
+            val result = try {
+                val connection = host.awaitConnection(timeoutMs = 60_000)
+                TranscriptFollower.follow(connection, ref, transcript) { truncated ->
+                    val items = transcript.items()
+                    _state.update { s ->
+                        s.copy(source = Source.Transcript, items = items, truncated = truncated, pending = unseen(s.pending, items))
+                    }
+                    failures = 0
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (t: Throwable) {
+                TranscriptFollower.Result.Ended
+            }
+            if (result == TranscriptFollower.Result.Missing) {
+                _state.update { it.copy(source = Source.Screen) }
+                // The file may appear once the agent writes its first turn.
+                delay(5_000)
+                continue
+            }
+            failures++
+            delay(minOf(30_000L, 1_000L shl minOf(failures, 5)))
+        }
+    }
+
+    /** Drops pending prompts once the transcript shows a user message with the same text. */
+    private fun unseen(pending: List<String>, items: List<ChatItem>): List<String> {
+        if (pending.isEmpty()) return pending
+        val recent = items.takeLast(40).filterIsInstance<ChatItem.User>().map { it.text.trim() }
+        return pending.filterNot { p -> recent.any { it == p.trim() } }
+    }
+
+    private suspend fun watchScreen() {
+        while (true) {
+            val agent = agent()
+            val status = agent?.agentStatus ?: host.state.value.snapshot?.pane(paneId)?.agentStatus ?: AgentStatus.Unknown
+            val source = _state.value.source
+            val blocked = status == AgentStatus.Blocked
+            if (blocked || source == Source.Screen) {
+                try {
+                    val api = host.awaitApi(10_000)
+                    val visible = if (blocked) api.readPane(paneId, source = "visible", lines = 80).text else null
+                    val recent = if (source == Source.Screen) api.readPane(paneId, source = "recent_unwrapped", lines = 200).text else null
+                    _state.update { s ->
+                        s.copy(
+                            screen = (recent ?: visible ?: s.screen).trimEnd(),
+                            prompt = visible?.let { BlockedPrompt.parse(it) },
+                            pending = if (source == Source.Screen && recent != null) s.pending.filterNot { recent.contains(it.trim().take(40)) } else s.pending,
+                        )
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Throwable) {
+                }
+            } else if (_state.value.prompt != null) {
+                _state.update { it.copy(prompt = null) }
+            }
+            delay(
+                when {
+                    blocked -> 1_200L
+                    source == Source.Screen && status == AgentStatus.Working -> 1_500L
+                    source == Source.Screen -> 3_000L
+                    else -> 700L
+                },
+            )
+        }
+    }
+}
