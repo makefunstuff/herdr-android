@@ -35,11 +35,12 @@ class HerdrApp : Application() {
 class AppContainer(app: Application) {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val machines = MachineStore(app)
-    val identity = IdentityStore(app)
+    val identity = IdentityStore(app, scope)
     val hosts = HostManager(scope, machines, identity)
 
     init {
-        // Create the key up front so the public key is ready to show.
-        scope.launch { runCatching { identity.get() } }
+        // Read the key up front so the public key is ready to show. A missing key is never made
+        // here: the first launch offers to restore one first.
+        scope.launch { runCatching { identity.load() } }
     }
 }

@@ -8,9 +8,17 @@ on:
 permissions:
   contents: write
 
+# One run per branch at a time, so a newer default-branch build never ends up behind an older Latest.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      # Only the default branch publishes a release; everything else is a run artifact.
+      PUBLISH: ${{ github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
     steps:
       - uses: actions/checkout@v5
 
@@ -24,28 +32,62 @@ jobs:
       - name: Core tests
         run: ./gradlew -p core test
 
+      # The fixed signing key, so every APK installs over the last one and keeps the app's data.
+      # Missing secrets (forks, pull requests from forks) fall back to the debug key.
+      - name: Signing key
+        env:
+          HERDR_KEYSTORE_BASE64: ${{ secrets.HERDR_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$HERDR_KEYSTORE_BASE64" ]; then
+            echo "$HERDR_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/herdr.jks"
+            echo "HERDR_KEYSTORE_FILE=$RUNNER_TEMP/herdr.jks" >> "$GITHUB_ENV"
+          else
+            echo "::warning::HERDR_KEYSTORE_BASE64 is not set; this APK is signed with a throwaway debug key and won't update an installed app."
+          fi
+
       - name: Build APK
-        run: ./gradlew :app:assembleDebug
+        env:
+          HERDR_KEYSTORE_PASSWORD: ${{ secrets.HERDR_KEYSTORE_PASSWORD }}
+          HERDR_KEY_ALIAS: ${{ secrets.HERDR_KEY_ALIAS }}
+          HERDR_KEY_PASSWORD: ${{ secrets.HERDR_KEY_PASSWORD }}
+        run: ./gradlew :app:assembleRelease
 
       - name: Rename APK
         run: |
           mkdir -p out
-          cp app/build/outputs/apk/debug/app-debug.apk "out/herdr-android-${GITHUB_RUN_NUMBER}.apk"
+          cp app/build/outputs/apk/release/app-release.apk out/herdr-android.apk
 
       - uses: actions/upload-artifact@v4
         with:
-          name: herdr-android-apk
-          path: out/*.apk
+          name: herdr-android-${{ github.run_number }}
+          path: out/herdr-android.apk
 
-      # A rolling pre-release per branch so the APK has a plain download link for a phone.
-      - name: Publish pre-release
-        if: github.event_name != 'pull_request'
+      # A normal release marked Latest, so releases/latest always has the newest APK under the same name.
+      - name: Publish release
+        if: env.PUBLISH == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # Branch names can hold characters (or a trailing "-") GitHub refuses in a release tag.
-          tag="apk-$(printf '%s' "$GITHUB_REF_NAME" | tr -c 'A-Za-z0-9._-' '-' | sed -E 's/-+/-/g; s/[-.]+$//')"
-          gh release delete "$tag" --yes --cleanup-tag || true
-          gh release create "$tag" out/*.apk --prerelease --target "$GITHUB_SHA" \
-            --title "Herdr for Android build ${GITHUB_RUN_NUMBER} (${GITHUB_REF_NAME})" \
-            --notes "Debug build of ${GITHUB_SHA}. Install it on your phone by opening the .apk file."
+          if [ -z "$HERDR_KEYSTORE_FILE" ]; then
+            echo "::warning::No release published: set the HERDR_KEYSTORE_* secrets (see README). A debug-signed APK can't update the installed app."
+            exit 0
+          fi
+          version="0.1.${GITHUB_RUN_NUMBER}"
+          if gh release view "v${version}" >/dev/null 2>&1; then
+            # A re-run of the same build: replace its APK.
+            gh release upload "v${version}" out/herdr-android.apk --clobber
+          else
+            gh release create "v${version}" out/herdr-android.apk --latest --target "$GITHUB_SHA" \
+              --title "Herdr for Android ${version}" \
+              --notes "Build ${GITHUB_RUN_NUMBER} of ${GITHUB_SHA}. On your phone, open herdr-android.apk below to install or update the app; it keeps its data and SSH key."
+          fi
+
+      # Branch builds used to publish rolling apk-<branch> pre-releases; clear them out, but only
+      # once a real release has replaced them, so Releases always has an APK to install.
+      - name: Remove old branch pre-releases
+        if: env.PUBLISH == 'true' && env.HERDR_KEYSTORE_FILE != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release list --limit 200 --json tagName --jq '.[].tagName | select(startswith("apk-"))' |
+            while read -r tag; do gh release delete "$tag" --yes --cleanup-tag; done
