@@ -116,7 +116,13 @@ fun MarkdownText(
 @Composable
 fun CodeBlock(text: String, modifier: Modifier = Modifier, maxLines: Int = Int.MAX_VALUE, copyable: Boolean = false) {
     val context = LocalContext.current
-    Box(modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHighest, RoundedCornerShape(8.dp))) {
+    Column(modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHighest, RoundedCornerShape(8.dp))) {
+        if (copyable) {
+            TextButton(
+                onClick = { context.copyToClipboard("code", text) },
+                modifier = Modifier.align(Alignment.End).heightIn(min = 48.dp),
+            ) { Text("Copy", style = MaterialTheme.typography.labelMedium) }
+        }
         Text(
             text,
             fontFamily = FontFamily.Monospace,
@@ -128,14 +134,8 @@ fun CodeBlock(text: String, modifier: Modifier = Modifier, maxLines: Int = Int.M
             modifier = Modifier
                 .fillMaxWidth()
                 .horizontalScroll(rememberScrollState())
-                .padding(start = 10.dp, end = if (copyable) 64.dp else 10.dp, top = 8.dp, bottom = 8.dp),
+                .padding(start = 10.dp, end = 10.dp, top = if (copyable) 0.dp else 8.dp, bottom = 8.dp),
         )
-        if (copyable) {
-            TextButton(
-                onClick = { context.copyToClipboard("code", text) },
-                modifier = Modifier.align(Alignment.TopEnd).heightIn(min = 48.dp),
-            ) { Text("Copy", style = MaterialTheme.typography.labelMedium) }
-        }
     }
 }
 
