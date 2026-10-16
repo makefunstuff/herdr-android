@@ -6,6 +6,7 @@ import com.makefunstuff.herdr.core.api.HerdrJson
 import com.makefunstuff.herdr.core.api.SessionEntry
 import com.makefunstuff.herdr.core.api.HerdrApi
 import com.makefunstuff.herdr.core.api.SessionSnapshot
+import com.makefunstuff.herdr.core.board.BoardClient
 import com.makefunstuff.herdr.core.ssh.ConnectError
 import com.makefunstuff.herdr.core.ssh.HerdrCommands
 import com.makefunstuff.herdr.core.ssh.Machine
@@ -50,7 +51,11 @@ data class HostState(
     val status: HostStatus = HostStatus.Stopped,
     val snapshot: SessionSnapshot? = null,
     val herdrVersion: String? = null,
+    /** The herdr-projects launcher on the machine; null when the board isn't installed (or not checked yet). */
+    val boardPath: String? = null,
 ) {
+    val hasBoard: Boolean get() = boardPath != null
+
     val online: Boolean get() = status == HostStatus.Online
 }
 
@@ -129,6 +134,20 @@ class HostSession(
         return connection ?: throw IOException(statusMessage())
     }
 
+    /** The work board on this machine, when it has one. */
+    suspend fun awaitBoard(timeoutMs: Long = 20_000): BoardClient {
+        val conn = awaitConnection(timeoutMs)
+        val path = state.value.boardPath ?: throw IOException("herdr-projects isn't installed on ${machine.label}")
+        return BoardClient(conn, machine, path)
+    }
+
+    /** Looks for the board again, for one installed or removed since the machine connected. */
+    suspend fun checkBoard() {
+        val conn = connection ?: return
+        val path = runCatching { BoardClient.locate(conn) }.getOrElse { return }
+        _state.update { it.copy(boardPath = path) }
+    }
+
     private fun statusMessage(): String = when (val s = state.value.status) {
         is HostStatus.Attention -> s.message
         is HostStatus.Reconnecting -> s.message
@@ -185,6 +204,7 @@ class HostSession(
 
         val snapshot = herdr.snapshot()
         _state.update { it.copy(status = HostStatus.Online, snapshot = snapshot, herdrVersion = pong.version) }
+        launch { checkBoard() }
 
         val done = CompletableDeferred<Throwable?>()
         launch { done.complete(events.closed.await() ?: IOException("herdr event stream closed")) }
