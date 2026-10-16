@@ -343,7 +343,7 @@ private fun WorkspaceCard(
                 } else {
                     // One tab: name it, so the row with its menu isn't an empty gap.
                     Text(
-                        tabs.firstOrNull()?.let { t -> t.label.ifBlank { "Tab ${t.number}" } } ?: "",
+                        tabs.firstOrNull()?.let { t -> t.label.ifBlank { "${t.number}" }.let { l -> if (l.all { it.isDigit() }) "Tab $l" else l } } ?: "",
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
