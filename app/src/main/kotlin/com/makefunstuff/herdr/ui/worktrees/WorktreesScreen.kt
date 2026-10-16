@@ -381,7 +381,7 @@ private fun RepoCard(
                 }
             }
             when (listing) {
-                Listing.Loading -> Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                Listing.Loading -> com.makefunstuff.herdr.ui.design.LoadingState("Loading worktrees")
                 is Listing.Failed -> Column(Modifier.padding(horizontal = 14.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(listing.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
                     if (listing.needsTrust) OutlinedButton(onClick = onTrust) { Text("Trust this repository…") }

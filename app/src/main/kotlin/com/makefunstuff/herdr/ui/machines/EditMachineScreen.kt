@@ -271,10 +271,9 @@ fun EditMachineScreen(nav: NavController, id: String?) {
             when (val t = test) {
                 null -> {}
                 TestResult.Running -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    CircularProgressIndicator(Modifier.padding(4.dp))
-                    Text("Connecting…")
+                    com.makefunstuff.herdr.ui.design.LoadingState("Connecting")
                 }
-                is TestResult.Failed -> Text(t.message, color = MaterialTheme.colorScheme.error)
+                is TestResult.Failed -> com.makefunstuff.herdr.ui.design.ErrorMessage(t.message)
                 is TestResult.Ok -> Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
                     Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text("Connected", style = MaterialTheme.typography.titleSmall)

@@ -489,7 +489,7 @@ private fun ServerTab(model: AdminModel, state: HostState) {
                         )
                     }
                 }
-                is Load.Failed -> Text(m.message, color = BAD, style = MaterialTheme.typography.bodySmall)
+                is Load.Failed -> com.makefunstuff.herdr.ui.design.ErrorMessage(m.message)
                 Load.Loading -> {}
             }
             val shown = (model.manifests as? Load.Ready)?.value.orEmpty()
@@ -662,8 +662,8 @@ private fun AddMachineSheet(model: AdminModel, onDismiss: () -> Unit) {
 
 private fun <T> LazyListScope.loadState(load: Load<T>, empty: String, content: LazyListScope.(T) -> Unit) {
     when (load) {
-        Load.Loading -> item { Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
-        is Load.Failed -> item { Text(load.message, color = BAD, style = MaterialTheme.typography.bodyMedium) }
+        Load.Loading -> item { com.makefunstuff.herdr.ui.design.LoadingState() }
+        is Load.Failed -> item { com.makefunstuff.herdr.ui.design.ErrorState("Couldn't load this", load.message) }
         is Load.Ready -> if ((load.value as? Collection<*>)?.isEmpty() == true) item { Hint(empty) } else content(load.value)
     }
 }

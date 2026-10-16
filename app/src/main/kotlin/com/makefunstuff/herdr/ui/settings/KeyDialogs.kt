@@ -109,7 +109,7 @@ fun ImportKeyDialog(replacing: Boolean, onDismiss: () -> Unit) {
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                     modifier = Modifier.fillMaxWidth(),
                 )
-                error?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
+                error?.let { com.makefunstuff.herdr.ui.design.ErrorMessage(it) }
             }
         },
         confirmButton = {

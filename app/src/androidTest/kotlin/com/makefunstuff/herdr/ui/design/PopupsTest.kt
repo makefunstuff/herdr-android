@@ -45,6 +45,24 @@ class PopupsTest {
         assertEquals(true, hit)
         rule.onNodeWithText("Refresh").assertDoesNotExistCompat()
     }
+
+    @Test fun toastShowsAndErrorStateRetries() {
+        var retried = false
+        rule.setContent {
+            HerdrTheme {
+                androidx.compose.foundation.layout.Box {
+                    ErrorState("Couldn't load", "Connection refused", onRetry = { retried = true })
+                    ToastHost()
+                    StatusBadge("Needs you", androidx.compose.ui.graphics.Color.Red)
+                }
+            }
+        }
+        rule.runOnIdle { Toasts.show("Saved") }
+        rule.onNodeWithText("Saved").assertIsDisplayed()
+        rule.onNodeWithText("Needs you").assertIsDisplayed()
+        rule.onNodeWithText("Try again").performClick()
+        assertEquals(true, retried)
+    }
 }
 
 private fun androidx.compose.ui.test.SemanticsNodeInteraction.assertDoesNotExistCompat() = this.assertDoesNotExist()

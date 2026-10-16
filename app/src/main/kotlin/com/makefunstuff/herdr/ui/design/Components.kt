@@ -29,6 +29,17 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -68,6 +79,7 @@ private fun Scrim(onDismiss: () -> Unit, align: Alignment, content: @Composable 
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClickLabel = "Close", onClick = onDismiss),
         contentAlignment = align,
     ) {
+        ToastHost()
         AnimatedVisibility(
             visible = shown,
             enter = fadeIn(tween(160)) + slideInVertically(tween(220)) { it / 6 },
@@ -114,8 +126,8 @@ fun HerdrDialog(
                         horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        dismissButton?.invoke()
-                        confirmButton()
+                        Box(Modifier.heightIn(min = 48.dp), contentAlignment = Alignment.Center) { dismissButton?.invoke() }
+                        Box(Modifier.heightIn(min = 48.dp), contentAlignment = Alignment.Center) { confirmButton() }
                     }
                 }
             }
@@ -199,5 +211,95 @@ fun ErrorMessage(text: String, modifier: Modifier = Modifier, onRetry: (() -> Un
             Text(text.lineSequence().first().take(240), Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onErrorContainer)
             if (onRetry != null) TextButton(onClick = onRetry, modifier = Modifier.heightIn(min = 48.dp)) { Text("Retry") }
         }
+    }
+}
+
+/** App-wide, styled replacement for system toasts. [com.makefunstuff.herdr.ui.common.toast] feeds it. */
+object Toasts {
+    class Msg(val text: String, val error: Boolean, val id: Long)
+    var current by mutableStateOf<Msg?>(null)
+        private set
+    private var next = 0L
+    private val errorWords = Regex("""(?i)\b(couldn't|can't|didn't|isn't|refused|failed|error|not |no app|unable)""")
+    fun show(text: String, error: Boolean = errorWords.containsMatchIn(text)) {
+        current = Msg(text, error, next++)
+    }
+    fun dismiss() { current = null }
+}
+
+/** Shows the current toast at the top of whatever it is placed in; dismisses itself. */
+@Composable
+fun ToastHost() {
+    val m = Toasts.current
+    LaunchedEffect(m?.id) {
+        if (m != null) { kotlinx.coroutines.delay(if (m.error) 5000 else 3000); if (Toasts.current?.id == m.id) Toasts.dismiss() }
+    }
+    Box(Modifier.fillMaxSize().statusBarsPadding().padding(12.dp), contentAlignment = Alignment.TopCenter) {
+        AnimatedVisibility(m != null, enter = fadeIn() + slideInVertically { -it }, exit = fadeOut() + slideOutVertically { -it }) {
+            val last = remember { mutableStateOf(m) }
+            if (m != null) last.value = m
+            val msg = last.value
+            if (msg != null) Surface(
+                color = if (msg.error) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.inverseSurface,
+                contentColor = if (msg.error) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.inverseOnSurface,
+                shape = RoundedCornerShape(16.dp), tonalElevation = 6.dp, shadowElevation = 6.dp,
+                modifier = Modifier.widthIn(max = 560.dp).clickable(onClickLabel = "Dismiss") { Toasts.dismiss() }
+                    .semantics { liveRegion = LiveRegionMode.Polite },
+            ) {
+                Text(msg.text.lineSequence().first().take(200), Modifier.padding(horizontal = 16.dp, vertical = 12.dp).heightIn(min = 24.dp), style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+    }
+}
+
+/** Rounded outlined field with consistent error handling for forms. */
+@Composable
+fun HerdrTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    modifier: Modifier = Modifier,
+    error: String? = null,
+    hint: String? = null,
+    singleLine: Boolean = true,
+    keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
+    visualTransformation: VisualTransformation = VisualTransformation.None,
+) {
+    OutlinedTextField(
+        value = value, onValueChange = onValueChange, label = { Text(label) }, singleLine = singleLine,
+        isError = error != null, shape = RoundedCornerShape(14.dp),
+        supportingText = (error ?: hint)?.let { { Text(it) } },
+        keyboardOptions = keyboardOptions, visualTransformation = visualTransformation,
+        modifier = modifier.fillMaxWidth().heightIn(min = 56.dp),
+    )
+}
+
+/** Small status chip: coloured dot + label (never colour alone). */
+@Composable
+fun StatusBadge(text: String, color: Color, modifier: Modifier = Modifier) {
+    Surface(color = color.copy(alpha = 0.16f), shape = RoundedCornerShape(50), modifier = modifier) {
+        Row(Modifier.padding(horizontal = 10.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Box(Modifier.size(8.dp).background(color, androidx.compose.foundation.shape.CircleShape))
+            Text(text, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface, maxLines = 1)
+        }
+    }
+}
+
+/** Centered progress with a spoken label. */
+@Composable
+fun LoadingState(label: String = "Loading", modifier: Modifier = Modifier) {
+    Column(modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        CircularProgressIndicator(Modifier.semantics { contentDescription = label })
+        Text(label + "…", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+/** Full-area error with what happened and a way out. */
+@Composable
+fun ErrorState(title: String, body: String?, modifier: Modifier = Modifier, onRetry: (() -> Unit)? = null) {
+    Column(modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.error, textAlign = TextAlign.Center)
+        if (body != null) Text(body.lineSequence().first().take(240), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
+        if (onRetry != null) androidx.compose.material3.FilledTonalButton(onClick = onRetry, modifier = Modifier.heightIn(min = 48.dp)) { Text("Try again") }
     }
 }

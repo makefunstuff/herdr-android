@@ -93,7 +93,7 @@ fun HostStatus.detail(): String? = when (this) {
 fun Context.copyToClipboard(label: String, text: String, toast: String = "Copied") {
     val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     cm.setPrimaryClip(ClipData.newPlainText(label, text))
-    Toast.makeText(this, toast, Toast.LENGTH_SHORT).show()
+    com.makefunstuff.herdr.ui.design.Toasts.show(toast, error = false)
 }
 
 /** The clipboard's first text item, if it has one. */
@@ -102,7 +102,7 @@ fun Context.clipboardText(): String? {
     return cm.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.text?.toString()
 }
 
-fun Context.toast(text: String) = Toast.makeText(this, text, Toast.LENGTH_LONG).show()
+fun Context.toast(text: String) = com.makefunstuff.herdr.ui.design.Toasts.show(text)
 
 /** Opens [url] in whatever app handles it (the browser for links). False when nothing can. */
 fun Context.openUrl(url: String): Boolean {

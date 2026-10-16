@@ -58,7 +58,12 @@ class MainActivity : ComponentActivity() {
         val container = (application as HerdrApp).container
         setContent {
             CompositionLocalProvider(LocalContainer provides container) {
-                HerdrTheme { AppNav() }
+                HerdrTheme {
+                    androidx.compose.foundation.layout.Box {
+                        AppNav()
+                        com.makefunstuff.herdr.ui.design.ToastHost()
+                    }
+                }
             }
         }
     }
