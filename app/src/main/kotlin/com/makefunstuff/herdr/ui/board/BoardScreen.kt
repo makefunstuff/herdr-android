@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.ui.semantics.contentDescription
@@ -43,6 +42,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
@@ -198,6 +198,7 @@ fun BoardScreen(nav: NavController, machineId: String) {
         ).filter { it.second.isNotEmpty() }
     }
 
+    Box(Modifier.fillMaxSize()) {
     Scaffold(
         topBar = {
             TopAppBar(
@@ -306,21 +307,20 @@ fun BoardScreen(nav: NavController, machineId: String) {
         }
     }
 
-    refusal?.let { r ->
-        AlertDialog(
-            onDismissRequest = { refusal = null },
-            title = { Text("The board said no") },
-            text = { Column(Modifier.verticalScroll(rememberScrollState())) { MarkdownText(r) } },
-            confirmButton = { TextButton(onClick = { refusal = null }) { Text("OK") } },
-        )
-    }
     val open = tasks.firstOrNull { it.id == openId }
     if (openId != null && open != null) {
-        TaskSheet(session, open, onDismiss = { openId = null }, busy = busy, onAction = { a -> choose(open, a) }, onPick = { letter -> perform(open, BoardAction.Pick, letter = letter) },
-            onEdit = { pending = Pending.Edit(open) })
+        TaskDetailScreen(session, open, onBack = { openId = null }, busy = busy, onAction = { a -> choose(open, a) }, onPick = { letter -> perform(open, BoardAction.Pick, letter = letter) },
+            onMore = { actionsFor = open })
     }
     actionsFor?.let { t ->
-        ActionsSheet(t, onDismiss = { actionsFor = null }, onAction = { a -> actionsFor = null; choose(t, a) }, onEdit = { actionsFor = null; pending = Pending.Edit(t) }, onOpen = { actionsFor = null; openId = t.id })
+        ActionsSheet(t, onDismiss = { actionsFor = null }, onAction = { a -> actionsFor = null; choose(t, a) }, onEdit = { actionsFor = null; pending = Pending.Edit(t) },
+            onOpen = if (openId == t.id) null else ({ actionsFor = null; openId = t.id }))
+    }
+    refusal?.let { r ->
+        BoardPanel("The board said no", onDismiss = { refusal = null }, accent = MaterialTheme.colorScheme.error,
+            buttons = { Button(onClick = { refusal = null }, modifier = Modifier.heightIn(min = 48.dp)) { Text("OK") } }) {
+            MarkdownText(r)
+        }
     }
     BoardDialogs(
         pending = pending, session = session, repos = repos, onDismiss = { pending = null },
@@ -329,6 +329,7 @@ fun BoardScreen(nav: NavController, machineId: String) {
         onAnyway = { p -> pending = null; perform(p.task, BoardAction.ApproveAnyway) },
         onSaved = { pending = null; readNow.trySend(Unit) },
     )
+    }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
