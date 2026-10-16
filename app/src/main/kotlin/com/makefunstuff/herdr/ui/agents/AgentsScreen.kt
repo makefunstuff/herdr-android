@@ -211,9 +211,9 @@ private fun AgentRowItem(row: AgentRow, showMachine: Boolean, onOpen: () -> Unit
         },
         meta = if (status == AgentStatus.Working || status == AgentStatus.Done) agent.statusLabel else null,
         onClickLabel = "Open chat",
+        titleLines = 2,
         onLongClick = onMenu,
         onClick = onOpen,
-        modifier = Modifier.padding(horizontal = Space.xs),
     )
 }
 

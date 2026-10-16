@@ -76,7 +76,7 @@ fun SettingsScreen() {
                             SettingRow("Copy public key", HerdrIcons.ContentCopy) { context.copyToClipboard("public key", state.publicKey, "Public key copied") }
                             SettingRow("Back up", HerdrIcons.Upload, "A passphrase-protected file you keep", chevron = true) { dialog = KeyDialog.Export }
                             SettingRow("Restore or import", HerdrIcons.Download, "A backup, or an existing OpenSSH key", chevron = true) { dialog = KeyDialog.Import(replacing = true) }
-                            SettingRow("New key", HerdrIcons.Key, "Replaces this one; machines must trust the new key", chevron = true) { dialog = KeyDialog.New(replacing = true) }
+                            SettingRow("New key", HerdrIcons.Key, "Replaces this one", chevron = true) { dialog = KeyDialog.New(replacing = true) }
                         }
                         IdentityStore.State.Missing, is IdentityStore.State.Unreadable -> {
                             val unreadable = (state as? IdentityStore.State.Unreadable)?.reason

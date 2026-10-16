@@ -675,19 +675,32 @@ fun HerdrChip(text: String, selected: Boolean, onClick: () -> Unit, modifier: Mo
     HerdrChip(selected, onClick, { Text(text, maxLines = 1, overflow = TextOverflow.Ellipsis) }, modifier)
 
 /** A row of mutually exclusive choices drawn as one pill track (replaces segmented buttons). */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SegmentedPills(options: List<String>, selected: Int, onSelect: (Int) -> Unit, modifier: Modifier = Modifier) {
     val c = Herdr.colors
-    Row(modifier.fillMaxWidth().clip(HerdrShapes.Pill).background(c.field).padding(Space.xs)) {
+    // With large text the labels no longer fit one track: show them as chips that wrap instead.
+    if (androidx.compose.ui.platform.LocalDensity.current.fontScale > 1.3f) {
+        FlowRow(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Space.s)) {
+            options.forEachIndexed { i, label -> HerdrChip(label, selected = i == selected, onClick = { onSelect(i) }) }
+        }
+        return
+    }
+    Row(modifier.fillMaxWidth().clip(HerdrShapes.Pill).background(c.field)) {
         options.forEachIndexed { i, label ->
             val on = i == selected
+            // The whole 48dp height is the target; the selected pill is drawn 4dp inside the track.
             Box(
-                Modifier.weight(1f).heightIn(min = 40.dp).clip(HerdrShapes.Pill)
-                    .background(if (on) MaterialTheme.colorScheme.primary else Color.Transparent)
+                Modifier.weight(1f).heightIn(min = 48.dp).clip(HerdrShapes.Pill)
                     .clickable(role = Role.Tab, onClick = { onSelect(i) })
-                    .semantics { this.selected = on },
+                    .semantics { this.selected = on }
+                    .padding(Space.xs),
                 contentAlignment = Alignment.Center,
             ) {
+                Box(
+                    Modifier.matchParentSize().clip(HerdrShapes.Pill)
+                        .background(if (on) MaterialTheme.colorScheme.primary else Color.Transparent),
+                )
                 Text(
                     label, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     color = if (on) MaterialTheme.colorScheme.onPrimary else c.text,
@@ -900,6 +913,7 @@ fun ListRow(
     titleColor: Color = Color.Unspecified,
     subtitleColor: Color = Color.Unspecified,
     subtitleLines: Int = 1,
+    titleLines: Int = 1,
     below: (@Composable () -> Unit)? = null,
     onClickLabel: String? = null,
     onLongClick: (() -> Unit)? = null,
@@ -923,7 +937,7 @@ fun ListRow(
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    title, style = MaterialTheme.typography.titleMedium, maxLines = titleLines, overflow = TextOverflow.Ellipsis,
                     color = if (!enabled) c.off else if (titleColor == Color.Unspecified) c.text else titleColor,
                     modifier = Modifier.weight(1f),
                 )

@@ -282,13 +282,14 @@ fun TabActionsSheet(
     val scope = rememberCoroutineScope()
     var rename by remember { mutableStateOf(false) }
     var confirmClose by remember { mutableStateOf(false) }
-    val label = tab.label.ifBlank { tab.tabId }
+    val label = tab.label.ifBlank { "${tab.number}" }.let { l -> if (l.all { it.isDigit() }) "Tab $l" else l }
     val order = snap.tabs.filter { it.workspaceId == tab.workspaceId }.map { it.tabId }
     val index = order.indexOf(tab.tabId)
     val up = moveIndex(order, tab.tabId, index - 1)
     val down = moveIndex(order, tab.tabId, index + 1)
 
-    ManageSheet(label, "Tab ${tab.number} · ${tab.paneCount} pane${if (tab.paneCount == 1) "" else "s"}", onDismiss) {
+    val panes = "${tab.paneCount} pane${if (tab.paneCount == 1) "" else "s"}"
+    ManageSheet(label, if (label == "Tab ${tab.number}") panes else "Tab ${tab.number} · $panes", onDismiss) {
         if (!tab.focused) {
             ManageRow("Focus in herdr", icon = HerdrIcons.CropFree) {
                 manage(context, scope, session, onDismiss) { it.focusTab(tab.tabId); null }

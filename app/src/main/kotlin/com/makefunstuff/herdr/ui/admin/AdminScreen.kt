@@ -378,7 +378,6 @@ private fun IntegrationRow(i: IntegrationInfo, model: AdminModel, onRemove: () -
     ListRow(
         i.label.ifBlank { i.target },
         subtitle = status,
-        enabled = i.available || i.installed,
         leading = { IconTile(letter = i.label.ifBlank { i.target }.take(1).uppercase(), dot = color) },
         trailing = {
             when {
