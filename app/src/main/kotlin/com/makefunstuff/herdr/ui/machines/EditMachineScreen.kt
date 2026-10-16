@@ -241,7 +241,7 @@ fun EditMachineScreen(nav: NavController, id: String?) {
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    Text(publicKey ?: "Generating…", fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
+                    Text(publicKey ?: "No SSH key yet. Set one up in Settings.", fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
                     TextButton(onClick = { publicKey?.let { context.copyToClipboard("public key", it, "Public key copied") } }) {
                         Text("Copy public key")
                     }

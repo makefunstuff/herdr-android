@@ -4,7 +4,11 @@ import com.makefunstuff.herdr.core.api.AgentStatus
 import com.makefunstuff.herdr.core.api.ApiConnection
 import com.makefunstuff.herdr.core.api.HerdrApi
 import com.makefunstuff.herdr.core.api.HerdrApiException
+import com.makefunstuff.herdr.core.keys.KeyExport
 import com.makefunstuff.herdr.core.keys.KeyGen
+import com.makefunstuff.herdr.core.keys.KeyImport
+import com.makefunstuff.herdr.core.keys.OpenSshKeyFile
+import com.makefunstuff.herdr.core.keys.PassphraseException
 import com.makefunstuff.herdr.core.ssh.HerdrCommands
 import com.makefunstuff.herdr.core.ssh.Machine
 import com.makefunstuff.herdr.core.terminal.Cell
@@ -239,5 +243,103 @@ class KeyImportTest {
         val id = KeyGen.ed25519("x")
         val imported = com.makefunstuff.herdr.core.keys.KeyImport.fromPrivateKey(id.privateKeyPem, "x")
         assertEquals(id.publicKeyLine, imported.publicKeyLine)
+    }
+}
+
+class KeyBackupTest {
+    private fun blob(line: String) = line.split(' ')[1]
+
+    @Test
+    fun exportedBackupNeedsItsPassphrase() {
+        val id = KeyGen.ed25519("herdr-android@Pixel")
+        val backup = KeyExport.encrypted(id, "correct horse")
+        assertTrue(OpenSshKeyFile.isEncrypted(backup))
+        assertFalse(backup.contains(id.privateKeyPem.lines()[1]))
+        assertFailsWith<PassphraseException> { KeyImport.fromPrivateKey(backup, "other") }
+        assertFailsWith<PassphraseException> { KeyImport.fromPrivateKey(backup, "other", "wrong horse") }
+        val restored = KeyImport.fromPrivateKey(backup, "other", "correct horse")
+        // Same key and the original comment, so the authorized_keys line is unchanged.
+        assertEquals(id.publicKeyLine, restored.publicKeyLine)
+        assertFalse(OpenSshKeyFile.isEncrypted(restored.privateKeyPem))
+    }
+
+    @Test
+    fun keyWithoutCommentGetsTheFallback() {
+        val id = KeyGen.ed25519("")
+        assertEquals(blob(id.publicKeyLine), blob(KeyImport.fromPrivateKey(id.privateKeyPem, "phone").publicKeyLine))
+        assertTrue(KeyImport.fromPrivateKey(id.privateKeyPem, "phone").publicKeyLine.endsWith(" phone"))
+    }
+
+    @Test
+    fun rejectsGarbage() {
+        assertFailsWith<IllegalArgumentException> { KeyImport.fromPrivateKey("hello", "x") }
+        assertFailsWith<IllegalArgumentException> {
+            KeyImport.fromPrivateKey("${OpenSshKeyFile.BEGIN}\nAAAA\n${OpenSshKeyFile.END}\n", "x")
+        }
+    }
+
+    // Interop with OpenSSH's own tool, when it is installed.
+    private val sshKeygen = listOf("/usr/bin/ssh-keygen", "/usr/local/bin/ssh-keygen").firstOrNull { File(it).canExecute() }
+
+    private fun keygen(vararg args: String): String {
+        val p = ProcessBuilder(sshKeygen!!, *args).redirectErrorStream(true).start()
+        val out = p.inputStream.readBytes().toString(Charsets.UTF_8)
+        assertEquals(0, p.waitFor(), out)
+        return out
+    }
+
+    private fun tempKey(): File = File.createTempFile("herdr-key", "").also { it.delete(); it.deleteOnExit() }
+
+    @Test
+    fun importsKeysMadeBySshKeygen() {
+        if (sshKeygen == null) return
+        val cases = listOf(
+            listOf("-t", "ed25519"),
+            listOf("-t", "ecdsa", "-b", "256"),
+            listOf("-t", "rsa", "-b", "2048"),
+            listOf("-t", "rsa", "-b", "2048", "-m", "PEM"),
+            listOf("-t", "ecdsa", "-b", "384", "-m", "PEM"),
+        )
+        for (case in cases) for (passphrase in listOf("", "s3cret pass")) {
+            val file = tempKey()
+            keygen(*case.toTypedArray(), "-N", passphrase, "-C", "me@laptop", "-q", "-f", file.path)
+            val expected = File(file.path + ".pub").readText().trim()
+            if (passphrase.isNotEmpty()) {
+                assertFailsWith<PassphraseException>("$case") { KeyImport.fromPrivateKey(file.readText(), "x") }
+            }
+            val imported = KeyImport.fromPrivateKey(file.readText(), "x", passphrase.ifEmpty { null })
+            assertEquals(blob(expected), blob(imported.publicKeyLine), "$case")
+        }
+    }
+
+    @Test
+    fun sshKeygenReadsTheBackup() {
+        if (sshKeygen == null) return
+        val id = KeyGen.ed25519("herdr-android@Pixel")
+        val file = tempKey()
+        file.writeText(KeyExport.encrypted(id, "correct horse"))
+        file.setReadable(false, false)
+        file.setReadable(true, true)
+        val public = keygen("-y", "-P", "correct horse", "-f", file.path).trim()
+        assertEquals(blob(id.publicKeyLine), blob(public))
+        val plain = tempKey()
+        plain.writeText(id.privateKeyPem)
+        plain.setReadable(false, false)
+        plain.setReadable(true, true)
+        assertEquals(id.publicKeyLine, keygen("-y", "-f", plain.path).trim())
+    }
+
+    @Test
+    fun rsaBackupRoundTrips() {
+        if (sshKeygen == null) return
+        val file = tempKey()
+        keygen("-t", "rsa", "-b", "2048", "-m", "PEM", "-N", "", "-q", "-f", file.path)
+        val id = KeyImport.fromPrivateKey(file.readText(), "x")
+        val backup = tempKey()
+        backup.writeText(KeyExport.encrypted(id, "pass phrase"))
+        backup.setReadable(false, false)
+        backup.setReadable(true, true)
+        assertEquals(blob(id.publicKeyLine), blob(keygen("-y", "-P", "pass phrase", "-f", backup.path).trim()))
+        assertEquals(id.publicKeyLine, KeyImport.fromPrivateKey(backup.readText(), "y", "pass phrase").publicKeyLine)
     }
 }

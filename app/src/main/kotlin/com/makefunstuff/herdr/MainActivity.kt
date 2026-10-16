@@ -21,6 +21,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -31,6 +34,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.makefunstuff.herdr.core.api.AgentStatus
+import com.makefunstuff.herdr.data.IdentityStore
 import com.makefunstuff.herdr.ui.agents.AgentScreen
 import com.makefunstuff.herdr.ui.agents.AgentsScreen
 import com.makefunstuff.herdr.ui.common.LocalContainer
@@ -38,6 +42,7 @@ import com.makefunstuff.herdr.ui.coordinator.CoordinatorScreen
 import com.makefunstuff.herdr.ui.machines.EditMachineScreen
 import com.makefunstuff.herdr.ui.machines.MachineScreen
 import com.makefunstuff.herdr.ui.machines.MachinesScreen
+import com.makefunstuff.herdr.ui.settings.KeySetupDialog
 import com.makefunstuff.herdr.ui.settings.SettingsScreen
 import com.makefunstuff.herdr.ui.terminal.TerminalScreen
 import com.makefunstuff.herdr.ui.theme.HerdrTheme
@@ -80,6 +85,16 @@ private fun AppNav() {
     val topLevel = route in setOf(Routes.AGENTS, Routes.MACHINES, Routes.SETTINGS)
     val agents by LocalContainer.current.hosts.agents.collectAsStateWithLifecycle()
     val blocked = agents.count { it.agent.agentStatus == AgentStatus.Blocked }
+    val keyState by LocalContainer.current.identity.state.collectAsStateWithLifecycle()
+    var keySetupDismissed by rememberSaveable { mutableStateOf(false) }
+
+    // No usable key yet: offer to restore one before a new key is made.
+    if (!keySetupDismissed && (keyState == IdentityStore.State.Missing || keyState is IdentityStore.State.Unreadable)) {
+        KeySetupDialog(
+            unreadable = (keyState as? IdentityStore.State.Unreadable)?.reason,
+            onDismiss = { keySetupDismissed = true },
+        )
+    }
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),

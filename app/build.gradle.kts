@@ -7,6 +7,18 @@ plugins {
     id("org.jetbrains.kotlin.plugin.serialization")
 }
 
+val buildNumber = (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInt()
+// GitHub Actions passes a secret that isn't set as an empty string, so empty counts as unset.
+fun env(name: String): String? = System.getenv(name)?.takeIf { it.isNotEmpty() }
+
+val releaseKeystore = env("HERDR_KEYSTORE_FILE")?.let { path ->
+    // A half-configured key must fail the build rather than quietly ship a debug-signed APK.
+    listOf("HERDR_KEYSTORE_PASSWORD", "HERDR_KEY_ALIAS").filter { env(it) == null }.let { missing ->
+        if (missing.isNotEmpty()) throw GradleException("HERDR_KEYSTORE_FILE is set but ${missing.joinToString()} is not")
+    }
+    file(path).also { if (!it.isFile) throw GradleException("Keystore $path not found") }
+}
+
 android {
     namespace = "com.makefunstuff.herdr"
     compileSdk = 35
@@ -15,8 +27,22 @@ android {
         applicationId = "com.makefunstuff.herdr"
         minSdk = 28
         targetSdk = 35
-        versionCode = (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInt()
-        versionName = "0.1.${System.getenv("GITHUB_RUN_NUMBER") ?: "0"}"
+        // CI's run number grows with every build, so each new APK installs as an update.
+        versionCode = buildNumber
+        versionName = "0.1.$buildNumber"
+    }
+
+    signingConfigs {
+        // The fixed key from the HERDR_KEYSTORE* secrets (see README). Every build signed with it
+        // installs over the previous one and keeps the app's data, including its SSH key.
+        if (releaseKeystore != null) {
+            create("herdr") {
+                storeFile = releaseKeystore
+                storePassword = env("HERDR_KEYSTORE_PASSWORD")
+                keyAlias = env("HERDR_KEY_ALIAS")
+                keyPassword = env("HERDR_KEY_PASSWORD") ?: env("HERDR_KEYSTORE_PASSWORD")
+            }
+        }
     }
 
     buildTypes {
@@ -25,8 +51,8 @@ android {
         }
         release {
             isMinifyEnabled = false
-            // Signed with the debug key so the CI artifact installs directly. Replace before publishing.
-            signingConfig = signingConfigs.getByName("debug")
+            // Without the keystore (local builds, forks) fall back to the debug key so the APK still installs.
+            signingConfig = signingConfigs.findByName("herdr") ?: signingConfigs.getByName("debug")
         }
     }
 

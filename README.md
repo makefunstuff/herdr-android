@@ -4,7 +4,38 @@ A native Android client for [herdr](https://herdr.dev) hosts: see your agents ac
 
 ## Getting the app
 
-Every push builds a debug APK on GitHub Actions. Download it from the branch's pre-release under **Releases** (or the `herdr-android-apk` artifact on the run page) and open it on your phone to install. Android will ask you to allow installs from your browser or file manager once.
+On your phone, open the repo's [latest release](https://github.com/makefunstuff/herdr-android/releases/latest) and tap **herdr-android.apk** (the direct link is `https://github.com/makefunstuff/herdr-android/releases/latest/download/herdr-android.apk`). Android asks you once to allow installs from your browser or file manager.
+
+To update, do the same again: every build is signed with the same key and has a higher version code, so it installs over the app you have and keeps its machines and SSH key. No uninstall needed.
+
+Only the default branch publishes a release (tagged `v0.1.<run number>`). Other branches and pull requests build the APK too, as the `herdr-android-<run number>` artifact on their Actions run page, without a release.
+
+## Keeping the SSH key
+
+The key stays through updates. An uninstall or a new phone wipes it, so back it up first: **Settings → SSH key → Back up** saves it as an OpenSSH private key protected by a passphrase you choose (`ssh-keygen -y -f herdr-android-key` reads it too). After a reinstall the app offers **Restore or import** before it makes a new key; the same button is in Settings. It also takes an existing OpenSSH (or PEM) private key, with or without a passphrase.
+
+The app never replaces a key on its own: it only makes one when it has none and you ask for it, and **New key** asks before throwing the old one away.
+
+## Signing key (once, for the repo owner)
+
+Releases must all be signed with one key, or Android refuses the update. Create it once and keep a copy somewhere safe; losing it means everyone has to uninstall (and restore their SSH key backup) once.
+
+```sh
+keytool -genkeypair -keystore herdr-release.jks -alias herdr \
+  -keyalg RSA -keysize 4096 -validity 10000 -dname "CN=Herdr for Android"
+base64 -w0 herdr-release.jks > herdr-release.jks.b64
+```
+
+Then add these secrets under **Settings → Secrets and variables → Actions** (or with `gh secret set NAME`):
+
+| Secret | Value |
+| --- | --- |
+| `HERDR_KEYSTORE_BASE64` | contents of `herdr-release.jks.b64` (`gh secret set HERDR_KEYSTORE_BASE64 < herdr-release.jks.b64`) |
+| `HERDR_KEYSTORE_PASSWORD` | the keystore password |
+| `HERDR_KEY_ALIAS` | `herdr` |
+| `HERDR_KEY_PASSWORD` | optional: the key password, only if it differs from the keystore password (keytool uses the same one by default) |
+
+Without these secrets, and for local builds, the APK is signed with the normal debug key and the default branch skips publishing a release (and keeps the old `apk-*` pre-releases until the first real one). To sign a local build with the real key, set `HERDR_KEYSTORE_FILE`, `HERDR_KEYSTORE_PASSWORD` and `HERDR_KEY_ALIAS` and run `./gradlew :app:assembleRelease`.
 
 ## Setting up a machine
 
