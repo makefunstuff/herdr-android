@@ -109,8 +109,10 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
         scope.launch {
             runCatching {
                 val api = session.awaitApi()
-                // The agent call is the parity one; fall back to the pane when no agent is running.
-                if (agent != null) api.agentSendKeys(paneId, k) else api.sendKeys(paneId, k)
+                // agent.send_keys reaches agents herdr started itself; one an integration reported
+                // answers "not an active named agent", so its keys go to the pane instead.
+                val sent = if (agent != null) runCatching { api.agentSendKeys(paneId, k) } else null
+                if (sent == null || sent.isFailure) api.sendKeys(paneId, k)
             }.onFailure { context.toast(it.message ?: "Couldn't send keys") }
             session.refresh()
         }

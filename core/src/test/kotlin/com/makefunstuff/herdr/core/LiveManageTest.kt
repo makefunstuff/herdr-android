@@ -142,6 +142,11 @@ class LiveManageTest {
             val why = api.explainAgent(p1)
             assertTrue(why.summary.startsWith("herdr reads claude as"), why.summary)
             assertTrue(why.rules.isNotEmpty())
+            // agent.send_keys only reaches agents herdr started itself; a reported one is refused in
+            // a plain sentence, which is what the app shows the person.
+            val notReady = assertFailsWith<HerdrApiException> { api.agentSendKeys(p1, listOf("esc")) }
+            assertEquals("agent_not_ready", notReady.code)
+            assertEquals("Agent $p1 is not an active named agent.", notReady.message)
 
             // Metadata shows up on the workspace.
             client.call(
