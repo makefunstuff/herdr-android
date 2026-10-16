@@ -1,9 +1,11 @@
 package com.makefunstuff.herdr.core.chat
 
 import com.makefunstuff.herdr.core.api.AgentSessionRef
+import com.makefunstuff.herdr.core.ssh.Duplex
 import com.makefunstuff.herdr.core.ssh.HerdrCommands
 import com.makefunstuff.herdr.core.ssh.MachineConnection
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -62,18 +64,26 @@ object TranscriptFollower {
 
     /**
      * Streams [ref]'s transcript into [transcript], calling [onUpdate] after each burst of lines.
-     * [onUpdate]'s flag says the start of the file was cut off. Returns when the stream ends;
-     * cancelling the caller closes the channel.
+     * [onUpdate]'s flag says the start of the file was cut off. Returns when the stream ends.
+     * Cancelling the caller closes the channel, which stops the remote tail.
      */
     suspend fun follow(
         connection: MachineConnection,
         ref: AgentSessionRef,
         transcript: Transcript,
         onUpdate: (truncated: Boolean) -> Unit,
+    ): Result = follow({ connection.start(it) }, ref, transcript, onUpdate)
+
+    /** [follow] with any way to start the remote command, so tests can run it locally. */
+    suspend fun follow(
+        start: suspend (command: String) -> Duplex,
+        ref: AgentSessionRef,
+        transcript: Transcript,
+        onUpdate: (truncated: Boolean) -> Unit,
     ): Result = coroutineScope {
-        val process = connection.start(command(ref))
+        val process = start(command(ref))
         try {
-            val reader = process.stdout.bufferedReader(Charsets.UTF_8)
+            val reader = process.input.bufferedReader(Charsets.UTF_8)
             val header = withContext(Dispatchers.IO) { reader.readLine() } ?: throw IOException("transcript stream closed")
             if (header.startsWith(MISSING)) return@coroutineScope Result.Missing
             val size = header.removePrefix(FILE).substringBefore(' ').toLongOrNull() ?: 0
@@ -82,7 +92,9 @@ object TranscriptFollower {
             job.join()
             Result.Ended
         } finally {
-            withContext(Dispatchers.IO) { runCatching { process.close() } }
+            // NonCancellable: this runs when the chat closes, and a plain withContext would throw at
+            // once in a cancelled coroutine, leaving the channel and the remote tail running.
+            withContext(NonCancellable + Dispatchers.IO) { runCatching { process.close() } }
         }
     }
 

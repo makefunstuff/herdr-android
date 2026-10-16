@@ -8,6 +8,8 @@ import com.makefunstuff.herdr.core.chat.CodexTranscript
 import com.makefunstuff.herdr.core.chat.PiTranscript
 import com.makefunstuff.herdr.core.chat.ToolState
 import com.makefunstuff.herdr.core.chat.TranscriptFollower
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import java.io.File
 import java.util.concurrent.TimeUnit
 import kotlin.test.Test
@@ -212,6 +214,58 @@ class TranscriptFollowerTest {
         assertEquals(listOf("p", "q"), run(home, AgentSessionRef("pi", "path", piFile.absolutePath)).drop(1))
 
         assertEquals(listOf("@@missing"), run(home, AgentSessionRef("claude", "id", "nope")))
+    }
+}
+
+class TranscriptFollowerCancelTest {
+    /** A local `sh` standing in for the SSH channel: closing it closes the script's stdin, as sshd does. */
+    private class LocalChannel(command: String, home: File) : com.makefunstuff.herdr.core.ssh.Duplex {
+        val process: Process = ProcessBuilder("sh", "-c", command).also { it.environment()["HOME"] = home.absolutePath }.start()
+        @Volatile var closed = false
+        override val input get() = process.inputStream
+        override val output get() = process.outputStream
+        override fun close() {
+            closed = true
+            process.outputStream.close()
+        }
+    }
+
+    @Test
+    fun closingTheChatStopsTheRemoteTail(): Unit = kotlinx.coroutines.runBlocking {
+        val home = kotlin.io.path.createTempDirectory("home").toFile()
+        val dir = File(home, ".claude/projects/-x").apply { mkdirs() }
+        File(dir, "s1.jsonl").writeText("""{"type":"user","uuid":"u1","message":{"role":"user","content":"hello"}}""" + "\n")
+        var channel: LocalChannel? = null
+        val updated = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val transcript = ClaudeTranscript()
+        // Its own scope, so a follower that ignores cancellation fails the test instead of hanging it.
+        val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO)
+        val job = scope.launch {
+            TranscriptFollower.follow(
+                { cmd -> LocalChannel(cmd, home).also { channel = it } },
+                AgentSessionRef("claude", "id", "s1"),
+                transcript,
+            ) { if (transcript.items().isNotEmpty()) updated.complete(Unit) }
+        }
+        kotlinx.coroutines.withTimeout(10_000) { updated.await() }
+        val ch = channel!!
+        val tails = ch.process.descendants().toList()
+        try {
+            assertTrue(tails.isNotEmpty(), "the follower should be running tail")
+
+            // What leaving the chat screen does.
+            job.cancel()
+            kotlinx.coroutines.withTimeoutOrNull(10_000) { job.join() }
+            assertTrue(ch.closed, "cancelling must close the channel")
+            assertTrue(ch.process.waitFor(5, TimeUnit.SECONDS), "the remote script should exit once its channel closes")
+            val deadline = System.currentTimeMillis() + 5_000
+            while (tails.any { it.isAlive } && System.currentTimeMillis() < deadline) Thread.sleep(50)
+            assertTrue(tails.none { it.isAlive }, "tail must not outlive the chat")
+        } finally {
+            tails.forEach { it.destroyForcibly() }
+            ch.process.destroyForcibly()
+            scope.cancel()
+        }
     }
 }
 

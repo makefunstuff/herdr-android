@@ -2,6 +2,7 @@ package com.makefunstuff.herdr.core.api
 
 import com.makefunstuff.herdr.core.ssh.Duplex
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -42,7 +43,8 @@ class ApiClient(private val open: suspend () -> Duplex) : ApiCaller {
                 ApiConnection.unwrap(HerdrJson.parseToJsonElement(reply).jsonObject)
             }
         } finally {
-            withContext(Dispatchers.IO) { runCatching { duplex.close() } }
+            // NonCancellable, or a cancelled call (a closed screen) would skip this and leak the channel.
+            withContext(NonCancellable + Dispatchers.IO) { runCatching { duplex.close() } }
         }
     }
 }
