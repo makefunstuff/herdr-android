@@ -317,7 +317,7 @@ fun BoardScreen(nav: NavController, machineId: String) {
             onOpen = if (openId == t.id) null else ({ actionsFor = null; openId = t.id }))
     }
     refusal?.let { r ->
-        BoardPanel("The board said no", onDismiss = { refusal = null }, accent = BoardStatus.Error.color(),
+        BoardPanel("The board said no", onDismiss = { refusal = null }, accent = MaterialTheme.colorScheme.error,
             buttons = { Button(onClick = { refusal = null }, modifier = Modifier.heightIn(min = 48.dp)) { Text("OK") } }) {
             MarkdownText(r)
         }

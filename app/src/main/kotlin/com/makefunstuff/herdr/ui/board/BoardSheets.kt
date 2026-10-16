@@ -227,7 +227,7 @@ fun TaskDetailScreen(
                     }
                     if (primary != null) Button(
                         onClick = { onAction(primary) }, enabled = busy == null,
-                        colors = if (primary.destructive) ButtonDefaults.buttonColors(containerColor = BoardStatus.Error.color(), contentColor = Color.White) else ButtonDefaults.buttonColors(),
+                        colors = if (primary.destructive) ButtonDefaults.buttonColors(containerColor = DangerButton, contentColor = Color.White) else ButtonDefaults.buttonColors(),
                         modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
                     ) { Text(primary.label, style = MaterialTheme.typography.titleSmall) }
                 }
@@ -258,7 +258,7 @@ fun TaskDetailScreen(
                     Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(if (t.needsYou) "Needs you" else "Status", style = MaterialTheme.typography.labelLarge, color = color, modifier = Modifier.semantics { heading() })
                         if (step != null) Text(step, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-                        if (doing.isNotEmpty()) MarkdownText(doing, style = MaterialTheme.typography.bodyMedium)
+                        if (doing.isNotEmpty() && d?.failure?.title?.startsWith(doing.trim().trimEnd('.'), ignoreCase = true) != true) MarkdownText(doing, style = MaterialTheme.typography.bodyMedium)
                         t.progress?.let { p ->
                             LinearProgressIndicator(progress = { p / 100f }, color = color, modifier = Modifier.fillMaxWidth())
                             Text("$p%" + (t.eta?.let { " · ${it}m left" } ?: ""), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -451,12 +451,12 @@ fun BoardDialogs(
             }
         }
         is Pending.Confirm -> BoardPanel(
-            "${pending.action.label.removeSuffix("…")}?", onDismiss, accent = BoardStatus.Error.color(),
+            "${pending.action.label.removeSuffix("…")}?", onDismiss, accent = MaterialTheme.colorScheme.error,
             buttons = {
                 PanelCancel(onDismiss)
                 Button(
                     onClick = { onConfirm(pending) }, modifier = Modifier.heightIn(min = 48.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = BoardStatus.Error.color(), contentColor = Color.White),
+                    colors = ButtonDefaults.buttonColors(containerColor = DangerButton, contentColor = Color.White),
                 ) { Text(pending.action.label.removeSuffix("…")) }
             },
         ) { Text(confirmText(pending), style = MaterialTheme.typography.bodyMedium) }
@@ -466,12 +466,12 @@ fun BoardDialogs(
             }
             var sure by remember { mutableStateOf(false) }
             BoardPanel(
-                "Approve ${pending.task.name} anyway?", onDismiss, accent = BoardStatus.Error.color(),
+                "Approve ${pending.task.name} anyway?", onDismiss, accent = MaterialTheme.colorScheme.error,
                 buttons = {
                     PanelCancel(onDismiss)
                     Button(
                         onClick = { onAnyway(pending) }, enabled = sure, modifier = Modifier.heightIn(min = 48.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = BoardStatus.Error.color(), contentColor = Color.White),
+                        colors = ButtonDefaults.buttonColors(containerColor = DangerButton, contentColor = Color.White),
                     ) { Text("Approve anyway") }
                 },
             ) {
@@ -572,3 +572,6 @@ private fun confirmText(p: Pending.Confirm): String = when (p.action) {
     BoardAction.Clear -> "Removes ${p.task.name} from the board. Work already merged or kept stays."
     else -> "${p.action.label} on ${p.task.name}."
 }
+
+/** Dark enough for white text at WCAG AA (about 6.5:1), unlike the salmon status colour. */
+private val DangerButton = Color(0xFFB3261E)
