@@ -1,9 +1,5 @@
 package com.makefunstuff.herdr.ui.worktrees
 
-import com.makefunstuff.herdr.ui.design.HerdrDialog
-import com.makefunstuff.herdr.ui.design.HerdrMenu
-import com.makefunstuff.herdr.ui.design.HerdrMenuItem
-import com.makefunstuff.herdr.ui.design.HerdrSheet
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -13,34 +9,21 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItem
-import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -52,8 +35,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -71,6 +58,22 @@ import com.makefunstuff.herdr.ui.common.Pill
 import com.makefunstuff.herdr.ui.common.StatusDot
 import com.makefunstuff.herdr.ui.common.copyToClipboard
 import com.makefunstuff.herdr.ui.common.toast
+import com.makefunstuff.herdr.ui.design.BarIcon
+import com.makefunstuff.herdr.ui.design.HerdrDialog
+import com.makefunstuff.herdr.ui.design.HerdrField
+import com.makefunstuff.herdr.ui.design.HerdrIcons
+import com.makefunstuff.herdr.ui.design.HerdrMenu
+import com.makefunstuff.herdr.ui.design.HerdrMenuItem
+import com.makefunstuff.herdr.ui.design.HerdrSheet
+import com.makefunstuff.herdr.ui.design.HerdrTopBar
+import com.makefunstuff.herdr.ui.design.IconTile
+import com.makefunstuff.herdr.ui.design.ListRow
+import com.makefunstuff.herdr.ui.design.MenuRow
+import com.makefunstuff.herdr.ui.design.QuietButton
+import com.makefunstuff.herdr.ui.design.QuietCard
+import com.makefunstuff.herdr.ui.design.SecondaryButton
+import com.makefunstuff.herdr.ui.theme.Herdr
+import com.makefunstuff.herdr.ui.theme.Space
 import com.makefunstuff.herdr.ui.theme.color
 import kotlinx.coroutines.launch
 
@@ -226,42 +229,35 @@ fun WorktreesScreen(nav: NavController, machineId: String, workspaceId: String?)
     }
 
     Scaffold(
+        containerColor = Herdr.colors.ground,
         topBar = {
-            TopAppBar(
-                navigationIcon = { IconButton(onClick = { nav.popBackStack() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
-                title = {
-                    Column {
-                        Text(if (onlyRepo != null) known[onlyRepo]?.name ?: "Worktrees" else "Worktrees")
-                        Text(
-                            if (onlyRepo != null) "Worktrees · ${state.machine.label}" else state.machine.label,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                },
-                actions = {
-                    IconButton(onClick = { session.refresh(); refreshTick++ }) { Icon(Icons.Filled.Refresh, "Refresh") }
-                },
-            )
+            HerdrTopBar(
+                if (onlyRepo != null) known[onlyRepo]?.name ?: "Worktrees" else "Worktrees",
+                subtitle = if (onlyRepo != null) "Worktrees · ${state.machine.label}" else state.machine.label,
+                onBack = { nav.popBackStack() },
+            ) {
+                BarIcon(HerdrIcons.Refresh, "Refresh", { session.refresh(); refreshTick++ })
+            }
         },
     ) { padding ->
         if (snap == null || (!state.online && visible.isEmpty())) {
-            EmptyState(if (state.online) "Loading…" else "Offline", "Worktrees show once ${state.machine.label} is connected.")
+            if (state.online) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { com.makefunstuff.herdr.ui.design.LoadingState("Loading worktrees") }
+            else EmptyState("Offline", "Worktrees show once ${state.machine.label} is connected.", icon = HerdrIcons.AccountTree)
             return@Scaffold
         }
         LazyColumn(
             modifier = Modifier.padding(padding),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(start = Space.screen, end = Space.screen, top = Space.xs, bottom = Space.xxl),
+            verticalArrangement = Arrangement.spacedBy(Space.m),
         ) {
             if (!state.online) {
-                item { Text("Offline · showing the last known state", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+                item { com.makefunstuff.herdr.ui.design.Notice("Offline · showing the last known state", color = Herdr.colors.amber, icon = HerdrIcons.Schedule) }
             }
             if (visible.isEmpty()) {
                 item {
-                    Text(
+                    com.makefunstuff.herdr.ui.design.StateBlock(
+                        HerdrIcons.AccountTree, "No repositories yet",
                         "No workspace here is in a Git repository. Open a repository by its folder to see its worktrees.",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
@@ -278,7 +274,10 @@ fun WorktreesScreen(nav: NavController, machineId: String, workspaceId: String?)
             }
             if (onlyRepo == null) {
                 item {
-                    OutlinedButton(onClick = { addingPath = true }, modifier = Modifier.fillMaxWidth()) { Text("Open a repository by folder…") }
+                    SecondaryButton(onClick = { addingPath = true }, modifier = Modifier.fillMaxWidth()) {
+                        Icon(HerdrIcons.Folder, null, Modifier.size(18.dp))
+                        Text("Open a repository by folder…")
+                    }
                 }
             }
         }
@@ -358,101 +357,79 @@ private fun RepoCard(
     onOpen: (GitWorktree) -> Unit,
     onActions: (GitWorktree) -> Unit,
 ) {
-    Card(
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-    ) {
-        Column(Modifier.padding(vertical = 10.dp)) {
-            Row(Modifier.padding(start = 14.dp, end = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(repo.name, style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        repo.root.shortPath(),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-                TextButton(onClick = onNew, enabled = listing !is Listing.Failed) {
-                    Icon(Icons.Filled.Add, null)
-                    Spacer(Modifier.width(4.dp))
+    QuietCard {
+        ListRow(
+            repo.name,
+            subtitle = repo.root.shortPath(),
+            leading = { IconTile(HerdrIcons.AccountTree) },
+            trailing = {
+                SecondaryButton(onClick = onNew, enabled = listing !is Listing.Failed, contentPadding = PaddingValues(start = 12.dp, end = 16.dp)) {
+                    Icon(HerdrIcons.Add, null, Modifier.size(18.dp))
                     Text("New")
                 }
+            },
+            modifier = Modifier.padding(top = Space.xs),
+        )
+        when (listing) {
+            Listing.Loading -> com.makefunstuff.herdr.ui.design.LoadingState("Loading worktrees")
+            is Listing.Failed -> Column(Modifier.padding(horizontal = Space.l, vertical = Space.s), verticalArrangement = Arrangement.spacedBy(Space.s)) {
+                com.makefunstuff.herdr.ui.design.ErrorMessage(listing.message)
+                if (listing.needsTrust) SecondaryButton(onClick = onTrust) { Text("Trust this repository…") }
             }
-            when (listing) {
-                Listing.Loading -> com.makefunstuff.herdr.ui.design.LoadingState("Loading worktrees")
-                is Listing.Failed -> Column(Modifier.padding(horizontal = 14.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(listing.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
-                    if (listing.needsTrust) OutlinedButton(onClick = onTrust) { Text("Trust this repository…") }
-                }
-                is Listing.Loaded -> listing.list.worktrees.forEachIndexed { i, wt ->
-                    if (i > 0) HorizontalDivider(Modifier.padding(horizontal = 14.dp))
-                    WorktreeRow(wt, snap, onClick = { onOpen(wt) }, onLongClick = { onActions(wt) })
-                }
+            is Listing.Loaded -> Column(Modifier.padding(bottom = Space.xs)) {
+                listing.list.worktrees.forEach { wt -> WorktreeRow(wt, snap, onClick = { onOpen(wt) }, onLongClick = { onActions(wt) }) }
             }
         }
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun WorktreeRow(wt: GitWorktree, snap: SessionSnapshot, onClick: () -> Unit, onLongClick: () -> Unit) {
     val ws = wt.openWorkspaceId?.let { snap.workspace(it) }
-    ListItem(
-        modifier = Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick),
-        colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-        leadingContent = ws?.let { { StatusDot(it.agentStatus.color()) } },
-        headlineContent = { Text(wt.title, fontFamily = FontFamily.Monospace, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-        supportingContent = {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(wt.path.shortPath(), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    if (!wt.isLinkedWorktree) Pill("main checkout")
-                    if (ws != null) Pill("open · ${ws.label.ifBlank { ws.workspaceId }}")
-                    if (wt.isPrunable) Pill("missing", color = MaterialTheme.colorScheme.error)
-                }
+    val c = Herdr.colors
+    ListRow(
+        wt.title,
+        subtitle = wt.path.shortPath(),
+        leading = { IconTile(HerdrIcons.CallSplit, size = 36.dp, dot = ws?.agentStatus?.takeIf { it != com.makefunstuff.herdr.core.api.AgentStatus.Unknown }?.color()) },
+        below = {
+            val tags = listOfNotNull(
+                if (!wt.isLinkedWorktree) "main checkout" to null else null,
+                ws?.let { "open · ${it.label.ifBlank { it.workspaceId }}" to null },
+                if (wt.isPrunable) "missing" to c.red else null,
+            )
+            if (tags.isNotEmpty()) Row(Modifier.padding(top = Space.xs), horizontalArrangement = Arrangement.spacedBy(Space.xs)) {
+                tags.forEach { (t, col) -> Pill(t, color = col) }
             }
         },
-        trailingContent = { IconButton(onClick = onLongClick) { Icon(Icons.Filled.MoreVert, "Actions for ${wt.title}") } },
+        trailing = {
+            Box(
+                Modifier.size(48.dp).clip(CircleShape).clickable(role = Role.Button, onClick = onLongClick)
+                    .semantics { contentDescription = "Actions for ${wt.title}" },
+                contentAlignment = Alignment.Center,
+            ) { Icon(HerdrIcons.MoreVert, null, tint = c.muted) }
+        },
+        onLongClick = onLongClick,
+        onClick = onClick,
     )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun WorktreeActionsSheet(wt: GitWorktree, onDismiss: () -> Unit, onOpen: () -> Unit, onCopy: () -> Unit, onRemove: () -> Unit) {
-    HerdrSheet(onDismissRequest = onDismiss) {
-        Column(Modifier.fillMaxWidth().padding(bottom = 16.dp).navigationBarsPadding()) {
-            Text(wt.title, style = MaterialTheme.typography.titleMedium, fontFamily = FontFamily.Monospace, modifier = Modifier.padding(horizontal = 20.dp))
+    HerdrMenu(expanded = true, onDismissRequest = onDismiss, title = wt.title, subtitle = wt.path.shortPath()) {
+        MenuRow(if (wt.isOpen) "Go to workspace" else "Open as workspace", HerdrIcons.Folder, onOpen)
+        MenuRow("Copy path", HerdrIcons.ContentCopy, onCopy)
+        if (wt.isLinkedWorktree) {
+            MenuRow("Remove worktree…", HerdrIcons.Delete, onRemove, destructive = true)
+        } else {
             Text(
-                wt.path.shortPath(),
+                "The repository's main checkout can't be removed.",
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+                color = Herdr.colors.muted,
+                modifier = Modifier.padding(horizontal = Space.l, vertical = Space.m),
             )
-            SheetAction(if (wt.isOpen) "Go to workspace" else "Open as workspace", onClick = onOpen)
-            SheetAction("Copy path", onClick = onCopy)
-            if (wt.isLinkedWorktree) {
-                SheetAction("Remove worktree…", danger = true, onClick = onRemove)
-            } else {
-                Text(
-                    "The repository's main checkout can't be removed.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
-                )
-            }
         }
     }
-}
-
-@Composable
-private fun SheetAction(text: String, danger: Boolean = false, onClick: () -> Unit) {
-    ListItem(
-        modifier = Modifier.clickable(onClick = onClick),
-        headlineContent = { Text(text, color = if (danger) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface) },
-        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-    )
 }
 
 @Composable
@@ -465,7 +442,7 @@ private fun AddRepoDialog(onDismiss: () -> Unit, onAdd: (path: String) -> Unit) 
         title = { Text("Open a repository") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
+                HerdrField(
                     path, { path = it },
                     label = { Text("Folder inside the repository") },
                     placeholder = { Text("/home/you/src/project") },
@@ -475,11 +452,11 @@ private fun AddRepoDialog(onDismiss: () -> Unit, onAdd: (path: String) -> Unit) 
                 Text(
                     "An absolute path on the machine. Lists its worktrees without opening anything.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = Herdr.colors.muted,
                 )
             }
         },
-        confirmButton = { TextButton(onClick = { onAdd(clean) }, enabled = clean.startsWith("/")) { Text("Show worktrees") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        confirmButton = { QuietButton(onClick = { onAdd(clean) }, enabled = clean.startsWith("/")) { Text("Show worktrees") } },
+        dismissButton = { QuietButton(onClick = onDismiss) { Text("Cancel") } },
     )
 }

@@ -1,5 +1,11 @@
 package com.makefunstuff.herdr.ui.manage
 
+import com.makefunstuff.herdr.ui.design.SheetTitle
+import com.makefunstuff.herdr.ui.design.StateBlock
+import com.makefunstuff.herdr.ui.theme.Herdr
+import com.makefunstuff.herdr.ui.theme.Space
+import com.makefunstuff.herdr.ui.design.HerdrIcons
+import com.makefunstuff.herdr.ui.design.QuietButton
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
@@ -17,15 +23,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -55,45 +56,24 @@ fun NoticesSheet(
     onDismiss: () -> Unit,
 ) {
     HerdrSheet(onDismissRequest = onDismiss) {
-        Column(Modifier.fillMaxWidth().padding(bottom = 24.dp)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp),
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Text("Notifications", style = MaterialTheme.typography.titleLarge)
-                    Text(
-                        if (rows.isEmpty()) "Nothing new" else "${rows.size} recent",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                if (rows.isNotEmpty()) TextButton(onClick = onClear, modifier = Modifier.heightIn(min = 48.dp)) { Text("Clear") }
-            }
-            if (rows.isEmpty()) {
-                Column(
-                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 28.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    Box(
-                        Modifier.size(56.dp).background(MaterialTheme.colorScheme.surfaceContainerHighest, CircleShape),
-                        contentAlignment = Alignment.Center,
-                    ) { Icon(Icons.Filled.Notifications, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(26.dp)) }
-                    Text("All quiet", style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        "When an agent finishes or asks for you, herdr's notification shows up here.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center,
-                    )
-                }
-                return@Column
-            }
-            LazyColumn(Modifier.heightIn(max = 560.dp), contentPadding = PaddingValues(vertical = 4.dp)) {
-                items(rows, key = { "${it.machineId}/${it.notice.id}" }) { row ->
-                    NoticeItem(row, showMachine) { onOpenAgent(row.machineId, row.notice.paneId) }
-                }
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth().padding(end = Space.s),
+        ) {
+            SheetTitle("Notifications", if (rows.isEmpty()) "Nothing new" else "${rows.size} recent", Modifier.weight(1f))
+            if (rows.isNotEmpty()) QuietButton(onClick = onClear) { Text("Clear") }
+        }
+        if (rows.isEmpty()) {
+            StateBlock(
+                HerdrIcons.Notifications, "All quiet",
+                "When an agent finishes or asks for you, herdr's notification shows up here.",
+                Modifier.padding(bottom = Space.xl),
+            )
+            return@HerdrSheet
+        }
+        LazyColumn(Modifier.heightIn(max = 560.dp), contentPadding = PaddingValues(start = Space.s, end = Space.s, bottom = Space.l)) {
+            items(rows, key = { "${it.machineId}/${it.notice.id}" }) { row ->
+                NoticeItem(row, showMachine) { onOpenAgent(row.machineId, row.notice.paneId) }
             }
         }
     }
@@ -111,14 +91,13 @@ private fun NoticeItem(row: NoticeRow, showMachine: Boolean, onOpen: () -> Unit)
         title = notice.title,
         detail = meta.joinToString(" · ").ifBlank { null },
         icon = when (notice.kind) {
-            Notice.Kind.Done -> Icons.Filled.Check
-            Notice.Kind.NeedsYou -> Icons.Filled.Warning
+            Notice.Kind.Done -> HerdrIcons.CheckCircle
+            Notice.Kind.NeedsYou -> HerdrIcons.Warning
         },
         iconTint = status.color(),
-        modifier = Modifier.padding(horizontal = 8.dp),
         onClick = onOpen,
         trailing = {
-            Text(ago(notice.at), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(ago(notice.at), style = MaterialTheme.typography.labelMedium, color = Herdr.colors.faint)
         },
     )
 }

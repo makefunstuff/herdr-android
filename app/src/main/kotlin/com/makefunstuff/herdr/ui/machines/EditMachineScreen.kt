@@ -1,9 +1,8 @@
 package com.makefunstuff.herdr.ui.machines
 
-import com.makefunstuff.herdr.ui.design.BarTitle
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -19,24 +18,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -51,8 +38,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
-import com.makefunstuff.herdr.core.api.SessionEntry
 import com.makefunstuff.herdr.core.api.AgentStatus
+import com.makefunstuff.herdr.core.api.SessionEntry
 import com.makefunstuff.herdr.core.ssh.HerdrBinaries
 import com.makefunstuff.herdr.core.ssh.HerdrCommands
 import com.makefunstuff.herdr.core.ssh.Machine
@@ -62,15 +49,26 @@ import com.makefunstuff.herdr.ui.common.LocalContainer
 import com.makefunstuff.herdr.ui.common.StatusDot
 import com.makefunstuff.herdr.ui.common.copyToClipboard
 import com.makefunstuff.herdr.ui.design.ActionRow
+import com.makefunstuff.herdr.ui.design.BarIcon
 import com.makefunstuff.herdr.ui.design.BottomActionBar
 import com.makefunstuff.herdr.ui.design.ErrorMessage
+import com.makefunstuff.herdr.ui.design.FieldLabel
+import com.makefunstuff.herdr.ui.design.HerdrChip
+import com.makefunstuff.herdr.ui.design.HerdrIcons
 import com.makefunstuff.herdr.ui.design.HerdrMenu
-import com.makefunstuff.herdr.ui.design.HerdrMenuItem
 import com.makefunstuff.herdr.ui.design.HerdrTextField
+import com.makefunstuff.herdr.ui.design.HerdrTopBar
 import com.makefunstuff.herdr.ui.design.LoadingState
+import com.makefunstuff.herdr.ui.design.MonoBlock
+import com.makefunstuff.herdr.ui.design.PrimaryButton
+import com.makefunstuff.herdr.ui.design.QuietButton
 import com.makefunstuff.herdr.ui.design.QuietCard
+import com.makefunstuff.herdr.ui.design.SecondaryButton
 import com.makefunstuff.herdr.ui.design.SectionHeading
+import com.makefunstuff.herdr.ui.design.StatusBadge
 import com.makefunstuff.herdr.ui.manage.ConfirmDialog
+import com.makefunstuff.herdr.ui.theme.Herdr
+import com.makefunstuff.herdr.ui.theme.Space
 import com.makefunstuff.herdr.ui.theme.color
 import kotlinx.coroutines.launch
 import kotlinx.serialization.builtins.ListSerializer
@@ -171,25 +169,20 @@ fun EditMachineScreen(nav: NavController, id: String?) {
     val canBuild = build() != null
 
     Scaffold(
+        containerColor = Herdr.colors.ground,
         topBar = {
-            TopAppBar(
-                navigationIcon = { IconButton(onClick = { nav.popBackStack() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
-                title = { BarTitle(if (existing == null) "Add machine" else "Edit ${existing.label}") },
-                actions = {
-                    if (existing != null) {
-                        IconButton(onClick = { confirmDelete = true }) { Icon(Icons.Filled.Delete, "Remove machine") }
-                    }
-                },
-            )
+            HerdrTopBar(if (existing == null) "Add machine" else "Edit ${existing.label}", onBack = { nav.popBackStack() }) {
+                if (existing != null) BarIcon(HerdrIcons.Delete, "Remove machine", { confirmDelete = true })
+            }
         },
         bottomBar = {
             BottomActionBar {
-                OutlinedButton(
+                SecondaryButton(
                     onClick = { runTest() },
                     enabled = canBuild && test != TestResult.Running,
                     modifier = Modifier.weight(1f).heightIn(min = 48.dp),
                 ) { Text("Test connection") }
-                Button(
+                PrimaryButton(
                     onClick = { save() },
                     enabled = canBuild,
                     modifier = Modifier.weight(1f).heightIn(min = 48.dp),
@@ -198,10 +191,10 @@ fun EditMachineScreen(nav: NavController, id: String?) {
         },
     ) { padding ->
         Column(
-            Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = Space.screen),
+            verticalArrangement = Arrangement.spacedBy(Space.s),
         ) {
-            SectionHeading("Where it is", top = 8.dp)
+            SectionHeading("Where it is", top = Space.xs)
             HerdrTextField(
                 value = target,
                 onValueChange = { target = it; test = null },
@@ -234,16 +227,12 @@ fun EditMachineScreen(nav: NavController, id: String?) {
                         readOnly = true,
                     )
                     Box(Modifier.matchParentSize().clickable(onClickLabel = "Choose a jump host") { jumpOpen = true })
-                    Icon(Icons.Filled.ArrowDropDown, null, modifier = Modifier.align(Alignment.CenterEnd).padding(end = 12.dp))
+                    Icon(HerdrIcons.ExpandMore, null, tint = Herdr.colors.muted, modifier = Modifier.align(Alignment.TopEnd).padding(top = 16.dp, end = 12.dp))
                 }
-                HerdrMenu(expanded = jumpOpen, onDismissRequest = { jumpOpen = false }, title = "Connect through") {
-                    HerdrMenuItem(text = { Text("Direct") }, onClick = { viaId = null; jumpOpen = false })
+                HerdrMenu(expanded = jumpOpen, onDismissRequest = { jumpOpen = false }, title = "Connect through", subtitle = "A jump host for a machine only reachable from there") {
+                    ActionRow("Direct", icon = HerdrIcons.Smartphone, detail = "From this phone", selected = viaId == null, onClick = { viaId = null; jumpOpen = false })
                     others.forEach { o ->
-                        HerdrMenuItem(
-                            text = { Text(o.label) },
-                            leadingIcon = if (o.id == viaId) ({ Icon(Icons.Filled.Check, null) }) else null,
-                            onClick = { viaId = o.id; jumpOpen = false },
-                        )
+                        ActionRow(o.label, icon = HerdrIcons.Dns, detail = o.target, selected = o.id == viaId, onClick = { viaId = o.id; jumpOpen = false })
                     }
                 }
             }
@@ -264,40 +253,32 @@ fun EditMachineScreen(nav: NavController, id: String?) {
             }
 
             SectionHeading("This phone's SSH key")
-            QuietCard {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            QuietCard(padded = true) {
+                Column(verticalArrangement = Arrangement.spacedBy(Space.m)) {
                     Text(
                         "Add it to ~/.ssh/authorized_keys on the machine.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Text(
-                        publicKey ?: "No SSH key yet. Set one up in Settings.",
-                        fontFamily = FontFamily.Monospace,
-                        style = MaterialTheme.typography.bodySmall,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Herdr.colors.muted,
                     )
                     if (publicKey != null) {
-                        Surface(
-                            color = MaterialTheme.colorScheme.secondaryContainer,
-                            shape = RoundedCornerShape(50),
-                            modifier = Modifier.clickable { context.copyToClipboard("public key", publicKey!!, "Public key copied") },
-                        ) {
-                            Row(
-                                Modifier.padding(horizontal = 14.dp).heightIn(min = 40.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            ) { Icon(Icons.Filled.Lock, null, modifier = Modifier.size(18.dp)); Text("Copy public key", style = MaterialTheme.typography.labelLarge) }
+                        MonoBlock(publicKey!!)
+                        SecondaryButton(onClick = { context.copyToClipboard("public key", publicKey!!, "Public key copied") }) {
+                            Icon(HerdrIcons.ContentCopy, null, modifier = Modifier.size(18.dp))
+                            Text("Copy public key")
                         }
+                    } else {
+                        Text("No SSH key yet. Set one up in Settings.", style = MaterialTheme.typography.bodyMedium)
                     }
                 }
             }
 
             pinnedKey?.let { fp ->
                 SectionHeading("Trusted host key")
-                QuietCard {
-                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(fp, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
-                        TextButton(onClick = { pinnedKey = null; test = null }, modifier = Modifier.heightIn(min = 48.dp)) {
+                QuietCard(padded = true) {
+                    Column(verticalArrangement = Arrangement.spacedBy(Space.m)) {
+                        MonoBlock(fp)
+                        SecondaryButton(onClick = { pinnedKey = null; test = null }) {
+                            Icon(HerdrIcons.RestartAlt, null, modifier = Modifier.size(18.dp))
                             Text("Forget and check again")
                         }
                     }
@@ -326,34 +307,31 @@ fun EditMachineScreen(nav: NavController, id: String?) {
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun ConnectedCard(result: TestResult.Ok, pinnedKey: String?, chosen: String, onChoose: (String) -> Unit) {
-    QuietCard {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                StatusDot(AgentStatus.Idle.color())
-                Text("Connected", style = MaterialTheme.typography.titleMedium)
-            }
+    QuietCard(padded = true) {
+        Column(verticalArrangement = Arrangement.spacedBy(Space.m)) {
+            StatusBadge("Connected", Herdr.colors.green)
             if (pinnedKey == null) {
                 Text(
                     "The host key is only seen on the first connection. Check it matches the machine before saving:",
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Herdr.colors.muted,
                 )
-                Text(result.fingerprint, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
+                MonoBlock(result.fingerprint)
             }
             if (result.sessions.isEmpty()) {
                 Text(
                     "No herdr sessions are running there yet. Start herdr on the machine once.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Herdr.colors.muted,
                 )
             } else {
-                Text("herdr sessions", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                FieldLabel("herdr sessions")
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(Space.s), verticalArrangement = Arrangement.spacedBy(0.dp)) {
                     result.sessions.forEach { s ->
-                        FilterChip(
+                        HerdrChip(
                             selected = chosen == s.name,
                             onClick = { onChoose(s.name) },
                             label = { Text(if (s.running) s.name else "${s.name} (stopped)") },
-                            modifier = Modifier.heightIn(min = 40.dp),
                         )
                     }
                 }

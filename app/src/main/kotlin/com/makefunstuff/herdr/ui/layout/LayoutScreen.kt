@@ -1,13 +1,5 @@
 package com.makefunstuff.herdr.ui.layout
 
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.heading
-import androidx.compose.foundation.layout.heightIn
-import com.makefunstuff.herdr.ui.design.BarTitle
-import com.makefunstuff.herdr.ui.design.HerdrDialog
-import com.makefunstuff.herdr.ui.design.HerdrMenu
-import com.makefunstuff.herdr.ui.design.HerdrMenuItem
-import com.makefunstuff.herdr.ui.design.HerdrSheet
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,32 +12,24 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -56,8 +40,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -79,8 +66,28 @@ import com.makefunstuff.herdr.ui.common.LocalContainer
 import com.makefunstuff.herdr.ui.common.clipboardText
 import com.makefunstuff.herdr.ui.common.copyToClipboard
 import com.makefunstuff.herdr.ui.common.toast
-import kotlinx.coroutines.launch
+import com.makefunstuff.herdr.ui.design.BarIcon
+import com.makefunstuff.herdr.ui.design.DangerButton
+import com.makefunstuff.herdr.ui.design.HerdrDialog
+import com.makefunstuff.herdr.ui.design.HerdrField
+import com.makefunstuff.herdr.ui.design.HerdrIcons
+import com.makefunstuff.herdr.ui.design.HerdrMenu
+import com.makefunstuff.herdr.ui.design.HerdrSheet
+import com.makefunstuff.herdr.ui.design.HerdrTopBar
+import com.makefunstuff.herdr.ui.design.IconTile
+import com.makefunstuff.herdr.ui.design.ListRow
+import com.makefunstuff.herdr.ui.design.LoadingState
+import com.makefunstuff.herdr.ui.design.MenuRow
+import com.makefunstuff.herdr.ui.design.QuietButton
+import com.makefunstuff.herdr.ui.design.QuietCard
+import com.makefunstuff.herdr.ui.design.SecondaryButton
+import com.makefunstuff.herdr.ui.design.SectionHeading
+import com.makefunstuff.herdr.ui.design.SheetTitle
+import com.makefunstuff.herdr.ui.design.StateBlock
+import com.makefunstuff.herdr.ui.theme.Herdr
+import com.makefunstuff.herdr.ui.theme.Space
 import kotlin.math.roundToInt
+import kotlinx.coroutines.launch
 
 /**
  * A tab's layout: the split tree as a diagram, sliders for its ratios, and saved layouts to apply
@@ -191,150 +198,103 @@ fun LayoutScreen(nav: NavController, machineId: String, paneId: String) {
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        containerColor = Herdr.colors.ground,
         topBar = {
-            TopAppBar(
-                title = {
-                    BarTitle("Layout", snapshot.location(workspace, tab) ?: tab)
-                },
-                navigationIcon = {
-                    IconButton(onClick = { nav.popBackStack() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
-                },
-                actions = {
-                    IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, "More") }
-                    HerdrMenu(expanded = menu, onDismissRequest = { menu = false }, title = "Layout") {
-                        HerdrMenuItem(
-                            text = { Text("Save this layout…") },
-                            enabled = tree != null,
-                            onClick = { menu = false; saveOpen = true },
-                        )
-                        HerdrMenuItem(
-                            text = { Text("Saved layouts") },
-                            onClick = { menu = false; savedOpen = true },
-                        )
-                        HerdrMenuItem(
-                            text = { Text("Copy layout as JSON") },
-                            enabled = tree != null,
-                            onClick = {
-                                menu = false
-                                tree?.let { context.copyToClipboard("layout", LayoutTemplates.encode(it.template()), "Layout copied") }
-                            },
-                        )
-                        HerdrMenuItem(
-                            text = { Text("Paste layout and apply") },
-                            onClick = {
-                                menu = false
-                                val text = context.clipboardText()
-                                if (text.isNullOrBlank()) {
-                                    context.toast("The clipboard is empty")
-                                } else {
-                                    runCatching { LayoutTemplates.decode(text) }
-                                        .onSuccess { apply(it, replace = false, label = null) }
-                                        .onFailure { context.toast("That isn't a layout: ${it.message}") }
-                                }
-                            },
-                        )
-                        HerdrMenuItem(text = { Text("Refresh") }, onClick = { menu = false; reload++ })
-                    }
-                },
-            )
+            HerdrTopBar("Layout", subtitle = snapshot.location(workspace, tab) ?: tab, onBack = { nav.popBackStack() }) {
+                BarIcon(HerdrIcons.MoreVert, "More", { menu = true })
+                HerdrMenu(expanded = menu, onDismissRequest = { menu = false }, title = "Layout", subtitle = snapshot.location(workspace, tab) ?: tab) {
+                    MenuRow("Save this layout…", HerdrIcons.Add, { menu = false; saveOpen = true }, enabled = tree != null)
+                    MenuRow("Saved layouts", HerdrIcons.Dashboard, { menu = false; savedOpen = true })
+                    MenuRow("Copy layout as JSON", HerdrIcons.ContentCopy, {
+                        menu = false
+                        tree?.let { context.copyToClipboard("layout", LayoutTemplates.encode(it.template()), "Layout copied") }
+                    }, enabled = tree != null)
+                    MenuRow("Paste layout and apply", HerdrIcons.Download, {
+                        menu = false
+                        val text = context.clipboardText()
+                        if (text.isNullOrBlank()) {
+                            context.toast("The clipboard is empty")
+                        } else {
+                            runCatching { LayoutTemplates.decode(text) }
+                                .onSuccess { apply(it, replace = false, label = null) }
+                                .onFailure { context.toast("That isn't a layout: ${it.message}") }
+                        }
+                    })
+                    MenuRow("Refresh", HerdrIcons.Refresh, { menu = false; reload++ })
+                }
+            }
         },
     ) { padding ->
         LazyColumn(
             Modifier.padding(padding).fillMaxSize(),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+            contentPadding = PaddingValues(start = Space.screen, end = Space.screen, top = Space.xs, bottom = Space.xl),
+            verticalArrangement = Arrangement.spacedBy(Space.s),
         ) {
             item {
-                Card(
-                    shape = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-                ) {
-                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("The tab", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-                            if (tabLayout?.zoomed == true) Text("zoomed", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                        }
-                        val layout = tabLayout
-                        if (layout == null) {
-                            Text("Loading…", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        } else {
-                            LayoutDiagram(layout, panes, Modifier.fillMaxWidth().aspectRatio(1.6f))
-                        }
+                QuietCard(padded = true) {
+                    val layout = tabLayout
+                    if (layout == null) {
+                        LoadingState("Reading the layout")
+                    } else {
+                        LayoutDiagram(layout, panes, Modifier.fillMaxWidth().aspectRatio(1.6f))
+                        if (layout.zoomed) Text("Zoomed: one pane fills the tab", style = MaterialTheme.typography.labelMedium, color = Herdr.colors.muted, modifier = Modifier.padding(top = Space.s))
                     }
                 }
             }
 
-            item { Text("Split ratios", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp).semantics { heading() }) }
+            item { SectionHeading("Split ratios", top = Space.l) }
             val rows = tree?.let { ratioRows(it) } ?: emptyList()
             if (tree != null && rows.isEmpty()) {
                 item {
                     Text(
                         "This tab has a single pane. Split it to get a ratio to change.",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = Herdr.colors.muted,
                     )
                 }
             }
-            items(rows, key = { it.path.joinToString("") { if (it) "1" else "0" } }) { row ->
-                RatioSlider(row) { setRatio(row.path, it) }
+            if (rows.isNotEmpty()) item {
+                QuietCard(padded = true) {
+                    rows.forEach { row -> key(row.path.joinToString("") { if (it) "1" else "0" }) { RatioSlider(row) { setRatio(row.path, it) } } }
+                }
             }
 
-            item { Text("Panes", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp).semantics { heading() }) }
-            items(panes, key = { it.paneId }) { p ->
-                Card(
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-                ) {
-                    Row(
-                        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
-                            Text(p.displayName, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            val rect = tabLayout?.panes?.firstOrNull { it.paneId == p.paneId }?.rect
-                            Text(
-                                buildString {
-                                    if (p.paneId == tabLayout?.focusedPaneId) append("focused · ")
-                                    rect?.let { append("${it.width}×${it.height}") }
-                                }.ifBlank { p.paneId },
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        androidx.compose.material3.FilledTonalButton(onClick = { nav.navigate(Routes.terminal(machineId, p.paneId)) }, modifier = Modifier.heightIn(min = 48.dp)) { Text("Terminal") }
+            item { SectionHeading("Panes", top = Space.l) }
+            item {
+                QuietCard {
+                    panes.forEach { p ->
+                        val rect = tabLayout?.panes?.firstOrNull { it.paneId == p.paneId }?.rect
+                        ListRow(
+                            p.displayName,
+                            subtitle = buildString {
+                                if (p.paneId == tabLayout?.focusedPaneId) append("Focused · ")
+                                rect?.let { append("${it.width}×${it.height}") }
+                            }.ifBlank { p.paneId },
+                            leading = { IconTile(HerdrIcons.Terminal, size = 36.dp) },
+                            trailing = { Icon(HerdrIcons.ChevronRight, null, tint = Herdr.colors.faint) },
+                            onClickLabel = "Open terminal",
+                            onClick = { nav.navigate(Routes.terminal(machineId, p.paneId)) },
+                        )
                     }
                 }
             }
 
+            item { SectionHeading("Saved layouts", top = Space.l) }
             item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-                ) {
-                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Saved layouts", style = MaterialTheme.typography.titleSmall)
-                        if (saved.isEmpty()) {
-                            Text(
-                                "Save this tab's layout, then apply it here or on another tab.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        } else {
-                            saved.forEach { s ->
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(s.name, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    TextButton(onClick = { apply(s.root, replace = false, label = s.name) }) { Text("New tab") }
-                                    TextButton(onClick = { applying = s; replaceOpen = true }) { Text("Replace…") }
-                                    IconButton(onClick = { saved = store.remove(s.name) }) { Icon(Icons.Default.Delete, "Delete ${s.name}") }
-                                }
-                            }
-                        }
-                        TextButton(onClick = { saveOpen = true }, enabled = tree != null) {
-                            Icon(Icons.Default.Add, null)
-                            Spacer(Modifier.width(4.dp))
-                            Text("Save this layout")
-                        }
+                QuietCard {
+                    if (saved.isEmpty()) {
+                        Text(
+                            "Save this tab's layout, then apply it here or on another tab.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Herdr.colors.muted,
+                            modifier = Modifier.padding(start = Space.l, end = Space.l, top = Space.l),
+                        )
+                    } else {
+                        saved.forEach { s -> SavedLayoutRow(s.name, onNewTab = { apply(s.root, replace = false, label = s.name) }, onReplace = { applying = s; replaceOpen = true }, onDelete = { saved = store.remove(s.name) }) }
+                    }
+                    QuietButton(onClick = { saveOpen = true }, enabled = tree != null, modifier = Modifier.padding(Space.s)) {
+                        Icon(HerdrIcons.Add, null, Modifier.size(18.dp))
+                        Text("Save this layout")
                     }
                 }
             }
@@ -348,7 +308,7 @@ fun LayoutScreen(nav: NavController, machineId: String, paneId: String) {
             title = { Text("Save layout") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
+                    HerdrField(
                         value = name,
                         onValueChange = { name = it },
                         label = { Text("Name") },
@@ -364,7 +324,7 @@ fun LayoutScreen(nav: NavController, machineId: String, paneId: String) {
                 }
             },
             confirmButton = {
-                TextButton(
+                QuietButton(
                     enabled = name.isNotBlank() && tree != null,
                     onClick = {
                         tree?.let { saved = store.save(name.trim(), it.template()) }
@@ -373,30 +333,24 @@ fun LayoutScreen(nav: NavController, machineId: String, paneId: String) {
                     },
                 ) { Text("Save") }
             },
-            dismissButton = { TextButton(onClick = { saveOpen = false }) { Text("Cancel") } },
+            dismissButton = { QuietButton(onClick = { saveOpen = false }) { Text("Cancel") } },
         )
     }
 
     if (savedOpen) {
         HerdrSheet(onDismissRequest = { savedOpen = false }) {
-            Column(
-                Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 24.dp).navigationBarsPadding(),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Text("Saved layouts", style = MaterialTheme.typography.titleMedium)
+            SheetTitle("Saved layouts")
+            Column(Modifier.fillMaxWidth().padding(horizontal = Space.s).padding(bottom = Space.l).navigationBarsPadding()) {
                 if (saved.isEmpty()) {
-                    Text(
-                        "Nothing saved yet. Use Save this layout to keep the current tab's arrangement.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    StateBlock(HerdrIcons.Dashboard, "Nothing saved yet", "Use Save this layout to keep the current tab's arrangement.")
                 }
                 saved.forEach { s ->
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(s.name, modifier = Modifier.weight(1f))
-                        TextButton(onClick = { savedOpen = false; apply(s.root, replace = false, label = s.name) }) { Text("New tab") }
-                        TextButton(onClick = { savedOpen = false; applying = s; replaceOpen = true }) { Text("Replace…") }
-                    }
+                    SavedLayoutRow(
+                        s.name,
+                        onNewTab = { savedOpen = false; apply(s.root, replace = false, label = s.name) },
+                        onReplace = { savedOpen = false; applying = s; replaceOpen = true },
+                        onDelete = null,
+                    )
                 }
             }
         }
@@ -409,15 +363,13 @@ fun LayoutScreen(nav: NavController, machineId: String, paneId: String) {
             title = { Text("Replace this tab?") },
             text = { Text("The panes in this tab are closed and \"${target.name}\" takes their place. Anything running in them stops.") },
             confirmButton = {
-                TextButton(
-                    onClick = {
-                        replaceOpen = false
-                        applying = null
-                        apply(target.root, replace = true, label = null)
-                    },
-                ) { Text("Replace") }
+                DangerButton("Replace") {
+                    replaceOpen = false
+                    applying = null
+                    apply(target.root, replace = true, label = null)
+                }
             },
-            dismissButton = { TextButton(onClick = { replaceOpen = false; applying = null }) { Text("Cancel") } },
+            dismissButton = { QuietButton(onClick = { replaceOpen = false; applying = null }) { Text("Cancel") } },
         )
     }
 }
@@ -433,27 +385,43 @@ private fun ratioRows(node: LayoutNode): List<RatioRow> =
 @Composable
 private fun RatioSlider(row: RatioRow, onCommit: (Float) -> Unit) {
     var value by remember(row.path, row.ratio) { mutableStateOf(row.ratio) }
+    val c = Herdr.colors
     Column(Modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(row.label, style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
-            Text("${(value * 100).roundToInt()}%", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(row.label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+            Text("${(value * 100).roundToInt()}%", style = MaterialTheme.typography.labelLarge, color = c.muted)
         }
         Slider(
             value = value,
             onValueChange = { value = it },
             onValueChangeFinished = { onCommit(value) },
             valueRange = 0.1f..0.9f,
+            colors = SliderDefaults.colors(
+                thumbColor = MaterialTheme.colorScheme.primary, activeTrackColor = MaterialTheme.colorScheme.primary,
+                inactiveTrackColor = c.field, activeTickColor = Color.Transparent, inactiveTickColor = Color.Transparent,
+            ),
         )
+    }
+}
+
+/** A saved layout: its name, then apply it as a new tab or in place of this one. */
+@Composable
+private fun SavedLayoutRow(name: String, onNewTab: () -> Unit, onReplace: () -> Unit, onDelete: (() -> Unit)?) {
+    Row(Modifier.fillMaxWidth().padding(start = Space.l, end = Space.xs), verticalAlignment = Alignment.CenterVertically) {
+        Text(name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        QuietButton(onClick = onNewTab) { Text("New tab") }
+        QuietButton(onClick = onReplace) { Text("Replace…") }
+        if (onDelete != null) BarIcon(HerdrIcons.Delete, "Delete $name", onDelete)
     }
 }
 
 /** The tab's panes as herdr lays them out, with split edges and the focused pane marked. */
 @Composable
 private fun LayoutDiagram(layout: TabLayout, panes: List<PaneInfo>, modifier: Modifier) {
-    val outline = MaterialTheme.colorScheme.outlineVariant
-    val fill = MaterialTheme.colorScheme.surfaceContainerHighest
-    val focused = MaterialTheme.colorScheme.primary
-    val labelColor = MaterialTheme.colorScheme.onSurface
+    val outline = Herdr.colors.fieldFocused
+    val fill = Herdr.colors.field
+    val focused = Herdr.colors.accent
+    val labelColor = Herdr.colors.text
     val measurer = rememberTextMeasurer()
     val area = layout.area
     Canvas(modifier) {
@@ -465,14 +433,14 @@ private fun LayoutDiagram(layout: TabLayout, panes: List<PaneInfo>, modifier: Mo
             val topLeft = Offset((r.x - area.x) * sx + 2f, (r.y - area.y) * sy + 2f)
             val sz = Size(r.width * sx - 4f, r.height * sy - 4f)
             if (sz.width <= 0 || sz.height <= 0) return@forEach
-            drawRoundRect(fill, topLeft, sz, CornerRadius(6f))
+            drawRoundRect(fill, topLeft, sz, CornerRadius(8.dp.toPx()))
             val isFocused = p.paneId == layout.focusedPaneId
             drawRoundRect(
                 if (isFocused) focused else outline,
                 topLeft,
                 sz,
-                CornerRadius(6f),
-                style = Stroke(width = if (isFocused) 4f else 2f),
+                CornerRadius(8.dp.toPx()),
+                style = Stroke(width = if (isFocused) 2.dp.toPx() else 1.dp.toPx()),
             )
             val name = panes.firstOrNull { it.paneId == p.paneId }?.displayName ?: p.paneId
             val text = measurer.measure(
@@ -482,7 +450,7 @@ private fun LayoutDiagram(layout: TabLayout, panes: List<PaneInfo>, modifier: Mo
                 overflow = TextOverflow.Ellipsis,
                 constraints = Constraints(maxWidth = (sz.width - 12f).toInt().coerceAtLeast(0)),
             )
-            drawText(text, topLeft = Offset(topLeft.x + 6f, topLeft.y + 6f))
+            drawText(text, topLeft = Offset(topLeft.x + 8.dp.toPx(), topLeft.y + 6.dp.toPx()))
         }
         layout.splits.forEach { s ->
             val r = s.rect

@@ -1,9 +1,5 @@
 package com.makefunstuff.herdr.ui.terminal
 
-import com.makefunstuff.herdr.ui.design.HerdrDialog
-import com.makefunstuff.herdr.ui.design.HerdrMenu
-import com.makefunstuff.herdr.ui.design.HerdrMenuItem
-import com.makefunstuff.herdr.ui.design.HerdrSheet
 import android.content.Context
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -21,31 +17,19 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowLeft
-import androidx.compose.material.icons.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -61,7 +45,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -86,6 +74,24 @@ import com.makefunstuff.herdr.ui.common.LocalContainer
 import com.makefunstuff.herdr.ui.common.copyToClipboard
 import com.makefunstuff.herdr.ui.common.openUrl
 import com.makefunstuff.herdr.ui.common.toast
+import com.makefunstuff.herdr.ui.design.BarIcon
+import com.makefunstuff.herdr.ui.design.PrimaryButton
+import com.makefunstuff.herdr.ui.design.SecondaryButton
+import com.makefunstuff.herdr.ui.design.HerdrDialog
+import com.makefunstuff.herdr.ui.design.HerdrField
+import com.makefunstuff.herdr.ui.design.HerdrIcons
+import com.makefunstuff.herdr.ui.design.HerdrMenu
+import com.makefunstuff.herdr.ui.design.HerdrShapes
+import com.makefunstuff.herdr.ui.design.HerdrSheet
+import com.makefunstuff.herdr.ui.design.HerdrTopBar
+import com.makefunstuff.herdr.ui.design.MenuRow
+import com.makefunstuff.herdr.ui.design.MenuSection
+import com.makefunstuff.herdr.ui.design.QuietButton
+import com.makefunstuff.herdr.ui.design.SheetTitle
+import com.makefunstuff.herdr.ui.design.sheetColor
+import com.makefunstuff.herdr.ui.theme.Herdr
+import com.makefunstuff.herdr.ui.theme.Radius
+import com.makefunstuff.herdr.ui.theme.Space
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -311,68 +317,42 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        containerColor = Herdr.colors.ground,
         topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text(pane?.displayName ?: paneId, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(
-                            buildString {
-                                append(session.machine.label)
-                                stream?.emulator?.let { append(" · ${it.cols}×${it.rows}") }
-                                if (keepHost) append(" · desktop size")
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
+            HerdrTopBar(
+                pane?.displayName ?: paneId,
+                subtitle = buildString {
+                    append(session.machine.label)
+                    stream?.emulator?.let { append(" · ${it.cols}×${it.rows}") }
+                    if (keepHost) append(" · desktop size")
                 },
-                navigationIcon = {
-                    IconButton(onClick = { nav.popBackStack() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
-                },
-                actions = {
-                    if (!finding) IconButton(onClick = { finding = true }) { Icon(Icons.Default.Search, "Find") }
-                    IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, "More") }
-                    HerdrMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                        HerdrMenuItem(
-                            text = { Text(if (finding) "Hide find" else "Find in scrollback") },
-                            onClick = { menu = false; finding = !finding },
-                        )
-                        HerdrMenuItem(
-                            text = { Text("Select text") },
-                            onClick = {
-                                menu = false
-                                view?.startSelection(CellPoint(0, 0))
-                                selecting = true
-                                context.toast("Drag to select, then Copy")
-                            },
-                        )
-                        HerdrMenuItem(
-                            text = { Text("Copy screen") },
-                            onClick = { menu = false; view?.let { context.copyToClipboard("terminal", it.screenText(), "Screen copied") } },
-                        )
-                        HerdrMenuItem(text = { Text("Resize pane…") }, onClick = { menu = false; resizeOpen = true })
-                        HerdrMenuItem(
-                            text = { Text("Layout…") },
-                            onClick = { menu = false; nav.navigate(Routes.layout(machineId, paneId)) },
-                        )
-                        HerdrMenuItem(
-                            text = { Text(if (keepHost) "Fit to phone" else "Desktop size") },
-                            onClick = { menu = false; keepHost = !keepHost },
-                        )
-                        HerdrMenuItem(text = { Text("Reconnect") }, onClick = { menu = false; generation++ })
-                    }
-                },
-            )
+                onBack = { nav.popBackStack() },
+            ) {
+                if (!finding) BarIcon(HerdrIcons.Search, "Find", { finding = true })
+                BarIcon(HerdrIcons.MoreVert, "More", { menu = true })
+                HerdrMenu(expanded = menu, onDismissRequest = { menu = false }, title = pane?.displayName ?: paneId, subtitle = session.machine.label) {
+                    MenuRow(if (finding) "Hide find" else "Find in scrollback", HerdrIcons.Search, { menu = false; finding = !finding })
+                    MenuRow("Select text", HerdrIcons.SelectAll, {
+                        menu = false
+                        view?.startSelection(CellPoint(0, 0))
+                        selecting = true
+                        context.toast("Drag to select, then Copy")
+                    })
+                    MenuRow("Copy screen", HerdrIcons.ContentCopy, { menu = false; view?.let { context.copyToClipboard("terminal", it.screenText(), "Screen copied") } })
+                    MenuSection("Pane")
+                    MenuRow("Resize pane…", HerdrIcons.OpenInFull, { menu = false; resizeOpen = true })
+                    MenuRow("Layout…", HerdrIcons.Dashboard, { menu = false; nav.navigate(Routes.layout(machineId, paneId)) })
+                    MenuRow(if (keepHost) "Fit to phone" else "Desktop size", if (keepHost) HerdrIcons.Smartphone else HerdrIcons.Computer, { menu = false; keepHost = !keepHost })
+                    MenuRow("Reconnect", HerdrIcons.Sync, { menu = false; generation++ })
+                }
+            }
         },
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize().imePadding()) {
             if (finding) {
-                Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, tonalElevation = 2.dp) {
-                    Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp)) {
-                        OutlinedTextField(
+                Surface(color = Herdr.colors.ground) {
+                    Column(Modifier.fillMaxWidth().padding(horizontal = Space.m, vertical = Space.xs)) {
+                        HerdrField(
                             value = query,
                             onValueChange = {
                                 query = it
@@ -380,6 +360,8 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
                                 found = null
                             },
                             placeholder = { Text("Find in scrollback") },
+                            leadingIcon = { Icon(HerdrIcons.Search, null, Modifier.size(20.dp)) },
+                            shape = HerdrShapes.Pill,
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                             keyboardActions = KeyboardActions(onSearch = { find(true) }),
@@ -394,18 +376,16 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
                                     else -> "${(found!!.currentGlobal ?: 0) + 1} of ${found!!.total}"
                                 },
                                 style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.weight(1f),
+                                color = Herdr.colors.muted,
+                                modifier = Modifier.weight(1f).padding(start = Space.xs),
                             )
-                            IconButton(onClick = { find(true) }) { Icon(Icons.Default.KeyboardArrowUp, "Older") }
-                            IconButton(onClick = { find(false) }) { Icon(Icons.Default.KeyboardArrowDown, "Newer") }
-                            IconButton(
-                                onClick = {
-                                    finding = false
-                                    search?.reset()
-                                    found = null
-                                },
-                            ) { Icon(Icons.Default.Close, "Close") }
+                            BarIcon(HerdrIcons.KeyboardArrowUp, "Older", { find(true) })
+                            BarIcon(HerdrIcons.KeyboardArrowDown, "Newer", { find(false) })
+                            BarIcon(HerdrIcons.Close, "Close", {
+                                finding = false
+                                search?.reset()
+                                found = null
+                            })
                         }
                     }
                 }
@@ -445,23 +425,26 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
                     Text(
                         "herdr ${herdr.describe} differs from the server (${herdr.serverVersion})",
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        color = Herdr.colors.text,
                         modifier = Modifier
                             .align(Alignment.TopCenter)
                             .fillMaxWidth()
-                            .background(MaterialTheme.colorScheme.errorContainer)
-                            .padding(horizontal = 8.dp, vertical = 2.dp),
+                            .background(Herdr.colors.tint(Herdr.colors.amber).compositeOver(Herdr.colors.ground))
+                            .padding(horizontal = Space.m, vertical = Space.xs),
                     )
                 }
                 if (message != null) {
                     Surface(
-                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        shape = MaterialTheme.shapes.medium,
-                        modifier = Modifier.align(Alignment.Center).padding(24.dp),
+                        color = sheetColor,
+                        shape = HerdrShapes.Card,
+                        modifier = Modifier.align(Alignment.Center).padding(Space.xl),
                     ) {
-                        Column(Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(message, style = MaterialTheme.typography.bodyMedium)
-                            TextButton(onClick = { generation++ }) { Text("Reconnect") }
+                        Column(Modifier.padding(Space.xl), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(Space.l)) {
+                            Text(message, style = MaterialTheme.typography.bodyMedium, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                            SecondaryButton(onClick = { generation++ }) {
+                                Icon(HerdrIcons.Sync, null, Modifier.size(18.dp))
+                                Text("Reconnect")
+                            }
                         }
                     }
                 }
@@ -470,19 +453,19 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
                 Row(
                     Modifier
                         .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.secondaryContainer)
+                        .background(Herdr.colors.ground)
                         .navigationBarsPadding()
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                        .padding(horizontal = Space.s, vertical = Space.xs),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
                         "Drag to select",
                         style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer,
-                        modifier = Modifier.weight(1f).padding(start = 8.dp),
+                        color = Herdr.colors.muted,
+                        modifier = Modifier.weight(1f).padding(start = Space.s),
                     )
-                    TextButton(onClick = { copySelection() }) { Text("Copy") }
-                    TextButton(
+                    PrimaryButton(onClick = { copySelection() }) { Text("Copy") }
+                    QuietButton(
                         onClick = {
                             view?.clearSelection()
                             selecting = false
@@ -493,11 +476,11 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
                 Row(
                     Modifier
                         .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.surfaceContainer)
+                        .background(Herdr.colors.ground)
                         .horizontalScroll(rememberScrollState())
                         .navigationBarsPadding()
-                        .padding(horizontal = 4.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        .padding(horizontal = Space.xs),
+                    horizontalArrangement = Arrangement.spacedBy(0.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Key("⌨", highlighted = true) { view?.showKeyboard() }
@@ -521,54 +504,62 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
     }
 }
 
-/** A compact key for the row above the keyboard. */
+/** A key for the row above the keyboard: a 48dp target with a 40dp grey key drawn in it. */
 @Composable
 private fun Key(label: String, selected: Boolean = false, highlighted: Boolean = false, onClick: () -> Unit) {
-    val colors = MaterialTheme.colorScheme
+    val c = Herdr.colors
     Box(
-        Modifier
-            .heightIn(min = 36.dp)
-            .widthIn(min = 40.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .background(
-                when {
-                    selected -> colors.primary
-                    highlighted -> colors.secondaryContainer
-                    else -> colors.surfaceContainerHighest
-                },
-            )
-            .clickable(onClick = onClick)
-            .padding(horizontal = 10.dp),
+        Modifier.heightIn(min = 52.dp).widthIn(min = 48.dp).clickable(role = Role.Button, onClick = onClick).padding(horizontal = 2.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            label,
-            fontFamily = FontFamily.Monospace,
-            style = MaterialTheme.typography.labelLarge,
-            color = if (selected) colors.onPrimary else colors.onSurface,
-        )
+        Box(
+            Modifier
+                .heightIn(min = 40.dp)
+                .widthIn(min = 44.dp)
+                .clip(RoundedCornerShape(Radius.s + 2.dp))
+                .background(
+                    when {
+                        selected -> MaterialTheme.colorScheme.primary
+                        highlighted -> c.fieldFocused
+                        else -> c.field
+                    },
+                )
+                .padding(horizontal = 10.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                label,
+                fontFamily = FontFamily.Monospace,
+                style = MaterialTheme.typography.labelLarge,
+                color = if (selected) MaterialTheme.colorScheme.onPrimary else c.text,
+            )
+        }
     }
 }
 
 /** Direction pad for `pane.resize`, which moves the pane's edge into a neighbouring split. */
 @Composable
 private fun ResizeSheet(onPick: (ResizeDirection) -> Unit) {
+    SheetTitle("Resize the pane", "Moves the pane's edge, so it only works when the tab is split. The pane grows toward the arrow.")
     Column(
-        Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 24.dp).navigationBarsPadding(),
+        Modifier.fillMaxWidth().padding(horizontal = Space.xl).padding(bottom = Space.xl).navigationBarsPadding(),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(Space.s),
     ) {
-        Text("Resize the pane", style = MaterialTheme.typography.titleMedium)
-        Text(
-            "Moves the pane's edge, so it only works when the tab is split. The pane grows toward the arrow.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        IconButton(onClick = { onPick(ResizeDirection.Up) }) { Icon(Icons.Default.KeyboardArrowUp, "Grow up") }
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            IconButton(onClick = { onPick(ResizeDirection.Left) }) { Icon(Icons.Default.KeyboardArrowLeft, "Grow left") }
-            IconButton(onClick = { onPick(ResizeDirection.Right) }) { Icon(Icons.Default.KeyboardArrowRight, "Grow right") }
+        PadKey(HerdrIcons.KeyboardArrowUp, "Grow up") { onPick(ResizeDirection.Up) }
+        Row(horizontalArrangement = Arrangement.spacedBy(72.dp)) {
+            PadKey(HerdrIcons.ChevronLeft, "Grow left") { onPick(ResizeDirection.Left) }
+            PadKey(HerdrIcons.ChevronRight, "Grow right") { onPick(ResizeDirection.Right) }
         }
-        IconButton(onClick = { onPick(ResizeDirection.Down) }) { Icon(Icons.Default.KeyboardArrowDown, "Grow down") }
+        PadKey(HerdrIcons.KeyboardArrowDown, "Grow down") { onPick(ResizeDirection.Down) }
     }
+}
+
+@Composable
+private fun PadKey(icon: androidx.compose.ui.graphics.vector.ImageVector, description: String, onClick: () -> Unit) {
+    Box(
+        Modifier.size(56.dp).clip(CircleShape).background(Herdr.colors.field).clickable(role = Role.Button, onClick = onClick)
+            .semantics { contentDescription = description },
+        contentAlignment = Alignment.Center,
+    ) { Icon(icon, null, tint = Herdr.colors.text, modifier = Modifier.size(28.dp)) }
 }

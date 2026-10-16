@@ -1,5 +1,13 @@
 package com.makefunstuff.herdr.ui.machines
 
+import com.makefunstuff.herdr.ui.design.SheetTitle
+import com.makefunstuff.herdr.ui.design.SegmentedPills
+import com.makefunstuff.herdr.ui.design.FieldLabel
+import com.makefunstuff.herdr.ui.theme.Herdr
+import com.makefunstuff.herdr.ui.theme.Space
+import com.makefunstuff.herdr.ui.design.HerdrField
+import com.makefunstuff.herdr.ui.design.HerdrChip
+import com.makefunstuff.herdr.ui.design.PrimaryButton
 import com.makefunstuff.herdr.ui.design.HerdrDialog
 import com.makefunstuff.herdr.ui.design.HerdrMenu
 import com.makefunstuff.herdr.ui.design.HerdrMenuItem
@@ -11,14 +19,8 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -68,25 +70,18 @@ fun NewSheet(session: HostSession, snap: SessionSnapshot, onDismiss: () -> Unit)
     }
 
     HerdrSheet(onDismissRequest = onDismiss) {
+        SheetTitle("New", "Start an agent, or open a workspace, tab or split")
         Column(
-            Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 16.dp).navigationBarsPadding(),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            Modifier.fillMaxWidth().padding(horizontal = Space.xl).padding(bottom = Space.l).navigationBarsPadding(),
+            verticalArrangement = Arrangement.spacedBy(Space.m),
         ) {
             val modes = listOf("Agent", "Workspace", "Tab", "Split")
-            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                modes.forEachIndexed { i, m ->
-                    SegmentedButton(
-                        selected = mode == i,
-                        onClick = { mode = i },
-                        shape = SegmentedButtonDefaults.itemShape(i, modes.size),
-                    ) { Text(m) }
-                }
-            }
+            SegmentedPills(modes, mode, { mode = it })
             if (mode != 1 && snap.workspaces.isNotEmpty()) {
-                Text("Workspace", style = MaterialTheme.typography.labelMedium)
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                FieldLabel("Workspace")
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(Space.s)) {
                     items(snap.workspaces, key = { it.workspaceId }) { ws ->
-                        FilterChip(
+                        HerdrChip(
                             selected = ws.workspaceId == workspaceId,
                             onClick = { workspaceId = ws.workspaceId },
                             label = { Text(ws.label.ifBlank { ws.workspaceId }) },
@@ -96,11 +91,11 @@ fun NewSheet(session: HostSession, snap: SessionSnapshot, onDismiss: () -> Unit)
             }
             when (mode) {
                 0 -> {
-                    Text("Agent", style = MaterialTheme.typography.labelMedium)
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        items(KINDS) { k -> FilterChip(selected = k == kind, onClick = { kind = k }, label = { Text(k) }) }
+                    FieldLabel("Agent")
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(Space.s)) {
+                        items(KINDS) { k -> HerdrChip(selected = k == kind, onClick = { kind = k }, label = { Text(k) }) }
                     }
-                    OutlinedTextField(
+                    HerdrField(
                         value = name,
                         onValueChange = { name = it.filter { c -> c.isLetterOrDigit() || c == '-' || c == '_' } },
                         label = { Text("Name") },
@@ -111,11 +106,11 @@ fun NewSheet(session: HostSession, snap: SessionSnapshot, onDismiss: () -> Unit)
                     Text(
                         "Starts in a new split next to the workspace's focused pane.",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = Herdr.colors.muted,
                     )
-                    Button(
+                    PrimaryButton(
                         onClick = {
-                            val pane = anchorPane() ?: return@Button context.toast("Pick a workspace first")
+                            val pane = anchorPane() ?: return@PrimaryButton context.toast("Pick a workspace first")
                             act { session.awaitApi().startAgent(name.ifBlank { kind }, kind, pane) }
                         },
                         enabled = !busy && workspaceId != null,
@@ -123,23 +118,23 @@ fun NewSheet(session: HostSession, snap: SessionSnapshot, onDismiss: () -> Unit)
                     ) { Text(if (busy) "Starting…" else "Start $kind") }
                 }
                 1 -> {
-                    OutlinedTextField(label, { label = it }, label = { Text("Name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(
+                    HerdrField(label, { label = it }, label = { Text("Name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    HerdrField(
                         cwd, { cwd = it },
                         label = { Text("Folder (absolute path, optional)") },
                         placeholder = { Text("/home/you/src/project") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )
-                    Button(
+                    PrimaryButton(
                         onClick = { act { session.awaitApi().createWorkspace(label.ifBlank { null }, cwd.ifBlank { null }) } },
                         enabled = !busy,
                         modifier = Modifier.fillMaxWidth(),
                     ) { Text("Create workspace") }
                 }
                 2 -> {
-                    OutlinedTextField(label, { label = it }, label = { Text("Tab name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    Button(
+                    HerdrField(label, { label = it }, label = { Text("Tab name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    PrimaryButton(
                         onClick = { act { session.awaitApi().createTab(workspaceId!!, label.ifBlank { null }) } },
                         enabled = !busy && workspaceId != null,
                         modifier = Modifier.fillMaxWidth(),
@@ -149,12 +144,12 @@ fun NewSheet(session: HostSession, snap: SessionSnapshot, onDismiss: () -> Unit)
                     Text(
                         "Splits the workspace's focused pane and opens a shell.",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = Herdr.colors.muted,
                     )
                     listOf("right" to "Split right", "down" to "Split down").forEach { (dir, text) ->
-                        Button(
+                        PrimaryButton(
                             onClick = {
-                                val pane = anchorPane() ?: return@Button context.toast("Pick a workspace first")
+                                val pane = anchorPane() ?: return@PrimaryButton context.toast("Pick a workspace first")
                                 act { session.awaitApi().splitPane(pane, dir) }
                             },
                             enabled = !busy && workspaceId != null,

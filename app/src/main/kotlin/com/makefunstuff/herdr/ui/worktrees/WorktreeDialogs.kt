@@ -1,5 +1,13 @@
 package com.makefunstuff.herdr.ui.worktrees
 
+import com.makefunstuff.herdr.ui.design.SheetTitle
+import com.makefunstuff.herdr.ui.design.FieldLabel
+import com.makefunstuff.herdr.ui.theme.Space
+import com.makefunstuff.herdr.ui.theme.Herdr
+import com.makefunstuff.herdr.ui.design.QuietButton
+import com.makefunstuff.herdr.ui.design.HerdrField
+import com.makefunstuff.herdr.ui.design.HerdrChip
+import com.makefunstuff.herdr.ui.design.PrimaryButton
 import com.makefunstuff.herdr.ui.design.HerdrDialog
 import com.makefunstuff.herdr.ui.design.HerdrMenu
 import com.makefunstuff.herdr.ui.design.HerdrMenuItem
@@ -14,14 +22,10 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -66,13 +70,13 @@ fun CreateWorktreeSheet(
     var busy by remember { mutableStateOf(false) }
 
     HerdrSheet(onDismissRequest = onDismiss) {
+        SheetTitle("New worktree", "of $repoName, opened as a new workspace")
         Column(
             Modifier.fillMaxWidth().imePadding()
-                .padding(horizontal = 20.dp).padding(bottom = 16.dp).navigationBarsPadding(),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+                .padding(horizontal = Space.xl).padding(bottom = Space.l).navigationBarsPadding(),
+            verticalArrangement = Arrangement.spacedBy(Space.m),
         ) {
-            Text("New worktree of $repoName", style = MaterialTheme.typography.titleMedium)
-            OutlinedTextField(
+            HerdrField(
                 branch, { branch = it.filterNot(Char::isWhitespace) },
                 label = { Text("New branch") },
                 placeholder = { Text("herdr picks a name if empty") },
@@ -80,27 +84,27 @@ fun CreateWorktreeSheet(
                 modifier = Modifier.fillMaxWidth(),
             )
             if (branches.isNotEmpty()) {
-                Text("Start from", style = MaterialTheme.typography.labelMedium)
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items(branches) { b -> FilterChip(selected = b == base, onClick = { base = if (base == b) "" else b }, label = { Text(b) }) }
+                FieldLabel("Start from")
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(Space.s)) {
+                    items(branches) { b -> HerdrChip(selected = b == base, onClick = { base = if (base == b) "" else b }, label = { Text(b) }) }
                 }
             }
-            OutlinedTextField(
+            HerdrField(
                 base, { base = it.trim() },
                 label = { Text("Base (branch, tag or commit, optional)") },
                 placeholder = { Text("the current checkout") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
-            OutlinedTextField(label, { label = it }, label = { Text("Workspace name (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(
+            HerdrField(label, { label = it }, label = { Text("Workspace name (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            HerdrField(
                 path, { path = it },
                 label = { Text("Folder (absolute path, optional)") },
                 placeholder = { Text("herdr's worktree folder") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
-            Button(
+            PrimaryButton(
                 onClick = {
                     busy = true
                     scope.launch {
@@ -200,13 +204,13 @@ fun RemoveWorktreeFlow(session: HostSession, request: RemoveRequest, onDone: (re
                 )
             },
             confirmButton = {
-                TextButton(
+                QuietButton(
                     onClick = { remove(force = false) },
                     enabled = !busy,
-                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    color = Herdr.colors.red,
                 ) { Text(if (busy) "Removing…" else "Remove") }
             },
-            dismissButton = { TextButton(onClick = { onDone(false) }, enabled = !busy) { Text("Cancel") } },
+            dismissButton = { QuietButton(onClick = { onDone(false) }, enabled = !busy) { Text("Cancel") } },
         )
     } else {
         HerdrDialog(
@@ -214,14 +218,14 @@ fun RemoveWorktreeFlow(session: HostSession, request: RemoveRequest, onDone: (re
             title = { Text("${request.title} has changes") },
             text = { Text("It has modified or untracked files that aren't committed. Removing it anyway deletes them for good.") },
             confirmButton = {
-                TextButton(
+                QuietButton(
                     onClick = { remove(force = true) },
                     enabled = !busy,
-                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    color = Herdr.colors.red,
                 ) { Text(if (busy) "Removing…" else "Delete changes and remove") }
             },
             dismissButton = {
-                TextButton(
+                QuietButton(
                     onClick = {
                         scope.launch {
                             closeIfOpened(pending.first, pending.second)
@@ -249,7 +253,7 @@ fun TrustRepositoryDialog(repoName: String, onTrust: () -> Unit, onDismiss: () -
                     "Trust lasts until you leave this screen.",
             )
         },
-        confirmButton = { TextButton(onClick = onTrust) { Text("Trust") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        confirmButton = { QuietButton(onClick = onTrust) { Text("Trust") } },
+        dismissButton = { QuietButton(onClick = onDismiss) { Text("Cancel") } },
     )
 }

@@ -1,5 +1,16 @@
 package com.makefunstuff.herdr.ui.settings
 
+import com.makefunstuff.herdr.ui.design.Notice
+import com.makefunstuff.herdr.ui.design.HerdrIcons
+import com.makefunstuff.herdr.ui.design.PrimaryButton
+import com.makefunstuff.herdr.ui.theme.Herdr
+import com.makefunstuff.herdr.ui.theme.Space
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Icon
+import androidx.compose.ui.graphics.Color
+import com.makefunstuff.herdr.ui.design.QuietButton
+import com.makefunstuff.herdr.ui.design.SecondaryButton
+import com.makefunstuff.herdr.ui.design.HerdrField
 import com.makefunstuff.herdr.ui.design.HerdrDialog
 import com.makefunstuff.herdr.ui.design.HerdrMenu
 import com.makefunstuff.herdr.ui.design.HerdrMenuItem
@@ -16,10 +27,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -77,17 +85,18 @@ fun ImportKeyDialog(replacing: Boolean, onDismiss: () -> Unit) {
             Column(Modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
                     "Choose a key backup saved from this app, or an OpenSSH private key (a file like ~/.ssh/id_ed25519). You can also paste it.",
-                    style = MaterialTheme.typography.bodySmall,
                 )
                 if (replacing) {
-                    Text(
+                    Notice(
                         "This replaces the app's current key. Machines that only trust the current key will refuse the app.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
+                        color = Herdr.colors.red, icon = HerdrIcons.Warning,
                     )
                 }
-                OutlinedButton(onClick = { pick.launch(arrayOf("*/*")) }) { Text("Choose file") }
-                OutlinedTextField(
+                SecondaryButton(onClick = { pick.launch(arrayOf("*/*")) }) {
+                    Icon(HerdrIcons.Folder, null, Modifier.size(18.dp))
+                    Text("Choose file")
+                }
+                HerdrField(
                     value = text,
                     onValueChange = {
                         text = it
@@ -97,7 +106,7 @@ fun ImportKeyDialog(replacing: Boolean, onDismiss: () -> Unit) {
                     modifier = Modifier.fillMaxWidth().height(140.dp),
                     textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
                 )
-                OutlinedTextField(
+                HerdrField(
                     value = passphrase,
                     onValueChange = {
                         passphrase = it
@@ -113,8 +122,9 @@ fun ImportKeyDialog(replacing: Boolean, onDismiss: () -> Unit) {
             }
         },
         confirmButton = {
-            TextButton(
+            QuietButton(
                 enabled = text.isNotBlank() && !busy,
+                color = if (replacing) Herdr.colors.red else Color.Unspecified,
                 onClick = {
                     busy = true
                     scope.launch {
@@ -133,7 +143,7 @@ fun ImportKeyDialog(replacing: Boolean, onDismiss: () -> Unit) {
                 },
             ) { Text(if (replacing) "Replace key" else "Use this key") }
         },
-        dismissButton = { TextButton(enabled = !busy, onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { QuietButton(enabled = !busy, onClick = onDismiss) { Text("Cancel") } },
     )
 }
 
@@ -177,7 +187,7 @@ fun ExportKeyDialog(onDismiss: () -> Unit) {
                     "Saves the private key as an OpenSSH key file protected by a passphrase. Restore it here after reinstalling the app or on a new phone, and your machines keep trusting it. Without the passphrase the file is useless, so don't lose it.",
                     style = MaterialTheme.typography.bodySmall,
                 )
-                OutlinedTextField(
+                HerdrField(
                     value = passphrase,
                     onValueChange = { passphrase = it },
                     label = { Text("Passphrase") },
@@ -187,7 +197,7 @@ fun ExportKeyDialog(onDismiss: () -> Unit) {
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                     modifier = Modifier.fillMaxWidth(),
                 )
-                OutlinedTextField(
+                HerdrField(
                     value = repeat,
                     onValueChange = { repeat = it },
                     label = { Text("Repeat passphrase") },
@@ -201,12 +211,12 @@ fun ExportKeyDialog(onDismiss: () -> Unit) {
             }
         },
         confirmButton = {
-            TextButton(
+            QuietButton(
                 enabled = !tooShort && repeat == passphrase && !busy,
                 onClick = { save.launch("herdr-android-key") },
             ) { Text("Save file") }
         },
-        dismissButton = { TextButton(enabled = !busy, onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { QuietButton(enabled = !busy, onClick = onDismiss) { Text("Cancel") } },
     )
 }
 
@@ -231,7 +241,7 @@ fun NewKeyDialog(replacing: Boolean, onDismiss: () -> Unit) {
         },
         confirmButton = {
             // The dialog's scope ends when it closes, so it closes once the key is saved.
-            TextButton(enabled = !busy, onClick = {
+            QuietButton(enabled = !busy, color = if (replacing) Herdr.colors.red else Color.Unspecified, onClick = {
                 busy = true
                 scope.launch {
                     runCatching { container.identity.create(replace = replacing) }
@@ -242,7 +252,7 @@ fun NewKeyDialog(replacing: Boolean, onDismiss: () -> Unit) {
                 }
             }) { Text(if (replacing) "Replace key" else "Make new key") }
         },
-        dismissButton = { TextButton(enabled = !busy, onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { QuietButton(enabled = !busy, onClick = onDismiss) { Text("Cancel") } },
     )
 }
 
@@ -270,10 +280,10 @@ fun KeySetupDialog(unreadable: String?, onDismiss: () -> Unit) {
                 )
             },
             confirmButton = {
-                Column(horizontalAlignment = Alignment.End) {
-                    TextButton(onClick = { importing = true }) { Text("Restore or import") }
-                    TextButton(onClick = { creating = true }) { Text("Make a new key") }
-                    TextButton(onClick = onDismiss) { Text("Later") }
+                Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(Space.s)) {
+                    PrimaryButton("Restore or import", Modifier.fillMaxWidth()) { importing = true }
+                    SecondaryButton("Make a new key", Modifier.fillMaxWidth()) { creating = true }
+                    QuietButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { Text("Later") }
                 }
             },
         )

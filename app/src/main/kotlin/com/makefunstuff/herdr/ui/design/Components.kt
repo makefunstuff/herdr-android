@@ -804,6 +804,12 @@ fun HerdrTextField(
 // ---------------------------------------------------------------------------------------------
 // Surfaces and rows
 
+/** The small label over a group of choices inside a form or sheet ("Workspace", "Agent"). */
+@Composable
+fun FieldLabel(text: String, modifier: Modifier = Modifier) {
+    Text(text, style = MaterialTheme.typography.titleSmall, color = Herdr.colors.muted, modifier = modifier.padding(top = Space.xs).semantics { heading() })
+}
+
 /** A muted label that names a group of fields or rows, over the group. */
 @Composable
 fun SectionHeading(text: String, modifier: Modifier = Modifier, top: Dp = Space.xl, trailing: (@Composable () -> Unit)? = null) {
