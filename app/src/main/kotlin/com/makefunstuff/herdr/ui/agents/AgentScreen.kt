@@ -102,6 +102,7 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
     val state by chat.state.collectAsStateWithLifecycle()
 
     var draft by rememberSaveable { mutableStateOf("") }
+    var sending by remember { mutableStateOf(false) }
     var showKeys by rememberSaveable { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
 
@@ -120,8 +121,11 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
 
     fun send() {
         val text = draft.trim()
-        if (text.isEmpty()) return
+        if (text.isEmpty() || sending) return
+        sending = true
         val blocked = status == AgentStatus.Blocked
+        // Counted before the send, so a transcript that is quicker than this call still confirms it.
+        if (!blocked) chat.addPending(text)
         scope.launch {
             runCatching {
                 val api = session.awaitApi()
@@ -141,8 +145,11 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
                 }
             }.onSuccess {
                 draft = ""
-                if (!blocked) chat.addPending(text)
-            }.onFailure { context.toast(it.message ?: "Couldn't send") }
+            }.onFailure {
+                if (!blocked) chat.dropPending(text)
+                context.toast(it.message ?: "Couldn't send")
+            }
+            sending = false
             session.refresh()
         }
     }
@@ -160,7 +167,7 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
                 }
                 AgentChat.Source.Loading -> {}
             }
-            state.pending.forEachIndexed { i, p -> add(ChatRow.User(ChatItem.User("$i", p), pending = true)) }
+            state.pending.forEachIndexed { i, p -> add(ChatRow.User(ChatItem.User("$i", p.text), pending = true)) }
         }
     }
     val listState = rememberLazyListState()

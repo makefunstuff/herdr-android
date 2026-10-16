@@ -1,5 +1,6 @@
 package com.makefunstuff.herdr.core.board
 
+import com.makefunstuff.herdr.core.chat.SentMatch
 import com.makefunstuff.herdr.core.ssh.HerdrCommands.quote
 import com.makefunstuff.herdr.core.ssh.Machine
 import com.makefunstuff.herdr.core.ssh.MachineConnection
@@ -177,14 +178,15 @@ object CoordinatorChat {
      * The chat as the board draws it (`board/view/talk.rs`): what was said; its latest message where
      * the conversation holds none of its words yet; and your newest unanswered words once, at the end.
      */
-    fun lines(view: CoordinatorView, talk: List<Said> = view.talk): List<ChatLine> {
+    fun lines(view: CoordinatorView, talk: List<Said> = view.talk, baseline: Int? = null): List<ChatLine> {
         val out = talk.map { ChatLine(it.you, it.text) }.toMutableList()
         if (out.none { !it.you } && view.said.isNotEmpty()) out += ChatLine(false, view.said)
         val mine = view.sent.trim()
         if (mine.isNotEmpty()) {
-            val head = mine.take(200)
             val last = out.lastOrNull()
-            if (last != null && last.you && last.text.contains(head)) out.removeAt(out.size - 1)
+            // With a baseline (matching messages there before this one was sent), an older identical one stays.
+            val recorded = baseline == null || SentMatch.count(mine, out.filter { it.you }.map { it.text }) > baseline
+            if (last != null && last.you && recorded && SentMatch.same(mine, last.text)) out.removeAt(out.size - 1)
             out += ChatLine(true, mine, pending = true)
         }
         return out
