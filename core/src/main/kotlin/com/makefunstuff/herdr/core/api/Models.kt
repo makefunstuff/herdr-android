@@ -70,6 +70,7 @@ data class PaneInfo(
     @SerialName("display_agent") val displayAgent: String? = null,
     @SerialName("agent_status") val agentStatusRaw: String = "unknown",
     @SerialName("state_labels") val stateLabels: Map<String, String> = emptyMap(),
+    val scroll: PaneScroll? = null,
     val revision: Long = 0,
 ) {
     val agentStatus: AgentStatus get() = AgentStatus.of(agentStatusRaw)
@@ -133,6 +134,14 @@ data class LayoutPane(
 )
 
 @Serializable
+data class LayoutSplit(
+    val id: String = "",
+    val direction: String = "right",
+    val ratio: Float = 0.5f,
+    val rect: LayoutRect = LayoutRect(),
+)
+
+@Serializable
 data class TabLayout(
     @SerialName("workspace_id") val workspaceId: String,
     @SerialName("tab_id") val tabId: String,
@@ -140,6 +149,7 @@ data class TabLayout(
     val area: LayoutRect = LayoutRect(),
     @SerialName("focused_pane_id") val focusedPaneId: String = "",
     val panes: List<LayoutPane> = emptyList(),
+    val splits: List<LayoutSplit> = emptyList(),
 )
 
 @Serializable
