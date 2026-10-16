@@ -28,6 +28,8 @@ data class WorkspaceInfo(
     @SerialName("active_tab_id") val activeTabId: String = "",
     @SerialName("agent_status") val agentStatusRaw: String = "unknown",
     val worktree: WorktreeInfo? = null,
+    /** Metadata that integrations report for the workspace (branch, PR, …), as key → value. */
+    val tokens: Map<String, String> = emptyMap(),
 ) {
     val agentStatus: AgentStatus get() = AgentStatus.of(agentStatusRaw)
 }

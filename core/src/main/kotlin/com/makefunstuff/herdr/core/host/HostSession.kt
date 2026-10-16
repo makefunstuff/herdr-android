@@ -21,6 +21,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
@@ -53,6 +54,16 @@ data class HostState(
     val herdrVersion: String? = null,
     /** The herdr-projects launcher on the machine; null when the board isn't installed (or not checked yet). */
     val boardPath: String? = null,
+    /**
+     * The metadata integrations report for each workspace (branch, PR, …), as key → value. Read
+     * separately from [snapshot], which doesn't carry it, and kept for every workspace (empty when
+     * none was reported) so the snapshot's workspace ids can be used as the cache key.
+     */
+    val workspaceMeta: Map<String, Map<String, String>> = emptyMap(),
+    /** The session's notifications, newest first. */
+    val notices: List<Notice> = emptyList(),
+    /** How many of [notices] arrived since they were last looked at. */
+    val unreadNotices: Int = 0,
 ) {
     val hasBoard: Boolean get() = boardPath != null
 
@@ -84,6 +95,7 @@ class HostSession(
 
     @Volatile private var connection: MachineConnection? = null
     @Volatile private var api: HerdrApi? = null
+    @Volatile private var metaDirty = true
 
     val machine: Machine get() = _state.value.machine
 
@@ -117,6 +129,26 @@ class HostSession(
 
     fun refresh() {
         refreshRequests.trySend(Unit)
+    }
+
+    fun markNoticesRead() {
+        _state.update { it.copy(unreadNotices = 0) }
+    }
+
+    fun clearNotices() {
+        _state.update { it.copy(notices = emptyList(), unreadNotices = 0) }
+    }
+
+    /** Takes a new snapshot, noting the agents that finished or started waiting since the last one. */
+    private fun applySnapshot(next: SessionSnapshot, extra: (HostState) -> HostState = { it }) {
+        _state.update { s ->
+            val added = Notices.between(s.snapshot, next, System.currentTimeMillis())
+            extra(s).copy(
+                snapshot = next,
+                notices = Notices.merge(s.notices, added),
+                unreadNotices = minOf(Notices.LIMIT, s.unreadNotices + added.size),
+            )
+        }
     }
 
     /** Waits for the machine to come online and returns its API. */
@@ -203,12 +235,18 @@ class HostSession(
         val events = subscribe(opener, HerdrApi.subscriptionParams(emptyList()))
 
         val snapshot = herdr.snapshot()
-        _state.update { it.copy(status = HostStatus.Online, snapshot = snapshot, herdrVersion = pong.version) }
+        applySnapshot(snapshot) { it.copy(status = HostStatus.Online, herdrVersion = pong.version) }
         launch { checkBoard() }
+        launch { loadWorkspaceMeta(herdr, snapshot) }
 
         val done = CompletableDeferred<Throwable?>()
         launch { done.complete(events.closed.await() ?: IOException("herdr event stream closed")) }
-        launch { events.events.collect { refreshRequests.trySend(Unit) } }
+        launch {
+            events.events.collect { event ->
+                if (event["event"]?.jsonPrimitive?.content == "workspace.metadata_updated") metaDirty = true
+                refreshRequests.trySend(Unit)
+            }
+        }
         launch { watchAgentStatus(opener) }
         launch {
             while (true) {
@@ -223,7 +261,11 @@ class HostSession(
                     done.complete(t)
                     break
                 }
-                _state.update { it.copy(snapshot = next) }
+                applySnapshot(next)
+                if (metaDirty || next.workspaces.map { it.workspaceId }.toSet() != _state.value.workspaceMeta.keys) {
+                    metaDirty = false
+                    loadWorkspaceMeta(herdr, next)
+                }
             }
         }
         val error = done.await()
@@ -307,6 +349,14 @@ class HostSession(
             watcher?.close()
         }
         awaitCancellation()
+    }
+
+    /** Reads each workspace's integration metadata (workspace.get); the snapshot doesn't carry it. */
+    private suspend fun loadWorkspaceMeta(herdr: HerdrApi, snapshot: SessionSnapshot) {
+        val meta = snapshot.workspaces.associate { ws ->
+            ws.workspaceId to runCatching { herdr.workspace(ws.workspaceId).tokens }.getOrDefault(emptyMap())
+        }
+        _state.update { it.copy(workspaceMeta = meta) }
     }
 
     private fun teardown() {
