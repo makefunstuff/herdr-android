@@ -46,6 +46,7 @@ import com.makefunstuff.herdr.ui.common.EmptyState
 import com.makefunstuff.herdr.ui.common.LocalContainer
 import com.makefunstuff.herdr.ui.common.Pill
 import com.makefunstuff.herdr.ui.common.StatusDot
+import com.makefunstuff.herdr.ui.coordinator.CoordinatorCard
 import com.makefunstuff.herdr.ui.theme.color
 import com.makefunstuff.herdr.ui.theme.title
 
@@ -58,6 +59,7 @@ fun AgentsScreen(nav: NavController) {
     val agents by container.hosts.agents.collectAsStateWithLifecycle()
     val hosts by container.hosts.hosts.collectAsStateWithLifecycle()
     var filter by remember { mutableStateOf<String?>(null) }
+    val boards = hosts.filter { it.hasBoard }
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -69,7 +71,7 @@ fun AgentsScreen(nav: NavController) {
                 "Add a machine that runs herdr. Its agents show up here, with the ones waiting on you first.",
             ) { Button(onClick = { nav.navigate(Routes.edit()) }) { Text("Add machine") } }
 
-            agents.isEmpty() -> EmptyState(
+            agents.isEmpty() && boards.isEmpty() -> EmptyState(
                 if (hosts.any { it.online }) "No agents running" else "Not connected yet",
                 if (hosts.any { it.online }) {
                     "Start an agent in herdr, or open a machine to start one from here."
@@ -99,6 +101,10 @@ fun AgentsScreen(nav: NavController) {
                                 }
                             }
                         }
+                    }
+                    // The Coordinator of each machine with the work board, above its agents.
+                    items(boards.filter { filter == null || it.machine.id == filter }, key = { "coordinator/${it.machine.id}" }) { h ->
+                        CoordinatorCard(h.machine.label, showMachine = hosts.size > 1) { nav.navigate(Routes.coordinator(h.machine.id)) }
                     }
                     for (status in ORDER) {
                         val rows = grouped[status].orEmpty().sortedByDescending { it.agent.stateChangeSeq }
