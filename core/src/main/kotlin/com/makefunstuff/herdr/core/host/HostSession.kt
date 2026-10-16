@@ -207,7 +207,7 @@ class HostSession(
         val found = probeHerdr(conn, m)
         var choice = HerdrBinaries.choose(found, null)?.let { HerdrChoice(it, null, found) }
         herdrMachine = choice?.let { m.copy(herdrPath = it.binary.path) } ?: m
-        val opener = apiOpener(conn, m)
+        val opener = apiOpener(conn, m, found)
         val herdr = HerdrApi(ApiClient(opener))
         val pong = herdr.ping()
         api = herdr
@@ -256,7 +256,7 @@ class HostSession(
      * per request); falls back to `herdr remote-api-bridge` when the SSH server forbids socket
      * forwarding.
      */
-    private suspend fun apiOpener(conn: MachineConnection, m: Machine): suspend () -> Duplex {
+    private suspend fun apiOpener(conn: MachineConnection, m: Machine, found: List<HerdrBinary>): suspend () -> Duplex {
         val list = conn.run(HerdrCommands.sessionList(herdrMachine))
         if (list.exitStatus == HerdrCommands.NOT_FOUND_EXIT) {
             throw ConnectError.HerdrMissing(
@@ -284,12 +284,7 @@ class HostSession(
             val works = runCatching { HerdrApi(ApiClient(viaSocket)).ping() }.isSuccess
             if (works) return viaSocket
         }
-        val check = conn.run(HerdrCommands.apiBridgeCheck(herdrMachine))
-        if (check.stdout.trim() != "herdr-api-bridge-v1") {
-            throw ConnectError.HerdrMissing(
-                "herdr on ${m.label} is too old for the app, and SSH socket forwarding is off. Update herdr there (herdr update).",
-            )
-        }
+        herdrMachine = findApiBridge(m, found, { conn.run(it) }, { conn.start(it) })
         // Read at each request, so the bridge follows the binary chosen once the server's version is known.
         return { conn.start(HerdrCommands.apiBridge(herdrMachine)) }
     }

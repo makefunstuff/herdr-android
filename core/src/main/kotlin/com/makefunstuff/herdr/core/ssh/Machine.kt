@@ -99,8 +99,9 @@ object HerdrCommands {
         "case \"\$seen\" in *\" \$2 \"*) return 0;; esac; seen=\"\$seen\$2 \"; " +
         "v=\"\$(\"\$2\" --version </dev/null 2>/dev/null | head -n 1)\"; printf '%s\\t%s\\t%s\\n' \"\$1\" \"\$2\" \"\$v\"; }; " +
         "emit explicit \"\$h\"; " +
-        // The bracket keeps pgrep from matching this script's own command line.
-        "for p in \$(pgrep -u \"\$(id -u)\" -f 'herdr[ ]server' 2>/dev/null); do " +
+        // Global options (notably --session NAME) precede `server`. Anchor at the executable
+        // and use [h] so pgrep doesn't discover the shell running this probe itself.
+        "for p in \$(pgrep -u \"\$(id -u)\" -f '^(.*/)?[h]erdr[^/[:space:]]*([[:space:]]+[^[:space:]]+)*[[:space:]]+server([[:space:]]|$)' 2>/dev/null); do " +
         "if [ -d /proc/\$p ]; then e=\"\$(readlink /proc/\$p/exe 2>/dev/null)\"; e=\"\${e% (deleted)}\"; " +
         "else e=\"\$(lsof -a -p \$p -d txt -Fn 2>/dev/null | sed -n 's/^n//p' | head -n 1)\"; fi; " +
         "case \"\${e##*/}\" in herdr*) emit server \"\$e\";; esac; done; " +

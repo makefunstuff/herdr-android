@@ -269,6 +269,38 @@ class MachineTest {
     }
 
     @Test
+    fun probeFindsNamedServerOutsideTheInstallPaths() {
+        // Give a real process a herdr executable and named-server command line, without needing
+        // an installed herdr or touching any session on the test machine.
+        if (!File("/proc/self/exe").exists() || !File("/bin/bash").canExecute()) return
+        val dir = kotlin.io.path.createTempDirectory("herdr-named-server").toFile()
+        val binary = File(dir, "custom/herdr").apply {
+            parentFile.mkdirs()
+            File("/bin/sleep").copyTo(this)
+            setExecutable(true)
+        }
+        val process = ProcessBuilder(
+            "/bin/bash", "-c", "exec -a \"\$1 --session named-review server\" \"\$1\" 30", "sh", binary.path,
+        ).start()
+        try {
+            val machine = Machine("id", "box", "h", user = "u", session = "named-review")
+            var found = emptyList<HerdrBinary>()
+            val deadline = System.nanoTime() + 5_000_000_000L
+            do {
+                val probe = ProcessBuilder("/bin/sh", "-c", HerdrCommands.probe(machine)).start()
+                found = HerdrBinaries.parse(probe.inputStream.readBytes().toString(Charsets.UTF_8))
+                assertEquals(0, probe.waitFor())
+                if (found.any { it.path == binary.path }) break
+                Thread.sleep(20)
+            } while (System.nanoTime() < deadline)
+            assertEquals("server", found.firstOrNull { it.path == binary.path }?.source, found.toString())
+        } finally {
+            process.destroyForcibly().waitFor()
+            dir.deleteRecursively()
+        }
+    }
+
+    @Test
     fun choosesTheHerdrMatchingTheServer() {
         val out = listOf(
             "motd noise",
