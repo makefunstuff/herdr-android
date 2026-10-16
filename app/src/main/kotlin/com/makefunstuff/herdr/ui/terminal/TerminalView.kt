@@ -15,7 +15,8 @@ import android.view.inputmethod.BaseInputConnection
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
 import android.view.inputmethod.InputMethodManager
-import com.makefunstuff.herdr.core.terminal.Cell
+import com.makefunstuff.herdr.core.terminal.TerminalCanvas
+import com.makefunstuff.herdr.core.terminal.TerminalPainter
 import com.makefunstuff.herdr.core.terminal.Keys
 import com.makefunstuff.herdr.core.terminal.TerminalEmulator
 import kotlin.math.abs
@@ -68,6 +69,11 @@ class TerminalView(context: Context) : View(context) {
         updateMetrics()
     }
 
+    /** Called after a pinch changes the text size, with the new size in sp. */
+    var onFontSizeChanged: (Float) -> Unit = {}
+
+    val fontSizeSp: Float get() = fontSizePx / resources.displayMetrics.scaledDensity
+
     fun setFontSizeSp(sp: Float) {
         fontSizePx = sp * resources.displayMetrics.scaledDensity
         updateMetrics()
@@ -80,7 +86,7 @@ class TerminalView(context: Context) : View(context) {
         boldPaint.textSize = fontSizePx
         cellW = textPaint.measureText("M")
         val fm = textPaint.fontMetrics
-        cellH = (fm.descent - fm.ascent) * 1.08f
+        cellH = Math.ceil(((fm.descent - fm.ascent) * 1.1f).toDouble()).toFloat()
         baseline = -fm.ascent + (cellH - (fm.descent - fm.ascent)) / 2f
     }
 
@@ -99,75 +105,16 @@ class TerminalView(context: Context) : View(context) {
     // ---- Drawing ------------------------------------------------------------------------
 
     override fun onDraw(canvas: Canvas) {
-        canvas.drawColor(DEFAULT_BG)
+        canvas.drawColor(painter.palette.background)
         val emu = emulator ?: return
         val pad = PAD * density
         synchronized(emu.lock) {
             clampPan(emu)
             canvas.save()
-            canvas.translate(pad - panX, pad - panY)
-            val sb = StringBuilder()
-            for (y in 0 until emu.rows) {
-                val row = emu.row(y)
-                val top = y * cellH
-                var x = 0
-                while (x < emu.cols) {
-                    val cell = row[x]
-                    if (cell.isContinuation) { x++; continue }
-                    val (fg, bg) = colors(cell)
-                    // Gather a run of single-width cells with the same style.
-                    val start = x
-                    sb.setLength(0)
-                    sb.append(cell.text ?: " ")
-                    var end = x + 1
-                    val wide = end < emu.cols && row[end].isContinuation
-                    if (!wide) {
-                        while (end < emu.cols) {
-                            val next = row[end]
-                            if (next.isContinuation || next.fg != cell.fg || next.bg != cell.bg || next.attrs != cell.attrs) break
-                            if (end + 1 < emu.cols && row[end + 1].isContinuation) break
-                            sb.append(next.text ?: " ")
-                            end++
-                        }
-                    } else {
-                        end++
-                    }
-                    val left = start * cellW
-                    val right = end * cellW
-                    if (bg != DEFAULT_BG) {
-                        bgPaint.color = bg
-                        canvas.drawRect(left, top, right, top + cellH, bgPaint)
-                    }
-                    if (cell.attrs and Cell.HIDDEN == 0) {
-                        val paint = if (cell.attrs and Cell.BOLD != 0) boldPaint else textPaint
-                        paint.color = fg
-                        paint.textSkewX = if (cell.attrs and Cell.ITALIC != 0) -0.2f else 0f
-                        paint.isUnderlineText = cell.attrs and Cell.UNDERLINE != 0
-                        paint.isStrikeThruText = cell.attrs and Cell.STRIKE != 0
-                        if (wide) {
-                            canvas.drawText(sb, 0, sb.length, left, top + baseline, paint)
-                        } else {
-                            // Draw each cell at its grid position so box-drawing lines stay aligned.
-                            var col = start
-                            var i = 0
-                            while (i < sb.length) {
-                                val cp = Character.codePointAt(sb, i)
-                                val n = Character.charCount(cp)
-                                if (cp != ' '.code) canvas.drawText(sb, i, i + n, col * cellW, top + baseline, paint)
-                                i += n
-                                col++
-                            }
-                        }
-                    }
-                    x = end
-                }
-            }
-            if (emu.cursorVisible) {
-                bgPaint.color = CURSOR
-                bgPaint.alpha = 160
-                canvas.drawRect(emu.cursorX * cellW, emu.cursorY * cellH, (emu.cursorX + 1) * cellW, (emu.cursorY + 1) * cellH, bgPaint)
-                bgPaint.alpha = 255
-            }
+            canvas.translate(Math.round(pad - panX).toFloat(), Math.round(pad - panY).toFloat())
+            surface.canvas = canvas
+            painter.paint(emu, surface, cellW, cellH, baseline)
+            surface.canvas = null
             canvas.restore()
         }
     }
@@ -180,28 +127,28 @@ class TerminalView(context: Context) : View(context) {
         panY = panY.coerceIn(0f, maxY)
     }
 
-    private fun colors(cell: Cell): Pair<Int, Int> {
-        var fg = if (cell.fg == Cell.DEFAULT_COLOR) DEFAULT_FG else resolve(cell.fg)
-        var bg = if (cell.bg == Cell.DEFAULT_COLOR) DEFAULT_BG else resolve(cell.bg)
-        if (cell.attrs and Cell.BOLD != 0 && cell.fg in 0..7) fg = resolve(cell.fg + 8)
-        if (cell.attrs and Cell.INVERSE != 0) { val t = fg; fg = bg; bg = t }
-        if (cell.attrs and Cell.DIM != 0) fg = (fg and 0x00FFFFFF) or (0x99 shl 24)
-        return fg to bg
-    }
+    private val painter = TerminalPainter()
+    private val surface = AndroidSurface()
 
-    private fun resolve(color: Int): Int = when {
-        Cell.isRgb(color) -> 0xFF000000.toInt() or (color and 0xFFFFFF)
-        color in 0..15 -> ANSI[color]
-        color in 16..231 -> {
-            val i = color - 16
-            val steps = intArrayOf(0, 95, 135, 175, 215, 255)
-            0xFF000000.toInt() or (steps[i / 36] shl 16) or (steps[(i / 6) % 6] shl 8) or steps[i % 6]
+    /** Adapts the shared painter to an Android canvas. */
+    private inner class AndroidSurface : TerminalCanvas {
+        var canvas: Canvas? = null
+
+        override fun fillRect(left: Float, top: Float, right: Float, bottom: Float, argb: Int) {
+            bgPaint.color = argb
+            canvas?.drawRect(left, top, right, bottom, bgPaint)
         }
-        color in 232..255 -> {
-            val v = 8 + (color - 232) * 10
-            0xFF000000.toInt() or (v shl 16) or (v shl 8) or v
+
+        override fun drawText(text: String, x: Float, baseline: Float, maxWidth: Float, argb: Int, bold: Boolean, italic: Boolean) {
+            val paint = if (bold) boldPaint else textPaint
+            paint.color = argb
+            paint.textSkewX = if (italic) -0.2f else 0f
+            // Symbols the monospace font lacks come from wider fallback fonts; squeeze them into the cell.
+            val w = paint.measureText(text)
+            paint.textScaleX = if (w > maxWidth * 1.05f && w > 0f) maxWidth / w else 1f
+            canvas?.drawText(text, x, baseline, paint)
+            paint.textScaleX = 1f
         }
-        else -> DEFAULT_FG
     }
 
     // ---- Touch -------------------------------------------------------------------------
@@ -210,6 +157,7 @@ class TerminalView(context: Context) : View(context) {
         override fun onScale(detector: ScaleGestureDetector): Boolean {
             val sp = fontSizePx / resources.displayMetrics.scaledDensity
             setFontSizeSp((sp * detector.scaleFactor).coerceIn(5f, 24f))
+            onFontSizeChanged(fontSizeSp)
             return true
         }
     })
@@ -366,14 +314,5 @@ class TerminalView(context: Context) : View(context) {
 
     companion object {
         private const val PAD = 4f
-        val DEFAULT_FG = 0xFFD8DEDA.toInt()
-        val DEFAULT_BG = 0xFF0B0D0C.toInt()
-        val CURSOR = 0xFF7DD3B6.toInt()
-        val ANSI = intArrayOf(
-            0xFF1D2321.toInt(), 0xFFE0675C.toInt(), 0xFF7CC68B.toInt(), 0xFFE2B64A.toInt(),
-            0xFF6E9FE6.toInt(), 0xFFC38AD8.toInt(), 0xFF5CC3C0.toInt(), 0xFFC9D1CC.toInt(),
-            0xFF5B6560.toInt(), 0xFFF2877D.toInt(), 0xFF98DCA6.toInt(), 0xFFF0CC6C.toInt(),
-            0xFF8FB8F5.toInt(), 0xFFD6A6E8.toInt(), 0xFF7FDAD6.toInt(), 0xFFF4F7F5.toInt(),
-        )
     }
 }

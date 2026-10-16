@@ -1,6 +1,12 @@
 package com.makefunstuff.herdr.ui.terminal
 
 import androidx.compose.foundation.background
+import com.makefunstuff.herdr.core.terminal.TerminalPalette
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,11 +22,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -55,8 +59,8 @@ import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
-/** Panes wider than this keep the host's size; narrower ones are resized to fit the phone. */
-private const val KEEP_HOST_ABOVE_COLS = 80
+private const val PREFS = "terminal"
+private const val FONT_SP = "font_sp"
 
 private val EXTRA_KEYS = listOf(
     "esc" to Keys.ESC, "tab" to Keys.TAB, "↑" to Keys.UP, "↓" to Keys.DOWN, "←" to Keys.LEFT, "→" to Keys.RIGHT,
@@ -82,13 +86,9 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
     val pane = snapshot?.pane(paneId)
     val hostRect = snapshot?.paneRect(paneId)
 
-    // null until we know the pane's size on the host.
-    var keepHost by remember(paneId) { mutableStateOf<Boolean?>(null) }
-    LaunchedEffect(hostRect != null, state.online) {
-        if (keepHost == null && hostRect != null) keepHost = hostRect.width > KEEP_HOST_ABOVE_COLS
-        // Pane not in the layout (or no snapshot yet but online): fit to the phone.
-        else if (keepHost == null && state.online && snapshot != null) keepHost = false
-    }
+    val prefs = remember { context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE) }
+    // The pane is resized to fit the phone; "Desktop size" keeps the host's size and pans instead.
+    var keepHost by remember(paneId) { mutableStateOf(false) }
     var grid by remember { mutableStateOf<Pair<Int, Int>?>(null) }
     var stream by remember { mutableStateOf<TerminalStream?>(null) }
     var generation by remember { mutableIntStateOf(0) }
@@ -99,12 +99,12 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
     var failure by remember { mutableStateOf<String?>(null) }
 
     val keep = keepHost
-    val ready = keep != null && (keep || grid != null)
+    val ready = (keep && hostRect != null) || grid != null
     LaunchedEffect(generation, ready) {
         if (!ready) return@LaunchedEffect
         val opened = runCatching {
             val conn = session.awaitConnection(timeoutMs = 30_000)
-            val (cols, rows) = if (keep == true && hostRect != null && hostRect.width > 0 && hostRect.height > 0) {
+            val (cols, rows) = if (keep && hostRect != null && hostRect.width > 0 && hostRect.height > 0) {
                 hostRect.width to hostRect.height
             } else {
                 grid ?: (80 to 24)
@@ -129,8 +129,8 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
     // In fit mode, follow the view's grid; switching back to host size restores the host's.
     LaunchedEffect(stream, grid, keepHost) {
         val s = stream ?: return@LaunchedEffect
-        if (keepHost == false) grid?.let { (c, r) -> s.resize(c, r) }
-        else if (keepHost == true && hostRect != null && hostRect.width > 0) s.resize(hostRect.width, hostRect.height)
+        if (!keepHost) grid?.let { (c, r) -> s.resize(c, r) }
+        else if (hostRect != null && hostRect.width > 0) s.resize(hostRect.width, hostRect.height)
     }
 
     val revision by (stream?.revision ?: NO_REVISION).collectAsStateWithLifecycle()
@@ -161,7 +161,7 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
                             buildString {
                                 append(session.machine.label)
                                 stream?.emulator?.let { append(" · ${it.cols}×${it.rows}") }
-                                if (keepHost == true) append(" · host size")
+                                if (keepHost) append(" · desktop size")
                             },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -175,8 +175,8 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
                     IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, "More") }
                     DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                         DropdownMenuItem(
-                            text = { Text(if (keepHost == true) "Fit to screen" else "Keep host size") },
-                            onClick = { menu = false; keepHost = keepHost != true },
+                            text = { Text(if (keepHost) "Fit to phone" else "Desktop size") },
+                            onClick = { menu = false; keepHost = !keepHost },
                         )
                         DropdownMenuItem(
                             text = { Text("Copy screen") },
@@ -189,20 +189,22 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
         },
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize().imePadding()) {
-            Box(Modifier.weight(1f).fillMaxWidth().background(Color(0xFF101114))) {
+            Box(Modifier.weight(1f).fillMaxWidth().background(Color(TerminalPalette.Default.background))) {
                 AndroidView(
                     factory = { ctx ->
                         TerminalView(ctx).also { v ->
                             v.onGridSize = { c, r -> grid = c to r }
                             v.onLongPress = { context.copyToClipboard("terminal", v.screenText(), "Screen copied") }
                             v.onModifiersConsumed = { ctrl = false; alt = false }
+                            v.setFontSizeSp(prefs.getFloat(FONT_SP, 11f))
+                            v.onFontSizeChanged = { sp -> prefs.edit().putFloat(FONT_SP, sp).apply() }
                             view = v
                         }
                     },
                     update = { v ->
                         v.onInput = { text -> stream?.send(text) }
                         v.onScroll = { lines -> if (lines != 0) stream?.scroll(lines > 0, kotlin.math.abs(lines)) }
-                        if (v.fitToView != (keepHost != true)) v.fitToView = keepHost != true
+                        if (v.fitToView != !keepHost) v.fitToView = !keepHost
                     },
                     modifier = Modifier.fillMaxSize(),
                 )
@@ -230,17 +232,44 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
                     .background(MaterialTheme.colorScheme.surfaceContainer)
                     .horizontalScroll(rememberScrollState())
                     .navigationBarsPadding()
-                    .padding(horizontal = 6.dp, vertical = 4.dp),
+                    .padding(horizontal = 4.dp, vertical = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                FilterChip(selected = ctrl, onClick = { ctrl = !ctrl }, label = { Text("ctrl") })
-                FilterChip(selected = alt, onClick = { alt = !alt }, label = { Text("alt") })
-                EXTRA_KEYS.forEach { (label, keys) ->
-                    TextButton(onClick = { send(keys) }) { Text(label, fontFamily = FontFamily.Monospace) }
-                }
-                Button(onClick = { view?.showKeyboard() }) { Text("Keyboard") }
+                Key("⌨", highlighted = true) { view?.showKeyboard() }
+                Key("ctrl", selected = ctrl) { ctrl = !ctrl }
+                Key("alt", selected = alt) { alt = !alt }
+                EXTRA_KEYS.forEach { (label, keys) -> Key(label) { send(keys) } }
             }
         }
+    }
+}
+
+/** A compact key for the row above the keyboard. */
+@Composable
+private fun Key(label: String, selected: Boolean = false, highlighted: Boolean = false, onClick: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    Box(
+        Modifier
+            .heightIn(min = 36.dp)
+            .widthIn(min = 40.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(
+                when {
+                    selected -> colors.primary
+                    highlighted -> colors.secondaryContainer
+                    else -> colors.surfaceContainerHighest
+                },
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            label,
+            fontFamily = FontFamily.Monospace,
+            style = MaterialTheme.typography.labelLarge,
+            color = if (selected) colors.onPrimary else colors.onSurface,
+        )
     }
 }

@@ -1,0 +1,229 @@
+package com.makefunstuff.herdr.core.terminal
+
+import kotlin.math.max
+import kotlin.math.roundToInt
+
+/** The drawing operations [TerminalPainter] needs; Android's Canvas and Java2D both provide them. */
+interface TerminalCanvas {
+    fun fillRect(left: Float, top: Float, right: Float, bottom: Float, argb: Int)
+
+    /** Draws [text] from [x] on [baseline], squeezed horizontally if it is wider than [maxWidth]. */
+    fun drawText(text: String, x: Float, baseline: Float, maxWidth: Float, argb: Int, bold: Boolean, italic: Boolean)
+}
+
+class TerminalPalette(
+    val foreground: Int,
+    val background: Int,
+    val cursor: Int,
+    val ansi: IntArray,
+) {
+    fun resolve(color: Int, fallback: Int): Int = when {
+        color == Cell.DEFAULT_COLOR -> fallback
+        Cell.isRgb(color) -> OPAQUE or (color and 0xFFFFFF)
+        color in 0..15 -> ansi[color]
+        color in 16..231 -> {
+            val i = color - 16
+            OPAQUE or (CUBE[i / 36] shl 16) or (CUBE[(i / 6) % 6] shl 8) or CUBE[i % 6]
+        }
+        color in 232..255 -> {
+            val v = 8 + (color - 232) * 10
+            OPAQUE or (v shl 16) or (v shl 8) or v
+        }
+        else -> fallback
+    }
+
+    companion object {
+        private const val OPAQUE = 0xFF000000.toInt()
+        private val CUBE = intArrayOf(0, 95, 135, 175, 215, 255)
+
+        val Default = TerminalPalette(
+            foreground = 0xFFD8DEDA.toInt(),
+            background = 0xFF0B0D0C.toInt(),
+            cursor = 0xFF7DD3B6.toInt(),
+            ansi = intArrayOf(
+                0xFF1D2321.toInt(), 0xFFE0675C.toInt(), 0xFF7CC68B.toInt(), 0xFFE2B64A.toInt(),
+                0xFF6E9FE6.toInt(), 0xFFC38AD8.toInt(), 0xFF5CC3C0.toInt(), 0xFFC9D1CC.toInt(),
+                0xFF5B6560.toInt(), 0xFFF2877D.toInt(), 0xFF98DCA6.toInt(), 0xFFF0CC6C.toInt(),
+                0xFF8FB8F5.toInt(), 0xFFD6A6E8.toInt(), 0xFF7FDAD6.toInt(), 0xFFF4F7F5.toInt(),
+            ),
+        )
+    }
+}
+
+/**
+ * Paints a [TerminalEmulator] grid. Box-drawing and block characters are drawn as shapes that
+ * fill their cell exactly, the way desktop terminals do, so agent TUIs keep unbroken borders
+ * whatever font and line height the phone uses. Cell edges snap to whole pixels to avoid seams.
+ */
+class TerminalPainter(var palette: TerminalPalette = TerminalPalette.Default) {
+
+    /** Caller holds [TerminalEmulator.lock]. */
+    fun paint(emu: TerminalEmulator, canvas: TerminalCanvas, cellW: Float, cellH: Float, baseline: Float, showCursor: Boolean = true) {
+        val p = palette
+        canvas.fillRect(0f, 0f, px(emu.cols * cellW), px(emu.rows * cellH), p.background)
+        for (y in 0 until emu.rows) {
+            val row = emu.row(y)
+            val top = px(y * cellH)
+            val bottom = px((y + 1) * cellH)
+            for (x in 0 until emu.cols) {
+                val cell = row[x]
+                if (cell.isContinuation) continue
+                val span = if (x + 1 < emu.cols && row[x + 1].isContinuation) 2 else 1
+                val left = px(x * cellW)
+                val right = px((x + span) * cellW)
+                var fg = p.resolve(cell.fg, p.foreground)
+                var bg = p.resolve(cell.bg, p.background)
+                if (cell.attrs and Cell.BOLD != 0 && cell.fg in 0..7) fg = p.resolve(cell.fg + 8, p.foreground)
+                if (cell.attrs and Cell.INVERSE != 0) { val t = fg; fg = bg; bg = t }
+                if (cell.attrs and Cell.DIM != 0) fg = blend(fg, bg, 0.6f)
+                if (bg != p.background) canvas.fillRect(left, top, right, bottom, bg)
+                if (cell.attrs and Cell.HIDDEN != 0) continue
+                val text = cell.text
+                if (!text.isNullOrEmpty() && text != " ") {
+                    val cp = text.codePointAt(0)
+                    when {
+                        cp in 0x2500..0x257F && BOX[cp - 0x2500] != 0 ->
+                            drawBox(canvas, BOX[cp - 0x2500], left, top, right, bottom, cellW, fg)
+                        cp in 0x2580..0x259F -> drawBlock(canvas, cp, left, top, right, bottom, fg, bg)
+                        else -> canvas.drawText(
+                            text, left, top + baseline, right - left, fg,
+                            bold = cell.attrs and Cell.BOLD != 0, italic = cell.attrs and Cell.ITALIC != 0,
+                        )
+                    }
+                }
+                val line = max(1f, (cellH / 14f).roundToInt().toFloat())
+                if (cell.attrs and Cell.UNDERLINE != 0) {
+                    val uy = px(top + baseline + line)
+                    canvas.fillRect(left, uy, right, uy + line, fg)
+                }
+                if (cell.attrs and Cell.STRIKE != 0) {
+                    val sy = px(top + cellH / 2)
+                    canvas.fillRect(left, sy, right, sy + line, fg)
+                }
+            }
+        }
+        if (showCursor && emu.cursorVisible && emu.cursorY < emu.rows && emu.cursorX < emu.cols) {
+            canvas.fillRect(
+                px(emu.cursorX * cellW), px(emu.cursorY * cellH),
+                px((emu.cursorX + 1) * cellW), px((emu.cursorY + 1) * cellH),
+                (p.cursor and 0xFFFFFF) or (0xA0 shl 24),
+            )
+        }
+    }
+
+    private fun drawBox(c: TerminalCanvas, spec: Int, l: Float, t: Float, r: Float, b: Float, cellW: Float, color: Int) {
+        val light = max(1f, (cellW / 8f).roundToInt().toFloat())
+        val cx = px((l + r) / 2f - light / 2f) + light / 2f
+        val cy = px((t + b) / 2f - light / 2f) + light / 2f
+        val dashes = (spec shr 8) and 7
+        fun thickness(w: Int) = if (w == 2) light * 2 else light
+        // Horizontal arms
+        for ((weight, from, to) in listOf(
+            Triple((spec shr 6) and 3, l, cx),
+            Triple((spec shr 2) and 3, cx, r),
+        )) {
+            if (weight == 0) continue
+            val th = thickness(weight)
+            val a = if (from == l) l else from - th / 2f
+            val z = if (to == r) r else to + th / 2f
+            if (weight == 3) {
+                hLine(c, a, z, cy - light * 1.5f, light, color, dashes, l, r)
+                hLine(c, a, z, cy + light * 0.5f, light, color, dashes, l, r)
+            } else {
+                hLine(c, a, z, cy - th / 2f, th, color, dashes, l, r)
+            }
+        }
+        // Vertical arms
+        for ((weight, from, to) in listOf(
+            Triple(spec and 3, t, cy),
+            Triple((spec shr 4) and 3, cy, b),
+        )) {
+            if (weight == 0) continue
+            val th = thickness(weight)
+            val a = if (from == t) t else from - th / 2f
+            val z = if (to == b) b else to + th / 2f
+            if (weight == 3) {
+                vLine(c, a, z, cx - light * 1.5f, light, color, dashes, t, b)
+                vLine(c, a, z, cx + light * 0.5f, light, color, dashes, t, b)
+            } else {
+                vLine(c, a, z, cx - th / 2f, th, color, dashes, t, b)
+            }
+        }
+    }
+
+    private fun hLine(c: TerminalCanvas, a: Float, z: Float, y: Float, th: Float, color: Int, dashes: Int, l: Float, r: Float) {
+        val top = px(y)
+        if (dashes == 0) { c.fillRect(a, top, z, top + th, color); return }
+        val seg = (r - l) / dashes
+        for (i in 0 until dashes) {
+            val s = l + i * seg
+            c.fillRect(px(s), top, px(s + seg * 0.6f), top + th, color)
+        }
+    }
+
+    private fun vLine(c: TerminalCanvas, a: Float, z: Float, x: Float, th: Float, color: Int, dashes: Int, t: Float, b: Float) {
+        val left = px(x)
+        if (dashes == 0) { c.fillRect(left, a, left + th, z, color); return }
+        val seg = (b - t) / dashes
+        for (i in 0 until dashes) {
+            val s = t + i * seg
+            c.fillRect(left, px(s), left + th, px(s + seg * 0.6f), color)
+        }
+    }
+
+    private fun drawBlock(c: TerminalCanvas, cp: Int, l: Float, t: Float, r: Float, b: Float, fg: Int, bg: Int) {
+        val w = r - l
+        val h = b - t
+        val mx = px(l + w / 2)
+        val my = px(t + h / 2)
+        when (cp) {
+            0x2580 -> c.fillRect(l, t, r, my, fg)
+            in 0x2581..0x2588 -> c.fillRect(l, px(b - h * (cp - 0x2580) / 8f), r, b, fg)
+            in 0x2589..0x258F -> c.fillRect(l, t, px(l + w * (0x2590 - cp) / 8f), b, fg)
+            0x2590 -> c.fillRect(mx, t, r, b, fg)
+            0x2591 -> c.fillRect(l, t, r, b, blend(fg, bg, 0.25f))
+            0x2592 -> c.fillRect(l, t, r, b, blend(fg, bg, 0.5f))
+            0x2593 -> c.fillRect(l, t, r, b, blend(fg, bg, 0.75f))
+            0x2594 -> c.fillRect(l, t, r, px(t + h / 8f), fg)
+            0x2595 -> c.fillRect(px(r - w / 8f), t, r, b, fg)
+            else -> {
+                // Quadrants: bits are upper-left, upper-right, lower-left, lower-right.
+                val q = QUADRANTS[cp - 0x2596]
+                if (q and 1 != 0) c.fillRect(l, t, mx, my, fg)
+                if (q and 2 != 0) c.fillRect(mx, t, r, my, fg)
+                if (q and 4 != 0) c.fillRect(l, my, mx, b, fg)
+                if (q and 8 != 0) c.fillRect(mx, my, r, b, fg)
+            }
+        }
+    }
+
+    companion object {
+        private fun px(v: Float): Float = v.roundToInt().toFloat()
+
+        /** [amount] of [fg] over [bg]. */
+        fun blend(fg: Int, bg: Int, amount: Float): Int {
+            fun ch(c: Int, s: Int) = (c shr s) and 0xFF
+            fun mix(s: Int) = (ch(fg, s) * amount + ch(bg, s) * (1 - amount)).roundToInt() and 0xFF
+            return (0xFF shl 24) or (mix(16) shl 16) or (mix(8) shl 8) or mix(0)
+        }
+
+        // ▖ ▗ ▘ ▙ ▚ ▛ ▜ ▝ ▞ ▟
+        private val QUADRANTS = intArrayOf(4, 8, 1, 1 or 4 or 8, 1 or 8, 1 or 2 or 4, 1 or 2 or 8, 2, 2 or 4, 2 or 4 or 8)
+
+        /**
+         * U+2500..U+257F, generated from the Unicode names. Two bits per arm (0 none, 1 light,
+         * 2 heavy, 3 double): up, right, down, left; then the dash count (bits 8-10) and an arc
+         * flag (bit 11, drawn as a square corner). 0 means "leave it to the font" (diagonals).
+         */
+        private val BOX = intArrayOf(
+        68, 136, 17, 34, 836, 904, 785, 802, 1092, 1160, 1041, 1058, 20, 24, 36, 40,
+        80, 144, 96, 160, 5, 9, 6, 10, 65, 129, 66, 130, 21, 25, 22, 37,
+        38, 26, 41, 42, 81, 145, 82, 97, 98, 146, 161, 162, 84, 148, 88, 152,
+        100, 164, 104, 168, 69, 133, 73, 137, 70, 134, 74, 138, 85, 149, 89, 153,
+        86, 101, 102, 150, 90, 165, 105, 154, 169, 166, 106, 170, 580, 648, 529, 546,
+        204, 51, 28, 52, 60, 208, 112, 240, 13, 7, 15, 193, 67, 195, 29, 55,
+        63, 209, 115, 243, 220, 116, 252, 205, 71, 207, 221, 119, 255, 2068, 2128, 2113,
+        2053, 0, 0, 0, 64, 1, 4, 16, 128, 2, 8, 32, 72, 33, 132, 18,
+        )
+    }
+}
