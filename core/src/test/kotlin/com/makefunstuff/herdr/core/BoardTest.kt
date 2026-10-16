@@ -55,11 +55,39 @@ class BoardTest {
     @Test
     fun commandsQuoteThePathAndCarryTheSession() {
         val req = BoardCommands.dispatchRequest("it's \"quoted\"\nline two", delegate = true)
-        val cmd = BoardCommands.remote(machine.copy(session = "work"), "/home/u/my dir/herdr-projects", "dispatch", req)
+        val cmd = BoardCommands.command(machine.copy(session = "work"), "/home/u/my dir/herdr-projects", "dispatch", req)
         assertTrue(cmd.startsWith("env HERDR_SESSION='work' '/home/u/my dir/herdr-projects' remote 'dispatch' "), cmd)
         val b64 = cmd.substringAfterLast(' ')
         assertEquals("""{"text":"it's \"quoted\"\nline two","delegate":true}""", String(Base64.getDecoder().decode(b64)))
-        assertEquals("'/p' remote 'list'", BoardCommands.remote(machine, "/p", "list"))
+        assertEquals("'/p' remote 'list'", BoardCommands.command(machine, "/p", "list"))
+    }
+
+    @Test
+    fun runsTheLauncherInALoginShellWithItsPath() {
+        // A login shell's profile adds a folder to PATH; SSH's own PATH (here a bare one) lacks it.
+        val dir = kotlin.io.path.createTempDirectory("board").toFile()
+        try {
+            val bin = java.io.File(dir, "only-in-profile").apply { mkdirs() }
+            java.io.File(dir, ".profile").writeText("PATH=\"${bin.path}:\$PATH\"\n")
+            java.io.File(dir, "my launcher").apply {
+                writeText("#!/bin/sh\necho \"PATH=\$PATH\"\necho \"SESSION=\$HERDR_SESSION\"\nfor a; do echo \"ARG=\$a\"; done\n")
+                setExecutable(true)
+            }
+            val req = BoardCommands.dispatchRequest("it's \"x\"", delegate = false)
+            val cmd = BoardCommands.remote(machine.copy(session = "work"), java.io.File(dir, "my launcher").path, "dispatch", req)
+            val p = ProcessBuilder("/bin/sh", "-c", cmd).apply {
+                environment().clear()
+                environment().putAll(mapOf("HOME" to dir.path, "SHELL" to "/bin/sh", "PATH" to "/usr/bin:/bin"))
+            }.start()
+            val out = p.inputStream.readBytes().toString(Charsets.UTF_8).lines()
+            assertEquals(0, p.waitFor(), out.joinToString("\n"))
+            assertTrue(out.first().startsWith("PATH=${bin.path}:"), out.joinToString("\n"))
+            assertEquals("SESSION=work", out[1])
+            assertEquals(listOf("ARG=remote", "ARG=dispatch"), out.subList(2, 4))
+            assertEquals(req.toString(), String(Base64.getDecoder().decode(out[4].removePrefix("ARG="))))
+        } finally {
+            dir.deleteRecursively()
+        }
     }
 
     @Test
