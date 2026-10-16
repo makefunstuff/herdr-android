@@ -71,4 +71,10 @@ class SentMatchTest {
         assertEquals(2, CoordinatorChat.lines(view, both, baseline = 1).count { it.you })
         assertEquals(1, CoordinatorChat.lines(CoordinatorView(state = "working", sent = msg, talk = listOf(Said(true, "$msg\n[sent with tab]")))).count { it.you })
     }
+
+    @Test fun reviewProbes() {
+        assertTrue(SentMatch.same("yes go ahead", "yes go ahead\n[sent with tab]"))
+        assertFalse(SentMatch.same("Please look at task 5 now", "Please look at task 5 now and also task 6"))
+        assertEquals(1, SentMatch.countOnScreen(msg, "> I still don't get where why an\nd how I can use pi durable"))
+    }
 }

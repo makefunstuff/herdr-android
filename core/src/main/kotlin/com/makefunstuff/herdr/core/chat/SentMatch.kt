@@ -7,7 +7,7 @@ package com.makefunstuff.herdr.core.chat
  */
 object SentMatch {
     private const val HEAD = 200
-    private const val MIN_PREFIX = 20
+    private const val TRUNCATED = 100
 
     /** Whitespace collapsed and Markdown emphasis marks removed. */
     fun normalize(s: String): String =
@@ -18,12 +18,15 @@ object SentMatch {
      * the other (the board appends lines, a channel truncates).
      */
     fun same(sent: String, seen: String): Boolean {
-        val a = normalize(sent).take(HEAD)
-        val b = normalize(seen).take(HEAD)
+        val a = normalize(sent)
+        val b = normalize(seen)
         if (a.isEmpty() || b.isEmpty()) return false
-        if (a == b) return true
+        if (a.take(HEAD) == b.take(HEAD) && (a.length >= HEAD || b.length >= HEAD || a == b)) return true
         val (short, long) = if (a.length <= b.length) a to b else b to a
-        return short.length >= MIN_PREFIX && long.startsWith(short)
+        if (!long.startsWith(short)) return false
+        val rest = long.substring(short.length).trim()
+        // Lines the board appends, in brackets; or a long message cut short.
+        return (rest.startsWith("[") && rest.endsWith("]")) || short.length >= TRUNCATED
     }
 
     /** How many of [seen] are [sent]. */
@@ -31,9 +34,10 @@ object SentMatch {
 
     /** Occurrences of the start of [sent] in a screen's text. */
     fun countOnScreen(sent: String, screen: String): Int {
-        val head = normalize(sent).take(40)
+        // A terminal can wrap in the middle of a word: compare without any whitespace.
+        val head = normalize(sent).filterNot { it.isWhitespace() }.take(40)
         if (head.isEmpty()) return 0
-        val text = normalize(screen)
+        val text = screen.filterNot { it.isWhitespace() || it in "*_`>" }
         var n = 0
         var i = text.indexOf(head)
         while (i >= 0) { n++; i = text.indexOf(head, i + head.length) }
