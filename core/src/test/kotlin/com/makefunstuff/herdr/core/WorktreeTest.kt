@@ -28,7 +28,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /** Answers each method with a canned `result`, and remembers what was asked. */
-private class FakeCaller(private val replies: Map<String, String>) : ApiCaller {
+private class WorktreeFakeCaller(private val replies: Map<String, String>) : ApiCaller {
     val calls = mutableListOf<Pair<String, JsonObject>>()
 
     override suspend fun call(method: String, params: JsonObject, timeoutMs: Long): JsonObject {
@@ -53,7 +53,7 @@ class WorktreeApiTest {
 
     @Test
     fun listsWorktrees() = runBlocking {
-        val fake = FakeCaller(mapOf("worktree.list" to list))
+        val fake = WorktreeFakeCaller(mapOf("worktree.list" to list))
         val result = HerdrApi(fake).worktrees(workspaceId = "w4")
         assertEquals("repo", result.source.repoName)
         assertEquals("w4", result.source.sourceWorkspaceId)
@@ -72,7 +72,7 @@ class WorktreeApiTest {
 
     @Test
     fun createsOpensAndRemoves() = runBlocking {
-        val fake = FakeCaller(mapOf("worktree.create" to opened, "worktree.open" to reopened, "worktree.remove" to removed))
+        val fake = WorktreeFakeCaller(mapOf("worktree.create" to opened, "worktree.open" to reopened, "worktree.remove" to removed))
         val api = HerdrApi(fake)
 
         val created = api.createWorktree(cwd = "/src/repo", branch = "feat-x", base = "main")
@@ -102,7 +102,7 @@ class WorktreeApiTest {
 
     @Test
     fun errorsReadAsPlainMessages() = runBlocking {
-        val e = assertFailsWith<HerdrApiException> { HerdrApi(FakeCaller(mapOf("worktree.remove" to dirty))).removeWorktree("w5") }
+        val e = assertFailsWith<HerdrApiException> { HerdrApi(WorktreeFakeCaller(mapOf("worktree.remove" to dirty))).removeWorktree("w5") }
         assertTrue(WorktreeErrors.needsForce(e))
         assertFalse(WorktreeErrors.needsTrust(e))
         assertEquals("This worktree has changes that aren't committed. Removing it deletes them.", WorktreeErrors.describe(e))

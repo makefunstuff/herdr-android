@@ -25,7 +25,16 @@ import java.io.OutputStream
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
-class HerdrApiException(val code: String, val detail: String) : IOException("$code: $detail")
+/** An error herdr answered with. [message] is herdr's own text as a sentence; [code] is for code to match on. */
+class HerdrApiException(val code: String, val detail: String) : IOException(plain(code, detail)) {
+    companion object {
+        fun plain(code: String, detail: String): String {
+            val text = detail.trim().ifEmpty { code.replace('_', ' ') }
+            val sentence = text.replaceFirstChar { it.uppercaseChar() }
+            return if (sentence.last() in ".!?") sentence else "$sentence."
+        }
+    }
+}
 
 /** Something that can make one herdr API request. */
 interface ApiCaller {
