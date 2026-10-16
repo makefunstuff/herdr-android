@@ -25,7 +25,13 @@ import java.io.OutputStream
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
-class HerdrApiException(val code: String, message: String) : IOException("$code: $message")
+class HerdrApiException(val code: String, val detail: String) : IOException("$code: $detail")
+
+/** An error as a person should read it: herdr's own message without its code. */
+fun Throwable.plainMessage(): String = when (this) {
+    is HerdrApiException -> detail.replaceFirstChar { it.uppercase() }
+    else -> message?.takeIf { it.isNotBlank() } ?: javaClass.simpleName
+}
 
 /** Something that can make one herdr API request. */
 interface ApiCaller {

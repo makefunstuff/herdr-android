@@ -61,6 +61,68 @@ class HerdrApi(private val connection: ApiCaller) {
         )
     }
 
+    // --- Plugins ---
+
+    suspend fun plugins(): List<PluginInfo> =
+        HerdrJson.decodeFromJsonElement(connection.call("plugin.list")["plugins"] ?: JsonArray(emptyList()))
+
+    /** Enables or disables a plugin and returns it as herdr now reports it. */
+    suspend fun setPluginEnabled(pluginId: String, enabled: Boolean): PluginInfo =
+        HerdrJson.decodeFromJsonElement(
+            connection.call(if (enabled) "plugin.enable" else "plugin.disable", params("plugin_id" to pluginId))["plugin"]
+                ?: throw HerdrApiException("bad_response", "herdr didn't return the plugin"),
+        )
+
+    suspend fun pluginActions(pluginId: String? = null): List<PluginAction> =
+        HerdrJson.decodeFromJsonElement(
+            connection.call("plugin.action.list", params("plugin_id" to pluginId))["actions"] ?: JsonArray(emptyList()),
+        )
+
+    /** Starts a plugin action. herdr runs it in the background; the returned log is its first state. */
+    suspend fun invokePluginAction(pluginId: String, actionId: String): PluginLog? =
+        connection.call(
+            "plugin.action.invoke",
+            params("plugin_id" to pluginId, "action_id" to actionId, "context" to params("invocation_source" to "herdr-android")),
+        )["log"]?.let { HerdrJson.decodeFromJsonElement<PluginLog>(it) }
+
+    /** Recent plugin command runs, newest first. */
+    suspend fun pluginLogs(pluginId: String? = null, limit: Int? = 50): List<PluginLog> =
+        HerdrJson.decodeFromJsonElement<List<PluginLog>>(
+            connection.call("plugin.log.list", params("plugin_id" to pluginId, "limit" to limit))["logs"] ?: JsonArray(emptyList()),
+        ).sortedByDescending { it.startedUnixMs }
+
+    // --- Integrations ---
+
+    suspend fun integrations(): List<IntegrationInfo> =
+        HerdrJson.decodeFromJsonElement(connection.call("integration.list")["integrations"] ?: JsonArray(emptyList()))
+
+    /** Installs herdr's hook for an agent; returns herdr's messages about what it did. */
+    suspend fun installIntegration(target: String): List<String> =
+        messages(connection.call("integration.install", params("target" to target), timeoutMs = 60_000))
+
+    suspend fun uninstallIntegration(target: String): List<String> =
+        messages(connection.call("integration.uninstall", params("target" to target), timeoutMs = 60_000))
+
+    // --- Server ---
+
+    suspend fun reloadConfig(): ConfigReload = decode(connection.call("server.reload_config"))
+
+    suspend fun agentManifests(): List<AgentManifestInfo> =
+        HerdrJson.decodeFromJsonElement(connection.call("server.agent_manifests")["manifests"] ?: JsonArray(emptyList()))
+
+    suspend fun reloadAgentManifests(): List<AgentManifestInfo> =
+        HerdrJson.decodeFromJsonElement(
+            connection.call("server.reload_agent_manifests", timeoutMs = 60_000)["manifests"] ?: JsonArray(emptyList()),
+        )
+
+    /** Stops the herdr server, closing every pane in the session. */
+    suspend fun stopServer() {
+        connection.call("server.stop")
+    }
+
+    private fun messages(result: JsonObject): List<String> =
+        (result["details"] as? JsonObject)?.get("messages")?.let { HerdrJson.decodeFromJsonElement<List<String>>(it) } ?: emptyList()
+
     private inline fun <reified T> decode(obj: JsonObject): T = HerdrJson.decodeFromJsonElement(obj)
 
     companion object {

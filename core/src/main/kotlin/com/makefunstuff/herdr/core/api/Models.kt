@@ -194,6 +194,132 @@ data class SavedMachineEntry(
 data class PongInfo(
     val version: String = "",
     val protocol: Int = 0,
+    val capabilities: ServerCapabilities = ServerCapabilities(),
+)
+
+@Serializable
+data class ServerCapabilities(
+    @SerialName("live_handoff") val liveHandoff: Boolean = false,
+    @SerialName("detached_server_daemon") val detachedServerDaemon: Boolean = false,
+    @SerialName("health_check") val healthCheck: Boolean = false,
+    @SerialName("ssh_agent_registration") val sshAgentRegistration: Boolean = false,
+)
+
+/** An installed herdr plugin (`plugin.list`). */
+@Serializable
+data class PluginInfo(
+    @SerialName("plugin_id") val pluginId: String,
+    val name: String = "",
+    val version: String = "",
+    val description: String? = null,
+    val enabled: Boolean = true,
+    @SerialName("min_herdr_version") val minHerdrVersion: String = "",
+    @SerialName("plugin_root") val pluginRoot: String = "",
+    val actions: List<PluginManifestAction> = emptyList(),
+    val panes: List<PluginManifestPane> = emptyList(),
+    val events: List<PluginEventHook> = emptyList(),
+    val source: PluginSource? = null,
+    val warnings: List<String> = emptyList(),
+) {
+    val title: String get() = name.ifBlank { pluginId }
+
+    /** Where it came from: `owner/repo` for GitHub installs, else "local". */
+    val origin: String get() = when {
+        source?.kind == "github" && source.owner != null && source.repo != null -> "${source.owner}/${source.repo}"
+        else -> source?.kind ?: "local"
+    }
+}
+
+@Serializable
+data class PluginManifestAction(
+    val id: String,
+    val title: String = "",
+    val description: String? = null,
+    val contexts: List<String> = emptyList(),
+)
+
+@Serializable
+data class PluginManifestPane(val id: String, val title: String = "", val description: String? = null)
+
+@Serializable
+data class PluginEventHook(val on: String = "")
+
+@Serializable
+data class PluginSource(
+    val kind: String = "local",
+    val owner: String? = null,
+    val repo: String? = null,
+    @SerialName("requested_ref") val requestedRef: String? = null,
+    @SerialName("resolved_commit") val resolvedCommit: String? = null,
+)
+
+/** A runnable plugin action (`plugin.action.list`). */
+@Serializable
+data class PluginAction(
+    @SerialName("plugin_id") val pluginId: String,
+    @SerialName("action_id") val actionId: String,
+    val title: String = "",
+    val description: String? = null,
+    val contexts: List<String> = emptyList(),
+    val platforms: List<String>? = null,
+    val command: List<String> = emptyList(),
+) {
+    /** Actions declaring platforms only run on those; null means any. */
+    fun runsOn(os: String?): Boolean = platforms == null || os == null || os in platforms
+}
+
+/** One run of a plugin command (`plugin.log.list`). */
+@Serializable
+data class PluginLog(
+    @SerialName("log_id") val logId: String,
+    @SerialName("plugin_id") val pluginId: String,
+    @SerialName("action_id") val actionId: String? = null,
+    val event: String? = null,
+    val command: List<String> = emptyList(),
+    val status: String = "running",
+    @SerialName("started_unix_ms") val startedUnixMs: Long = 0,
+    @SerialName("finished_unix_ms") val finishedUnixMs: Long? = null,
+    @SerialName("exit_code") val exitCode: Int? = null,
+    val stdout: String? = null,
+    val stderr: String? = null,
+    val error: String? = null,
+) {
+    /** What triggered the run: the action id, the event name, or the command. */
+    val trigger: String get() = actionId ?: event ?: command.joinToString(" ")
+}
+
+/** An agent integration herdr can install (`integration.list`). */
+@Serializable
+data class IntegrationInfo(
+    val target: String,
+    val label: String = "",
+    val command: String = "",
+    /** Whether the agent's CLI is present on the machine. */
+    val available: Boolean = false,
+    /** `not_installed`, `current` or `outdated`. */
+    val state: String = "not_installed",
+) {
+    val installed: Boolean get() = state != "not_installed"
+    val outdated: Boolean get() = state == "outdated"
+}
+
+@Serializable
+data class AgentManifestInfo(
+    val agent: String,
+    val source: String = "",
+    @SerialName("source_kind") val sourceKind: String = "",
+    @SerialName("active_version") val activeVersion: String? = null,
+    @SerialName("cached_remote_version") val cachedRemoteVersion: String? = null,
+    @SerialName("remote_update_result") val remoteUpdateResult: String? = null,
+    @SerialName("remote_update_error") val remoteUpdateError: String? = null,
+    val warning: String? = null,
+)
+
+@Serializable
+data class ConfigReload(
+    /** `applied`, `partial` or `failed`. */
+    val status: String = "applied",
+    val diagnostics: List<String> = emptyList(),
 )
 
 internal val HerdrJson = Json {
