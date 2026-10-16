@@ -65,6 +65,16 @@ class BlockedPromptTest {
     }
 
     @Test
+    fun piSelectList() {
+        val screen = " Allow the extension to run git push?\n\n  Allow once\n→ Always allow\n  Deny\n\n ↑↓ navigate · enter select\n"
+        val p = assertNotNull(BlockedPrompt.parse(screen))
+        assertEquals("Allow the extension to run git push?", p.question)
+        assertEquals(listOf("Allow once", "Always allow", "Deny"), p.options.map { it.label })
+        assertEquals(1, p.selected)
+        assertEquals(listOf("up", "enter"), p.keysFor(0))
+    }
+
+    @Test
     fun noMenu() {
         assertNull(BlockedPrompt.parse("just some output\nand more\n"))
     }

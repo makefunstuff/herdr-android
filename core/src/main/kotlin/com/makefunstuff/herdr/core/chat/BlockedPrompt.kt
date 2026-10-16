@@ -24,7 +24,7 @@ data class BlockedPrompt(
     }
 
     companion object {
-        private val CURSOR = Regex("^(\\s*)[❯›▶►➤>]\\s+(\\S.*)$")
+        private val CURSOR = Regex("^(\\s*)[❯›▶►➤→>]\\s+(\\S.*)$")
         private val NUMBERED = Regex("^(\\d{1,2})[.)]\\s+(.+)$")
         private val HARD_RULE = Regex("^[─━═▔▁]{6,}$")
         private val SOFT_RULE = Regex("^[╌┄┈╍┅┉\\-–—·.]{6,}$")

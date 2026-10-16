@@ -1,6 +1,5 @@
 package com.makefunstuff.herdr.ui.agents
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -10,8 +9,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -20,7 +19,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
@@ -94,6 +92,9 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
     val pane = snapshot?.pane(paneId)
     val status = agent?.agentStatus ?: pane?.agentStatus ?: AgentStatus.Unknown
 
+    // What the agent is working on: herdr's title for it, or the title the agent gives its terminal.
+    val activity = agent?.let { it.title?.takeIf { t -> t.isNotBlank() } ?: it.terminalTitle?.takeIf { t -> t.isNotBlank() } }
+
     val chat = remember(session, paneId) { AgentChat(session, paneId, scope) }
     DisposableEffect(chat) {
         chat.start()
@@ -149,7 +150,9 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
                 AgentChat.Source.Transcript -> addAll(chatRows(state.items))
                 AgentChat.Source.Screen -> {
                     add(ChatRow.Info("screen-note", "No transcript for this agent, so this is its screen"))
-                    if (state.screen.isNotBlank()) add(ChatRow.Screen(state.screen.lines().takeLast(200).joinToString("\n")))
+                    // TUIs pad with blank rows; one blank line is enough on a phone.
+                    val screen = state.screen.lines().takeLast(200).joinToString("\n").replace(Regex("\n\\s*\n(\\s*\n)+"), "\n\n")
+                    if (screen.isNotBlank()) add(ChatRow.Screen(screen))
                 }
                 AgentChat.Source.Loading -> {}
             }
@@ -159,7 +162,7 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
     val listState = rememberLazyListState()
     val atBottom by remember { derivedStateOf { listState.firstVisibleItemIndex <= 1 } }
     // Stay pinned to the newest message unless the reader scrolled up.
-    LaunchedEffect(rows.lastOrNull()?.key, rows.size) {
+    LaunchedEffect(rows.lastOrNull()?.key, rows.size, status) {
         if (atBottom) listState.animateScrollToItem(0)
     }
 
@@ -201,8 +204,9 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
             )
         },
     ) { padding ->
-        Column(Modifier.padding(padding).fillMaxSize().imePadding()) {
-            StatusStrip(status, agent?.statusLabel, agent?.subtitle, online = host.online)
+        // The top bar's inset comes from the scaffold; the bottom follows the keyboard or the nav bar.
+        Column(Modifier.padding(top = padding.calculateTopPadding()).fillMaxSize().imePadding().navigationBarsPadding()) {
+            StatusStrip(status, agent?.statusLabel, activity, online = host.online)
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 when {
                     agent == null && pane == null && snapshot != null ->
@@ -218,7 +222,9 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                         modifier = Modifier.fillMaxSize(),
                     ) {
-                        if (status == AgentStatus.Working) item(key = "working") { WorkingLine(agent?.subtitle) }
+                        // The newest entry: the question the agent is waiting on, or what it is doing.
+                        if (status == AgentStatus.Blocked) item(key = "blocked") { BlockedCard(state.prompt, state.screen, onKeys = ::keys) }
+                        if (status == AgentStatus.Working) item(key = "working") { WorkingLine(activity) }
                         items(rows.asReversed(), key = { it.key }) { ChatRowView(it) }
                     }
                 }
@@ -227,16 +233,6 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
                         onClick = { scope.launch { listState.animateScrollToItem(0) } },
                         modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp),
                     ) { Icon(Icons.Filled.KeyboardArrowDown, "Newest") }
-                }
-            }
-            AnimatedVisibility(status == AgentStatus.Blocked) {
-                Box(
-                    Modifier
-                        .padding(horizontal = 12.dp, vertical = 6.dp)
-                        .heightIn(max = 420.dp)
-                        .verticalScroll(rememberScrollState()),
-                ) {
-                    BlockedCard(state.prompt, state.screen, onKeys = ::keys)
                 }
             }
             if (showKeys) KeyRow(onKeys = ::keys)

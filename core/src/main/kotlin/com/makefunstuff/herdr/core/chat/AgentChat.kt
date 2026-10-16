@@ -132,7 +132,7 @@ class AgentChat(private val host: HostSession, val paneId: String, private val s
                 try {
                     val api = host.awaitApi(10_000)
                     val visible = if (blocked) api.readPane(paneId, source = "visible", lines = 80).text else null
-                    val recent = if (source == Source.Screen) api.readPane(paneId, source = "recent-unwrapped", lines = 200).text else null
+                    val recent = if (source == Source.Screen) api.readPane(paneId, source = "recent_unwrapped", lines = 200).text else null
                     _state.update { s ->
                         s.copy(
                             screen = (recent ?: visible ?: s.screen).trimEnd(),

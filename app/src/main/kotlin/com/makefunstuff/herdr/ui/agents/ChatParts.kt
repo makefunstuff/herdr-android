@@ -20,7 +20,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -221,8 +225,8 @@ private fun ToolStateIcon(state: ToolState) {
     Box(Modifier.size(14.dp), contentAlignment = Alignment.Center) {
         when (state) {
             ToolState.Running -> CircularProgressIndicator(Modifier.size(12.dp), strokeWidth = 1.5.dp, color = AgentStatus.Working.color())
-            ToolState.Done -> Text("✓", fontSize = 12.sp, color = AgentStatus.Idle.color())
-            ToolState.Failed -> Text("✕", fontSize = 12.sp, color = AgentStatus.Blocked.color())
+            ToolState.Done -> Icon(Icons.Filled.Check, "Done", Modifier.size(14.dp), tint = AgentStatus.Idle.color())
+            ToolState.Failed -> Icon(Icons.Filled.Close, "Failed", Modifier.size(14.dp), tint = AgentStatus.Blocked.color())
         }
     }
 }
