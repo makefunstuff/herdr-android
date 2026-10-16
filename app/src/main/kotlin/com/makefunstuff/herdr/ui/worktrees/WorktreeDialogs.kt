@@ -1,5 +1,9 @@
 package com.makefunstuff.herdr.ui.worktrees
 
+import com.makefunstuff.herdr.ui.design.HerdrDialog
+import com.makefunstuff.herdr.ui.design.HerdrMenu
+import com.makefunstuff.herdr.ui.design.HerdrMenuItem
+import com.makefunstuff.herdr.ui.design.HerdrSheet
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -10,13 +14,11 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -63,7 +65,7 @@ fun CreateWorktreeSheet(
     var path by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
 
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    HerdrSheet(onDismissRequest = onDismiss) {
         Column(
             Modifier.fillMaxWidth().imePadding().verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp).padding(bottom = 16.dp).navigationBarsPadding(),
@@ -185,7 +187,7 @@ fun RemoveWorktreeFlow(session: HostSession, request: RemoveRequest, onDone: (re
 
     val pending = dirty
     if (pending == null) {
-        AlertDialog(
+        HerdrDialog(
             onDismissRequest = { if (!busy) onDone(false) },
             title = { Text("Remove ${request.title}?") },
             text = {
@@ -207,7 +209,7 @@ fun RemoveWorktreeFlow(session: HostSession, request: RemoveRequest, onDone: (re
             dismissButton = { TextButton(onClick = { onDone(false) }, enabled = !busy) { Text("Cancel") } },
         )
     } else {
-        AlertDialog(
+        HerdrDialog(
             onDismissRequest = {},
             title = { Text("${request.title} has changes") },
             text = { Text("It has modified or untracked files that aren't committed. Removing it anyway deletes them for good.") },
@@ -237,7 +239,7 @@ fun RemoveWorktreeFlow(session: HostSession, request: RemoveRequest, onDone: (re
 /** Asks before passing herdr's per-request Git trust for a repository Git flagged as unsafe. */
 @Composable
 fun TrustRepositoryDialog(repoName: String, onTrust: () -> Unit, onDismiss: () -> Unit) {
-    AlertDialog(
+    HerdrDialog(
         onDismissRequest = onDismiss,
         title = { Text("Trust $repoName?") },
         text = {

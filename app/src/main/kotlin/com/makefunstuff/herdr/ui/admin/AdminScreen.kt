@@ -1,5 +1,9 @@
 package com.makefunstuff.herdr.ui.admin
 
+import com.makefunstuff.herdr.ui.design.HerdrDialog
+import com.makefunstuff.herdr.ui.design.HerdrMenu
+import com.makefunstuff.herdr.ui.design.HerdrMenuItem
+import com.makefunstuff.herdr.ui.design.HerdrSheet
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
@@ -29,14 +33,11 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
@@ -44,7 +45,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PrimaryScrollableTabRow
@@ -57,7 +57,6 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -229,9 +228,9 @@ private fun PluginCard(p: PluginInfo, model: AdminModel, onOpen: () -> Unit) {
                 else Switch(checked = p.enabled, onCheckedChange = { model.setEnabled(p, it) })
             }
         }
-        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-            DropdownMenuItem(text = { Text("Actions and logs") }, onClick = { menu = false; onOpen() })
-            DropdownMenuItem(text = { Text(if (p.enabled) "Disable" else "Enable") }, onClick = { menu = false; model.setEnabled(p, !p.enabled) })
+        HerdrMenu(expanded = menu, onDismissRequest = { menu = false }) {
+            HerdrMenuItem(text = { Text("Actions and logs") }, onClick = { menu = false; onOpen() })
+            HerdrMenuItem(text = { Text(if (p.enabled) "Disable" else "Enable") }, onClick = { menu = false; model.setEnabled(p, !p.enabled) })
         }
     }
 }
@@ -241,7 +240,7 @@ private fun PluginCard(p: PluginInfo, model: AdminModel, onOpen: () -> Unit) {
 private fun PluginSheet(p: PluginInfo, model: AdminModel, onLog: (PluginLog) -> Unit, onDismiss: () -> Unit) {
     val actions = model.actions.filter { it.pluginId == p.pluginId && it.runsOn(model.os) }
     val logs = (model.logs as? Load.Ready)?.value?.filter { it.pluginId == p.pluginId }.orEmpty()
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    HerdrSheet(onDismissRequest = onDismiss) {
         LazyColumn(
             Modifier.fillMaxWidth().navigationBarsPadding(),
             contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 24.dp),
@@ -323,7 +322,7 @@ private fun LogRow(log: PluginLog, showPlugin: Boolean, onClick: () -> Unit) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun LogSheet(log: PluginLog, onDismiss: () -> Unit) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    HerdrSheet(onDismissRequest = onDismiss) {
         Column(
             Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 24.dp).navigationBarsPadding().verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -412,9 +411,9 @@ private fun IntegrationRow(i: IntegrationInfo, model: AdminModel, onRemove: () -
         if (i.installed && !busy) {
             Box {
                 IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "More") }
-                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                    DropdownMenuItem(text = { Text("Reinstall") }, onClick = { menu = false; model.install(i) })
-                    DropdownMenuItem(text = { Text("Remove", color = BAD) }, onClick = { menu = false; onRemove() })
+                HerdrMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    HerdrMenuItem(text = { Text("Reinstall") }, onClick = { menu = false; model.install(i) })
+                    HerdrMenuItem(text = { Text("Remove", color = BAD) }, onClick = { menu = false; onRemove() })
                 }
             }
         }
@@ -550,7 +549,7 @@ private fun ServerTab(model: AdminModel, state: HostState) {
 @Composable
 private fun UpdateDialog(canHandoff: Boolean, onConfirm: (Boolean) -> Unit, onDismiss: () -> Unit) {
     var handoff by remember { mutableStateOf(false) }
-    AlertDialog(
+    HerdrDialog(
         onDismissRequest = onDismiss,
         title = { Text("Update herdr?") },
         text = {
@@ -623,8 +622,8 @@ private fun SavedMachineRow(m: SavedMachineEntry, model: AdminModel, onRemove: (
             }
             if (busy) CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
         }
-        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-            DropdownMenuItem(text = { Text("Remove", color = BAD) }, enabled = !busy, onClick = { menu = false; onRemove() })
+        HerdrMenu(expanded = menu, onDismissRequest = { menu = false }) {
+            HerdrMenuItem(text = { Text("Remove", color = BAD) }, enabled = !busy, onClick = { menu = false; onRemove() })
         }
     }
 }
@@ -637,7 +636,7 @@ private fun AddMachineSheet(model: AdminModel, onDismiss: () -> Unit) {
     var sessionName by remember { mutableStateOf("") }
     val busy = model.isBusy("machine-add")
     val valid = target.isNotBlank() && !target.trim().startsWith("-") && target.trim().none { it.isWhitespace() }
-    ModalBottomSheet(onDismissRequest = { if (!busy) onDismiss() }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+    HerdrSheet(onDismissRequest = { if (!busy) onDismiss() }) {
         Column(
             Modifier.fillMaxWidth().imePadding().verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp).padding(bottom = 16.dp).navigationBarsPadding(),
@@ -671,7 +670,7 @@ private fun <T> LazyListScope.loadState(load: Load<T>, empty: String, content: L
 
 @Composable
 private fun Confirm(title: String, body: String, action: String, onConfirm: () -> Unit, onDismiss: () -> Unit, destructive: Boolean = true) {
-    AlertDialog(
+    HerdrDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = { Text(body) },

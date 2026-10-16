@@ -1,5 +1,9 @@
 package com.makefunstuff.herdr.ui.machines
 
+import com.makefunstuff.herdr.ui.design.HerdrDialog
+import com.makefunstuff.herdr.ui.design.HerdrMenu
+import com.makefunstuff.herdr.ui.design.HerdrMenuItem
+import com.makefunstuff.herdr.ui.design.HerdrSheet
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -11,7 +15,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -64,7 +67,7 @@ fun NewSheet(session: HostSession, snap: SessionSnapshot, onDismiss: () -> Unit)
             ?: snap.panes.firstOrNull { it.tabId == ws.activeTabId }?.paneId
     }
 
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    HerdrSheet(onDismissRequest = onDismiss) {
         Column(
             Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 16.dp).navigationBarsPadding(),
             verticalArrangement = Arrangement.spacedBy(12.dp),

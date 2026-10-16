@@ -1,5 +1,9 @@
 package com.makefunstuff.herdr.ui.settings
 
+import com.makefunstuff.herdr.ui.design.HerdrDialog
+import com.makefunstuff.herdr.ui.design.HerdrMenu
+import com.makefunstuff.herdr.ui.design.HerdrMenuItem
+import com.makefunstuff.herdr.ui.design.HerdrSheet
 import android.content.Context
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -11,7 +15,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -67,7 +70,7 @@ fun ImportKeyDialog(replacing: Boolean, onDismiss: () -> Unit) {
         }
     }
 
-    AlertDialog(
+    HerdrDialog(
         onDismissRequest = { if (!busy) onDismiss() },
         title = { Text(if (replacing) "Replace the SSH key" else "Restore or import a key") },
         text = {
@@ -165,7 +168,7 @@ fun ExportKeyDialog(onDismiss: () -> Unit) {
 
     val tooShort = passphrase.length < MIN_PASSPHRASE
     val mismatch = repeat.isNotEmpty() && repeat != passphrase
-    AlertDialog(
+    HerdrDialog(
         onDismissRequest = { if (!busy) onDismiss() },
         title = { Text("Back up the SSH key") },
         text = {
@@ -214,7 +217,7 @@ fun NewKeyDialog(replacing: Boolean, onDismiss: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var busy by remember { mutableStateOf(false) }
-    AlertDialog(
+    HerdrDialog(
         onDismissRequest = { if (!busy) onDismiss() },
         title = { Text(if (replacing) "Replace the key with a new one?" else "Make a new key?") },
         text = {
@@ -254,7 +257,7 @@ fun KeySetupDialog(unreadable: String?, onDismiss: () -> Unit) {
     when {
         importing -> ImportKeyDialog(replacing = unreadable != null, onDismiss = { importing = false })
         creating -> NewKeyDialog(replacing = unreadable != null, onDismiss = { creating = false })
-        else -> AlertDialog(
+        else -> HerdrDialog(
             onDismissRequest = onDismiss,
             title = { Text(if (unreadable != null) "The SSH key can't be read" else "Set up the SSH key") },
             text = {

@@ -1,5 +1,9 @@
 package com.makefunstuff.herdr.ui.layout
 
+import com.makefunstuff.herdr.ui.design.HerdrDialog
+import com.makefunstuff.herdr.ui.design.HerdrMenu
+import com.makefunstuff.herdr.ui.design.HerdrMenuItem
+import com.makefunstuff.herdr.ui.design.HerdrSheet
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,16 +27,12 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
@@ -206,17 +206,17 @@ fun LayoutScreen(nav: NavController, machineId: String, paneId: String) {
                 },
                 actions = {
                     IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, "More") }
-                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                        DropdownMenuItem(
+                    HerdrMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                        HerdrMenuItem(
                             text = { Text("Save this layout…") },
                             enabled = tree != null,
                             onClick = { menu = false; saveOpen = true },
                         )
-                        DropdownMenuItem(
+                        HerdrMenuItem(
                             text = { Text("Saved layouts") },
                             onClick = { menu = false; savedOpen = true },
                         )
-                        DropdownMenuItem(
+                        HerdrMenuItem(
                             text = { Text("Copy layout as JSON") },
                             enabled = tree != null,
                             onClick = {
@@ -224,7 +224,7 @@ fun LayoutScreen(nav: NavController, machineId: String, paneId: String) {
                                 tree?.let { context.copyToClipboard("layout", LayoutTemplates.encode(it.template()), "Layout copied") }
                             },
                         )
-                        DropdownMenuItem(
+                        HerdrMenuItem(
                             text = { Text("Paste layout and apply") },
                             onClick = {
                                 menu = false
@@ -238,7 +238,7 @@ fun LayoutScreen(nav: NavController, machineId: String, paneId: String) {
                                 }
                             },
                         )
-                        DropdownMenuItem(text = { Text("Refresh") }, onClick = { menu = false; reload++ })
+                        HerdrMenuItem(text = { Text("Refresh") }, onClick = { menu = false; reload++ })
                     }
                 },
             )
@@ -347,7 +347,7 @@ fun LayoutScreen(nav: NavController, machineId: String, paneId: String) {
 
     if (saveOpen) {
         var name by remember { mutableStateOf("") }
-        AlertDialog(
+        HerdrDialog(
             onDismissRequest = { saveOpen = false },
             title = { Text("Save layout") },
             text = {
@@ -382,7 +382,7 @@ fun LayoutScreen(nav: NavController, machineId: String, paneId: String) {
     }
 
     if (savedOpen) {
-        ModalBottomSheet(onDismissRequest = { savedOpen = false }) {
+        HerdrSheet(onDismissRequest = { savedOpen = false }) {
             Column(
                 Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 24.dp).navigationBarsPadding(),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -408,7 +408,7 @@ fun LayoutScreen(nav: NavController, machineId: String, paneId: String) {
 
     if (replaceOpen && applying != null) {
         val target = applying!!
-        AlertDialog(
+        HerdrDialog(
             onDismissRequest = { replaceOpen = false; applying = null },
             title = { Text("Replace this tab?") },
             text = { Text("The panes in this tab are closed and \"${target.name}\" takes their place. Anything running in them stops.") },

@@ -1,5 +1,9 @@
 package com.makefunstuff.herdr.ui.board
 
+import com.makefunstuff.herdr.ui.design.HerdrDialog
+import com.makefunstuff.herdr.ui.design.HerdrMenu
+import com.makefunstuff.herdr.ui.design.HerdrMenuItem
+import com.makefunstuff.herdr.ui.design.HerdrSheet
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -45,8 +49,6 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
@@ -228,9 +230,9 @@ fun BoardScreen(nav: NavController, machineId: String) {
                     IconButton(onClick = { nav.navigate(Routes.coordinator(machineId)) }) { Icon(Icons.Filled.Email, "Coordinator chat") }
                     Box {
                         IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "Filter and more") }
-                        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                            DropdownMenuItem(text = { Text(if (archived) "Hide archived" else "Show archived") }, onClick = { archived = !archived; menu = false })
-                            DropdownMenuItem(text = { Text("Refresh") }, leadingIcon = { Icon(Icons.Filled.Refresh, null) }, onClick = { readNow.trySend(Unit); menu = false })
+                        HerdrMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                            HerdrMenuItem(text = { Text(if (archived) "Hide archived" else "Show archived") }, onClick = { archived = !archived; menu = false })
+                            HerdrMenuItem(text = { Text("Refresh") }, leadingIcon = { Icon(Icons.Filled.Refresh, null) }, onClick = { readNow.trySend(Unit); menu = false })
                         }
                     }
                 },

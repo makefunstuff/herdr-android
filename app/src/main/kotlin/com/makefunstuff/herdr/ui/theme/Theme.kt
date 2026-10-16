@@ -1,7 +1,13 @@
 package com.makefunstuff.herdr.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Shapes
+import androidx.compose.material3.Typography
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
@@ -51,7 +57,21 @@ private val Light = lightColorScheme(
 
 @Composable
 fun HerdrTheme(content: @Composable () -> Unit) {
-    MaterialTheme(colorScheme = if (isSystemInDarkTheme()) Dark else Light, content = content)
+    MaterialTheme(
+        colorScheme = if (isSystemInDarkTheme()) Dark else Light,
+        shapes = Shapes(
+            extraSmall = RoundedCornerShape(8.dp), small = RoundedCornerShape(12.dp), medium = RoundedCornerShape(16.dp),
+            large = RoundedCornerShape(24.dp), extraLarge = RoundedCornerShape(28.dp),
+        ),
+        typography = Typography().let {
+            it.copy(
+                titleLarge = it.titleLarge.copy(fontWeight = FontWeight.SemiBold),
+                titleMedium = it.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                labelSmall = it.labelSmall.copy(fontSize = 12.sp),
+            )
+        },
+        content = content,
+    )
 }
 
 /** herdr's own sidebar colours for agent states. */

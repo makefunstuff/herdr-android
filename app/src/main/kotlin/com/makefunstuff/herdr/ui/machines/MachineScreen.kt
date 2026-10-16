@@ -1,5 +1,9 @@
 package com.makefunstuff.herdr.ui.machines
 
+import com.makefunstuff.herdr.ui.design.HerdrDialog
+import com.makefunstuff.herdr.ui.design.HerdrMenu
+import com.makefunstuff.herdr.ui.design.HerdrMenuItem
+import com.makefunstuff.herdr.ui.design.HerdrSheet
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
@@ -26,14 +30,11 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
@@ -146,14 +147,14 @@ fun MachineScreen(nav: NavController, machineId: String) {
                     }
                     IconButton(onClick = { session.retry(); session.refresh(); scope.launch { session.checkBoard() } }) { Icon(Icons.Filled.Refresh, "Refresh") }
                     IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "More") }
-                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                        DropdownMenuItem(text = { Text("Notify herdr…") }, onClick = { menu = false; showNotify = true })
-                        DropdownMenuItem(text = { Text("Plugins") }, onClick = { menu = false; nav.navigate(Routes.admin(machineId, 0)) })
-                        DropdownMenuItem(text = { Text("Integrations") }, onClick = { menu = false; nav.navigate(Routes.admin(machineId, 1)) })
-                        DropdownMenuItem(text = { Text("Server and updates") }, onClick = { menu = false; nav.navigate(Routes.admin(machineId, 2)) })
-                        DropdownMenuItem(text = { Text("herdr's saved machines") }, onClick = { menu = false; nav.navigate(Routes.admin(machineId, 3)) })
+                    HerdrMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                        HerdrMenuItem(text = { Text("Notify herdr…") }, onClick = { menu = false; showNotify = true })
+                        HerdrMenuItem(text = { Text("Plugins") }, onClick = { menu = false; nav.navigate(Routes.admin(machineId, 0)) })
+                        HerdrMenuItem(text = { Text("Integrations") }, onClick = { menu = false; nav.navigate(Routes.admin(machineId, 1)) })
+                        HerdrMenuItem(text = { Text("Server and updates") }, onClick = { menu = false; nav.navigate(Routes.admin(machineId, 2)) })
+                        HerdrMenuItem(text = { Text("herdr's saved machines") }, onClick = { menu = false; nav.navigate(Routes.admin(machineId, 3)) })
                         HorizontalDivider()
-                        DropdownMenuItem(text = { Text("Import herdr machines from here") }, onClick = {
+                        HerdrMenuItem(text = { Text("Import herdr machines from here") }, onClick = {
                             menu = false
                             scope.launch {
                                 runCatching { MachineImport.discover(session, container.machines.machines.value) }
@@ -163,8 +164,8 @@ fun MachineScreen(nav: NavController, machineId: String) {
                                     .onFailure { context.toast(it.message ?: "Couldn't read machines") }
                             }
                         })
-                        DropdownMenuItem(text = { Text("Worktrees") }, onClick = { menu = false; nav.navigate(Routes.worktrees(machineId)) })
-                        DropdownMenuItem(text = { Text("Edit machine") }, onClick = { menu = false; nav.navigate(Routes.edit(machineId)) })
+                        HerdrMenuItem(text = { Text("Worktrees") }, onClick = { menu = false; nav.navigate(Routes.worktrees(machineId)) })
+                        HerdrMenuItem(text = { Text("Edit machine") }, onClick = { menu = false; nav.navigate(Routes.edit(machineId)) })
                     }
                 },
             )
@@ -312,14 +313,14 @@ private fun WorkspaceCard(
                 Pill("${ws.tabCount} tab${if (ws.tabCount == 1) "" else "s"}")
                 IconButton(onClick = onWorkspaceMenu) { Icon(Icons.Filled.MoreVert, "Workspace actions") }
                 Box {
-                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                        DropdownMenuItem(
+                    HerdrMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                        HerdrMenuItem(
                             text = { Text(if (repo != null) "Worktrees of ${repo.repoName.ifBlank { "this repository" }}" else "Worktrees in this folder") },
                             onClick = { menu = false; onWorktrees() },
                         )
-                        DropdownMenuItem(text = { Text("New worktree…") }, enabled = online, onClick = { menu = false; onNewWorktree() })
+                        HerdrMenuItem(text = { Text("New worktree…") }, enabled = online, onClick = { menu = false; onNewWorktree() })
                         if (repo?.isLinkedWorktree == true) {
-                            DropdownMenuItem(
+                            HerdrMenuItem(
                                 text = { Text("Remove this worktree…", color = MaterialTheme.colorScheme.error) },
                                 enabled = online,
                                 onClick = { menu = false; onRemoveWorktree() },
@@ -417,7 +418,7 @@ private fun ImportDialog(
 ) {
     val chosen = remember { mutableStateMapOf<String, Boolean>().apply { candidates.forEach { put(it.id, !it.alreadyAdded) } } }
     var via by remember { mutableStateOf(true) }
-    AlertDialog(
+    HerdrDialog(
         onDismissRequest = onDismiss,
         title = { Text("Import from $source") },
         text = {

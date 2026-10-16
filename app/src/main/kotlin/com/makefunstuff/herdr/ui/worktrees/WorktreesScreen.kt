@@ -1,5 +1,9 @@
 package com.makefunstuff.herdr.ui.worktrees
 
+import com.makefunstuff.herdr.ui.design.HerdrDialog
+import com.makefunstuff.herdr.ui.design.HerdrMenu
+import com.makefunstuff.herdr.ui.design.HerdrMenuItem
+import com.makefunstuff.herdr.ui.design.HerdrSheet
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -21,7 +25,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -32,7 +35,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -419,7 +421,7 @@ private fun WorktreeRow(wt: GitWorktree, snap: SessionSnapshot, onClick: () -> U
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun WorktreeActionsSheet(wt: GitWorktree, onDismiss: () -> Unit, onOpen: () -> Unit, onCopy: () -> Unit, onRemove: () -> Unit) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    HerdrSheet(onDismissRequest = onDismiss) {
         Column(Modifier.fillMaxWidth().padding(bottom = 16.dp).navigationBarsPadding()) {
             Text(wt.title, style = MaterialTheme.typography.titleMedium, fontFamily = FontFamily.Monospace, modifier = Modifier.padding(horizontal = 20.dp))
             Text(
@@ -458,7 +460,7 @@ private fun AddRepoDialog(onDismiss: () -> Unit, onAdd: (path: String) -> Unit) 
     var path by remember { mutableStateOf("") }
     // Keep what the user types, spaces and all; only trim when the path is used.
     val clean = path.trim()
-    AlertDialog(
+    HerdrDialog(
         onDismissRequest = onDismiss,
         title = { Text("Open a repository") },
         text = {

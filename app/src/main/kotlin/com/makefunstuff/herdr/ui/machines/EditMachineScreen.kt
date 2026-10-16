@@ -1,5 +1,12 @@
 package com.makefunstuff.herdr.ui.machines
 
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material.icons.filled.ArrowDropDown
+import com.makefunstuff.herdr.ui.design.HerdrDialog
+import com.makefunstuff.herdr.ui.design.HerdrMenu
+import com.makefunstuff.herdr.ui.design.HerdrMenuItem
+import com.makefunstuff.herdr.ui.design.HerdrSheet
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,7 +25,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
@@ -205,21 +211,22 @@ fun EditMachineScreen(nav: NavController, id: String?) {
             val others = machines.filter { it.id != existing?.id }
             if (others.isNotEmpty()) {
                 var open by remember { mutableStateOf(false) }
-                ExposedDropdownMenuBox(expanded = open, onExpandedChange = { open = it }) {
+                Box {
                     OutlinedTextField(
                         value = others.firstOrNull { it.id == viaId }?.label ?: "Direct",
                         onValueChange = {},
                         readOnly = true,
                         label = { Text("Connect through") },
                         supportingText = { Text("Use another machine as a jump host when this one is only reachable from there") },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(open) },
-                        modifier = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable),
+                        trailingIcon = { Icon(Icons.Filled.ArrowDropDown, null) },
+                        modifier = Modifier.fillMaxWidth(),
                     )
-                    ExposedDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-                        DropdownMenuItem(text = { Text("Direct") }, onClick = { viaId = null; open = false })
-                        others.forEach { o ->
-                            DropdownMenuItem(text = { Text(o.label) }, onClick = { viaId = o.id; open = false })
-                        }
+                    Box(Modifier.matchParentSize().clickable(onClickLabel = "Choose a jump host") { open = true })
+                }
+                HerdrMenu(expanded = open, onDismissRequest = { open = false }) {
+                    HerdrMenuItem(text = { Text("Direct") }, onClick = { viaId = null; open = false })
+                    others.forEach { o ->
+                        HerdrMenuItem(text = { Text(o.label) }, onClick = { viaId = o.id; open = false })
                     }
                 }
             }
