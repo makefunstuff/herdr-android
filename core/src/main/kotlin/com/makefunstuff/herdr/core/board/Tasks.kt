@@ -232,7 +232,7 @@ data class TaskDetails(
     val time: Usage?, val tokens: Usage?, val queue: String, val attempts: List<Attempt>, val comparison: String, val waitsFor: List<String>,
 )
 
-/** A command the board can be given about a task, with how it asks. */
+/** A command the board can be given about a task. [destructive] ones ask first: they stop work, throw it away or merge what failed a check. */
 enum class BoardAction(val verb: String, val label: String, val destructive: Boolean = false) {
     Delegate("delegate", "Start an agent"),
     Tell("tell", "Tell its agent…"),
@@ -241,11 +241,11 @@ enum class BoardAction(val verb: String, val label: String, val destructive: Boo
     Fix("fix", "Send failure to agent"),
     Review("review", "Send review findings back"),
     Finish("finish", "Finish anyway", true),
-    Approve("approve", "Approve and merge", true),
+    Approve("approve", "Approve and merge"),
     ApproveAnyway("approve", "Approve anyway…", true),
     ApprovePlan("approve", "Approve plan"),
     SendPlanBack("tell", "Send plan back…"),
-    Pick("pick", "Pick this attempt", true),
+    Pick("pick", "Pick this attempt"),
     Archive("archive", "Archive"),
     Restore("restore", "Restore"),
     Clear("clear", "Clear (remove)", true),
@@ -254,6 +254,21 @@ enum class BoardAction(val verb: String, val label: String, val destructive: Boo
 
 /** Which actions fit a task as it stands, as the board's own menu offers them (`update/menu.rs`). */
 object BoardActions {
+    /** The one action a person most likely wants next, or null when the task just needs watching. */
+    fun primary(t: BoardTask): BoardAction? {
+        if (t.archived) return BoardAction.Restore
+        return when (t.status) {
+            BoardStatus.Todo -> BoardAction.Delegate
+            BoardStatus.Approval -> BoardAction.Approve
+            BoardStatus.ReviewFailed -> BoardAction.Review
+            BoardStatus.PlanReady -> BoardAction.ApprovePlan
+            BoardStatus.Asks, BoardStatus.AsksOk, BoardStatus.NeedsLogin -> BoardAction.Tell
+            BoardStatus.Stopped -> BoardAction.Retry
+            BoardStatus.Error -> forTask(t).first()
+            else -> null
+        }
+    }
+
     fun forTask(t: BoardTask): List<BoardAction> {
         if (t.archived) return listOf(BoardAction.Restore, BoardAction.Clear)
         val out = mutableListOf<BoardAction>()

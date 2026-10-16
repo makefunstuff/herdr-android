@@ -15,7 +15,17 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.AssistChip
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
+import com.makefunstuff.herdr.ui.common.MarkdownText
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -89,6 +99,7 @@ fun TaskSheet(
     session: HostSession,
     t: BoardTask,
     onDismiss: () -> Unit,
+    busy: String? = null,
     onAction: (BoardAction) -> Unit,
     onPick: (String) -> Unit,
     onEdit: () -> Unit,
@@ -112,70 +123,87 @@ fun TaskSheet(
             }
         }
     }
+    val primary = BoardActions.primary(t)
+    val acts = BoardActions.forTask(t).filter { it != primary }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+        Column(Modifier.fillMaxWidth()) {
         Column(
-            Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).navigationBarsPadding().padding(horizontal = 20.dp).padding(bottom = 24.dp),
+            Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(t.name, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(t.name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                 Pill(t.status.label, color = t.status.color())
                 if (t.research) Pill("research")
                 if (t.agent.isNotEmpty()) Pill(t.agent)
             }
-            Text(t.title, style = MaterialTheme.typography.titleMedium)
+            Text(t.title, style = MaterialTheme.typography.titleLarge)
             val d = details
             val doing = d?.msg?.ifEmpty { t.msg } ?: t.msg
-            if (doing.isNotEmpty()) Text(doing, style = MaterialTheme.typography.bodyMedium)
             problem?.let { Text(it, color = BoardStatus.Error.color(), style = MaterialTheme.typography.bodySmall) }
-            if (d?.queue?.isNotEmpty() == true) Text(d.queue, style = MaterialTheme.typography.bodySmall)
-            if (d != null && d.waitsFor.isNotEmpty()) Text("Waits for: ${d.waitsFor.joinToString(", ")}", style = MaterialTheme.typography.bodySmall)
-
-            val acts = BoardActions.forTask(t)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                acts.forEach { a ->
-                    AssistChip(onClick = { onAction(a) }, label = { Text(a.label) })
-                }
-                AssistChip(onClick = onEdit, label = { Text("Edit…") })
-            }
-            if (d == null && problem == null) Text("Loading…", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            if (d != null) {
-                d.failure?.let { f ->
-                    Card("Something went wrong", BoardStatus.Error.color()) {
-                        Text(f.title, fontWeight = FontWeight.SemiBold)
-                        if (f.detail.isNotEmpty()) Text(f.detail, style = MaterialTheme.typography.bodySmall)
-                        if (f.next.isNotEmpty()) Text("Next: ${f.next}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (d == null && problem == null) LinearProgressIndicator(Modifier.fillMaxWidth())
+            if (d != null) d.failure?.let { f ->
+                Card(f.title.ifEmpty { "Something went wrong" }, BoardStatus.Error.color()) {
+                    if (f.detail.isNotEmpty()) MarkdownText(f.detail, style = MaterialTheme.typography.bodySmall)
+                    if (f.next.isNotEmpty()) {
+                        Text("Next step", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        MarkdownText(f.next, style = MaterialTheme.typography.bodySmall)
                     }
                 }
-                if (d.plan.isNotEmpty()) Section("Plan") { SelectionContainer { Text(d.plan, style = MaterialTheme.typography.bodySmall) } }
-                if (d.attempts.isNotEmpty()) Section(if (t.status == BoardStatus.PickOne) "Pick one of ${d.attempts.size}" else "Attempts") {
+            }
+            if (doing.isNotEmpty()) Section("Doing now", startOpen = true) { MarkdownText(doing) }
+            if (d?.queue?.isNotEmpty() == true) Text(d.queue, style = MaterialTheme.typography.bodySmall)
+            if (d != null && d.waitsFor.isNotEmpty()) Text("Waits for: ${d.waitsFor.joinToString(", ")}", style = MaterialTheme.typography.bodySmall)
+            if (d != null) {
+                if (d.plan.isNotEmpty()) Section("Plan", startOpen = t.status == BoardStatus.PlanReady) { MarkdownText(d.plan, style = MaterialTheme.typography.bodySmall) }
+                if (d.attempts.isNotEmpty()) Section(if (t.status == BoardStatus.PickOne) "Pick one of ${d.attempts.size}" else "Attempts", startOpen = true) {
                     d.attempts.forEach { a ->
                         Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
                                 Text("${a.letter} · ${a.agent}", fontWeight = FontWeight.SemiBold)
                                 Text(listOf(a.standing, a.stat).filter { it.isNotEmpty() }.joinToString(" · "), style = MaterialTheme.typography.bodySmall)
                             }
-                            if (t.status == BoardStatus.PickOne) TextButton(onClick = { onPick(a.letter) }) { Text("Pick") }
-                            else if (a.report.isNotEmpty()) TextButton(onClick = { context.openUrl(a.report) }) { Text("Report") }
+                            if (t.status == BoardStatus.PickOne) Button(onClick = { onPick(a.letter) }, enabled = busy == null, modifier = Modifier.heightIn(min = 48.dp)) { Text("Pick ${a.letter}") }
+                            else if (a.report.isNotEmpty()) TextButton(onClick = { context.openUrl(a.report) }, modifier = Modifier.heightIn(min = 48.dp)) { Text("Report") }
                         }
                     }
-                    if (d.comparison.isNotEmpty()) Text(d.comparison, style = MaterialTheme.typography.bodySmall)
+                    if (d.comparison.isNotEmpty()) MarkdownText(d.comparison, style = MaterialTheme.typography.bodySmall)
                 }
-                if (d.reviews.isNotEmpty()) Section("Reviews") {
-                    d.reviews.asReversed().forEach { ReviewView(it) }
+                if (d.reviews.isNotEmpty()) Section("Reviews · ${d.reviews.size}", startOpen = true) {
+                    d.reviews.asReversed().forEachIndexed { i, r -> ReviewView(r, startOpen = i == 0) }
                 }
-                if (d.handovers.isNotEmpty()) Section("Handovers") { d.handovers.forEach { Text("↪ $it", style = MaterialTheme.typography.bodySmall) } }
-                if (d.pr.isNotEmpty() || d.reportLink.isNotEmpty()) Section("Links") {
-                    if (d.pr.isNotEmpty()) TextButton(onClick = { context.openUrl(d.pr) }) { Text("Pull request: ${d.pr.substringAfter("github.com/")}") }
-                    if (d.reportLink.isNotEmpty()) TextButton(onClick = { context.openUrl(d.reportLink) }) { Text("Research report") }
+                if (d.pr.isNotEmpty() || d.reportLink.isNotEmpty()) Section("Links", startOpen = true) {
+                    if (d.pr.isNotEmpty()) OutlinedButton(onClick = { context.openUrl(d.pr) }, modifier = Modifier.heightIn(min = 48.dp)) { Text("Pull request ${d.pr.substringAfter("github.com/")}", maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                    if (d.reportLink.isNotEmpty()) OutlinedButton(onClick = { context.openUrl(d.reportLink) }, modifier = Modifier.heightIn(min = 48.dp)) { Text("Research report") }
                 }
-                if (d.time != null || d.tokens != null) Section("Limits and usage") {
+                if (d.description.isNotEmpty()) Section("Description", startOpen = d.description.length < 600) { MarkdownText(d.description, style = MaterialTheme.typography.bodySmall) }
+                if (d.handovers.isNotEmpty()) Section("Handovers · ${d.handovers.size}", startOpen = false) { d.handovers.forEach { MarkdownText("↪ $it", style = MaterialTheme.typography.bodySmall) } }
+                if (d.time != null || d.tokens != null) Section("Limits and usage", startOpen = false) {
                     d.time?.let { Text("Time: ${it.used.ifEmpty { "0s" }} used · limit ${it.limit.ifEmpty { "none" }}", style = MaterialTheme.typography.bodySmall) }
                     d.tokens?.let { Text("Tokens: ${it.used.ifEmpty { "0" }} used · limit ${it.limit.ifEmpty { "none" }}", style = MaterialTheme.typography.bodySmall) }
                 }
-                if (d.description.isNotEmpty()) Section("Description") { SelectionContainer { Text(d.description, style = MaterialTheme.typography.bodySmall) } }
                 if (d.branch.isNotEmpty()) Text("Branch ${d.branch}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+        }
+        HorizontalDivider()
+        Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 20.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            busy?.let { Text("$it…", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            if (primary != null) {
+                Button(
+                    onClick = { onAction(primary) }, enabled = busy == null,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                ) { Text(primary.label, style = MaterialTheme.typography.titleSmall) }
+            }
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                (acts).forEach { a ->
+                    OutlinedButton(
+                        onClick = { onAction(a) }, enabled = busy == null, modifier = Modifier.heightIn(min = 48.dp),
+                        colors = if (a.destructive) ButtonDefaults.outlinedButtonColors(contentColor = BoardStatus.Error.color()) else ButtonDefaults.outlinedButtonColors(),
+                    ) { Text(a.label) }
+                }
+                OutlinedButton(onClick = onEdit, enabled = busy == null, modifier = Modifier.heightIn(min = 48.dp)) { Text("Edit…") }
+            }
+        }
         }
     }
 }
@@ -191,10 +219,19 @@ private fun Card(title: String, color: Color, content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun Section(title: String, content: @Composable () -> Unit) {
+private fun Section(title: String, startOpen: Boolean = true, content: @Composable () -> Unit) {
+    var open by rememberSaveable(title) { mutableStateOf(startOpen) }
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(title, style = MaterialTheme.typography.titleSmall)
-        content()
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                .clickable(onClickLabel = if (open) "Collapse $title" else "Expand $title") { open = !open }
+                .semantics { heading() },
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+        ) {
+            Text(title, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+            Text(if (open) "▾" else "▸", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        if (open) content()
     }
 }
 
@@ -204,34 +241,51 @@ private fun severityColor(s: String) = when (s) {
     else -> BoardStatus.Todo.color()
 }
 
+private val severityOrder = listOf("critical", "blocker", "major", "minor", "trivial")
+
 @Composable
-private fun ReviewView(r: Review) {
+private fun ReviewView(r: Review, startOpen: Boolean = true) {
     val verdict = when {
-        r.error.isNotEmpty() -> "failed: ${r.error}"
+        r.error.isNotEmpty() -> "failed"
         r.pass == true -> "passed"
         r.pass == false || r.meets == false -> "did not pass"
         else -> "in"
     }
+    var open by rememberSaveable("review-${r.round}") { mutableStateOf(startOpen) }
+    val findings = r.findings.sortedBy { severityOrder.indexOf(it.severity).let { i -> if (i < 0) 99 else i } }
     Surface(color = MaterialTheme.colorScheme.surfaceContainer, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("Round ${r.round} · $verdict" + if (r.by.isNotEmpty()) " · ${r.by.substringAfterLast('/')}" else "", style = MaterialTheme.typography.labelLarge)
-            if (r.text.isNotEmpty()) Text(r.text, style = MaterialTheme.typography.bodySmall)
-            r.findings.forEach { FindingView(it) }
-            r.limitations.forEach { Text("Limit: $it", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(
+                Modifier.fillMaxWidth().heightIn(min = 40.dp).clickable(onClickLabel = if (open) "Collapse review" else "Expand review") { open = !open },
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+            ) {
+                Text(
+                    "Round ${r.round} · $verdict" + (if (findings.isNotEmpty()) " · ${findings.size} finding${if (findings.size == 1) "" else "s"}" else "") +
+                        if (r.by.isNotEmpty()) " · ${r.by.substringAfterLast('/')}" else "",
+                    style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f),
+                )
+                Text(if (open) "▾" else "▸")
+            }
+            if (open) {
+                if (r.error.isNotEmpty()) MarkdownText(r.error, style = MaterialTheme.typography.bodySmall, color = BoardStatus.Error.color())
+                if (r.text.isNotEmpty()) MarkdownText(r.text, style = MaterialTheme.typography.bodySmall)
+                findings.forEach { FindingView(it) }
+                r.limitations.forEach { MarkdownText("Limit: $it", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            }
         }
     }
 }
 
 @Composable
 private fun FindingView(f: Finding) {
-    Column(Modifier.padding(top = 4.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+    Column(Modifier.padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
             Pill(f.severity.ifEmpty { "finding" }, color = severityColor(f.severity))
             Text(f.id, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Text(f.subject, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
-        if (f.where.isNotEmpty()) Text(f.where, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        if (f.proof.isNotEmpty()) Text(f.proof, style = MaterialTheme.typography.bodySmall)
+        MarkdownText(f.subject, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold))
+        if (f.where.isNotEmpty()) MarkdownText(f.where, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (f.proof.isNotEmpty()) MarkdownText(f.proof, style = MaterialTheme.typography.bodySmall)
     }
 }
 
@@ -290,9 +344,9 @@ fun BoardDialogs(
                             d.isFailure -> Text(d.exceptionOrNull()?.message.orEmpty(), color = BoardStatus.Error.color())
                             else -> {
                                 val x = d.getOrThrow()
-                                x.failure?.let { f -> Text(listOf(f.title, f.detail).filter { it.isNotEmpty() }.joinToString("\n"), color = BoardStatus.Error.color()) }
+                                x.failure?.let { f -> MarkdownText(listOf("**${f.title}**", f.detail).filter { it.isNotEmpty() }.joinToString("\n\n"), color = BoardStatus.Error.color()) }
                                 x.reviews.lastOrNull()?.let { r ->
-                                    if (r.text.isNotEmpty()) Text(r.text, style = MaterialTheme.typography.bodySmall)
+                                    if (r.text.isNotEmpty()) MarkdownText(r.text, style = MaterialTheme.typography.bodySmall)
                                     r.findings.forEach { FindingView(it) }
                                 }
                             }
@@ -395,8 +449,6 @@ private fun FlowRowChips(repos: List<String>, selected: String, onPick: (String)
 private fun confirmText(p: Pending.Confirm): String = when (p.action) {
     BoardAction.Stop -> "Stops ${p.task.name}'s agent. Its work is kept."
     BoardAction.Finish -> "Takes ${p.task.name}'s work as it is, without the agent's summary."
-    BoardAction.Approve -> "Merges ${p.task.name}'s finished work. Nothing else needs your yes."
-    BoardAction.Pick -> "Keeps attempt ${p.letter} of ${p.task.name}. The other attempts' tabs close."
     BoardAction.Clear -> "Removes ${p.task.name} from the board. Work already merged or kept stays."
     else -> "${p.action.label} on ${p.task.name}."
 }

@@ -145,3 +145,25 @@ class BoardTasksTest {
         assertTrue(list.contains("--archived") && list.contains("--query") && list.contains(BoardCommands.LIST_MARK), list)
     }
 }
+
+class BoardActionsPrimaryTest {
+    private fun t(state: String, stage: String, kind: String = "") = BoardTask(
+        "r/1", "R-1", "t", state, stage, kind, "", "", null, null, false, "", false, false, 0, null, false,
+    )
+
+    @Test
+    fun primaryIsTheLikelyNextStep() {
+        assertEquals(BoardAction.Approve, BoardActions.primary(t("blocked", "approval", "permission")))
+        assertEquals(BoardAction.ApprovePlan, BoardActions.primary(t("blocked", "plan", "permission")))
+        assertEquals(BoardAction.Delegate, BoardActions.primary(t("idle", "todo")))
+        assertEquals(null, BoardActions.primary(t("working", "working")))
+    }
+
+    @Test
+    fun onlyRiskyActionsAskFirst() {
+        assertEquals(
+            setOf(BoardAction.Stop, BoardAction.Finish, BoardAction.ApproveAnyway, BoardAction.Clear),
+            BoardAction.entries.filter { it.destructive }.toSet(),
+        )
+    }
+}

@@ -14,6 +14,20 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import com.makefunstuff.herdr.core.chat.Markdown
+import com.makefunstuff.herdr.ui.common.MarkdownText
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.padding
@@ -120,6 +134,10 @@ fun BoardScreen(nav: NavController, machineId: String) {
     var openId by rememberSaveable { mutableStateOf<String?>(null) }
     var actionsFor by remember { mutableStateOf<BoardTask?>(null) }
     var pending by remember { mutableStateOf<Pending?>(null) }
+    var busy by remember { mutableStateOf<String?>(null) }
+    var refusal by remember { mutableStateOf<String?>(null) }
+    var refreshing by remember { mutableStateOf(false) }
+    var showDone by rememberSaveable { mutableStateOf(false) }
     val readNow = remember { Channel<Unit>(Channel.CONFLATED) }
     val owner = LocalLifecycleOwner.current
 
@@ -145,10 +163,13 @@ fun BoardScreen(nav: NavController, machineId: String) {
     }
 
     fun perform(task: BoardTask, action: BoardAction, text: String = "", letter: String = "") {
+        if (busy != null) return
+        busy = "${action.label.removeSuffix("…")} · ${task.name}"
         scope.launch {
             runCatching { session.awaitBoard().act(action, task.id, text, letter) }
                 .onSuccess { context.toast(it.ifEmpty { "Done" }) }
-                .onFailure { context.toast(it.message ?: "The board refused") }
+                .onFailure { refusal = it.message ?: "The board refused" }
+            busy = null
             readNow.trySend(Unit)
         }
     }
@@ -158,6 +179,7 @@ fun BoardScreen(nav: NavController, machineId: String) {
         pending = when {
             action == BoardAction.Tell || action == BoardAction.SendPlanBack -> Pending.Words(task, action)
             action == BoardAction.ApproveAnyway -> Pending.Anyway(task)
+            busy != null -> null
             action.destructive -> Pending.Confirm(task, action)
             else -> { perform(task, action); null }
         }
@@ -218,6 +240,10 @@ fun BoardScreen(nav: NavController, machineId: String) {
         },
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
+            busy?.let { b ->
+                LinearProgressIndicator(Modifier.fillMaxWidth().semantics { contentDescription = "Running: $b" })
+                Text(b + "…", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+            }
             if (repos.size > 1 || machines.isNotEmpty() || repo.isNotEmpty() || machine.isNotEmpty()) {
                 FlowRow(
                     Modifier.fillMaxWidth().padding(horizontal = 12.dp),
@@ -239,8 +265,12 @@ fun BoardScreen(nav: NavController, machineId: String) {
                 state.boardPath == null -> EmptyState("No work board here", "herdr-projects isn't installed on ${state.machine.label}.")
                 !loaded -> EmptyState("Loading…", "Reading the board on ${state.machine.label}.")
                 problem != null && tasks.isEmpty() -> EmptyState("The board isn't answering", problem.orEmpty())
-                else -> LazyColumn(
-                    Modifier.weight(1f).fillMaxWidth(),
+                else -> PullToRefreshBox(
+                    isRefreshing = refreshing,
+                    onRefresh = { scope.launch { refreshing = true; readNow.trySend(Unit); delay(900); refreshing = false } },
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                ) { LazyColumn(
+                    Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(12.dp, 8.dp, 12.dp, 88.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
@@ -254,26 +284,39 @@ fun BoardScreen(nav: NavController, machineId: String) {
                         }
                     }
                     groups.forEach { (title, list) ->
+                        val collapsible = title == "Done"
+                        val open = !collapsible || showDone
                         item(key = "h-$title") {
                             Text(
-                                "$title · ${list.size}",
-                                style = MaterialTheme.typography.labelLarge,
+                                (if (collapsible) (if (open) "▾ " else "▸ ") else "") + "$title · ${list.size}",
+                                style = MaterialTheme.typography.titleSmall,
                                 color = if (title == "Needs you") BoardStatus.Error.color() else MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(top = 8.dp),
+                                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                                    .then(if (collapsible) Modifier.clickable(onClickLabel = if (open) "Hide done tasks" else "Show done tasks") { showDone = !showDone } else Modifier)
+                                    .heightIn(min = 40.dp).wrapContentHeight(Alignment.CenterVertically)
+                                    .semantics { heading() },
                             )
                         }
-                        items(list, key = { it.id }) { t ->
+                        if (open) items(list, key = { it.id }) { t ->
                             TaskRow(t, onOpen = { openId = t.id }, onMenu = { actionsFor = t })
                         }
                     }
-                }
+                } }
             }
         }
     }
 
+    refusal?.let { r ->
+        AlertDialog(
+            onDismissRequest = { refusal = null },
+            title = { Text("The board said no") },
+            text = { Column(Modifier.verticalScroll(rememberScrollState())) { MarkdownText(r) } },
+            confirmButton = { TextButton(onClick = { refusal = null }) { Text("OK") } },
+        )
+    }
     val open = tasks.firstOrNull { it.id == openId }
     if (openId != null && open != null) {
-        TaskSheet(session, open, onDismiss = { openId = null }, onAction = { a -> choose(open, a) }, onPick = { letter -> pending = Pending.Confirm(open, BoardAction.Pick, letter) },
+        TaskSheet(session, open, onDismiss = { openId = null }, busy = busy, onAction = { a -> choose(open, a) }, onPick = { letter -> perform(open, BoardAction.Pick, letter = letter) },
             onEdit = { pending = Pending.Edit(open) })
     }
     actionsFor?.let { t ->
@@ -292,43 +335,51 @@ fun BoardScreen(nav: NavController, machineId: String) {
 @Composable
 private fun TaskRow(t: BoardTask, onOpen: () -> Unit, onMenu: () -> Unit) {
     val color = t.status.color()
+    val quiet = t.status == BoardStatus.Done || t.status == BoardStatus.Archived
+    val doing = remember(t.msg) { Markdown.plain(t.msg) }
     Card(
-        modifier = Modifier.fillMaxWidth().combinedClickable(onClick = onOpen, onLongClick = onMenu),
+        modifier = Modifier.fillMaxWidth()
+            .combinedClickable(onClickLabel = "Open details", onLongClickLabel = "Actions", onClick = onOpen, onLongClick = onMenu)
+            .semantics(mergeDescendants = true) {
+                contentDescription = "${t.name}, ${t.status.label}${if (t.needsYou) ", needs you" else ""}, ${t.title}"
+            },
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(
             containerColor = if (t.needsYou) MaterialTheme.colorScheme.surfaceContainerHighest else MaterialTheme.colorScheme.surfaceContainer,
         ),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (t.needsYou) 2.dp else 0.dp),
     ) {
         Row(Modifier.height(IntrinsicSize.Min)) {
-            Box(Modifier.width(5.dp).fillMaxHeight().background(color))
-            Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+            Box(Modifier.width(if (t.needsYou) 6.dp else 4.dp).fillMaxHeight().background(color))
+            Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(t.name, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(t.name, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                     Spacer(Modifier.width(8.dp))
                     Pill(t.status.label, color = color)
                     if (t.research) { Spacer(Modifier.width(6.dp)); Pill("research") }
                     Spacer(Modifier.weight(1f))
-                    if (t.agent.isNotEmpty()) Text(t.agent, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (t.agent.isNotEmpty()) Text(t.agent, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 120.dp))
                 }
                 Text(
-                    t.title + if (t.research) " [research]" else "",
+                    t.title,
                     style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold,
-                    maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp),
+                    color = if (quiet) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+                    maxLines = 2, overflow = TextOverflow.Ellipsis,
                 )
-                if (t.msg.isNotEmpty()) {
-                    Text(t.msg, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                if (doing.isNotEmpty() && !quiet) {
+                    Text(doing, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 val p = t.progress
-                if (p != null && t.status != BoardStatus.Done) {
-                    Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (p != null && !quiet) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         LinearProgressIndicator(progress = { p / 100f }, color = color, modifier = Modifier.weight(1f))
-                        Text("  $p%" + (t.eta?.let { " · ${it}m left" } ?: ""), style = MaterialTheme.typography.labelSmall, color = color)
+                        Text("  $p%" + (t.eta?.let { " · ${it}m left" } ?: ""), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                } else if (t.eta != null && t.status != BoardStatus.Done) {
-                    Text("${t.eta}m left", style = MaterialTheme.typography.labelSmall, color = color)
+                } else if (t.eta != null && !quiet) {
+                    Text("${t.eta}m left", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 if (t.pr.isNotEmpty()) {
-                    Text("PR ${t.prNumber.ifEmpty { "" }.let { if (it.isEmpty()) t.pr else "#$it" }}", style = MaterialTheme.typography.labelSmall, color = BoardStatus.Done.color(), modifier = Modifier.padding(top = 4.dp))
+                    Text("PR " + t.prNumber.let { if (it.isEmpty()) t.pr else "#$it" }, style = MaterialTheme.typography.labelSmall, color = BoardStatus.Done.color())
                 }
             }
         }

@@ -1,5 +1,7 @@
 package com.makefunstuff.herdr.ui.agents
 
+import com.makefunstuff.herdr.ui.common.CodeBlock
+import com.makefunstuff.herdr.ui.common.MarkdownText
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -90,7 +92,7 @@ fun chatRows(items: List<ChatItem>): List<ChatRow> {
 fun ChatRowView(row: ChatRow) {
     when (row) {
         is ChatRow.User -> UserBubble(row.item, row.pending)
-        is ChatRow.Agent -> SelectionContainer { MarkdownText(row.item.text, Modifier.fillMaxWidth().padding(end = 8.dp)) }
+        is ChatRow.Agent -> MarkdownText(row.item.text, Modifier.fillMaxWidth().padding(end = 8.dp))
         is ChatRow.Tools -> ToolGroup(row.tools)
         is ChatRow.Notice -> NoticeLine(row.item.text)
         is ChatRow.Screen -> SelectionContainer { CodeBlock(row.text) }
