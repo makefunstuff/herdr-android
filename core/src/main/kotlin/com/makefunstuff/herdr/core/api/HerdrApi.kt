@@ -136,7 +136,10 @@ class HerdrApi(private val connection: ApiCaller) {
 
     /** [mode] is toggle, on or off. */
     suspend fun zoomPane(paneId: String, mode: String = "toggle"): LayoutChange =
-        LayoutChange.of(connection.call("pane.zoom", params("pane_id" to paneId, "mode" to mode))["zoom"] as? JsonObject)
+        LayoutChange.of(
+            connection.call("pane.zoom", params("pane_id" to paneId, "mode" to mode))["zoom"] as? JsonObject,
+            changedKey = "zoom_changed",
+        )
 
     suspend fun focusPane(paneId: String) {
         connection.call("pane.focus", params("pane_id" to paneId))

@@ -81,7 +81,7 @@ class ManageApiTest {
             mapOf(
                 "pane.move" to """{"type":"pane_move","move_result":{"changed":false,"reason":"zoomed_tab","previous_pane_id":"w1:p1"}}""",
                 "pane.swap" to """{"type":"pane_swap","swap":{"changed":true,"source_pane_id":"w1:p1","focused_pane_id":"w1:p1"}}""",
-                "pane.zoom" to """{"type":"pane_zoom","zoom":{"changed":true,"zoomed":true,"pane_id":"w1:p1"}}""",
+                "pane.zoom" to """{"type":"pane_zoom","zoom":{"changed":true,"zoom_changed":true,"zoomed":true,"pane_id":"w1:p1"}}""",
                 "pane.focus_direction" to """{"type":"pane_focus_direction","focus":{"changed":false,"reason":"no_neighbor","source_pane_id":"w1:p1"}}""",
                 "pane.process_info" to """{"type":"pane_process_info","process_info":{"pane_id":"w1:p1","shell_pid":10,"foreground_process_group_id":11,"foreground_processes":[{"pid":11,"name":"vim","argv":["vim","notes.md"],"cwd":"/tmp"},{"pid":12,"name":"sh"}]}}""",
             ),
@@ -121,6 +121,21 @@ class ManageApiTest {
         assertEquals(10L, info.shellPid)
         assertEquals("vim notes.md", info.processes[0].command)
         assertEquals("sh", info.processes[1].command)
+    }
+
+    @Test
+    fun zoomOnASinglePaneTabSaysThereIsNothingToZoom() = runBlocking {
+        // herdr's `changed` is true here because focusing the pane changed something; `zoom_changed`
+        // is what says the zoom itself did nothing.
+        val fake = FakeCaller(
+            mapOf(
+                "pane.zoom" to """{"type":"pane_zoom","zoom":{"changed":true,"zoom_changed":false,"focus_changed":true,"reason":"single_pane","zoomed":false,"pane_id":"w1:p1"}}""",
+            ),
+        )
+        val zoom = HerdrApi(fake).zoomPane("w1:p1", "on")
+        assertEquals("pane.zoom" to """{"pane_id":"w1:p1","mode":"on"}""", fake.last())
+        assertEquals(false, zoom.zoomed)
+        assertEquals("The tab has only one pane, so there's nothing to zoom.", zoom.refusal)
     }
 
     @Test

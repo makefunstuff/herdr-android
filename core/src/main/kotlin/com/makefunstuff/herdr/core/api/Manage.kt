@@ -70,8 +70,13 @@ data class LayoutChange(val changed: Boolean, val reason: String?, val zoomed: B
         }
 
     companion object {
-        internal fun of(obj: JsonObject?): LayoutChange = LayoutChange(
-            changed = (obj?.get("changed") as? JsonPrimitive)?.booleanOrNull ?: true,
+        /**
+         * [changedKey] is herdr's own field for "did the thing I asked for happen". pane.zoom answers
+         * with a broader `changed` that is also true when it only moved the focus, so it is read
+         * through `zoom_changed` instead; a missing field counts as done.
+         */
+        internal fun of(obj: JsonObject?, changedKey: String = "changed"): LayoutChange = LayoutChange(
+            changed = (obj?.get(changedKey) as? JsonPrimitive)?.booleanOrNull ?: true,
             reason = (obj?.get("reason") as? JsonPrimitive)?.contentOrNull,
             zoomed = (obj?.get("zoomed") as? JsonPrimitive)?.booleanOrNull,
         )
