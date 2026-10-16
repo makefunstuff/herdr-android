@@ -3,6 +3,8 @@ package com.makefunstuff.herdr.ui.common
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -94,4 +96,18 @@ fun Context.copyToClipboard(label: String, text: String, toast: String = "Copied
     Toast.makeText(this, toast, Toast.LENGTH_SHORT).show()
 }
 
+/** The clipboard's first text item, if it has one. */
+fun Context.clipboardText(): String? {
+    val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    return cm.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.text?.toString()
+}
+
 fun Context.toast(text: String) = Toast.makeText(this, text, Toast.LENGTH_LONG).show()
+
+/** Opens [url] in whatever app handles it (the browser for links). False when nothing can. */
+fun Context.openUrl(url: String): Boolean {
+    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    return runCatching { startActivity(intent) }
+        .onFailure { toast("No app can open ${url.take(80)}") }
+        .isSuccess
+}
