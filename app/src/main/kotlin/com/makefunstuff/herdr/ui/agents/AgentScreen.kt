@@ -24,8 +24,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilledTonalButton
@@ -67,6 +65,7 @@ import com.makefunstuff.herdr.ui.common.EmptyState
 import com.makefunstuff.herdr.ui.common.LocalContainer
 import com.makefunstuff.herdr.ui.common.StatusDot
 import com.makefunstuff.herdr.ui.common.toast
+import com.makefunstuff.herdr.ui.manage.AgentActionsSheet
 import com.makefunstuff.herdr.ui.theme.color
 import com.makefunstuff.herdr.ui.theme.title
 import kotlinx.coroutines.launch
@@ -108,8 +107,11 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
 
     fun keys(k: List<String>) {
         scope.launch {
-            runCatching { session.awaitApi().sendKeys(paneId, k) }
-                .onFailure { context.toast(it.message ?: "Couldn't send keys") }
+            runCatching {
+                val api = session.awaitApi()
+                // The agent call is the parity one; fall back to the pane when no agent is running.
+                if (agent != null) api.agentSendKeys(paneId, k) else api.sendKeys(paneId, k)
+            }.onFailure { context.toast(it.message ?: "Couldn't send keys") }
             session.refresh()
         }
     }
@@ -195,11 +197,6 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
                 actions = {
                     TextButton(onClick = { nav.navigate(Routes.terminal(machineId, paneId)) }) { Text("Terminal") }
                     IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "More") }
-                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                        DropdownMenuItem(text = { Text(if (showKeys) "Hide keys" else "Show keys") }, onClick = { menu = false; showKeys = !showKeys })
-                        DropdownMenuItem(text = { Text("Interrupt (Esc)") }, onClick = { menu = false; keys(listOf("esc")) })
-                        DropdownMenuItem(text = { Text("Ctrl+C") }, onClick = { menu = false; keys(listOf("ctrl+c")) })
-                    }
                 },
             )
         },
@@ -250,6 +247,19 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
                 onStop = { keys(listOf("esc")) },
             )
         }
+    }
+
+    if (menu) {
+        AgentActionsSheet(
+            session = session,
+            agent = agent,
+            paneLabel = pane?.displayName ?: paneId,
+            onDismiss = { menu = false },
+            onTerminal = { menu = false; nav.navigate(Routes.terminal(machineId, paneId)) },
+            onToggleKeys = { menu = false; showKeys = !showKeys },
+            showKeys = showKeys,
+            onKey = { menu = false; keys(it) },
+        )
     }
 }
 

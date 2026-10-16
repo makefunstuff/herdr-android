@@ -7,6 +7,7 @@ import com.makefunstuff.herdr.core.api.HerdrApiException
 import com.makefunstuff.herdr.core.api.PaneDestination
 import com.makefunstuff.herdr.core.api.moveIndex
 import com.makefunstuff.herdr.core.api.params
+import com.makefunstuff.herdr.core.host.WORKSPACE_METADATA_EVENT
 import com.makefunstuff.herdr.core.ssh.Duplex
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -147,6 +148,10 @@ class LiveManageTest {
                 "workspace.report_metadata",
                 params("workspace_id" to a.workspaceId, "source" to "live-test", "tokens" to params("branch" to "main")),
             )
+            // The app reloads cached metadata on this pushed event, so its name is a contract.
+            withTimeout(5000) {
+                events.events.first { it["event"]?.jsonPrimitive?.content == WORKSPACE_METADATA_EVENT }
+            }
             assertEquals("main", api.workspace(a.workspaceId).tokens["branch"])
 
             val shown = api.showNotification("From the live test", "hello")

@@ -243,7 +243,8 @@ class HostSession(
         launch { done.complete(events.closed.await() ?: IOException("herdr event stream closed")) }
         launch {
             events.events.collect { event ->
-                if (event["event"]?.jsonPrimitive?.content == "workspace.metadata_updated") metaDirty = true
+                // Subscription uses the dotted name; herdr pushes the event's own name with underscores.
+                if (event["event"]?.jsonPrimitive?.content == WORKSPACE_METADATA_EVENT) metaDirty = true
                 refreshRequests.trySend(Unit)
             }
         }
@@ -368,3 +369,10 @@ class HostSession(
 }
 
 private val SessionListSerializer = ListSerializer(SessionEntry.serializer())
+
+/**
+ * The event herdr pushes when `workspace.report_metadata` changes a workspace's tokens. Note the
+ * underscores: subscriptions ask for `workspace.metadata_updated`, but the pushed `event` field is
+ * the schema's own name, `workspace_metadata_updated`.
+ */
+internal const val WORKSPACE_METADATA_EVENT = "workspace_metadata_updated"
