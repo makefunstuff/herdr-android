@@ -59,8 +59,8 @@ import com.makefunstuff.herdr.ui.common.StatusDot
 import com.makefunstuff.herdr.ui.common.detail
 import com.makefunstuff.herdr.ui.common.label
 import com.makefunstuff.herdr.ui.common.toast
-import com.makefunstuff.herdr.ui.design.BarIcon
 import com.makefunstuff.herdr.ui.design.BubbleShape
+import com.makefunstuff.herdr.ui.design.ReplyBubbleShape
 import com.makefunstuff.herdr.ui.design.ChatComposer
 import com.makefunstuff.herdr.ui.design.HerdrIcons
 import com.makefunstuff.herdr.ui.design.HerdrTopBar
@@ -182,7 +182,7 @@ fun CoordinatorScreen(nav: NavController, machineId: String) {
                 subtitle = "${state.machine.label} · " + (v?.let { stateWords(it) } ?: if (state.online) "work board" else state.status.label()),
                 onBack = { nav.popBackStack() },
             ) {
-                if (coordinatorPane != null) BarIcon(HerdrIcons.Terminal, "Terminal", { nav.navigate(Routes.terminal(machineId, coordinatorPane)) })
+                if (coordinatorPane != null) QuietButton(onClick = { nav.navigate(Routes.terminal(machineId, coordinatorPane)) }) { Text("Terminal") }
             }
         },
     ) { padding ->
@@ -263,21 +263,18 @@ private fun ChatEmpty(icon: ImageVector, title: String, body: String) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { StateBlock(icon, title, body) }
 }
 
-/** Yours: a grey bubble on the right. The Coordinator's: plain text on the ground, as in an agent's chat. */
+/** Yours on the right in mint, the Coordinator's on the left on the card surface. */
 @Composable
 private fun Bubble(line: ChatLine) {
     val mine = line.you
     val c = Herdr.colors
-    if (!mine) {
-        MarkdownText(line.text, Modifier.fillMaxWidth().padding(end = Space.s), style = MaterialTheme.typography.bodyLarge)
-        return
-    }
-    Row(Modifier.fillMaxWidth().padding(start = 48.dp), horizontalArrangement = Arrangement.End) {
-        Column(horizontalAlignment = Alignment.End) {
+    val scheme = MaterialTheme.colorScheme
+    Row(Modifier.fillMaxWidth().padding(start = if (mine) 48.dp else 0.dp, end = if (mine) 0.dp else 32.dp), horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start) {
+        Column(horizontalAlignment = if (mine) Alignment.End else Alignment.Start) {
             Surface(
-                color = c.field,
-                contentColor = c.text,
-                shape = BubbleShape,
+                color = if (mine) scheme.primaryContainer else c.card,
+                contentColor = if (mine) scheme.onPrimaryContainer else c.text,
+                shape = if (mine) BubbleShape else ReplyBubbleShape,
                 modifier = Modifier.alpha(if (line.pending) 0.72f else 1f),
             ) {
                 MarkdownText(line.text, Modifier.padding(horizontal = Space.l, vertical = Space.m), style = MaterialTheme.typography.bodyLarge)

@@ -21,10 +21,10 @@ import com.makefunstuff.herdr.core.api.AgentStatus
 import com.makefunstuff.herdr.core.board.BoardTone
 
 /*
- * The app's look, as docs/DESIGN.md describes it: a black (or white) ground, soft grey surfaces
- * instead of outlines, near-white (or near-black) text, inverse pill buttons, herdr's mint as the one
- * accent, and the board's status colours for state. Screens read these through MaterialTheme and
- * [Herdr]; nothing else defines a colour.
+ * The app's look, as docs/DESIGN.md describes it: herdr-android's own green-tinted neutrals,
+ * soft surfaces instead of outlines, herdr's mint as the primary and only accent, and the board's
+ * status colours for state. Screens read these through MaterialTheme and [Herdr]; nothing else
+ * defines a colour.
  */
 
 /** The tokens Material's scheme has no slot for. */
@@ -64,19 +64,19 @@ class HerdrColors(
 }
 
 internal val DarkHerdr = HerdrColors(
-    ground = Color(0xFF000000), card = Color(0xFF151515), field = Color(0xFF212121), fieldFocused = Color(0xFF2B2B2B),
-    line = Color(0xFF242424), text = Color(0xFFF2F2F2), muted = Color(0xFFA3A3A3), faint = Color(0xFF8C8C8C), off = Color(0xFF5A5A5A),
-    accent = Color(0xFF7DD3B6), onAccent = Color(0xFF00281E),
+    ground = Color(0xFF0F1412), card = Color(0xFF171D1A), field = Color(0xFF222926), fieldFocused = Color(0xFF2B3330),
+    line = Color(0xFF232A27), text = Color(0xFFE4EAE6), muted = Color(0xFFA7B1AC), faint = Color(0xFF8D9792), off = Color(0xFF56605B),
+    accent = Color(0xFF7DD3B6), onAccent = Color(0xFF00382B),
     red = Color(0xFFF0857A), amber = Color(0xFFE2B64A), green = Color(0xFF6CC993), blue = Color(0xFF7AA2F7),
     teal = Color(0xFF4DC4B8), pink = Color(0xFFE58FC0), grey = Color(0xFF8E9692), dark = true,
 )
 
 internal val LightHerdr = HerdrColors(
-    ground = Color(0xFFFFFFFF), card = Color(0xFFF3F3F4), field = Color(0xFFE9E9EB), fieldFocused = Color(0xFFDFDFE2),
-    line = Color(0xFFE6E6E8), text = Color(0xFF111111), muted = Color(0xFF5C5C5C), faint = Color(0xFF666666), off = Color(0xFFB0B0B0),
+    ground = Color(0xFFF4F7F5), card = Color(0xFFFFFFFF), field = Color(0xFFE7EDE9), fieldFocused = Color(0xFFDCE4DF),
+    line = Color(0xFFE5EBE7), text = Color(0xFF141A17), muted = Color(0xFF55605A), faint = Color(0xFF5F6964), off = Color(0xFFB2BBB6),
     accent = Color(0xFF1E6B58), onAccent = Color.White,
     red = Color(0xFFB3342A), amber = Color(0xFF8A5800), green = Color(0xFF22744A), blue = Color(0xFF3260C2),
-    teal = Color(0xFF0B7268), pink = Color(0xFFA0407A), grey = Color(0xFF606567), dark = false,
+    teal = Color(0xFF0B7268), pink = Color(0xFFA0407A), grey = Color(0xFF5C6461), dark = false,
 )
 
 val LocalHerdrColors = staticCompositionLocalOf { DarkHerdr }
@@ -111,59 +111,59 @@ object Radius {
 }
 
 internal val Dark = darkColorScheme(
-    primary = DarkHerdr.text, onPrimary = Color(0xFF000000),
-    primaryContainer = Color(0xFF2B2B2B), onPrimaryContainer = DarkHerdr.text,
-    inversePrimary = Color(0xFF2B2B2B),
-    secondary = Color(0xFFD4D4D4), onSecondary = Color(0xFF000000),
+    primary = DarkHerdr.accent, onPrimary = DarkHerdr.onAccent,
+    primaryContainer = Color(0xFF173F33), onPrimaryContainer = Color(0xFFBDEFDC),
+    inversePrimary = Color(0xFF1E6B58),
+    secondary = Color(0xFFB2CCC2), onSecondary = Color(0xFF1D352D),
     secondaryContainer = DarkHerdr.field, onSecondaryContainer = DarkHerdr.text,
     tertiary = DarkHerdr.accent, onTertiary = DarkHerdr.onAccent,
-    tertiaryContainer = Color(0xFF113A2F), onTertiaryContainer = Color(0xFFA6F2D4),
+    tertiaryContainer = Color(0xFF173F33), onTertiaryContainer = Color(0xFFBDEFDC),
     background = DarkHerdr.ground, onBackground = DarkHerdr.text,
     surface = DarkHerdr.ground, onSurface = DarkHerdr.text,
     surfaceVariant = DarkHerdr.field, onSurfaceVariant = DarkHerdr.muted,
     surfaceTint = Color.Transparent,
-    inverseSurface = DarkHerdr.text, inverseOnSurface = Color(0xFF111111),
+    inverseSurface = DarkHerdr.text, inverseOnSurface = Color(0xFF141A17),
     error = DarkHerdr.red, onError = Color(0xFF3A0A06),
-    errorContainer = Color(0xFF3A1714), onErrorContainer = Color(0xFFFFDAD5),
-    outline = Color(0xFF4A4A4A), outlineVariant = Color(0xFF2B2B2B),
+    errorContainer = Color(0xFF3A1A17), onErrorContainer = Color(0xFFFFDAD5),
+    outline = Color(0xFF4A5450), outlineVariant = Color(0xFF2B3330),
     scrim = Color(0xFF000000),
-    surfaceBright = Color(0xFF2B2B2B), surfaceDim = DarkHerdr.ground,
-    surfaceContainerLowest = DarkHerdr.ground, surfaceContainerLow = Color(0xFF0E0E0E),
-    surfaceContainer = DarkHerdr.card, surfaceContainerHigh = Color(0xFF1B1B1B),
+    surfaceBright = Color(0xFF2B3330), surfaceDim = DarkHerdr.ground,
+    surfaceContainerLowest = Color(0xFF0B0F0D), surfaceContainerLow = Color(0xFF131815),
+    surfaceContainer = DarkHerdr.card, surfaceContainerHigh = Color(0xFF1C2220),
     surfaceContainerHighest = DarkHerdr.field,
 )
 
 internal val Light = lightColorScheme(
-    primary = LightHerdr.text, onPrimary = Color.White,
-    primaryContainer = Color(0xFFE3E3E5), onPrimaryContainer = LightHerdr.text,
-    inversePrimary = Color(0xFFE3E3E5),
-    secondary = Color(0xFF3A3A3A), onSecondary = Color.White,
+    primary = LightHerdr.accent, onPrimary = LightHerdr.onAccent,
+    primaryContainer = Color(0xFFCDEDE0), onPrimaryContainer = Color(0xFF0B3328),
+    inversePrimary = Color(0xFF7DD3B6),
+    secondary = Color(0xFF4B635A), onSecondary = Color.White,
     secondaryContainer = LightHerdr.field, onSecondaryContainer = LightHerdr.text,
     tertiary = LightHerdr.accent, onTertiary = LightHerdr.onAccent,
-    tertiaryContainer = Color(0xFFD3F0E5), onTertiaryContainer = Color(0xFF0B3328),
+    tertiaryContainer = Color(0xFFCDEDE0), onTertiaryContainer = Color(0xFF0B3328),
     background = LightHerdr.ground, onBackground = LightHerdr.text,
     surface = LightHerdr.ground, onSurface = LightHerdr.text,
     surfaceVariant = LightHerdr.field, onSurfaceVariant = LightHerdr.muted,
     surfaceTint = Color.Transparent,
-    inverseSurface = Color(0xFF1C1C1C), inverseOnSurface = Color(0xFFF2F2F2),
+    inverseSurface = Color(0xFF26302B), inverseOnSurface = Color(0xFFEFF4F1),
     error = LightHerdr.red, onError = Color.White,
     errorContainer = Color(0xFFFBE4E1), onErrorContainer = Color(0xFF5C0F0A),
-    outline = Color(0xFFBDBDBD), outlineVariant = Color(0xFFE3E3E5),
+    outline = Color(0xFFB9C4BE), outlineVariant = Color(0xFFDCE4DF),
     scrim = Color(0xFF000000),
-    surfaceBright = LightHerdr.ground, surfaceDim = Color(0xFFE3E3E5),
-    surfaceContainerLowest = LightHerdr.ground, surfaceContainerLow = Color(0xFFF8F8F8),
-    surfaceContainer = LightHerdr.card, surfaceContainerHigh = Color(0xFFEDEDEE),
+    surfaceBright = LightHerdr.card, surfaceDim = Color(0xFFDCE4DF),
+    surfaceContainerLowest = Color.White, surfaceContainerLow = Color(0xFFF9FBFA),
+    surfaceContainer = LightHerdr.card, surfaceContainerHigh = Color(0xFFEEF3F0),
     surfaceContainerHighest = LightHerdr.field,
 )
 
 /**
- * Six sizes (28, 20, 16, 14, 13, 12) and three weights (regular, medium, semibold).
+ * Six sizes (24, 20, 16, 14, 13, 12) and three weights (regular, medium, semibold).
  * headline: a top-level screen's title. title: bars, sheets, dialogs and row titles. body: text.
  * label: buttons, chips, section headings and meta.
  */
 internal val HerdrTypography = Typography(
-    headlineLarge = TextStyle(fontSize = 28.sp, lineHeight = 34.sp, fontWeight = FontWeight.SemiBold, letterSpacing = (-0.4).sp),
-    headlineMedium = TextStyle(fontSize = 28.sp, lineHeight = 34.sp, fontWeight = FontWeight.SemiBold, letterSpacing = (-0.4).sp),
+    headlineLarge = TextStyle(fontSize = 24.sp, lineHeight = 32.sp, fontWeight = FontWeight.SemiBold),
+    headlineMedium = TextStyle(fontSize = 24.sp, lineHeight = 32.sp, fontWeight = FontWeight.SemiBold),
     headlineSmall = TextStyle(fontSize = 20.sp, lineHeight = 28.sp, fontWeight = FontWeight.SemiBold),
     titleLarge = TextStyle(fontSize = 20.sp, lineHeight = 28.sp, fontWeight = FontWeight.SemiBold),
     titleMedium = TextStyle(fontSize = 16.sp, lineHeight = 24.sp, fontWeight = FontWeight.SemiBold),

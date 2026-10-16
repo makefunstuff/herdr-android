@@ -1,48 +1,50 @@
 package com.makefunstuff.herdr.ui.board
 
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.makefunstuff.herdr.ui.common.Pill
 import com.makefunstuff.herdr.ui.design.HerdrIcons
-import com.makefunstuff.herdr.ui.design.IconTile
-import com.makefunstuff.herdr.ui.design.ListRow
-import com.makefunstuff.herdr.ui.design.LocalRowBackground
 import com.makefunstuff.herdr.ui.design.QuietCard
-import com.makefunstuff.herdr.ui.design.RowDivider
 import com.makefunstuff.herdr.ui.theme.Herdr
 import com.makefunstuff.herdr.ui.theme.Space
 
-/**
- * The ways into a machine's work board, where it has herdr-projects: the task Board and the
- * Coordinator chat, as one grouped card. [needsYou] counts the board's tasks waiting on you, when known.
- */
+/** The way into a machine's task board, shown where the machine has herdr-projects. */
 @Composable
-fun WorkBoardCard(
-    machineLabel: String,
-    showMachine: Boolean,
-    onBoard: () -> Unit,
-    onCoordinator: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
+fun BoardCard(machineLabel: String, showMachine: Boolean, onOpen: () -> Unit) =
+    EntryCard(HerdrIcons.ViewKanban, if (showMachine) "Board · $machineLabel" else "Board", "Tasks, reviews and approvals", "tasks", onOpen)
+
+/** The way into a machine's Coordinator chat, shown where the machine has the work board. */
+@Composable
+fun CoordinatorCard(machineLabel: String, showMachine: Boolean, onOpen: () -> Unit) =
+    EntryCard(HerdrIcons.Forum, if (showMachine) "Coordinator · $machineLabel" else "Coordinator", "Chat with the board's Coordinator", "work board", onOpen)
+
+/** A card that opens a part of the work board: its mark, its name and what it is for, a small tag. */
+@Composable
+private fun EntryCard(icon: ImageVector, title: String, body: String, tag: String, onOpen: () -> Unit) {
     val c = Herdr.colors
-    QuietCard(modifier) {
-        CompositionLocalProvider(LocalRowBackground provides c.card) {
-            ListRow(
-                title = if (showMachine) "Board · $machineLabel" else "Board",
-                subtitle = "Tasks, reviews and approvals",
-                leading = { IconTile(HerdrIcons.ViewKanban) },
-                chevron = true,
-                onClick = onBoard,
-            )
-            RowDivider(inset = Space.l + 52.dp)
-            ListRow(
-                title = if (showMachine) "Coordinator · $machineLabel" else "Coordinator",
-                subtitle = "Chat with the board's Coordinator",
-                leading = { IconTile(HerdrIcons.Forum) },
-                chevron = true,
-                onClick = onCoordinator,
-            )
+    QuietCard(onClick = onOpen, padded = true) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, null, tint = c.accent, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(Space.m))
+            Column(Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(body, style = MaterialTheme.typography.bodyMedium, color = c.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            Spacer(Modifier.width(Space.s))
+            Pill(tag)
         }
     }
 }

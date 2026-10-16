@@ -40,12 +40,11 @@ import androidx.compose.ui.unit.dp
 import com.makefunstuff.herdr.ui.theme.Herdr
 import com.makefunstuff.herdr.ui.theme.Space
 
-/** The bottom bar of the three top-level screens: on the ground, a hairline above, the selected icon on a pill. */
+/** The bottom bar of the three top-level screens: on the card surface, the selected icon on a mint pill. */
 @Composable
 fun HerdrNavBar(content: @Composable RowScope.() -> Unit) {
     val c = Herdr.colors
-    Column(Modifier.fillMaxWidth().background(c.ground)) {
-        Box(Modifier.fillMaxWidth().height(1.dp).background(c.line))
+    Column(Modifier.fillMaxWidth().background(c.card)) {
         Row(
             Modifier.fillMaxWidth().navigationBarsPadding().heightIn(min = 72.dp).padding(horizontal = Space.s),
             horizontalArrangement = Arrangement.SpaceEvenly,
@@ -58,7 +57,7 @@ fun HerdrNavBar(content: @Composable RowScope.() -> Unit) {
 @Composable
 fun RowScope.NavItem(label: String, icon: ImageVector, selected: Boolean, badge: Int = 0, onClick: () -> Unit) {
     val c = Herdr.colors
-    val pill by animateColorAsState(if (selected) c.field else Color.Transparent, tween(180), label = "nav")
+    val pill by animateColorAsState(if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent, tween(180), label = "nav")
     Column(
         Modifier.weight(1f).heightIn(min = 64.dp)
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
@@ -72,7 +71,7 @@ fun RowScope.NavItem(label: String, icon: ImageVector, selected: Boolean, badge:
     ) {
         Box(contentAlignment = Alignment.Center) {
             Box(Modifier.width(56.dp).height(32.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(50)).background(pill), contentAlignment = Alignment.Center) {
-                Icon(icon, null, tint = if (selected) c.text else c.muted, modifier = Modifier.size(24.dp))
+                Icon(icon, null, tint = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else c.muted, modifier = Modifier.size(24.dp))
             }
             if (badge > 0) CountBadge(badge, Modifier.align(Alignment.TopEnd).offset(x = (-8).dp, y = (-2).dp))
         }

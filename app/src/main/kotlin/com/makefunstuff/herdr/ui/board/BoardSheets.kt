@@ -89,9 +89,7 @@ import com.makefunstuff.herdr.ui.design.HerdrIcons
 import com.makefunstuff.herdr.ui.design.HerdrMenu
 import com.makefunstuff.herdr.ui.design.HerdrShapes
 import com.makefunstuff.herdr.ui.design.HerdrTopBar
-import com.makefunstuff.herdr.ui.design.IconTile
 import com.makefunstuff.herdr.ui.design.InfoLine
-import com.makefunstuff.herdr.ui.design.ListRow
 import com.makefunstuff.herdr.ui.design.LoadingState
 import com.makefunstuff.herdr.ui.design.MenuRow
 import com.makefunstuff.herdr.ui.design.PrimaryButton
@@ -160,7 +158,7 @@ private fun PanelCancel(onDismiss: () -> Unit) = QuietButton(onClick = onDismiss
 /** What a task's "More" offers: every action that fits, as rows with icons. */
 @Composable
 fun ActionsSheet(t: BoardTask, onDismiss: () -> Unit, onAction: (BoardAction) -> Unit, onEdit: () -> Unit, onOpen: (() -> Unit)?) {
-    HerdrMenu(expanded = true, onDismissRequest = onDismiss, title = t.title, subtitle = "${t.name} · ${t.status.label}") {
+    HerdrMenu(expanded = true, onDismissRequest = onDismiss, title = t.name + " · " + t.title) {
         if (onOpen != null) MenuRow("Open details", HerdrIcons.Description, onOpen)
         BoardActions.forTask(t).forEach { a ->
             MenuRow(a.label.removeSuffix("…"), a.icon(), { onAction(a) }, destructive = a.destructive)
@@ -328,9 +326,8 @@ fun TaskDetailContent(
                 if (d.attempts.isNotEmpty()) Section(if (t.status == BoardStatus.PickOne) "Pick one of ${d.attempts.size}" else "Attempts", startOpen = true) {
                     d.attempts.forEach { a ->
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            IconTile(letter = a.letter)
-                            Column(Modifier.weight(1f).padding(start = Space.m)) {
-                                Text(a.agent, style = MaterialTheme.typography.titleMedium)
+                            Column(Modifier.weight(1f)) {
+                                Text("${a.letter} · ${a.agent}", style = MaterialTheme.typography.titleMedium)
                                 Text(listOf(a.standing, a.stat).filter { it.isNotEmpty() }.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = c.muted)
                             }
                             if (t.status == BoardStatus.PickOne) PrimaryButton("Pick ${a.letter}", enabled = busy == null) { onPick(a.letter) }
@@ -360,12 +357,14 @@ fun TaskDetailContent(
 
 @Composable
 private fun LinkRow(label: String, value: String, onClick: () -> Unit) {
-    QuietCard(onClick = onClick, onClickLabel = "Open $label in the browser") {
-        ListRow(
-            label, subtitle = value,
-            leading = { IconTile(HerdrIcons.Link) },
-            trailing = { Icon(HerdrIcons.OpenInNew, null, tint = Herdr.colors.faint, modifier = Modifier.size(20.dp)) },
-        )
+    QuietCard(onClick = onClick, onClickLabel = "Open $label in the browser", padded = true) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(label, style = MaterialTheme.typography.labelLarge, color = Herdr.colors.accent)
+                Text(value, style = MaterialTheme.typography.bodySmall, color = Herdr.colors.muted, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
+            Icon(HerdrIcons.OpenInNew, null, tint = Herdr.colors.faint, modifier = Modifier.size(20.dp))
+        }
     }
 }
 

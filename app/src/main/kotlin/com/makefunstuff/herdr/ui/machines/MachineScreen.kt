@@ -27,7 +27,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -56,13 +55,21 @@ import com.makefunstuff.herdr.core.api.SessionSnapshot
 import com.makefunstuff.herdr.core.api.TabInfo
 import com.makefunstuff.herdr.core.api.TabLayout
 import com.makefunstuff.herdr.core.api.WorkspaceInfo
-import com.makefunstuff.herdr.ui.board.WorkBoardCard
+import com.makefunstuff.herdr.ui.board.BoardCard
+import com.makefunstuff.herdr.ui.board.CoordinatorCard
+import com.makefunstuff.herdr.ui.common.Pill
+import com.makefunstuff.herdr.ui.common.StatusDot
+import com.makefunstuff.herdr.ui.design.HerdrFab
+import com.makefunstuff.herdr.ui.design.RowDivider
+import com.makefunstuff.herdr.ui.design.SecondaryButton
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import com.makefunstuff.herdr.ui.common.EmptyState
 import com.makefunstuff.herdr.ui.common.LocalContainer
 import com.makefunstuff.herdr.ui.common.detail
 import com.makefunstuff.herdr.ui.common.label
 import com.makefunstuff.herdr.ui.common.toast
-import com.makefunstuff.herdr.ui.design.BarAdd
 import com.makefunstuff.herdr.ui.design.BarIcon
 import com.makefunstuff.herdr.ui.design.HerdrChip
 import com.makefunstuff.herdr.ui.design.HerdrDialog
@@ -70,15 +77,10 @@ import com.makefunstuff.herdr.ui.design.HerdrIcons
 import com.makefunstuff.herdr.ui.design.HerdrMenu
 import com.makefunstuff.herdr.ui.design.HerdrShapes
 import com.makefunstuff.herdr.ui.design.HerdrTopBar
-import com.makefunstuff.herdr.ui.design.IconTile
-import com.makefunstuff.herdr.ui.design.ListRow
-import com.makefunstuff.herdr.ui.design.LocalRowBackground
 import com.makefunstuff.herdr.ui.design.MenuRow
-import com.makefunstuff.herdr.ui.design.MenuSection
 import com.makefunstuff.herdr.ui.design.Notice
 import com.makefunstuff.herdr.ui.design.QuietButton
 import com.makefunstuff.herdr.ui.design.QuietCard
-import com.makefunstuff.herdr.ui.design.SectionHeading
 import com.makefunstuff.herdr.ui.manage.NoticeRow
 import com.makefunstuff.herdr.ui.manage.NoticesSheet
 import com.makefunstuff.herdr.ui.manage.NotifySheet
@@ -137,17 +139,15 @@ fun MachineScreen(nav: NavController, machineId: String) {
                 if (state.notices.isNotEmpty()) {
                     BarIcon(HerdrIcons.Notifications, "Notifications", { showNotices = true; session.markNoticesRead() }, badge = state.unreadNotices)
                 }
-                if (state.online) BarAdd("New") { showNew = true }
+                BarIcon(HerdrIcons.Refresh, "Refresh", { session.retry(); session.refresh(); scope.launch { session.checkBoard() } })
                 BarIcon(HerdrIcons.MoreVert, "More", { menu = true })
-                HerdrMenu(expanded = menu, onDismissRequest = { menu = false }, title = state.machine.label, subtitle = state.machine.target) {
-                    MenuRow("Refresh", HerdrIcons.Refresh, { menu = false; session.retry(); session.refresh(); scope.launch { session.checkBoard() } })
-                    MenuRow("Worktrees", HerdrIcons.AccountTree, { menu = false; nav.navigate(Routes.worktrees(machineId)) })
+                HerdrMenu(expanded = menu, onDismissRequest = { menu = false }, title = state.machine.label) {
                     MenuRow("Notify herdr…", HerdrIcons.NotificationsActive, { menu = false; showNotify = true })
-                    MenuSection("herdr on ${state.machine.label}")
                     MenuRow("Plugins", HerdrIcons.Extension, { menu = false; nav.navigate(Routes.admin(machineId, 0)) })
                     MenuRow("Integrations", HerdrIcons.Hub, { menu = false; nav.navigate(Routes.admin(machineId, 1)) })
                     MenuRow("Server and updates", HerdrIcons.CloudDownload, { menu = false; nav.navigate(Routes.admin(machineId, 2)) })
                     MenuRow("herdr's saved machines", HerdrIcons.Lan, { menu = false; nav.navigate(Routes.admin(machineId, 3)) })
+                    RowDivider(inset = Space.l)
                     MenuRow("Import herdr machines from here", HerdrIcons.Download, {
                         menu = false
                         scope.launch {
@@ -158,11 +158,12 @@ fun MachineScreen(nav: NavController, machineId: String) {
                                 .onFailure { context.toast(it.message ?: "Couldn't read machines") }
                         }
                     })
-                    MenuSection("This app")
+                    MenuRow("Worktrees", HerdrIcons.AccountTree, { menu = false; nav.navigate(Routes.worktrees(machineId)) })
                     MenuRow("Edit machine", HerdrIcons.Edit, { menu = false; nav.navigate(Routes.edit(machineId)) })
                 }
             }
         },
+        floatingActionButton = { if (state.online) HerdrFab("New") { showNew = true } },
     ) { padding ->
         if (snap == null) {
             EmptyState(state.status.label(), state.status.detail() ?: "Waiting for ${state.machine.label}…", icon = HerdrIcons.Dns)
@@ -170,24 +171,18 @@ fun MachineScreen(nav: NavController, machineId: String) {
         }
         LazyColumn(
             modifier = Modifier.padding(padding),
-            contentPadding = PaddingValues(start = Space.screen, end = Space.screen, top = Space.xs, bottom = Space.xl),
+            contentPadding = PaddingValues(start = Space.screen, end = Space.screen, top = Space.xs, bottom = 96.dp),
             verticalArrangement = Arrangement.spacedBy(Space.s),
         ) {
             if (!state.online) {
                 item { Notice("Offline · showing the last known state", color = Herdr.colors.amber, icon = HerdrIcons.Schedule) }
             }
             if (state.hasBoard) {
-                item(key = "board") {
-                    WorkBoardCard(
-                        state.machine.label, showMachine = false,
-                        onBoard = { nav.navigate(Routes.board(machineId)) },
-                        onCoordinator = { nav.navigate(Routes.coordinator(machineId)) },
-                    )
-                }
+                item(key = "board") { BoardCard(state.machine.label, showMachine = false) { nav.navigate(Routes.board(machineId)) } }
+                item(key = "coordinator") { CoordinatorCard(state.machine.label, showMachine = false) { nav.navigate(Routes.coordinator(machineId)) } }
             }
-            item(key = "ws-heading") { SectionHeading("Workspaces", top = if (state.hasBoard) Space.l else Space.xs) }
             if (snap.workspaces.isEmpty()) {
-                item { Text("No workspaces yet. Tap + to create one.", color = Herdr.colors.muted, style = MaterialTheme.typography.bodyMedium) }
+                item { Text("No workspaces yet. Tap New to create one.", color = Herdr.colors.muted, style = MaterialTheme.typography.bodyMedium) }
             }
             items(snap.workspaces, key = { it.workspaceId }) { ws ->
                 WorkspaceCard(
@@ -290,26 +285,20 @@ private fun WorkspaceCard(
     val tabId = tabs.firstOrNull { it.tabId == selectedTabId }?.tabId ?: tabs.firstOrNull()?.tabId
     val panes = snap.panes.filter { it.tabId == tabId }
     val layout = tabId?.let { snap.layout(it) }
-    val wsStatus = ws.agentStatus
-    QuietCard {
-        CompositionLocalProvider(LocalRowBackground provides c.card) {
+    QuietCard(padded = true) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
             // Long-press the header for the workspace's Git actions.
-            ListRow(
-                title = ws.label.ifBlank { ws.workspaceId },
-                subtitle = buildList {
-                    add("${ws.tabCount} tab${if (ws.tabCount == 1) "" else "s"}")
-                    if (repo?.isLinkedWorktree == true) add("worktree")
-                    val panes = snap.panes.count { p -> tabs.any { it.tabId == p.tabId } }
-                    if (panes > 1) add("$panes panes")
-                }.joinToString(" · "),
-                leading = { IconTile(HerdrIcons.Folder, dot = if (wsStatus == AgentStatus.Unknown) null else wsStatus.color()) },
-                trailing = { RowIcon(HerdrIcons.MoreVert, "Workspace actions", onWorkspaceMenu) },
-                onLongClick = { menu = true },
-                onClick = {},
-                modifier = Modifier.padding(top = Space.xs),
-            )
+            modifier = Modifier.combinedClickable(onClick = {}, onLongClick = { menu = true }),
+        ) {
+            StatusDot(if (ws.agentStatus == AgentStatus.Unknown) c.off else ws.agentStatus.color())
+            Spacer(Modifier.width(Space.m))
+            Text(ws.label.ifBlank { ws.workspaceId }, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            repo?.takeIf { it.isLinkedWorktree }?.let { Pill("worktree"); Spacer(Modifier.width(Space.xs)) }
+            Pill("${ws.tabCount} tab${if (ws.tabCount == 1) "" else "s"}")
+            RowIcon(HerdrIcons.MoreVert, "Workspace actions", onWorkspaceMenu)
         }
-        HerdrMenu(expanded = menu, onDismissRequest = { menu = false }, title = ws.label.ifBlank { ws.workspaceId }, subtitle = "Git") {
+        HerdrMenu(expanded = menu, onDismissRequest = { menu = false }, title = ws.label.ifBlank { ws.workspaceId }) {
             MenuRow(
                 if (repo != null) "Worktrees of ${repo.repoName.ifBlank { "this repository" }}" else "Worktrees in this folder",
                 HerdrIcons.AccountTree, { menu = false; onWorktrees() },
@@ -323,17 +312,13 @@ private fun WorkspaceCard(
             Text(
                 meta.entries.joinToString(" · ") { "${it.key}: ${it.value}" },
                 style = MaterialTheme.typography.bodySmall,
-                color = c.muted,
-                maxLines = 2,
+                color = c.accent,
+                maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(start = 68.dp, end = Space.l, bottom = Space.xs),
+                modifier = Modifier.padding(start = 20.dp),
             )
         }
-        // The tab bar: chips when there are several, the one tab's name when not, and its actions.
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth().padding(start = Space.l, end = Space.xs),
-        ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
             if (tabs.size > 1) {
                 LazyRow(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(Space.xs)) {
                     items(tabs, key = { it.tabId }) { t ->
@@ -341,54 +326,54 @@ private fun WorkspaceCard(
                     }
                 }
             } else {
+                // One tab: name it, so the row with its menu isn't an empty gap.
                 Text(
                     tabs.firstOrNull()?.let { t -> t.label.ifBlank { "${t.number}" }.let { l -> if (l.all { it.isDigit() }) "Tab $l" else l } } ?: "",
                     style = MaterialTheme.typography.titleSmall,
                     color = c.muted,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).padding(start = 20.dp),
                 )
             }
-            if (layout != null && layout.panes.size > 1) {
-                LayoutMap(layout, snap, Modifier.padding(start = Space.s).size(width = 36.dp, height = 24.dp))
-            }
             tabs.firstOrNull { it.tabId == tabId }?.let { active ->
-                RowIcon(HerdrIcons.MoreHoriz, "Tab actions", { onTabMenu(active) })
+                RowIcon(HerdrIcons.MoreVert, "Tab actions", { onTabMenu(active) })
             }
         }
-        Column(Modifier.padding(start = Space.s, end = Space.s, bottom = Space.s)) {
-            panes.forEach { pane ->
-                val agent = snap.agents.firstOrNull { it.paneId == pane.paneId }
-                val status = agent?.agentStatus ?: pane.agentStatus
-                val where = (pane.foregroundCwd ?: pane.cwd)?.replace(Regex("^/(home|Users)/[^/]+"), "~")
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth().clip(HerdrShapes.Tile)
-                        .combinedClickable(onClick = { onOpenPane(pane) }, onLongClick = { onPaneMenu(pane) })
-                        .heightIn(min = 56.dp).padding(start = Space.s, top = Space.xs, bottom = Space.xs),
-                ) {
-                    IconTile(
-                        if (agent != null) HerdrIcons.SmartToy else HerdrIcons.Terminal,
-                        size = 36.dp,
-                        dot = if (agent != null) status.color() else null,
-                        background = c.field,
-                    )
-                    Spacer(Modifier.width(Space.m))
-                    Column(Modifier.weight(1f)) {
+        Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(Space.m)) {
+            if (layout != null && layout.panes.size > 1) {
+                LayoutMap(layout, snap, Modifier.padding(top = Space.xs).size(width = 72.dp, height = 48.dp))
+            }
+            Column(Modifier.weight(1f)) {
+                panes.forEach { pane ->
+                    val agent = snap.agents.firstOrNull { it.paneId == pane.paneId }
+                    val status = agent?.agentStatus ?: pane.agentStatus
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth().clip(HerdrShapes.Tile)
+                            .combinedClickable(onClick = { onOpenPane(pane) }, onLongClick = { onPaneMenu(pane) })
+                            .heightIn(min = 52.dp),
+                    ) {
+                        StatusDot(if (agent == null) c.off else status.color(), size = 8)
+                        Spacer(Modifier.width(Space.m))
                         Text(
-                            agent?.displayName ?: pane.displayName,
+                            buildAnnotatedString {
+                                append(agent?.displayName ?: pane.displayName)
+                                withStyle(SpanStyle(color = c.muted)) {
+                                    if (agent != null) append(" · " + agent.statusLabel)
+                                    else (pane.foregroundCwd ?: pane.cwd)?.let { append(" · " + it.replace(Regex("^/(home|Users)/[^/]+"), "~")) }
+                                }
+                            },
                             style = MaterialTheme.typography.bodyLarge,
-                            maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
                         )
-                        Text(
-                            if (agent != null) agent.statusLabel.replaceFirstChar { it.uppercase() } else where ?: "Shell",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (agent != null && status != AgentStatus.Unknown) status.color() else c.muted,
-                            maxLines = 1, overflow = TextOverflow.Ellipsis,
-                        )
+                        SecondaryButton(
+                            onClick = { onTerminal(pane) },
+                            contentPadding = PaddingValues(horizontal = 14.dp),
+                        ) { Text("Terminal") }
                     }
-                    RowIcon(HerdrIcons.Terminal, "Terminal", { onTerminal(pane) })
                 }
             }
         }

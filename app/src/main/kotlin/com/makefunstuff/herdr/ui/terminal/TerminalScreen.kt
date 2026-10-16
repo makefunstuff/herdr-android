@@ -77,7 +77,6 @@ import com.makefunstuff.herdr.ui.common.toast
 import com.makefunstuff.herdr.ui.design.BarIcon
 import com.makefunstuff.herdr.ui.design.PrimaryButton
 import com.makefunstuff.herdr.ui.design.SecondaryButton
-import com.makefunstuff.herdr.ui.design.HerdrDialog
 import com.makefunstuff.herdr.ui.design.HerdrField
 import com.makefunstuff.herdr.ui.design.HerdrIcons
 import com.makefunstuff.herdr.ui.design.HerdrMenu
@@ -85,7 +84,6 @@ import com.makefunstuff.herdr.ui.design.HerdrShapes
 import com.makefunstuff.herdr.ui.design.HerdrSheet
 import com.makefunstuff.herdr.ui.design.HerdrTopBar
 import com.makefunstuff.herdr.ui.design.MenuRow
-import com.makefunstuff.herdr.ui.design.MenuSection
 import com.makefunstuff.herdr.ui.design.QuietButton
 import com.makefunstuff.herdr.ui.design.SheetTitle
 import com.makefunstuff.herdr.ui.design.sheetColor
@@ -339,7 +337,6 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
                         context.toast("Drag to select, then Copy")
                     })
                     MenuRow("Copy screen", HerdrIcons.ContentCopy, { menu = false; view?.let { context.copyToClipboard("terminal", it.screenText(), "Screen copied") } })
-                    MenuSection("Pane")
                     MenuRow("Resize pane…", HerdrIcons.OpenInFull, { menu = false; resizeOpen = true })
                     MenuRow("Layout…", HerdrIcons.Dashboard, { menu = false; nav.navigate(Routes.layout(machineId, paneId)) })
                     MenuRow(if (keepHost) "Fit to phone" else "Desktop size", if (keepHost) HerdrIcons.Smartphone else HerdrIcons.Computer, { menu = false; keepHost = !keepHost })

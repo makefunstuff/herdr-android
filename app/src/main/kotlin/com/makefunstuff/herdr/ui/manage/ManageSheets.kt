@@ -1,6 +1,6 @@
 package com.makefunstuff.herdr.ui.manage
 
-import com.makefunstuff.herdr.ui.design.SegmentedPills
+import androidx.compose.material3.RadioButtonDefaults
 import com.makefunstuff.herdr.ui.design.SheetTitle
 import com.makefunstuff.herdr.ui.design.MenuSection
 import com.makefunstuff.herdr.ui.design.KeyChip
@@ -13,13 +13,10 @@ import com.makefunstuff.herdr.ui.design.ActionRow
 import com.makefunstuff.herdr.ui.design.DangerButton
 import com.makefunstuff.herdr.ui.design.ErrorMessage
 import com.makefunstuff.herdr.ui.design.HerdrDialog
-import com.makefunstuff.herdr.ui.design.HerdrMenu
-import com.makefunstuff.herdr.ui.design.HerdrMenuItem
 import com.makefunstuff.herdr.ui.design.HerdrSheet
 import com.makefunstuff.herdr.ui.design.HerdrTextField
 import com.makefunstuff.herdr.ui.design.LoadingState
 import com.makefunstuff.herdr.ui.design.PrimaryButton
-import com.makefunstuff.herdr.ui.design.SectionHeading
 import android.content.Context
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -652,11 +649,13 @@ fun NotifySheet(session: HostSession, machineLabel: String, onDismiss: () -> Uni
             HerdrTextField(value = body, onValueChange = { body = it }, label = "Body", singleLine = false)
         }
         ManageHeading("Sound")
-        val sounds = listOf("none" to "None", "done" to "Done", "request" to "Request")
-        SegmentedPills(
-            sounds.map { it.second }, sounds.indexOfFirst { it.first == sound }, { sound = sounds[it].first },
-            Modifier.padding(horizontal = Space.l),
-        )
+        listOf("none" to "None", "done" to "Done", "request" to "Request").forEach { (value, name) ->
+            ManageRow(
+                name,
+                trailing = { RadioButton(selected = sound == value, onClick = null, colors = RadioButtonDefaults.colors(selectedColor = MaterialTheme.colorScheme.primary)) },
+                modifier = Modifier.semantics { selected = sound == value; role = Role.RadioButton },
+            ) { sound = value }
+        }
         Spacer(Modifier.height(Space.xl))
         PrimaryButton(
             "Send notification",

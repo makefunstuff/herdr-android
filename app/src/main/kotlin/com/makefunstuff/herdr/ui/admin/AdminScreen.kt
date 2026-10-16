@@ -71,23 +71,27 @@ import com.makefunstuff.herdr.ui.common.StatusDot
 import com.makefunstuff.herdr.ui.common.detail
 import com.makefunstuff.herdr.ui.common.label
 import com.makefunstuff.herdr.ui.common.toast
-import com.makefunstuff.herdr.ui.design.BarAdd
+import com.makefunstuff.herdr.ui.design.HerdrFab
+import com.makefunstuff.herdr.ui.design.RowDivider
+import com.makefunstuff.herdr.ui.design.QuietButton
+import androidx.compose.material3.PrimaryScrollableTabRow
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRowDefaults
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
+import androidx.compose.ui.unit.Dp
 import com.makefunstuff.herdr.ui.design.BarIcon
 import com.makefunstuff.herdr.ui.design.DangerButton
 import com.makefunstuff.herdr.ui.design.FieldLabel
-import com.makefunstuff.herdr.ui.design.HerdrChip
 import com.makefunstuff.herdr.ui.design.HerdrDialog
 import com.makefunstuff.herdr.ui.design.HerdrField
 import com.makefunstuff.herdr.ui.design.HerdrIcons
 import com.makefunstuff.herdr.ui.design.HerdrMenu
 import com.makefunstuff.herdr.ui.design.HerdrSheet
 import com.makefunstuff.herdr.ui.design.HerdrTopBar
-import com.makefunstuff.herdr.ui.design.IconTile
 import com.makefunstuff.herdr.ui.design.InfoLine
 import com.makefunstuff.herdr.ui.design.ListRow
 import com.makefunstuff.herdr.ui.design.MenuRow
 import com.makefunstuff.herdr.ui.design.PrimaryButton
-import com.makefunstuff.herdr.ui.design.QuietButton
 import com.makefunstuff.herdr.ui.design.QuietCard
 import com.makefunstuff.herdr.ui.design.RoundAction
 import com.makefunstuff.herdr.ui.design.SecondaryButton
@@ -162,16 +166,28 @@ fun AdminScreen(nav: NavController, machineId: String, initialTab: Int = 0) {
                     onBack = { nav.popBackStack() },
                 ) {
                     BarIcon(HerdrIcons.Refresh, "Refresh", { session.retry(); model.refreshAll() })
-                    if (tab == 3) BarAdd("Add") { adding = true }
                 }
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = Space.screen),
-                    horizontalArrangement = Arrangement.spacedBy(Space.s),
+                PrimaryScrollableTabRow(
+                    selectedTabIndex = tab,
+                    edgePadding = Space.s,
+                    containerColor = Herdr.colors.ground,
+                    contentColor = Herdr.colors.text,
+                    divider = { RowDivider(inset = 0.dp) },
+                    indicator = {
+                        TabRowDefaults.PrimaryIndicator(Modifier.tabIndicatorOffset(tab, matchContentSize = true), width = Dp.Unspecified, color = MaterialTheme.colorScheme.primary)
+                    },
                 ) {
-                    itemsIndexed(TABS) { i, t -> HerdrChip(t, selected = tab == i, onClick = { tab = i }) }
+                    TABS.forEachIndexed { i, t ->
+                        Tab(
+                            selected = tab == i, onClick = { tab = i },
+                            selectedContentColor = Herdr.colors.text, unselectedContentColor = Herdr.colors.muted,
+                            text = { Text(t, maxLines = 1, style = MaterialTheme.typography.labelLarge) },
+                        )
+                    }
                 }
             }
         },
+        floatingActionButton = { if (tab == 3) HerdrFab("Add") { adding = true } },
     ) { padding ->
         Box(Modifier.padding(padding).fillMaxSize()) {
             when (tab) {
@@ -211,17 +227,24 @@ private fun PluginsTab(model: AdminModel) {
 private fun PluginCard(p: PluginInfo, model: AdminModel, onOpen: () -> Unit) {
     var menu by remember { mutableStateOf(false) }
     val busy = model.isBusy("plugin:${p.pluginId}")
-    QuietCard(onClick = onOpen, onLongClick = { menu = true }) {
-        ListRow(
-            p.title + if (p.version.isNotBlank()) "  v${p.version}" else "",
-            subtitle = listOfNotNull(p.description, listOf(p.origin, "${p.actions.size} action${if (p.actions.size == 1) "" else "s"}").joinToString(" · ")).joinToString("\n"),
-            subtitleLines = 3,
-            leading = { IconTile(HerdrIcons.Extension) },
-            trailing = {
+    QuietCard(onClick = onOpen, onLongClick = { menu = true }, padded = true) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Space.xs)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.s)) {
+                    Text(p.title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                    if (p.version.isNotBlank()) Pill("v${p.version}")
+                }
+                p.description?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = Herdr.colors.muted, maxLines = 2, overflow = TextOverflow.Ellipsis) }
+                Text(
+                    listOf(p.origin, "${p.actions.size} action${if (p.actions.size == 1) "" else "s"}").joinToString(" · "),
+                    style = MaterialTheme.typography.labelMedium, color = Herdr.colors.faint,
+                )
+            }
+            Box(Modifier.width(64.dp), contentAlignment = Alignment.Center) {
                 if (busy) Spinner()
                 else androidx.compose.material3.Switch(checked = p.enabled, onCheckedChange = { model.setEnabled(p, it) }, colors = switchColors())
-            },
-        )
+            }
+        }
         HerdrMenu(expanded = menu, onDismissRequest = { menu = false }, title = p.title) {
             MenuRow("Actions and logs", HerdrIcons.PlayArrow, { menu = false; onOpen() })
             MenuRow(if (p.enabled) "Disable" else "Enable", HerdrIcons.PowerSettingsNew, { menu = false; model.setEnabled(p, !p.enabled) })
@@ -378,12 +401,12 @@ private fun IntegrationRow(i: IntegrationInfo, model: AdminModel, onRemove: () -
     ListRow(
         i.label.ifBlank { i.target },
         subtitle = status,
-        leading = { IconTile(letter = i.label.ifBlank { i.target }.take(1).uppercase(), dot = color) },
+        leading = { StatusDot(color ?: Herdr.colors.off) },
         trailing = {
             when {
                 busy -> Spinner()
-                i.outdated -> SecondaryButton("Update") { model.install(i) }
-                !i.installed && i.available -> SecondaryButton("Install") { model.install(i) }
+                i.outdated -> QuietButton(onClick = { model.install(i) }) { Text("Update") }
+                !i.installed && i.available -> QuietButton(onClick = { model.install(i) }) { Text("Install") }
                 i.installed -> Box {
                     Box(
                         Modifier.size(48.dp).clip(CircleShape).clickable(role = Role.Button) { menu = true }.semantics { contentDescription = "More" },
@@ -570,7 +593,7 @@ private fun SavedMachineRow(m: SavedMachineEntry, model: AdminModel, onRemove: (
         ListRow(
             m.label.ifBlank { m.target },
             subtitle = "${m.target.removePrefix("ssh://")} · session ${m.session}" + if (!m.enabled) " · disabled" else "",
-            leading = { IconTile(HerdrIcons.Dns, dot = if (m.enabled) OK else IDLE) },
+            leading = { StatusDot(if (m.enabled) OK else IDLE) },
             trailing = if (busy) ({ Spinner() }) else null,
             onLongClick = { menu = true },
             onClick = { menu = true },

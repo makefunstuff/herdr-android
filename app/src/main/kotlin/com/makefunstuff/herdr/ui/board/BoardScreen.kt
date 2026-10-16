@@ -60,7 +60,12 @@ import com.makefunstuff.herdr.ui.common.MarkdownText
 import com.makefunstuff.herdr.ui.common.detail
 import com.makefunstuff.herdr.ui.common.label
 import com.makefunstuff.herdr.ui.common.toast
-import com.makefunstuff.herdr.ui.design.BarAdd
+import com.makefunstuff.herdr.ui.design.HerdrFab
+import com.makefunstuff.herdr.ui.common.Pill
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.widthIn
 import com.makefunstuff.herdr.ui.design.BarIcon
 import com.makefunstuff.herdr.ui.design.ErrorMessage
 import com.makefunstuff.herdr.ui.design.ErrorState
@@ -209,15 +214,17 @@ fun BoardScreen(nav: NavController, machineId: String) {
                     )
                 }) else null,
             ) {
-                BarIcon(if (searching) HerdrIcons.Close else HerdrIcons.Search, if (searching) "Close search" else "Search", { if (searching) query = ""; searching = !searching })
-                if (!searching && state.boardPath != null) BarAdd("Add a task") { pending = Pending.Add }
+                BarIcon(if (searching) HerdrIcons.Close else HerdrIcons.Search, "Search", { if (searching) query = ""; searching = !searching })
+                BarIcon(HerdrIcons.Forum, "Coordinator chat", { nav.navigate(Routes.coordinator(machineId)) })
                 BarIcon(HerdrIcons.MoreVert, "Filter and more", { menu = true })
-                HerdrMenu(expanded = menu, onDismissRequest = { menu = false }, title = "Board", subtitle = state.machine.label) {
-                    MenuRow("Coordinator chat", HerdrIcons.Forum, { menu = false; nav.navigate(Routes.coordinator(machineId)) })
+                HerdrMenu(expanded = menu, onDismissRequest = { menu = false }) {
                     MenuRow(if (archived) "Hide archived" else "Show archived", if (archived) HerdrIcons.Unarchive else HerdrIcons.Archive, { archived = !archived; menu = false })
                     MenuRow("Refresh", HerdrIcons.Refresh, { readNow.trySend(Unit); menu = false })
                 }
             }
+        },
+        floatingActionButton = {
+            if (state.boardPath != null) HerdrFab(null, "Add a task") { pending = Pending.Add }
         },
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
@@ -227,7 +234,6 @@ fun BoardScreen(nav: NavController, machineId: String) {
                     contentPadding = PaddingValues(horizontal = Space.screen),
                     horizontalArrangement = Arrangement.spacedBy(Space.s),
                 ) {
-                    item { HerdrChip("All", selected = repo.isEmpty() && machine.isEmpty(), onClick = { repo = ""; machine = "" }) }
                     items(repos + machines) { name ->
                         val isMachine = name in machines
                         val on = if (isMachine) machine == name else repo == name
@@ -252,7 +258,7 @@ fun BoardScreen(nav: NavController, machineId: String) {
                     modifier = Modifier.weight(1f).fillMaxWidth(),
                 ) { LazyColumn(
                     Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(start = Space.screen, end = Space.screen, top = Space.xs, bottom = Space.xl),
+                    contentPadding = PaddingValues(start = Space.screen, end = Space.screen, top = Space.xs, bottom = 96.dp),
                     verticalArrangement = Arrangement.spacedBy(Space.s),
                 ) {
                     problem?.let { p -> item(key = "problem") { ErrorMessage(p, onRetry = { readNow.trySend(Unit) }) } }
@@ -261,7 +267,7 @@ fun BoardScreen(nav: NavController, machineId: String) {
                             StateBlock(
                                 if (query.isNotBlank()) HerdrIcons.Search else HerdrIcons.ViewKanban,
                                 if (query.isNotBlank()) "No task matches “$query”" else if (archived) "Nothing archived" else "No tasks yet",
-                                if (query.isNotBlank() || archived) null else "Add one with +, or tell the Coordinator what needs doing.",
+                                if (query.isNotBlank() || archived) null else "Add one with +.",
                                 Modifier.padding(top = Space.xxl),
                             )
                         }
@@ -338,8 +344,8 @@ internal fun Progress(p: Int, color: Color, modifier: Modifier = Modifier) {
 }
 
 /**
- * A task as a card: its key and status on top, the title, what it is doing, then progress or its
- * pull request. Tasks that wait on you look the same but sit first; the status says why.
+ * A task as a card, the board's way: a stripe in the status colour, the key with its status and
+ * agent, the title, what it is doing, progress and its pull request. Tasks that need you get a wider stripe.
  */
 @Composable
 private fun TaskRow(t: BoardTask, onOpen: () -> Unit, onMenu: () -> Unit) {
@@ -351,41 +357,51 @@ private fun TaskRow(t: BoardTask, onOpen: () -> Unit, onMenu: () -> Unit) {
         Modifier.semantics(mergeDescendants = true) {
             contentDescription = "${t.name}, ${t.status.label}${if (t.needsYou) ", needs you" else ""}, ${t.title}"
         },
-        padded = true,
         onClick = onOpen,
         onLongClick = onMenu,
         onClickLabel = "Open details",
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(t.name, style = MaterialTheme.typography.titleSmall, color = c.muted)
-            if (t.research) Text(" · research", style = MaterialTheme.typography.labelMedium, color = c.faint)
-            Spacer(Modifier.weight(1f))
-            StatusBadge(t.status.label, color)
-        }
-        Spacer(Modifier.height(Space.s))
-        Text(
-            t.title,
-            style = MaterialTheme.typography.titleMedium,
-            color = if (quiet) c.muted else c.text,
-            maxLines = 2, overflow = TextOverflow.Ellipsis,
-        )
-        if (doing.isNotEmpty() && !quiet) {
-            Text(doing, style = MaterialTheme.typography.bodyMedium, color = c.muted, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = Space.xxs))
-        }
-        val p = t.progress
-        val meta = listOfNotNull(
-            t.agent.takeIf { it.isNotEmpty() },
-            t.pr.takeIf { it.isNotEmpty() }?.let { "PR " + t.prNumber.let { n -> if (n.isEmpty()) it else "#$n" } },
-        ).joinToString(" · ")
-        if ((p != null || t.eta != null) && !quiet) {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = Space.m)) {
-                if (p != null) Progress(p, color, Modifier.weight(1f)) else Spacer(Modifier.weight(1f))
+        Row(Modifier.height(IntrinsicSize.Min)) {
+            Box(Modifier.padding(start = Space.s, top = Space.m, bottom = Space.m).width(if (t.needsYou) 4.dp else 3.dp).fillMaxHeight().clip(HerdrShapes.Pill).background(color))
+            Column(Modifier.padding(start = Space.m, end = Space.l, top = Space.m, bottom = Space.m)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(t.name, style = MaterialTheme.typography.titleSmall, color = c.text)
+                    Spacer(Modifier.width(Space.s))
+                    StatusBadge(t.status.label, color)
+                    if (t.research) { Spacer(Modifier.width(Space.xs)); Pill("research") }
+                    Spacer(Modifier.weight(1f))
+                    if (t.agent.isNotEmpty()) Text(
+                        t.agent, style = MaterialTheme.typography.labelMedium, color = c.faint, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(start = Space.s).widthIn(max = 120.dp),
+                    )
+                }
                 Text(
-                    listOfNotNull(p?.let { "$it%" }, t.eta?.let { "${it}m left" }).joinToString(" · "),
-                    style = MaterialTheme.typography.labelMedium, color = c.faint, modifier = Modifier.padding(start = Space.m),
+                    t.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = if (quiet) c.muted else c.text,
+                    maxLines = 2, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = Space.s),
                 )
+                if (doing.isNotEmpty() && !quiet) {
+                    Text(doing, style = MaterialTheme.typography.bodyMedium, color = c.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                val p = t.progress
+                if ((p != null || t.eta != null) && !quiet) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = Space.s)) {
+                        if (p != null) Progress(p, color, Modifier.weight(1f)) else Spacer(Modifier.weight(1f))
+                        Text(
+                            listOfNotNull(p?.let { "$it%" }, t.eta?.let { "${it}m left" }).joinToString(" · "),
+                            style = MaterialTheme.typography.labelMedium, color = c.faint, modifier = Modifier.padding(start = Space.m),
+                        )
+                    }
+                }
+                if (t.pr.isNotEmpty()) {
+                    Text(
+                        "PR " + t.prNumber.let { if (it.isEmpty()) t.pr else "#$it" },
+                        style = MaterialTheme.typography.labelMedium, color = c.accent, modifier = Modifier.padding(top = Space.xs),
+                    )
+                }
             }
         }
-        if (meta.isNotEmpty()) Text(meta, style = MaterialTheme.typography.labelMedium, color = c.faint, modifier = Modifier.padding(top = Space.s))
     }
 }

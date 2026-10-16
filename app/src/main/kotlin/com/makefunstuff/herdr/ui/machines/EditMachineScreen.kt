@@ -46,7 +46,6 @@ import com.makefunstuff.herdr.core.ssh.Machine
 import com.makefunstuff.herdr.core.ssh.SshConnector
 import com.makefunstuff.herdr.data.MachineStore
 import com.makefunstuff.herdr.ui.common.LocalContainer
-import com.makefunstuff.herdr.ui.common.StatusDot
 import com.makefunstuff.herdr.ui.common.copyToClipboard
 import com.makefunstuff.herdr.ui.design.ActionRow
 import com.makefunstuff.herdr.ui.design.BarIcon
@@ -61,7 +60,6 @@ import com.makefunstuff.herdr.ui.design.HerdrTopBar
 import com.makefunstuff.herdr.ui.design.LoadingState
 import com.makefunstuff.herdr.ui.design.MonoBlock
 import com.makefunstuff.herdr.ui.design.PrimaryButton
-import com.makefunstuff.herdr.ui.design.QuietButton
 import com.makefunstuff.herdr.ui.design.QuietCard
 import com.makefunstuff.herdr.ui.design.SecondaryButton
 import com.makefunstuff.herdr.ui.design.SectionHeading

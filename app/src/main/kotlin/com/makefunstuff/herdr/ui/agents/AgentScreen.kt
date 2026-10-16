@@ -49,7 +49,10 @@ import com.makefunstuff.herdr.ui.design.HerdrIcons
 import com.makefunstuff.herdr.ui.design.HerdrTopBar
 import com.makefunstuff.herdr.ui.design.LoadingState
 import com.makefunstuff.herdr.ui.design.RoundAction
-import com.makefunstuff.herdr.ui.design.StatusBadge
+import com.makefunstuff.herdr.ui.design.QuietButton
+import com.makefunstuff.herdr.ui.common.StatusDot
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.width
 import com.makefunstuff.herdr.ui.manage.AgentActionsSheet
 import com.makefunstuff.herdr.ui.theme.Herdr
 import com.makefunstuff.herdr.ui.theme.Space
@@ -175,7 +178,7 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
                 ).joinToString(" · "),
                 onBack = { nav.popBackStack() },
             ) {
-                BarIcon(HerdrIcons.Terminal, "Terminal", { nav.navigate(Routes.terminal(machineId, paneId)) })
+                QuietButton(onClick = { nav.navigate(Routes.terminal(machineId, paneId)) }) { Text("Terminal") }
                 BarIcon(HerdrIcons.MoreVert, "More", { menu = true })
             }
         },
@@ -246,28 +249,31 @@ private fun StatusStrip(status: AgentStatus, label: String?, activity: String?, 
     val c = Herdr.colors
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth().padding(horizontal = Space.screen).padding(bottom = Space.s),
+        modifier = Modifier.fillMaxWidth().background(c.card).padding(horizontal = Space.screen, vertical = Space.s),
     ) {
-        StatusBadge(
+        StatusDot(status.color())
+        Spacer(Modifier.width(Space.s))
+        Text(
             when (status) {
-                AgentStatus.Blocked -> "Needs you"
-                AgentStatus.Unknown -> label?.takeIf { it != "unknown" }?.replaceFirstChar { it.uppercase() } ?: "Status unknown"
+                AgentStatus.Blocked -> "Waiting for you"
+                AgentStatus.Unknown -> label?.takeIf { it != "unknown" } ?: "Status unknown"
                 else -> status.title()
             },
-            status.color(),
+            style = MaterialTheme.typography.labelLarge,
+            color = status.color(),
         )
         if (activity != null && status != AgentStatus.Blocked) {
             Text(
-                activity,
+                " · $activity",
                 style = MaterialTheme.typography.bodySmall,
                 color = c.muted,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(start = Space.s).weight(1f, fill = false),
+                modifier = Modifier.weight(1f, fill = false),
             )
         }
         Spacer(Modifier.weight(1f))
-        if (!online) Text("Offline", style = MaterialTheme.typography.labelMedium, color = c.faint)
+        if (!online) Text("offline", style = MaterialTheme.typography.labelMedium, color = c.faint)
     }
 }
 

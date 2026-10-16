@@ -32,12 +32,14 @@ import androidx.compose.ui.unit.dp
 import com.makefunstuff.herdr.ui.theme.Herdr
 import com.makefunstuff.herdr.ui.theme.Space
 
-/** A message you sent: a grey bubble on the right, its last corner tucked in. Replies sit on the ground without one. */
+/** A message bubble's corners: rounded, the one nearest the sender tucked in. */
 val BubbleShape = RoundedCornerShape(20.dp, 20.dp, 6.dp, 20.dp)
+val ReplyBubbleShape = RoundedCornerShape(20.dp, 20.dp, 20.dp, 6.dp)
 
 /**
- * The box you type into at the bottom of a chat (Puggie's composer): a rounded grey card with the
- * text and one round inverse button, send or stop. [below] holds a second action under the field.
+ * The box you type into at the bottom of a chat, as herdr-android lays it out: a rounded field,
+ * and beside it the round mint Send button, or a Stop button while the agent works and nothing is
+ * typed. [below] holds a second action under the field (the Coordinator's "Send and start agents").
  */
 @Composable
 fun ChatComposer(
@@ -51,39 +53,35 @@ fun ChatComposer(
     below: (@Composable () -> Unit)? = null,
 ) {
     val c = Herdr.colors
-    Column(modifier.fillMaxWidth().background(c.ground).padding(horizontal = Space.m, vertical = Space.s)) {
-        Row(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(26.dp)).background(c.card).padding(end = Space.xs),
-            verticalAlignment = Alignment.Bottom,
-        ) {
+    Column(modifier.fillMaxWidth().background(c.ground).padding(start = Space.m, end = Space.s, top = Space.s, bottom = Space.s)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
             TextField(
                 value = draft,
                 onValueChange = onDraft,
                 enabled = enabled,
                 placeholder = { Text(placeholder, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 maxLines = 6,
+                shape = RoundedCornerShape(24.dp),
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                 colors = TextFieldDefaults.colors(
-                    focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent,
-                    disabledContainerColor = Color.Transparent,
+                    focusedContainerColor = c.card, unfocusedContainerColor = c.card, disabledContainerColor = c.card,
                     focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent,
                     disabledIndicatorColor = Color.Transparent,
                     focusedPlaceholderColor = c.faint, unfocusedPlaceholderColor = c.faint, disabledPlaceholderColor = c.off,
                     cursorColor = c.accent,
                 ),
-                modifier = Modifier.weight(1f).heightIn(min = 56.dp),
+                modifier = Modifier.weight(1f).heightIn(min = 52.dp),
             )
-            val showStop = stop != null && draft.isBlank()
-            Box(Modifier.padding(bottom = Space.xs)) {
-                if (showStop) RoundAction(HerdrIcons.StopCircle, "Stop", onClick = stop!!)
-                else RoundAction(HerdrIcons.ArrowUpward, "Send", enabled = enabled && draft.isNotBlank(), onClick = onSend)
+            Box(Modifier.padding(start = Space.xs, bottom = 2.dp)) {
+                if (stop != null && draft.isBlank()) SecondaryButton("Stop", onClick = stop)
+                else RoundAction(HerdrIcons.Send, "Send", enabled = enabled && draft.isNotBlank(), onClick = onSend)
             }
         }
-        if (below != null) Box(Modifier.padding(top = Space.s)) { below() }
+        if (below != null) Box(Modifier.padding(top = Space.s, end = Space.xs)) { below() }
     }
 }
 
-/** A 48dp target with a 40dp inverse circle: the composer's send and stop. */
+/** A 48dp target with a 44dp mint circle: the composer's Send, "newest" in a long chat. */
 @Composable
 fun RoundAction(icon: ImageVector, description: String, enabled: Boolean = true, onClick: () -> Unit) {
     val scheme = MaterialTheme.colorScheme
@@ -94,7 +92,7 @@ fun RoundAction(icon: ImageVector, description: String, enabled: Boolean = true,
         contentAlignment = Alignment.Center,
     ) {
         Box(
-            Modifier.size(38.dp).background(if (enabled) scheme.primary else c.field, CircleShape),
+            Modifier.size(44.dp).background(if (enabled) scheme.primary else c.field, CircleShape),
             contentAlignment = Alignment.Center,
         ) { Icon(icon, null, tint = if (enabled) scheme.onPrimary else c.off, modifier = Modifier.size(22.dp)) }
     }

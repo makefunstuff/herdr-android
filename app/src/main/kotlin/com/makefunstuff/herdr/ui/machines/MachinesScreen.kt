@@ -13,7 +13,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -32,16 +31,19 @@ import com.makefunstuff.herdr.ui.common.color
 import com.makefunstuff.herdr.ui.common.copyToClipboard
 import com.makefunstuff.herdr.ui.common.detail
 import com.makefunstuff.herdr.ui.common.label
-import com.makefunstuff.herdr.ui.design.BarAdd
+import com.makefunstuff.herdr.ui.design.HerdrFab
 import com.makefunstuff.herdr.ui.design.HerdrIcons
+import com.makefunstuff.herdr.ui.design.StatusBadge
+import com.makefunstuff.herdr.ui.common.Pill
+import com.makefunstuff.herdr.ui.common.StatusDot
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.style.TextOverflow
 import com.makefunstuff.herdr.ui.design.HerdrTopBar
-import com.makefunstuff.herdr.ui.design.IconTile
-import com.makefunstuff.herdr.ui.design.ListRow
-import com.makefunstuff.herdr.ui.design.LocalRowBackground
 import com.makefunstuff.herdr.ui.design.PrimaryButton
 import com.makefunstuff.herdr.ui.design.QuietCard
 import com.makefunstuff.herdr.ui.design.SecondaryButton
-import com.makefunstuff.herdr.ui.design.StatusLabel
 import com.makefunstuff.herdr.ui.theme.Herdr
 import com.makefunstuff.herdr.ui.theme.Space
 import com.makefunstuff.herdr.ui.theme.color
@@ -54,10 +56,9 @@ fun MachinesScreen(nav: NavController) {
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         containerColor = Herdr.colors.ground,
-        topBar = {
-            HerdrTopBar("Machines") {
-                if (hosts.isNotEmpty()) BarAdd("Add machine") { nav.navigate(Routes.edit()) }
-            }
+        topBar = { HerdrTopBar("Machines") },
+        floatingActionButton = {
+            if (hosts.isNotEmpty()) HerdrFab("Add machine") { nav.navigate(Routes.edit()) }
         },
     ) { padding ->
         if (hosts.isEmpty()) {
@@ -70,7 +71,7 @@ fun MachinesScreen(nav: NavController) {
         }
         LazyColumn(
             modifier = Modifier.padding(padding),
-            contentPadding = PaddingValues(start = Space.screen, end = Space.screen, top = Space.xs, bottom = Space.xl),
+            contentPadding = PaddingValues(start = Space.screen, end = Space.screen, top = Space.xs, bottom = 96.dp),
             verticalArrangement = Arrangement.spacedBy(Space.s),
         ) {
             items(hosts, key = { it.machine.id }) { host ->
@@ -96,57 +97,55 @@ private fun MachineCard(host: HostState, via: String?, onOpen: () -> Unit, onRet
     val status = host.status
     QuietCard(
         Modifier.semantics(mergeDescendants = true) { stateDescription = status.label() },
+        padded = true,
         onClick = onOpen, onClickLabel = "Open ${m.label}",
     ) {
-        CompositionLocalProvider(LocalRowBackground provides c.card) {
-            ListRow(
-                title = m.label,
-                subtitle = buildString {
-                    append(m.target)
-                    via?.let { append(" · via ").append(it) }
-                },
-                leading = { IconTile(HerdrIcons.Dns, dot = status.color()) },
-                trailing = {
-                    Text(status.label(), style = MaterialTheme.typography.labelMedium, color = if (host.online) c.faint else status.color(), maxLines = 1)
-                },
-                modifier = Modifier.padding(top = Space.xs),
-            )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            StatusDot(status.color())
+            Spacer(Modifier.width(Space.m))
+            Text(m.label, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            StatusBadge(status.label(), status.color())
         }
-        val details = buildList {
-            if (snap != null) {
-                val counts = snap.agents.groupingBy { it.agentStatus }.eachCount()
-                counts[AgentStatus.Blocked]?.let { add("$it need${if (it == 1) "s" else ""} you" to AgentStatus.Blocked.color()) }
-                counts[AgentStatus.Working]?.let { add("$it working" to AgentStatus.Working.color()) }
-                counts[AgentStatus.Done]?.let { add("$it done" to AgentStatus.Done.color()) }
-                add("${snap.workspaces.size} workspace${if (snap.workspaces.size == 1) "" else "s"}" to null)
-            }
-            host.herdrVersion?.let { add("herdr $it" to null) }
-        }
-        if (details.isNotEmpty()) {
+        Text(
+            buildString {
+                append(m.target)
+                append(" · session ").append(m.session)
+                host.herdrVersion?.let { append(" · herdr ").append(it) }
+                via?.let { append(" · via ").append(it) }
+            },
+            style = MaterialTheme.typography.bodyMedium,
+            color = c.muted,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(start = 20.dp, top = Space.xxs),
+        )
+        if (snap != null) {
+            val counts = snap.agents.groupingBy { it.agentStatus }.eachCount()
             @OptIn(ExperimentalLayoutApi::class)
             FlowRow(
-                Modifier.padding(start = 68.dp, end = Space.l, bottom = Space.m),
-                horizontalArrangement = Arrangement.spacedBy(Space.m),
+                Modifier.padding(start = 20.dp, top = Space.s),
+                horizontalArrangement = Arrangement.spacedBy(Space.xs),
                 verticalArrangement = Arrangement.spacedBy(Space.xs),
             ) {
-                details.forEach { (text, color) ->
-                    if (color != null) StatusLabel(text, color) else Text(text, style = MaterialTheme.typography.labelMedium, color = c.faint)
-                }
+                counts[AgentStatus.Blocked]?.let { Pill("$it blocked", color = AgentStatus.Blocked.color()) }
+                counts[AgentStatus.Working]?.let { Pill("$it working", color = AgentStatus.Working.color()) }
+                counts[AgentStatus.Done]?.let { Pill("$it done", color = AgentStatus.Done.color()) }
+                Pill("${snap.workspaces.size} workspace${if (snap.workspaces.size == 1) "" else "s"}")
             }
         }
         val note = listOfNotNull(
-            status.detail(),
             if (snap != null && !host.online) "Showing the last known state" else null,
+            status.detail(),
         )
         if (note.isNotEmpty()) Text(
             note.joinToString("\n"),
             style = MaterialTheme.typography.bodySmall,
             color = c.muted,
-            modifier = Modifier.padding(start = 68.dp, end = Space.l, bottom = Space.m),
+            modifier = Modifier.padding(start = 20.dp, top = Space.s),
         )
         if (status is HostStatus.Attention || status is HostStatus.Reconnecting) {
             Row(
-                Modifier.padding(start = 68.dp - Space.xs, end = Space.l, bottom = Space.m),
+                Modifier.padding(start = 20.dp, top = Space.s),
                 horizontalArrangement = Arrangement.spacedBy(Space.s),
             ) {
                 if (status is HostStatus.Attention && status.kind == HostStatus.Attention.Kind.Auth) {

@@ -74,13 +74,12 @@ import com.makefunstuff.herdr.ui.design.HerdrIcons
 import com.makefunstuff.herdr.ui.design.HerdrMenu
 import com.makefunstuff.herdr.ui.design.HerdrSheet
 import com.makefunstuff.herdr.ui.design.HerdrTopBar
-import com.makefunstuff.herdr.ui.design.IconTile
+import com.makefunstuff.herdr.ui.design.SecondaryButton
 import com.makefunstuff.herdr.ui.design.ListRow
 import com.makefunstuff.herdr.ui.design.LoadingState
 import com.makefunstuff.herdr.ui.design.MenuRow
 import com.makefunstuff.herdr.ui.design.QuietButton
 import com.makefunstuff.herdr.ui.design.QuietCard
-import com.makefunstuff.herdr.ui.design.SecondaryButton
 import com.makefunstuff.herdr.ui.design.SectionHeading
 import com.makefunstuff.herdr.ui.design.SheetTitle
 import com.makefunstuff.herdr.ui.design.StateBlock
@@ -260,22 +259,17 @@ fun LayoutScreen(nav: NavController, machineId: String, paneId: String) {
             }
 
             item { SectionHeading("Panes", top = Space.l) }
-            item {
+            items(panes, key = { it.paneId }) { p ->
+                val rect = tabLayout?.panes?.firstOrNull { it.paneId == p.paneId }?.rect
                 QuietCard {
-                    panes.forEach { p ->
-                        val rect = tabLayout?.panes?.firstOrNull { it.paneId == p.paneId }?.rect
-                        ListRow(
-                            p.displayName,
-                            subtitle = buildString {
-                                if (p.paneId == tabLayout?.focusedPaneId) append("Focused · ")
-                                rect?.let { append("${it.width}×${it.height}") }
-                            }.ifBlank { p.paneId },
-                            leading = { IconTile(HerdrIcons.Terminal, size = 36.dp) },
-                            trailing = { Icon(HerdrIcons.ChevronRight, null, tint = Herdr.colors.faint) },
-                            onClickLabel = "Open terminal",
-                            onClick = { nav.navigate(Routes.terminal(machineId, p.paneId)) },
-                        )
-                    }
+                    ListRow(
+                        p.displayName,
+                        subtitle = buildString {
+                            if (p.paneId == tabLayout?.focusedPaneId) append("focused · ")
+                            rect?.let { append("${it.width}×${it.height}") }
+                        }.ifBlank { p.paneId },
+                        trailing = { SecondaryButton(onClick = { nav.navigate(Routes.terminal(machineId, p.paneId)) }) { Text("Terminal") } },
+                    )
                 }
             }
 

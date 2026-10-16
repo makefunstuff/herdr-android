@@ -29,17 +29,17 @@ import com.makefunstuff.herdr.data.IdentityStore
 import com.makefunstuff.herdr.ui.common.LocalContainer
 import com.makefunstuff.herdr.ui.common.copyToClipboard
 import com.makefunstuff.herdr.ui.design.ErrorMessage
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Icon
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import com.makefunstuff.herdr.ui.design.SecondaryButton
+import com.makefunstuff.herdr.ui.design.QuietButton
 import com.makefunstuff.herdr.ui.design.HerdrIcons
 import com.makefunstuff.herdr.ui.design.HerdrTopBar
-import com.makefunstuff.herdr.ui.design.IconTile
-import com.makefunstuff.herdr.ui.design.ListRow
 import com.makefunstuff.herdr.ui.design.LoadingState
-import com.makefunstuff.herdr.ui.design.LocalRowBackground
 import com.makefunstuff.herdr.ui.design.MonoBlock
-import com.makefunstuff.herdr.ui.design.QuietButton
 import com.makefunstuff.herdr.ui.design.QuietCard
-import com.makefunstuff.herdr.ui.design.SecondaryButton
-import com.makefunstuff.herdr.ui.design.SectionHeading
 import com.makefunstuff.herdr.ui.theme.Herdr
 import com.makefunstuff.herdr.ui.theme.Space
 
@@ -58,51 +58,56 @@ fun SettingsScreen() {
         topBar = { HerdrTopBar("Settings") },
     ) { padding ->
         Column(
-            Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = Space.screen).padding(bottom = Space.xl),
+            Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = Space.screen).padding(top = Space.xs, bottom = Space.xl),
+            verticalArrangement = Arrangement.spacedBy(Space.m),
         ) {
-            SectionHeading("SSH key", top = Space.xs)
-            Text(
-                "The app signs in to your machines with this key. Its private half is encrypted with a key kept in this phone's secure hardware, so it stays through app updates. Back it up to keep it when you reinstall the app or move to a new phone.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = c.muted,
-                modifier = Modifier.padding(bottom = Space.m),
-            )
-            QuietCard {
-                CompositionLocalProvider(LocalRowBackground provides c.card) {
+            QuietCard(padded = true) {
+                Column(verticalArrangement = Arrangement.spacedBy(Space.m)) {
+                    Text("SSH key", style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
+                    Text(
+                        "The app signs in to your machines with this key. Its private half is encrypted with a key kept in this phone's secure hardware, so it stays through app updates. Back it up to keep it when you reinstall the app or move to a new phone.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = c.muted,
+                    )
                     when (val state = keyState) {
                         IdentityStore.State.Loading -> LoadingState("Reading the key")
                         is IdentityStore.State.Ready -> {
-                            MonoBlock(state.publicKey, Modifier.padding(start = Space.l, end = Space.l, top = Space.l, bottom = Space.xs))
-                            SettingRow("Copy public key", HerdrIcons.ContentCopy) { context.copyToClipboard("public key", state.publicKey, "Public key copied") }
-                            SettingRow("Back up", HerdrIcons.Upload, "A passphrase-protected file you keep", chevron = true) { dialog = KeyDialog.Export }
-                            SettingRow("Restore or import", HerdrIcons.Download, "A backup, or an existing OpenSSH key", chevron = true) { dialog = KeyDialog.Import(replacing = true) }
-                            SettingRow("New key", HerdrIcons.Key, "Replaces this one", chevron = true) { dialog = KeyDialog.New(replacing = true) }
+                            MonoBlock(state.publicKey)
+                            Row(horizontalArrangement = Arrangement.spacedBy(Space.s)) {
+                                SecondaryButton(onClick = { context.copyToClipboard("public key", state.publicKey, "Public key copied") }) {
+                                    Icon(HerdrIcons.ContentCopy, null, Modifier.size(18.dp)); Text("Copy")
+                                }
+                                SecondaryButton(onClick = { dialog = KeyDialog.Export }) {
+                                    Icon(HerdrIcons.Upload, null, Modifier.size(18.dp)); Text("Back up")
+                                }
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(Space.xs)) {
+                                QuietButton(onClick = { dialog = KeyDialog.Import(replacing = true) }) { Text("Restore or import") }
+                                QuietButton(onClick = { dialog = KeyDialog.New(replacing = true) }) { Text("New key") }
+                            }
                         }
                         IdentityStore.State.Missing, is IdentityStore.State.Unreadable -> {
                             val unreadable = (state as? IdentityStore.State.Unreadable)?.reason
-                            Box(Modifier.padding(start = Space.l, end = Space.l, top = Space.l, bottom = Space.xs)) {
-                                if (unreadable != null) ErrorMessage("The saved key can't be read ($unreadable). It is kept until you restore or replace it.")
-                                else Text("No key yet.", style = MaterialTheme.typography.bodyMedium, color = c.muted)
+                            if (unreadable != null) ErrorMessage("The saved key can't be read ($unreadable). It is kept until you restore or replace it.")
+                            else Text("No key yet.", style = MaterialTheme.typography.bodyMedium)
+                            Row(horizontalArrangement = Arrangement.spacedBy(Space.s)) {
+                                SecondaryButton("Restore or import") { dialog = KeyDialog.Import(replacing = unreadable != null) }
+                                QuietButton(onClick = { dialog = KeyDialog.New(replacing = unreadable != null) }) { Text("New key") }
                             }
-                            SettingRow("Restore or import", HerdrIcons.Download, "A backup, or an existing OpenSSH key", chevron = true) { dialog = KeyDialog.Import(replacing = unreadable != null) }
-                            SettingRow("New key", HerdrIcons.Key, chevron = true) { dialog = KeyDialog.New(replacing = unreadable != null) }
                         }
                     }
                 }
             }
-            SectionHeading("About")
-            QuietCard {
-                ListRow(
-                    "Herdr for Android",
-                    subtitle = "Version ${BuildConfig.VERSION_NAME}",
-                    leading = { IconTile(HerdrIcons.Info) },
-                )
-                Text(
-                    "Talks to herdr over SSH using its socket API. Machines stay connected while the app is open.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = c.muted,
-                    modifier = Modifier.padding(start = Space.l, end = Space.l, bottom = Space.l),
-                )
+            QuietCard(padded = true) {
+                Column(verticalArrangement = Arrangement.spacedBy(Space.xs)) {
+                    Text("About", style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
+                    Text("Herdr for Android ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        "Talks to herdr over SSH using its socket API. Machines stay connected while the app is open.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = c.muted,
+                    )
+                }
             }
         }
     }
@@ -121,8 +126,3 @@ private sealed interface KeyDialog {
     data class New(val replacing: Boolean) : KeyDialog
 }
 
-/** A row of a settings card: icon, label, an optional muted line, the whole row the target. */
-@Composable
-private fun SettingRow(title: String, icon: ImageVector, detail: String? = null, chevron: Boolean = false, onClick: () -> Unit) {
-    ListRow(title, subtitle = detail, leading = { IconTile(icon) }, chevron = chevron, onClick = onClick)
-}

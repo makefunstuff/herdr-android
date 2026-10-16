@@ -8,6 +8,8 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -51,7 +53,6 @@ import com.makefunstuff.herdr.ui.design.BubbleShape
 import com.makefunstuff.herdr.ui.design.HerdrIcons
 import com.makefunstuff.herdr.ui.design.KeyChip
 import com.makefunstuff.herdr.ui.design.QuietButton
-import com.makefunstuff.herdr.ui.design.StatusBadge
 import com.makefunstuff.herdr.ui.theme.Herdr
 import com.makefunstuff.herdr.ui.theme.Radius
 import com.makefunstuff.herdr.ui.theme.Space
@@ -107,8 +108,8 @@ private fun UserBubble(item: ChatItem.User, pending: Boolean) {
     val long = item.text.length > 600 || item.text.count { it == '\n' } > 12
     Row(Modifier.fillMaxWidth().padding(start = 48.dp), horizontalArrangement = Arrangement.End) {
         Surface(
-            color = Herdr.colors.field,
-            contentColor = Herdr.colors.text,
+            color = MaterialTheme.colorScheme.primaryContainer,
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
             shape = BubbleShape,
             modifier = Modifier.alpha(if (pending) 0.6f else 1f).animateContentSize(),
         ) {
@@ -275,13 +276,13 @@ fun BlockedCard(
     val c = Herdr.colors
     var showDetails by remember(prompt?.question) { mutableStateOf(false) }
     Surface(
-        color = c.card,
-        border = BorderStroke(1.dp, c.red.copy(alpha = 0.55f)),
+        color = c.tint(c.red).compositeOver(c.card),
+        border = BorderStroke(1.dp, c.red.copy(alpha = 0.45f)),
         shape = RoundedCornerShape(Radius.l),
         modifier = Modifier.fillMaxWidth().animateContentSize(),
     ) {
         Column(Modifier.padding(Space.l), verticalArrangement = Arrangement.spacedBy(Space.s)) {
-            StatusBadge("Needs you", c.red)
+            Text("Needs you", style = MaterialTheme.typography.labelLarge, color = c.red)
             if (prompt == null) {
                 // A menu the app couldn't read: show the bottom of the screen and the usual keys.
                 val tail = screen.lines().filter { it.isNotBlank() }.takeLast(12).joinToString("\n")
@@ -323,12 +324,13 @@ fun BlockedCard(
                     val selected = i == prompt.selected
                     Row(
                         Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(Radius.m))
-                            .background(if (selected) MaterialTheme.colorScheme.primary else c.field)
+                            .background(c.card)
+                            .border(if (selected) 1.5.dp else 1.dp, if (selected) c.red else c.line, RoundedCornerShape(Radius.m))
                             .clickable { onKeys(prompt.keysFor(i)) }
                             .padding(horizontal = Space.l, vertical = Space.m),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        val fg = if (selected) MaterialTheme.colorScheme.onPrimary else c.text
+                        val fg = c.text
                         Column(Modifier.weight(1f)) {
                             Text(
                                 (option.number?.let { "$it. " } ?: "") + option.label,

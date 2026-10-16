@@ -139,8 +139,8 @@ private val NoClick: Modifier
 
 private val FullScreen = DialogProperties(usePlatformDefaultWidth = false)
 
-/** The colour sheets and dialogs sit on: a raised grey on black, white on white. */
-val sheetColor: Color @Composable get() = if (Herdr.colors.dark) Herdr.colors.card else Herdr.colors.ground
+/** The colour sheets and dialogs sit on: the card surface, one step above the screen. */
+val sheetColor: Color @Composable get() = Herdr.colors.card
 
 /**
  * Centred dialog, only for confirmations and short forms: a title, a body, and its buttons at the
@@ -464,7 +464,7 @@ fun BarTitle(title: String, subtitle: String? = null) {
 
 /**
  * The bar over a screen. With [onBack] it is a detail screen's bar (back arrow, 20sp title, muted
- * subtitle); without, a top-level screen's (28sp title). Actions are [BarIcon]s and [BarAdd].
+ * subtitle); without, a top-level screen's (24sp title). Actions are [BarIcon]s.
  */
 @Composable
 fun HerdrTopBar(
@@ -478,7 +478,7 @@ fun HerdrTopBar(
 ) {
     Row(
         modifier.fillMaxWidth().background(Herdr.colors.ground).statusBarsPadding()
-            .heightIn(min = if (onBack == null) 72.dp else 64.dp)
+            .heightIn(min = 64.dp)
             .padding(start = if (onBack == null) Space.screen else Space.xs, end = Space.xs),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -510,17 +510,28 @@ fun BarIcon(icon: ImageVector, contentDescription: String, onClick: () -> Unit, 
     }
 }
 
-/** The screen's one "add" action: a round inverse + in the bar (Puggie's "New bot"). */
+/**
+ * The screen's main "add" action, where herdr-android has always put it: a floating pill at the
+ * bottom right, mint with its label ("Add machine", "New"). [text] null draws the round icon-only one.
+ */
 @Composable
-fun BarAdd(contentDescription: String, onClick: () -> Unit) {
-    Box(
-        Modifier.size(48.dp).clickable(
-            interactionSource = remember { MutableInteractionSource() }, indication = null, role = Role.Button, onClick = onClick,
-        ).semantics { this.contentDescription = contentDescription },
-        contentAlignment = Alignment.Center,
+fun HerdrFab(text: String?, contentDescription: String = text ?: "Add", icon: ImageVector = HerdrIcons.Add, onClick: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    Surface(
+        onClick = onClick,
+        shape = HerdrShapes.Pill,
+        color = scheme.primary,
+        contentColor = scheme.onPrimary,
+        shadowElevation = 3.dp,
+        modifier = Modifier.heightIn(min = 56.dp).semantics { this.contentDescription = contentDescription },
     ) {
-        Box(Modifier.size(38.dp).background(MaterialTheme.colorScheme.primary, CircleShape), contentAlignment = Alignment.Center) {
-            Icon(HerdrIcons.Add, null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(24.dp))
+        Row(
+            Modifier.heightIn(min = 56.dp).padding(start = if (text == null) 16.dp else 18.dp, end = if (text == null) 16.dp else 22.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Space.s),
+        ) {
+            Icon(icon, null, modifier = Modifier.size(24.dp))
+            if (text != null) Text(text, style = MaterialTheme.typography.labelLarge)
         }
     }
 }
@@ -555,8 +566,8 @@ fun BottomActionBar(modifier: Modifier = Modifier, content: @Composable RowScope
 }
 
 // ---------------------------------------------------------------------------------------------
-// Buttons: pills, 48dp tall. Primary is inverse (white on black, black on white), secondary a grey
-// fill, quiet just text; danger is the red fill and only confirms something destructive.
+// Buttons: pills, 48dp tall. Primary is herdr's mint, secondary a soft fill, quiet just mint text;
+// danger is the red fill and only confirms something destructive.
 
 private val ButtonPadding = PaddingValues(horizontal = 20.dp, vertical = 10.dp)
 
@@ -606,7 +617,7 @@ fun SecondaryButton(onClick: () -> Unit, modifier: Modifier = Modifier, enabled:
 fun SecondaryButton(text: String, modifier: Modifier = Modifier, enabled: Boolean = true, onClick: () -> Unit) =
     SecondaryButton(onClick = onClick, modifier = modifier, enabled = enabled) { Text(text) }
 
-/** Text only. In a dialog's confirm slot it draws as the primary pill. [color] overrides the text colour (e.g. the accent for a link-like action). */
+/** Text only, in the mint. In a dialog's confirm slot it draws as the primary pill. [color] overrides the text colour. */
 @Composable
 fun QuietButton(
     onClick: () -> Unit,
@@ -621,7 +632,7 @@ fun QuietButton(
             PillButton(onClick, Herdr.colors.red, MaterialTheme.colorScheme.onError, modifier, enabled, ButtonPadding, content)
         } else PrimaryButton(onClick, modifier, enabled, ButtonPadding, content)
         else -> PillButton(
-            onClick, Color.Transparent, if (color == Color.Unspecified) Herdr.colors.text else color, modifier, enabled, contentPadding, content,
+            onClick, Color.Transparent, if (color == Color.Unspecified) Herdr.colors.accent else color, modifier, enabled, contentPadding, content,
         )
     }
 }
@@ -634,7 +645,7 @@ fun DangerButton(text: String, modifier: Modifier = Modifier, enabled: Boolean =
 // ---------------------------------------------------------------------------------------------
 // Chips, pills and status
 
-/** A filter or choice: a filled pill, inverse when selected. 48dp target, 36dp drawn. */
+/** A filter or choice: a filled pill, mint when selected. 48dp target, 36dp drawn. */
 @Composable
 fun HerdrChip(
     selected: Boolean,
@@ -654,13 +665,13 @@ fun HerdrChip(
     ) {
         Row(
             Modifier.heightIn(min = 36.dp).clip(HerdrShapes.Pill)
-                .background(if (selected) scheme.primary else c.field)
+                .background(if (selected) scheme.primaryContainer else c.field)
                 .padding(horizontal = 14.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             CompositionLocalProvider(
-                LocalContentColor provides when { !enabled -> c.off; selected -> scheme.onPrimary; else -> c.text },
+                LocalContentColor provides when { !enabled -> c.off; selected -> scheme.onPrimaryContainer; else -> c.text },
                 LocalTextStyle provides MaterialTheme.typography.labelLarge,
             ) {
                 if (leadingIcon != null) Box(Modifier.size(18.dp), contentAlignment = Alignment.Center) { leadingIcon() }
@@ -699,11 +710,11 @@ fun SegmentedPills(options: List<String>, selected: Int, onSelect: (Int) -> Unit
             ) {
                 Box(
                     Modifier.matchParentSize().clip(HerdrShapes.Pill)
-                        .background(if (on) MaterialTheme.colorScheme.primary else Color.Transparent),
+                        .background(if (on) MaterialTheme.colorScheme.primaryContainer else Color.Transparent),
                 )
                 Text(
                     label, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    color = if (on) MaterialTheme.colorScheme.onPrimary else c.text,
+                    color = if (on) MaterialTheme.colorScheme.onPrimaryContainer else c.text,
                     modifier = Modifier.padding(horizontal = Space.s),
                 )
             }
@@ -1004,8 +1015,12 @@ fun ActionRow(
             .padding(horizontal = Space.l, vertical = Space.s),
     ) {
         if (icon != null) {
-            Icon(icon, null, tint = accent, modifier = Modifier.size(22.dp))
-            Spacer(Modifier.width(Space.l))
+            // herdr-android's action rows lead with a tinted icon tile, so titles line up down the sheet.
+            Box(
+                Modifier.size(36.dp).background(if (destructive || iconTint != null) c.tint(accent) else c.field, HerdrShapes.Tile),
+                contentAlignment = Alignment.Center,
+            ) { Icon(icon, null, tint = accent, modifier = Modifier.size(20.dp)) }
+            Spacer(Modifier.width(Space.m))
         }
         Column(Modifier.weight(1f)) {
             Text(title, color = titleColor, style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)

@@ -119,8 +119,8 @@ private fun AppNav() {
         bottomBar = {
             if (topLevel) {
                 HerdrNavBar {
-                    NavItem("Agents", HerdrIcons.SmartToy, route == Routes.AGENTS, badge = blocked) { nav.goTop(Routes.AGENTS) }
-                    NavItem("Machines", HerdrIcons.Dns, route == Routes.MACHINES) { nav.goTop(Routes.MACHINES) }
+                    NavItem("Agents", HerdrIcons.Home, route == Routes.AGENTS, badge = blocked) { nav.goTop(Routes.AGENTS) }
+                    NavItem("Machines", HerdrIcons.List, route == Routes.MACHINES) { nav.goTop(Routes.MACHINES) }
                     NavItem("Settings", HerdrIcons.Settings, route == Routes.SETTINGS) { nav.goTop(Routes.SETTINGS) }
                 }
             }

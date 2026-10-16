@@ -12,9 +12,6 @@ import com.makefunstuff.herdr.ui.design.QuietButton
 import com.makefunstuff.herdr.ui.design.SecondaryButton
 import com.makefunstuff.herdr.ui.design.HerdrField
 import com.makefunstuff.herdr.ui.design.HerdrDialog
-import com.makefunstuff.herdr.ui.design.HerdrMenu
-import com.makefunstuff.herdr.ui.design.HerdrMenuItem
-import com.makefunstuff.herdr.ui.design.HerdrSheet
 import android.content.Context
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -280,10 +277,10 @@ fun KeySetupDialog(unreadable: String?, onDismiss: () -> Unit) {
                 )
             },
             confirmButton = {
-                Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(Space.s)) {
-                    PrimaryButton("Restore or import", Modifier.fillMaxWidth()) { importing = true }
-                    SecondaryButton("Make a new key", Modifier.fillMaxWidth()) { creating = true }
-                    QuietButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { Text("Later") }
+                Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(Space.xs)) {
+                    PrimaryButton("Restore or import") { importing = true }
+                    QuietButton(onClick = { creating = true }) { Text("Make a new key") }
+                    QuietButton(onClick = onDismiss) { Text("Later") }
                 }
             },
         )

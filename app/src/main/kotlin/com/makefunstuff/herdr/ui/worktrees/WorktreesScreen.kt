@@ -63,13 +63,11 @@ import com.makefunstuff.herdr.ui.design.HerdrDialog
 import com.makefunstuff.herdr.ui.design.HerdrField
 import com.makefunstuff.herdr.ui.design.HerdrIcons
 import com.makefunstuff.herdr.ui.design.HerdrMenu
-import com.makefunstuff.herdr.ui.design.HerdrMenuItem
-import com.makefunstuff.herdr.ui.design.HerdrSheet
 import com.makefunstuff.herdr.ui.design.HerdrTopBar
-import com.makefunstuff.herdr.ui.design.IconTile
+import com.makefunstuff.herdr.ui.design.RowDivider
+import com.makefunstuff.herdr.ui.design.QuietButton
 import com.makefunstuff.herdr.ui.design.ListRow
 import com.makefunstuff.herdr.ui.design.MenuRow
-import com.makefunstuff.herdr.ui.design.QuietButton
 import com.makefunstuff.herdr.ui.design.QuietCard
 import com.makefunstuff.herdr.ui.design.SecondaryButton
 import com.makefunstuff.herdr.ui.theme.Herdr
@@ -361,15 +359,15 @@ private fun RepoCard(
         ListRow(
             repo.name,
             subtitle = repo.root.shortPath(),
-            leading = { IconTile(HerdrIcons.AccountTree) },
             trailing = {
-                SecondaryButton(onClick = onNew, enabled = listing !is Listing.Failed, contentPadding = PaddingValues(start = 12.dp, end = 16.dp)) {
+                QuietButton(onClick = onNew, enabled = listing !is Listing.Failed) {
                     Icon(HerdrIcons.Add, null, Modifier.size(18.dp))
                     Text("New")
                 }
             },
             modifier = Modifier.padding(top = Space.xs),
         )
+        RowDivider()
         when (listing) {
             Listing.Loading -> com.makefunstuff.herdr.ui.design.LoadingState("Loading worktrees")
             is Listing.Failed -> Column(Modifier.padding(horizontal = Space.l, vertical = Space.s), verticalArrangement = Arrangement.spacedBy(Space.s)) {
@@ -390,7 +388,7 @@ private fun WorktreeRow(wt: GitWorktree, snap: SessionSnapshot, onClick: () -> U
     ListRow(
         wt.title,
         subtitle = wt.path.shortPath(),
-        leading = { IconTile(HerdrIcons.CallSplit, size = 36.dp, dot = ws?.agentStatus?.takeIf { it != com.makefunstuff.herdr.core.api.AgentStatus.Unknown }?.color()) },
+        leading = ws?.let { w -> { StatusDot(w.agentStatus.color()) } },
         below = {
             val tags = listOfNotNull(
                 if (!wt.isLinkedWorktree) "main checkout" to null else null,

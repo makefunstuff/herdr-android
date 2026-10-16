@@ -1,6 +1,5 @@
 package com.makefunstuff.herdr.ui.machines
 
-import com.makefunstuff.herdr.ui.design.SheetTitle
 import com.makefunstuff.herdr.ui.design.SegmentedPills
 import com.makefunstuff.herdr.ui.design.FieldLabel
 import com.makefunstuff.herdr.ui.theme.Herdr
@@ -8,9 +7,6 @@ import com.makefunstuff.herdr.ui.theme.Space
 import com.makefunstuff.herdr.ui.design.HerdrField
 import com.makefunstuff.herdr.ui.design.HerdrChip
 import com.makefunstuff.herdr.ui.design.PrimaryButton
-import com.makefunstuff.herdr.ui.design.HerdrDialog
-import com.makefunstuff.herdr.ui.design.HerdrMenu
-import com.makefunstuff.herdr.ui.design.HerdrMenuItem
 import com.makefunstuff.herdr.ui.design.HerdrSheet
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -70,9 +66,8 @@ fun NewSheet(session: HostSession, snap: SessionSnapshot, onDismiss: () -> Unit)
     }
 
     HerdrSheet(onDismissRequest = onDismiss) {
-        SheetTitle("New", "Start an agent, or open a workspace, tab or split")
         Column(
-            Modifier.fillMaxWidth().padding(horizontal = Space.xl).padding(bottom = Space.l).navigationBarsPadding(),
+            Modifier.fillMaxWidth().padding(horizontal = Space.xl).padding(top = Space.xs, bottom = Space.l).navigationBarsPadding(),
             verticalArrangement = Arrangement.spacedBy(Space.m),
         ) {
             val modes = listOf("Agent", "Workspace", "Tab", "Split")

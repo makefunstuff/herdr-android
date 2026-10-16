@@ -39,9 +39,9 @@ class DesignSystemTest {
         var added = 0
         rule.setContent {
             HerdrTheme {
-                HerdrTopBar("Machines") {
-                    BarIcon(HerdrIcons.Notifications, "Notifications", {}, badge = 3)
-                    BarAdd("Add machine") { added++ }
+                Column {
+                    HerdrTopBar("Machines") { BarIcon(HerdrIcons.Notifications, "Notifications", {}, badge = 3) }
+                    HerdrFab("Add machine") { added++ }
                 }
             }
         }
@@ -106,8 +106,8 @@ class DesignSystemTest {
             HerdrTheme { ChatComposer(draft, { draft = it }, "Message claude", onSend = { sent++ }, stop = { stopped++ }) }
         }
         // Nothing typed while the agent works: the button stops it.
-        rule.onNodeWithContentDescription("Stop").atLeast48()
-        rule.onNodeWithContentDescription("Stop").performClick()
+        rule.onNodeWithText("Stop").atLeast48()
+        rule.onNodeWithText("Stop").performClick()
         assertEquals(1, stopped)
         rule.onNodeWithText("Message claude").performTextInput("hi")
         rule.onNodeWithContentDescription("Send").assertIsEnabled().performClick()

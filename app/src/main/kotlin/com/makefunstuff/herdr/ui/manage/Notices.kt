@@ -35,7 +35,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.makefunstuff.herdr.core.api.AgentStatus
 import com.makefunstuff.herdr.core.host.Notice
-import com.makefunstuff.herdr.ui.common.StatusDot
 import com.makefunstuff.herdr.ui.theme.color
 
 /** One notice together with the machine it came from. */

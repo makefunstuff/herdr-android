@@ -9,8 +9,6 @@ import com.makefunstuff.herdr.ui.design.HerdrField
 import com.makefunstuff.herdr.ui.design.HerdrChip
 import com.makefunstuff.herdr.ui.design.PrimaryButton
 import com.makefunstuff.herdr.ui.design.HerdrDialog
-import com.makefunstuff.herdr.ui.design.HerdrMenu
-import com.makefunstuff.herdr.ui.design.HerdrMenuItem
 import com.makefunstuff.herdr.ui.design.HerdrSheet
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -70,7 +68,7 @@ fun CreateWorktreeSheet(
     var busy by remember { mutableStateOf(false) }
 
     HerdrSheet(onDismissRequest = onDismiss) {
-        SheetTitle("New worktree", "of $repoName, opened as a new workspace")
+        SheetTitle("New worktree of $repoName")
         Column(
             Modifier.fillMaxWidth().imePadding()
                 .padding(horizontal = Space.xl).padding(bottom = Space.l).navigationBarsPadding(),
