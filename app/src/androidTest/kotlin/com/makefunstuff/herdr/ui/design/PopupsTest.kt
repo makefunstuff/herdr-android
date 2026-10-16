@@ -60,6 +60,10 @@ class PopupsTest {
         rule.runOnIdle { Toasts.show("Saved") }
         rule.onNodeWithText("Saved").assertIsDisplayed()
         rule.onNodeWithText("Needs you").assertIsDisplayed()
+        // A tap on the toast dismisses it, so it no longer covers what is under it.
+        rule.onNodeWithText("Saved").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText("Saved").assertDoesNotExist()
         rule.onNodeWithText("Try again").performClick()
         assertEquals(true, retried)
     }

@@ -3,40 +3,37 @@ package com.makefunstuff.herdr.ui.machines
 import com.makefunstuff.herdr.ui.design.BarTitle
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
-import androidx.compose.material.icons.filled.ArrowDropDown
-import com.makefunstuff.herdr.ui.design.HerdrDialog
-import com.makefunstuff.herdr.ui.design.HerdrMenu
-import com.makefunstuff.herdr.ui.design.HerdrMenuItem
-import com.makefunstuff.herdr.ui.design.HerdrSheet
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -55,13 +52,26 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.makefunstuff.herdr.core.api.SessionEntry
+import com.makefunstuff.herdr.core.api.AgentStatus
 import com.makefunstuff.herdr.core.ssh.HerdrBinaries
 import com.makefunstuff.herdr.core.ssh.HerdrCommands
 import com.makefunstuff.herdr.core.ssh.Machine
 import com.makefunstuff.herdr.core.ssh.SshConnector
 import com.makefunstuff.herdr.data.MachineStore
 import com.makefunstuff.herdr.ui.common.LocalContainer
+import com.makefunstuff.herdr.ui.common.StatusDot
 import com.makefunstuff.herdr.ui.common.copyToClipboard
+import com.makefunstuff.herdr.ui.design.ActionRow
+import com.makefunstuff.herdr.ui.design.BottomActionBar
+import com.makefunstuff.herdr.ui.design.ErrorMessage
+import com.makefunstuff.herdr.ui.design.HerdrMenu
+import com.makefunstuff.herdr.ui.design.HerdrMenuItem
+import com.makefunstuff.herdr.ui.design.HerdrTextField
+import com.makefunstuff.herdr.ui.design.LoadingState
+import com.makefunstuff.herdr.ui.design.QuietCard
+import com.makefunstuff.herdr.ui.design.SectionHeading
+import com.makefunstuff.herdr.ui.manage.ConfirmDialog
+import com.makefunstuff.herdr.ui.theme.color
 import kotlinx.coroutines.launch
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
@@ -92,6 +102,7 @@ fun EditMachineScreen(nav: NavController, id: String?) {
     var pinnedKey by remember { mutableStateOf(existing?.hostKey) }
     var test by remember { mutableStateOf<TestResult?>(null) }
     var confirmDelete by remember { mutableStateOf(false) }
+    var jumpOpen by remember { mutableStateOf(false) }
 
     val parsed = Machine.parseTarget(target)
     val targetError = when {
@@ -149,6 +160,16 @@ fun EditMachineScreen(nav: NavController, id: String?) {
         }
     }
 
+    fun save() {
+        val m = build() ?: return
+        val fp = (test as? TestResult.Ok)?.fingerprint
+        container.machines.upsert(if (m.hostKey == null && fp != null) m.copy(hostKey = fp) else m)
+        nav.popBackStack()
+    }
+
+    val others = machines.filter { it.id != existing?.id }
+    val canBuild = build() != null
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -161,156 +182,181 @@ fun EditMachineScreen(nav: NavController, id: String?) {
                 },
             )
         },
+        bottomBar = {
+            BottomActionBar {
+                OutlinedButton(
+                    onClick = { runTest() },
+                    enabled = canBuild && test != TestResult.Running,
+                    modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+                ) { Text("Test connection") }
+                Button(
+                    onClick = { save() },
+                    enabled = canBuild,
+                    modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+                ) { Text(if (existing == null) "Add" else "Save") }
+            }
+        },
     ) { padding ->
         Column(
-            Modifier.padding(padding).fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            if (confirmDelete && existing != null) {
-                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
-                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Remove ${existing.label} from the app? Its herdr sessions and agents keep running.")
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Button(onClick = {
-                                container.machines.remove(existing.id)
-                                nav.popBackStack()
-                                nav.popBackStack()
-                            }) { Text("Remove") }
-                            TextButton(onClick = { confirmDelete = false }) { Text("Keep") }
-                        }
-                    }
-                }
-            }
-
-            OutlinedTextField(
+            SectionHeading("Where it is", top = 8.dp)
+            HerdrTextField(
                 value = target,
                 onValueChange = { target = it; test = null },
-                label = { Text("SSH target") },
-                placeholder = { Text("you@workbox.tail1234.ts.net") },
-                supportingText = { Text(targetError ?: "user@host, with :port if it isn't 22") },
-                isError = targetError != null,
-                singleLine = true,
+                label = "SSH target",
+                error = targetError,
+                hint = "user@host, with :port if it isn't 22",
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-                modifier = Modifier.fillMaxWidth(),
             )
-            OutlinedTextField(
+            HerdrTextField(
                 value = label,
                 onValueChange = { label = it },
-                label = { Text("Name") },
-                placeholder = { Text(parsed?.second?.substringBefore('.') ?: "workbox") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            OutlinedTextField(
-                value = session,
-                onValueChange = { session = it },
-                label = { Text("herdr session") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
+                label = "Name",
+                hint = "How the app shows it. Empty: \u201c${parsed?.second?.substringBefore('.') ?: "the host name"}\u201d",
             )
 
-            val others = machines.filter { it.id != existing?.id }
+            SectionHeading("herdr there")
+            HerdrTextField(
+                value = session,
+                onValueChange = { session = it },
+                label = "herdr session",
+                hint = "The herdr session the app opens",
+            )
             if (others.isNotEmpty()) {
-                var open by remember { mutableStateOf(false) }
                 Box {
-                    OutlinedTextField(
+                    HerdrTextField(
                         value = others.firstOrNull { it.id == viaId }?.label ?: "Direct",
                         onValueChange = {},
+                        label = "Connect through",
+                        hint = "A jump host for a machine only reachable from there",
                         readOnly = true,
-                        label = { Text("Connect through") },
-                        supportingText = { Text("Use another machine as a jump host when this one is only reachable from there") },
-                        trailingIcon = { Icon(Icons.Filled.ArrowDropDown, null) },
-                        modifier = Modifier.fillMaxWidth(),
                     )
-                    Box(Modifier.matchParentSize().clickable(onClickLabel = "Choose a jump host") { open = true })
+                    Box(Modifier.matchParentSize().clickable(onClickLabel = "Choose a jump host") { jumpOpen = true })
+                    Icon(Icons.Filled.ArrowDropDown, null, modifier = Modifier.align(Alignment.CenterEnd).padding(end = 12.dp))
                 }
-                HerdrMenu(expanded = open, onDismissRequest = { open = false }) {
-                    HerdrMenuItem(text = { Text("Direct") }, onClick = { viaId = null; open = false })
+                HerdrMenu(expanded = jumpOpen, onDismissRequest = { jumpOpen = false }, title = "Connect through") {
+                    HerdrMenuItem(text = { Text("Direct") }, onClick = { viaId = null; jumpOpen = false })
                     others.forEach { o ->
-                        HerdrMenuItem(text = { Text(o.label) }, onClick = { viaId = o.id; open = false })
+                        HerdrMenuItem(
+                            text = { Text(o.label) },
+                            leadingIcon = if (o.id == viaId) ({ Icon(Icons.Filled.Check, null) }) else null,
+                            onClick = { viaId = o.id; jumpOpen = false },
+                        )
                     }
                 }
             }
-
-            OutlinedTextField(
+            HerdrTextField(
                 value = herdrPath,
                 onValueChange = { herdrPath = it },
-                label = { Text("herdr path (optional)") },
-                placeholder = { Text("Found automatically") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
+                label = "herdr path",
+                hint = "Leave empty to find it automatically",
             )
 
-            Card(
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-            ) {
-                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("This phone's SSH key", style = MaterialTheme.typography.titleSmall)
+            when (val t = test) {
+                null -> {}
+                TestResult.Running -> QuietCard {
+                    LoadingState("Connecting to ${parsed?.second ?: "the machine"}")
+                }
+                is TestResult.Failed -> ErrorMessage(t.message, onRetry = { runTest() })
+                is TestResult.Ok -> ConnectedCard(t, pinnedKey, session) { session = it }
+            }
+
+            SectionHeading("This phone's SSH key")
+            QuietCard {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
                         "Add it to ~/.ssh/authorized_keys on the machine.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    Text(publicKey ?: "No SSH key yet. Set one up in Settings.", fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
-                    TextButton(onClick = { publicKey?.let { context.copyToClipboard("public key", it, "Public key copied") } }) {
-                        Text("Copy public key")
+                    Text(
+                        publicKey ?: "No SSH key yet. Set one up in Settings.",
+                        fontFamily = FontFamily.Monospace,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    if (publicKey != null) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.secondaryContainer,
+                            shape = RoundedCornerShape(50),
+                            modifier = Modifier.clickable { context.copyToClipboard("public key", publicKey!!, "Public key copied") },
+                        ) {
+                            Row(
+                                Modifier.padding(horizontal = 14.dp).heightIn(min = 40.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) { Icon(Icons.Filled.Lock, null, modifier = Modifier.size(18.dp)); Text("Copy public key", style = MaterialTheme.typography.labelLarge) }
+                        }
                     }
                 }
             }
 
             pinnedKey?.let { fp ->
-                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
-                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("Trusted host key", style = MaterialTheme.typography.titleSmall)
+                SectionHeading("Trusted host key")
+                QuietCard {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(fp, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
-                        TextButton(onClick = { pinnedKey = null; test = null }) { Text("Forget and re-check") }
-                    }
-                }
-            }
-
-            when (val t = test) {
-                null -> {}
-                TestResult.Running -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    com.makefunstuff.herdr.ui.design.LoadingState("Connecting")
-                }
-                is TestResult.Failed -> com.makefunstuff.herdr.ui.design.ErrorMessage(t.message)
-                is TestResult.Ok -> Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
-                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("Connected", style = MaterialTheme.typography.titleSmall)
-                        if (pinnedKey == null) {
-                            Text("Host key on first connection. Check it matches the machine before saving:", style = MaterialTheme.typography.bodySmall)
-                            Text(t.fingerprint, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
-                        }
-                        if (t.sessions.isEmpty()) {
-                            Text("No herdr sessions are running there yet. Start herdr on the machine once.", style = MaterialTheme.typography.bodySmall)
-                        } else {
-                            Text("herdr sessions", style = MaterialTheme.typography.labelMedium)
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                t.sessions.forEach { s ->
-                                    FilterChip(
-                                        selected = session == s.name,
-                                        onClick = { session = s.name },
-                                        label = { Text(if (s.running) s.name else "${s.name} (stopped)") },
-                                    )
-                                }
-                            }
+                        TextButton(onClick = { pinnedKey = null; test = null }, modifier = Modifier.heightIn(min = 48.dp)) {
+                            Text("Forget and check again")
                         }
                     }
                 }
             }
+            Spacer(Modifier.height(8.dp))
+        }
+    }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = { runTest() }, enabled = build() != null && test != TestResult.Running) { Text("Test connection") }
-                Button(
-                    onClick = {
-                        val m = build() ?: return@Button
-                        val fp = (test as? TestResult.Ok)?.fingerprint
-                        container.machines.upsert(if (m.hostKey == null && fp != null) m.copy(hostKey = fp) else m)
-                        nav.popBackStack()
-                    },
-                    enabled = build() != null,
-                ) { Text("Save") }
+    if (confirmDelete && existing != null) {
+        ConfirmDialog(
+            "Remove ${existing.label}?",
+            "Its herdr sessions and agents keep running. Only this phone forgets how to reach them.",
+            "Remove machine",
+            onDismiss = { confirmDelete = false },
+        ) {
+            confirmDelete = false
+            container.machines.remove(existing.id)
+            nav.popBackStack()
+            nav.popBackStack()
+        }
+    }
+}
+
+/** What the test found: the host key to check, and the herdr sessions it can pick from. */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun ConnectedCard(result: TestResult.Ok, pinnedKey: String?, chosen: String, onChoose: (String) -> Unit) {
+    QuietCard {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                StatusDot(AgentStatus.Idle.color())
+                Text("Connected", style = MaterialTheme.typography.titleMedium)
+            }
+            if (pinnedKey == null) {
+                Text(
+                    "The host key is only seen on the first connection. Check it matches the machine before saving:",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Text(result.fingerprint, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
+            }
+            if (result.sessions.isEmpty()) {
+                Text(
+                    "No herdr sessions are running there yet. Start herdr on the machine once.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                Text("herdr sessions", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    result.sessions.forEach { s ->
+                        FilterChip(
+                            selected = chosen == s.name,
+                            onClick = { onChoose(s.name) },
+                            label = { Text(if (s.running) s.name else "${s.name} (stopped)") },
+                            modifier = Modifier.heightIn(min = 40.dp),
+                        )
+                    }
+                }
             }
         }
     }

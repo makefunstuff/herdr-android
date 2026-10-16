@@ -7,34 +7,44 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -48,8 +58,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
@@ -62,9 +73,12 @@ import com.makefunstuff.herdr.core.board.Said
 import com.makefunstuff.herdr.ui.common.EmptyState
 import com.makefunstuff.herdr.ui.common.LocalContainer
 import com.makefunstuff.herdr.ui.common.Pill
+import com.makefunstuff.herdr.ui.common.StatusDot
 import com.makefunstuff.herdr.ui.common.detail
 import com.makefunstuff.herdr.ui.common.label
 import com.makefunstuff.herdr.ui.common.toast
+import com.makefunstuff.herdr.ui.design.readable
+import com.makefunstuff.herdr.ui.theme.color
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
@@ -177,7 +191,7 @@ fun CoordinatorScreen(nav: NavController, machineId: String) {
                 },
                 actions = {
                     if (coordinatorPane != null) {
-                        TextButton(onClick = { nav.navigate(Routes.terminal(machineId, coordinatorPane)) }) { Text("Terminal") }
+                        TextButton(onClick = { nav.navigate(Routes.terminal(machineId, coordinatorPane)) }, modifier = Modifier.heightIn(min = 48.dp)) { Text("Terminal") }
                     }
                 },
             )
@@ -186,12 +200,18 @@ fun CoordinatorScreen(nav: NavController, machineId: String) {
         Column(Modifier.padding(padding).fillMaxSize().imePadding()) {
             when {
                 !state.online && v == null -> {
-                    Box(Modifier.weight(1f)) { EmptyState(state.status.label(), state.status.detail() ?: "Waiting for ${state.machine.label}…") }
+                    Box(Modifier.weight(1f)) {
+                        ChatEmpty(Icons.Filled.Info, state.status.label(), state.status.detail() ?: "Waiting for ${state.machine.label}…")
+                    }
                 }
                 state.online && state.boardPath == null -> {
-                    Box(Modifier.weight(1f)) { EmptyState("No work board here", "herdr-projects isn't installed on ${state.machine.label}.") }
+                    Box(Modifier.weight(1f)) {
+                        ChatEmpty(Icons.Filled.Info, "No work board here", "herdr-projects isn't installed on ${state.machine.label}.")
+                    }
                 }
-                !loaded -> Box(Modifier.weight(1f)) { EmptyState("Loading…", "Reading the board on ${state.machine.label}.") }
+                !loaded -> Box(Modifier.weight(1f)) {
+                    ChatEmpty(Icons.AutoMirrored.Filled.Send, "Reading the board…", "Finding the Coordinator on ${state.machine.label}.")
+                }
                 else -> {
                     LazyColumn(
                         state = list,
@@ -201,13 +221,21 @@ fun CoordinatorScreen(nav: NavController, machineId: String) {
                     ) {
                         if (lines.isEmpty()) {
                             item {
-                                Text(
-                                    if (v == null) "No Coordinator is set up on ${host.ifEmpty { state.machine.label }}: what you send is added to the board as a task."
-                                    else "Nothing said yet. Tell the Coordinator what needs doing and it turns it into tasks.",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(16.dp),
-                                )
+                                Box(Modifier.fillParentMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+                                    if (v == null) {
+                                        ChatEmpty(
+                                            Icons.AutoMirrored.Filled.Send,
+                                            "No Coordinator here",
+                                            "Nothing on ${host.ifEmpty { state.machine.label }} answers as the Coordinator, so what you send is added to the board as a task.",
+                                        )
+                                    } else {
+                                        ChatEmpty(
+                                            Icons.AutoMirrored.Filled.Send,
+                                            "Nothing said yet",
+                                            "Tell the Coordinator what needs doing and it turns it into tasks.",
+                                        )
+                                    }
+                                }
                             }
                         }
                         itemsIndexed(lines, key = { i, l -> "$i/${l.you}" }) { _, line -> Bubble(line) }
@@ -240,6 +268,28 @@ private fun stateWords(v: CoordinatorView): String = when {
     }
 }
 
+/** The screen's own empty state: an icon, a heading and a sentence, centred in the space. */
+@Composable
+private fun ChatEmpty(icon: ImageVector, title: String, body: String) {
+    Column(
+        Modifier.fillMaxWidth().padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Box(
+            Modifier.size(64.dp).background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) { Icon(icon, null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(30.dp)) }
+        Text(title, style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
+        Text(
+            body,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
+    }
+}
+
 @Composable
 private fun Bubble(line: ChatLine) {
     val mine = line.you
@@ -249,22 +299,28 @@ private fun Bubble(line: ChatLine) {
                 color = if (mine) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
                 contentColor = if (mine) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
                 shape = RoundedCornerShape(
-                    topStart = 18.dp,
-                    topEnd = 18.dp,
-                    bottomStart = if (mine) 18.dp else 4.dp,
-                    bottomEnd = if (mine) 4.dp else 18.dp,
+                    topStart = 20.dp,
+                    topEnd = 20.dp,
+                    bottomStart = if (mine) 20.dp else 6.dp,
+                    bottomEnd = if (mine) 6.dp else 20.dp,
                 ),
-                modifier = Modifier.widthIn(max = 320.dp).alpha(if (line.pending) 0.7f else 1f),
+                modifier = Modifier.widthIn(max = 360.dp).alpha(if (line.pending) 0.72f else 1f),
             ) {
                 MarkdownText(line.text, Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
             }
             if (line.pending) {
-                Text(
-                    "Sent · waiting for the Coordinator",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 2.dp, end = 6.dp),
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(top = 4.dp, end = 6.dp),
+                ) {
+                    StatusDot(MaterialTheme.colorScheme.onSurfaceVariant, size = 6)
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        "Sending · waiting for the Coordinator",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
     }
@@ -277,13 +333,13 @@ private fun Foot(v: CoordinatorView?, tooOld: Boolean, problem: String?, onTermi
         if (v != null && (v.state == "working" || v.state == "starting" || v.queue > 0) && v.error.isEmpty()) Working()
         if (v?.state == "blocked") {
             Notice(
-                "The Coordinator shows a dialog on its screen that waits for your answer: it is in herdr's tab \"Coordinator\".",
+                "The Coordinator shows a dialog on its screen that waits for your answer. It is in herdr's \"Coordinator\" tab.",
                 Color(0xFFE2B64A),
                 action = onTerminal?.let { "Open its terminal" to it },
             )
         }
         if (v != null && !v.readable) {
-            Notice("Its program keeps no conversation the board can read: only its latest message shows here.", MaterialTheme.colorScheme.onSurfaceVariant)
+            Notice("Its program keeps no conversation the board can read, so only its latest message shows here.", MaterialTheme.colorScheme.onSurfaceVariant)
         }
         if (!v?.error.isNullOrEmpty()) Notice("The Coordinator could not be started: ${v?.error}", Color(0xFFEF7B70))
         if (tooOld) Notice("This machine's herdr-projects is too old to send its Coordinator. Update it there (herdr-projects update).", Color(0xFFE2B64A))
@@ -300,12 +356,25 @@ private fun Working() {
     }
 }
 
+/** A plain sentence in a tinted card, in place of a raw error dump. */
 @Composable
-private fun Notice(text: String, color: Color, action: Pair<String, () -> Unit>? = null) {
-    Surface(color = MaterialTheme.colorScheme.surfaceContainer, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
-            Text(text, style = MaterialTheme.typography.bodySmall, color = color)
-            action?.let { (label, go) -> TextButton(onClick = go) { Text(label) } }
+private fun Notice(text: String, tint: Color, action: Pair<String, () -> Unit>? = null) {
+    val scheme = MaterialTheme.colorScheme
+    val accent = readable(tint, scheme.surfaceContainer, scheme.onSurface)
+    Surface(
+        color = accent.copy(alpha = 0.10f),
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, accent.copy(alpha = 0.30f)),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(Modifier.padding(start = 14.dp, end = 6.dp, top = 10.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            StatusDot(accent, size = 8)
+            Spacer(Modifier.width(10.dp))
+            Text(text, style = MaterialTheme.typography.bodySmall, color = scheme.onSurface, modifier = Modifier.weight(1f))
+            if (action != null) {
+                Spacer(Modifier.width(4.dp))
+                TextButton(onClick = action.second, modifier = Modifier.heightIn(min = 48.dp)) { Text(action.first) }
+            }
         }
     }
 }
@@ -320,25 +389,46 @@ private fun Composer(
     onSendAndStart: () -> Unit,
 ) {
     Surface(color = MaterialTheme.colorScheme.surfaceContainerLow) {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(
-                    value = draft,
-                    onValueChange = onDraft,
-                    placeholder = { Text(hint) },
+        Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.Bottom) {
+                Surface(
+                    shape = RoundedCornerShape(22.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainer,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                     modifier = Modifier.weight(1f),
-                    maxLines = 6,
-                    shape = RoundedCornerShape(24.dp),
-                )
-                FilledIconButton(onClick = onSend, enabled = enabled && draft.isNotBlank(), modifier = Modifier.padding(start = 8.dp)) {
-                    Icon(Icons.AutoMirrored.Filled.Send, "Send")
+                ) {
+                    TextField(
+                        value = draft,
+                        onValueChange = onDraft,
+                        enabled = enabled,
+                        placeholder = { Text(hint) },
+                        maxLines = 6,
+                        shape = RoundedCornerShape(22.dp),
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = Color.Transparent,
+                            unfocusedContainerColor = Color.Transparent,
+                            disabledContainerColor = Color.Transparent,
+                            focusedIndicatorColor = Color.Transparent,
+                            unfocusedIndicatorColor = Color.Transparent,
+                            disabledIndicatorColor = Color.Transparent,
+                        ),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                 }
+                Spacer(Modifier.width(8.dp))
+                FilledIconButton(
+                    onClick = onSend,
+                    enabled = enabled && draft.isNotBlank(),
+                    modifier = Modifier.size(48.dp),
+                ) { Icon(Icons.AutoMirrored.Filled.Send, "Send") }
             }
             if (draft.isNotBlank()) {
                 // The board's Tab: what the Coordinator adds from this message gets an agent at once.
-                TextButton(onClick = onSendAndStart, enabled = enabled, modifier = Modifier.align(Alignment.End)) {
-                    Text("Send + start agents")
-                }
+                FilledTonalButton(
+                    onClick = onSendAndStart,
+                    enabled = enabled,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                ) { Text("Send and start agents") }
             }
         }
     }

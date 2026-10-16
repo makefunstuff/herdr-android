@@ -1,9 +1,18 @@
 package com.makefunstuff.herdr.ui.manage
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.heightIn
+import com.makefunstuff.herdr.ui.design.ActionRow
+import com.makefunstuff.herdr.ui.design.DangerButton
+import com.makefunstuff.herdr.ui.design.ErrorMessage
 import com.makefunstuff.herdr.ui.design.HerdrDialog
 import com.makefunstuff.herdr.ui.design.HerdrMenu
 import com.makefunstuff.herdr.ui.design.HerdrMenuItem
 import com.makefunstuff.herdr.ui.design.HerdrSheet
+import com.makefunstuff.herdr.ui.design.HerdrTextField
+import com.makefunstuff.herdr.ui.design.LoadingState
+import com.makefunstuff.herdr.ui.design.PrimaryButton
+import com.makefunstuff.herdr.ui.design.SectionHeading
 import android.content.Context
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -19,6 +28,15 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
@@ -31,6 +49,11 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -96,8 +119,8 @@ fun ManageSheet(
         Column(
             Modifier.fillMaxWidth().padding(bottom = 28.dp),
         ) {
-            Column(Modifier.padding(horizontal = 20.dp, vertical = 2.dp)) {
-                Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 2.dp)) {
+                Text(title, style = MaterialTheme.typography.titleLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 if (subtitle != null) {
                     Text(
                         subtitle,
@@ -122,48 +145,30 @@ fun ManageRow(
     detail: String? = null,
     destructive: Boolean = false,
     enabled: Boolean = true,
+    selected: Boolean = false,
+    chevron: Boolean = false,
+    trailing: (@Composable () -> Unit)? = null,
+    modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
 ) {
-    val tint = when {
-        !enabled -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
-        destructive -> MaterialTheme.colorScheme.error
-        else -> MaterialTheme.colorScheme.onSurface
-    }
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .then(if (onClick != null && enabled) Modifier.clickable(onClick = onClick) else Modifier)
-            .padding(horizontal = 20.dp, vertical = 13.dp),
-    ) {
-        if (icon != null) {
-            Icon(icon, null, tint = tint, modifier = Modifier.size(20.dp))
-            Spacer(Modifier.width(18.dp))
-        }
-        Column(Modifier.weight(1f)) {
-            Text(label, color = tint, style = MaterialTheme.typography.bodyLarge)
-            if (detail != null) {
-                Text(
-                    detail,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        }
-    }
+    ActionRow(
+        title = label,
+        modifier = modifier,
+        icon = icon,
+        detail = detail,
+        destructive = destructive,
+        enabled = enabled,
+        selected = selected,
+        chevron = chevron,
+        onClick = onClick,
+        trailing = trailing,
+    )
 }
 
 /** A heading inside a sheet, to group rows. */
 @Composable
 fun ManageHeading(text: String) {
-    Text(
-        text,
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 10.dp, bottom = 2.dp),
-    )
+    SectionHeading(text, Modifier.padding(horizontal = 16.dp), top = 16.dp)
 }
 
 /** Renames something. An empty box clears the name. */
@@ -181,16 +186,14 @@ fun RenameDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
-            OutlinedTextField(
+            HerdrTextField(
                 value = text,
                 onValueChange = { text = it },
-                singleLine = true,
-                label = { Text(label) },
-                supportingText = if (allowClear) ({ Text("Leave empty to clear the name") }) else null,
-                modifier = Modifier.fillMaxWidth(),
+                label = label,
+                hint = if (allowClear) "Leave empty to clear the name" else null,
             )
         },
-        confirmButton = { TextButton(onClick = { onRename(text.trim()) }) { Text("Save") } },
+        confirmButton = { PrimaryButton("Save") { onRename(text.trim()) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
 }
@@ -207,10 +210,8 @@ fun ConfirmDialog(
     HerdrDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
-        text = { Text(body) },
-        confirmButton = {
-            TextButton(onClick = onConfirm) { Text(confirmLabel, color = MaterialTheme.colorScheme.error) }
-        },
+        text = { Text(body, color = MaterialTheme.colorScheme.onSurfaceVariant) },
+        confirmButton = { DangerButton(confirmLabel, onClick = onConfirm) },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
 }
@@ -245,18 +246,19 @@ fun WorkspaceActionsSheet(
                 manage(context, scope, session, onDismiss) { it.focusWorkspace(ws.workspaceId); null }
             }
         }
-        ManageRow("Rename", icon = Icons.Filled.Edit) { rename = true }
+        ManageRow("Rename", icon = Icons.Filled.Edit, chevron = true) { rename = true }
         ManageRow(
             "Metadata",
             icon = Icons.Filled.Info,
             detail = meta.entries.joinToString(" · ") { "${it.key}: ${it.value}" }.ifBlank { "Nothing reported" },
             enabled = meta.isNotEmpty(),
+            chevron = true,
         ) { metadata = true }
         ManageHeading("Reorder")
-        ManageRow("Move up", detail = "Earlier in the workspace list", enabled = up != null) {
+        ManageRow("Move up", icon = Icons.Filled.KeyboardArrowUp, detail = "Earlier in the workspace list", enabled = up != null) {
             manage(context, scope, session, onDismiss) { it.moveWorkspace(ws.workspaceId, up!!); null }
         }
-        ManageRow("Move down", detail = "Later in the workspace list", enabled = down != null) {
+        ManageRow("Move down", icon = Icons.Filled.KeyboardArrowDown, detail = "Later in the workspace list", enabled = down != null) {
             manage(context, scope, session, onDismiss) { it.moveWorkspace(ws.workspaceId, down!!); null }
         }
         ManageHeading("Danger")
@@ -320,13 +322,13 @@ fun TabActionsSheet(
                 manage(context, scope, session, onDismiss) { it.focusTab(tab.tabId); null }
             }
         }
-        ManageRow("Rename", icon = Icons.Filled.Edit) { rename = true }
+        ManageRow("Rename", icon = Icons.Filled.Edit, chevron = true) { rename = true }
         val canClose = order.size > 1
         ManageHeading("Reorder")
-        ManageRow("Move left", enabled = up != null) {
+        ManageRow("Move left", icon = Icons.AutoMirrored.Filled.KeyboardArrowLeft, enabled = up != null) {
             manage(context, scope, session, onDismiss) { it.moveTab(tab.tabId, up!!); null }
         }
-        ManageRow("Move right", enabled = down != null) {
+        ManageRow("Move right", icon = Icons.AutoMirrored.Filled.KeyboardArrowRight, enabled = down != null) {
             manage(context, scope, session, onDismiss) { it.moveTab(tab.tabId, down!!); null }
         }
         ManageHeading("Danger")
@@ -401,47 +403,48 @@ fun PaneActionsSheet(
                         manage(context, scope, session, onDismiss) { it.focusPane(pane.paneId); null }
                     }
                 }
-                ManageRow("Rename", icon = Icons.Filled.Edit) { rename = true }
+                ManageRow("Rename", icon = Icons.Filled.Edit, chevron = true) { rename = true }
                 ManageRow(
                     if (zoomed) "Unzoom" else "Zoom to fit",
+                    icon = if (zoomed) Icons.Filled.Close else Icons.Filled.Add,
                     detail = if (zoomed) "Show the whole layout again" else "Fill the tab with this pane",
                     enabled = open,
                 ) {
                     manage(context, scope, session, onDismiss) { it.zoomPane(pane.paneId).refusal }
                 }
-                ManageRow("What's running", icon = Icons.Filled.Info) { screen = PaneScreen.Process }
+                ManageRow("What's running", icon = Icons.Filled.Info, chevron = true) { screen = PaneScreen.Process }
                 ManageRow("Clear screen and scrollback", icon = Icons.Filled.Clear) { confirmClear = true }
                 ManageHeading("Layout")
-                ManageRow("Move to another tab or workspace", enabled = true) { screen = PaneScreen.Move }
-                ManageRow("Swap with another pane", enabled = open) { screen = PaneScreen.Swap }
+                ManageRow("Move to another tab or workspace", icon = Icons.AutoMirrored.Filled.ArrowForward, chevron = true) { screen = PaneScreen.Move }
+                ManageRow("Swap with another pane", icon = Icons.Filled.Refresh, enabled = open, chevron = true) { screen = PaneScreen.Swap }
                 if (open) {
-                    ManageRow("Focus left", enabled = true) { manage(context, scope, session, onDismiss) { it.focusDirection(pane.paneId, "left").refusal } }
-                    ManageRow("Focus right", enabled = true) { manage(context, scope, session, onDismiss) { it.focusDirection(pane.paneId, "right").refusal } }
-                    ManageRow("Focus up", enabled = true) { manage(context, scope, session, onDismiss) { it.focusDirection(pane.paneId, "up").refusal } }
-                    ManageRow("Focus down", enabled = true) { manage(context, scope, session, onDismiss) { it.focusDirection(pane.paneId, "down").refusal } }
+                    ManageRow("Focus left", icon = Icons.AutoMirrored.Filled.KeyboardArrowLeft) { manage(context, scope, session, onDismiss) { it.focusDirection(pane.paneId, "left").refusal } }
+                    ManageRow("Focus right", icon = Icons.AutoMirrored.Filled.KeyboardArrowRight) { manage(context, scope, session, onDismiss) { it.focusDirection(pane.paneId, "right").refusal } }
+                    ManageRow("Focus up", icon = Icons.Filled.KeyboardArrowUp) { manage(context, scope, session, onDismiss) { it.focusDirection(pane.paneId, "up").refusal } }
+                    ManageRow("Focus down", icon = Icons.Filled.KeyboardArrowDown) { manage(context, scope, session, onDismiss) { it.focusDirection(pane.paneId, "down").refusal } }
                 }
                 ManageHeading("Danger")
                 ManageRow("Close pane", icon = Icons.Filled.Delete, destructive = true) { confirmClose = true }
             }
 
             PaneScreen.Move -> {
-                ManageRow("Back", icon = Icons.Filled.Close) { screen = PaneScreen.Actions }
+                ManageRow("Back", icon = Icons.AutoMirrored.Filled.ArrowBack) { screen = PaneScreen.Actions }
                 ManageHeading("Into a tab")
                 if (tabs.isEmpty()) ManageRow("No other tabs", enabled = false)
                 tabs.forEach { t ->
-                    ManageRow(t.label.ifBlank { t.tabId }, detail = "Split into this tab") {
+                    ManageRow(t.label.ifBlank { t.tabId }, icon = Icons.AutoMirrored.Filled.ArrowForward, detail = "Split into this tab") {
                         manage(context, scope, session, onDismiss) {
                             it.movePane(pane.paneId, PaneDestination.Tab(t.tabId)).refusal
                         }
                     }
                 }
                 ManageHeading("Into something new")
-                ManageRow("A new tab here") {
+                ManageRow("A new tab here", icon = Icons.Filled.Add) {
                     manage(context, scope, session, onDismiss) {
                         it.movePane(pane.paneId, PaneDestination.NewTab(workspaceId = pane.workspaceId)).refusal
                     }
                 }
-                ManageRow("A new workspace") {
+                ManageRow("A new workspace", icon = Icons.Filled.Add) {
                     manage(context, scope, session, onDismiss) {
                         it.movePane(pane.paneId, PaneDestination.NewWorkspace()).refusal
                     }
@@ -449,23 +452,23 @@ fun PaneActionsSheet(
             }
 
             PaneScreen.Swap -> {
-                ManageRow("Back", icon = Icons.Filled.Close) { screen = PaneScreen.Actions }
+                ManageRow("Back", icon = Icons.AutoMirrored.Filled.ArrowBack) { screen = PaneScreen.Actions }
                 ManageHeading("With the pane next to it")
                 listOf("left", "right", "up", "down").forEach { direction ->
-                    ManageRow("Swap $direction") {
+                    ManageRow("Swap $direction", icon = arrowFor(direction)) {
                         manage(context, scope, session, onDismiss) { it.swapPane(pane.paneId, direction = direction).refusal }
                     }
                 }
                 ManageHeading("With a pane in this tab")
                 siblings.filter { it.paneId != pane.paneId }.forEach { other ->
-                    ManageRow(other.displayName) {
+                    ManageRow(other.displayName, icon = Icons.Filled.Refresh) {
                         manage(context, scope, session, onDismiss) { it.swapPane(pane.paneId, targetPaneId = other.paneId).refusal }
                     }
                 }
             }
 
             PaneScreen.Process -> {
-                ManageRow("Back", icon = Icons.Filled.Close) { screen = PaneScreen.Actions }
+                ManageRow("Back", icon = Icons.AutoMirrored.Filled.ArrowBack) { screen = PaneScreen.Actions }
                 ProcessInfo(session, pane)
             }
         }
@@ -517,16 +520,9 @@ private fun ProcessInfo(session: HostSession, pane: PaneInfo) {
         loading = false
     }
     if (loading) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp),
-        ) {
-            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-            Spacer(Modifier.width(14.dp))
-            Text("Reading the pane…", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
+        LoadingState("Reading the pane")
     } else if (error != null) {
-        ManageRow("Couldn't read it", icon = Icons.Filled.Info, detail = error)
+        Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) { ErrorMessage(error!!) }
     } else {
         val i = info!!
         ManageRow("Shell", detail = "pid ${i.shellPid ?: "?"}" + (i.tty?.let { " · $it" } ?: ""))
@@ -565,16 +561,16 @@ fun AgentActionsSheet(
 
     ManageSheet(label, agent?.let { "${it.statusLabel} · ${it.agent ?: "terminal"}" } ?: "No agent in this pane", onDismiss) {
         if (target != null) {
-            ManageRow("Rename agent", icon = Icons.Filled.Edit) { rename = true }
+            ManageRow("Rename agent", icon = Icons.Filled.Edit, chevron = true) { rename = true }
             ManageRow("Focus in herdr", icon = Icons.Filled.Check) {
                 manage(context, scope, session, onDismiss) { it.focusAgent(target); null }
             }
-            ManageRow("Why this state?", icon = Icons.Filled.Info) { explain = true }
-            ManageRow("Details", icon = Icons.Filled.Info) { details = true }
+            ManageRow("Why this state?", icon = Icons.Filled.Info, chevron = true) { explain = true }
+            ManageRow("Details", icon = Icons.Filled.Info, chevron = true) { details = true }
         }
-        if (onTerminal != null) ManageRow("Open terminal", icon = Icons.Filled.Check) { onTerminal() }
+        if (onTerminal != null) ManageRow("Open terminal", icon = Icons.AutoMirrored.Filled.ArrowForward, chevron = true) { onTerminal() }
         if (onToggleKeys != null) {
-            ManageRow(if (showKeys) "Hide keys" else "Show keys") { onToggleKeys() }
+            ManageRow(if (showKeys) "Hide keys" else "Show keys", icon = Icons.Filled.Settings) { onToggleKeys() }
         }
         if (onKey != null) {
             ManageHeading("Send keys")
@@ -648,12 +644,12 @@ private fun ExplainSheet(session: HostSession, target: String, onDismiss: () -> 
     DetailSheet("Why this state?", onDismiss = onDismiss) {
         when {
             loading -> ManageRow("Asking herdr…")
-            error != null -> ManageRow("Couldn't read it", detail = error)
+            error != null -> Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) { ErrorMessage(error!!) }
             else -> {
                 Text(
                     summary.orEmpty(),
                     style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp),
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
                 )
                 extra.forEach { (k, v) -> ManageRow(k, detail = v) }
             }
@@ -678,20 +674,36 @@ fun NotifySheet(session: HostSession, machineLabel: String, onDismiss: () -> Uni
     var sound by remember { mutableStateOf("none") }
 
     ManageSheet("Notify herdr on $machineLabel", "Pops up on the desktop running herdr", onDismiss) {
-        Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            OutlinedTextField(value = title, onValueChange = { title = it }, singleLine = true, label = { Text("Title") }, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(value = body, onValueChange = { body = it }, label = { Text("Body") }, maxLines = 3, modifier = Modifier.fillMaxWidth())
+        Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            HerdrTextField(value = title, onValueChange = { title = it }, label = "Title")
+            HerdrTextField(value = body, onValueChange = { body = it }, label = "Body", singleLine = false)
         }
         ManageHeading("Sound")
-        ManageRow("None", icon = if (sound == "none") Icons.Filled.Check else null) { sound = "none" }
-        ManageRow("Done", icon = if (sound == "done") Icons.Filled.Check else null) { sound = "done" }
-        ManageRow("Request", icon = if (sound == "request") Icons.Filled.Check else null) { sound = "request" }
-        ManageRow("Send", icon = Icons.Filled.Notifications, enabled = title.isNotBlank()) {
-            manage(context, scope, session, onDismiss) {
-                val result: NotificationResult = it.showNotification(title, body, sound)
-                result.message
-            }
+        listOf("none" to "None", "done" to "Done", "request" to "Request").forEach { (value, name) ->
+            ManageRow(
+                name,
+                trailing = { RadioButton(selected = sound == value, onClick = null) },
+                modifier = Modifier.semantics { selected = sound == value; role = Role.RadioButton },
+            ) { sound = value }
         }
+        Spacer(Modifier.height(14.dp))
+        PrimaryButton(
+            "Send notification",
+            onClick = {
+                manage(context, scope, session, onDismiss) {
+                    val result: NotificationResult = it.showNotification(title, body, sound)
+                    result.message
+                }
+            },
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            enabled = title.isNotBlank(),
+        )
     }
 }
 
+private fun arrowFor(direction: String): ImageVector = when (direction) {
+    "left" -> Icons.AutoMirrored.Filled.KeyboardArrowLeft
+    "right" -> Icons.AutoMirrored.Filled.KeyboardArrowRight
+    "up" -> Icons.Filled.KeyboardArrowUp
+    else -> Icons.Filled.KeyboardArrowDown
+}

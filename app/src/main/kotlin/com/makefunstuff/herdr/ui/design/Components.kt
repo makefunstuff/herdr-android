@@ -16,9 +16,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -30,18 +32,24 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.input.VisualTransformation
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -55,8 +63,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -92,7 +102,7 @@ private fun Scrim(onDismiss: () -> Unit, align: Alignment, content: @Composable 
 private val NoClick: Modifier
     @Composable get() = Modifier.clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {}
 
-private val FullScreen = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
+private val FullScreen = DialogProperties(usePlatformDefaultWidth = false)
 
 /** Centered dialog; only for confirmations and short forms. */
 @Composable
@@ -137,30 +147,31 @@ fun HerdrDialog(
     }
 }
 
-/** Bottom sheet with a drag handle; scrolls when long. */
+/** Bottom sheet with a drag handle; scrolls when long, and drags away to dismiss. */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HerdrSheet(
     onDismissRequest: () -> Unit,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    Dialog(onDismissRequest = onDismissRequest, properties = FullScreen) {
-        Scrim(onDismissRequest, Alignment.BottomCenter) {
-            Surface(
-                color = MaterialTheme.colorScheme.surfaceContainerLow,
-                shape = HerdrShapes.Sheet,
-                tonalElevation = 3.dp,
-                modifier = Modifier.fillMaxWidth().widthIn(max = 640.dp).heightIn(max = 680.dp).imePadding().then(NoClick),
-            ) {
-                Column(Modifier.navigationBarsPadding()) {
-                    Box(
-                        Modifier.align(Alignment.CenterHorizontally).padding(top = 10.dp, bottom = 6.dp)
-                            .width(36.dp).size(width = 36.dp, height = 4.dp).clip(RoundedCornerShape(2.dp))
-                            .background(MaterialTheme.colorScheme.outlineVariant),
-                    )
-                    Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()), content = content)
-                    Spacer(Modifier.size(8.dp))
-                }
-            }
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ModalBottomSheet(
+        onDismissRequest = onDismissRequest,
+        sheetState = sheetState,
+        shape = HerdrShapes.Sheet,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        scrimColor = Color.Black.copy(alpha = 0.5f),
+        dragHandle = {
+            Box(
+                Modifier.padding(top = 10.dp, bottom = 6.dp).width(36.dp).height(4.dp)
+                    .clip(RoundedCornerShape(2.dp)).background(MaterialTheme.colorScheme.outlineVariant),
+            )
+        },
+    ) {
+        Box {
+            Column(content = content)
+            ToastHost(Modifier.matchParentSize())
         }
     }
 }
@@ -235,12 +246,12 @@ object Toasts {
 
 /** Shows the current toast at the top of whatever it is placed in; dismisses itself. */
 @Composable
-fun ToastHost() {
+fun ToastHost(modifier: Modifier = Modifier.fillMaxSize()) {
     val m = Toasts.current
     LaunchedEffect(m?.id) {
         if (m != null) { kotlinx.coroutines.delay(if (m.error) 5000 else 3000); if (Toasts.current?.id == m.id) Toasts.dismiss() }
     }
-    Box(Modifier.fillMaxSize().statusBarsPadding().padding(12.dp), contentAlignment = Alignment.TopCenter) {
+    Box(modifier.statusBarsPadding().padding(12.dp), contentAlignment = Alignment.TopCenter) {
         AnimatedVisibility(m != null, enter = fadeIn() + slideInVertically { -it }, exit = fadeOut() + slideOutVertically { -it }) {
             val last = remember { mutableStateOf(m) }
             if (m != null) last.value = m
@@ -268,11 +279,12 @@ fun HerdrTextField(
     error: String? = null,
     hint: String? = null,
     singleLine: Boolean = true,
+    readOnly: Boolean = false,
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
     visualTransformation: VisualTransformation = VisualTransformation.None,
 ) {
     OutlinedTextField(
-        value = value, onValueChange = onValueChange, label = { Text(label) }, singleLine = singleLine,
+        value = value, onValueChange = onValueChange, label = { Text(label) }, singleLine = singleLine, readOnly = readOnly,
         isError = error != null, shape = RoundedCornerShape(14.dp),
         supportingText = (error ?: hint)?.let { { Text(it) } },
         keyboardOptions = keyboardOptions, visualTransformation = visualTransformation,
@@ -338,3 +350,129 @@ fun BarTitle(title: String, subtitle: String? = null) {
 /** This accent colour as text on the current surface (≥4.5:1). */
 @Composable
 fun Color.readableText(): Color = readable(this, MaterialTheme.colorScheme.surface, MaterialTheme.colorScheme.onSurface)
+
+/** A muted label that names a group of fields or rows, over the group. */
+@Composable
+fun SectionHeading(text: String, modifier: Modifier = Modifier, top: Dp = 18.dp) {
+    Text(
+        text,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = modifier.fillMaxWidth().padding(top = top, bottom = 6.dp).semantics { heading() },
+    )
+}
+
+/** A quiet card that holds a form or a group of rows on its own surface, instead of the screen's ground. */
+@Composable
+fun QuietCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+    Surface(color = MaterialTheme.colorScheme.surfaceContainer, shape = RoundedCornerShape(18.dp), modifier = modifier.fillMaxWidth()) {
+        Column(content = content)
+    }
+}
+
+/**
+ * One tappable row: a tinted icon tile, a title, an optional second line, an optional trailing
+ * chevron. The management sheets and the forms share it, so every action looks and measures alike.
+ * 48dp tall at the least, and the whole row is the target, thumb-reachable at the sheet's edge.
+ */
+@Composable
+fun ActionRow(
+    title: String,
+    modifier: Modifier = Modifier,
+    detail: String? = null,
+    icon: ImageVector? = null,
+    destructive: Boolean = false,
+    selected: Boolean = false,
+    enabled: Boolean = true,
+    chevron: Boolean = false,
+    iconTint: Color? = null,
+    onClick: (() -> Unit)? = null,
+    trailing: (@Composable () -> Unit)? = null,
+) {
+    val scheme = MaterialTheme.colorScheme
+    val accent = when {
+        !enabled -> scheme.onSurfaceVariant.copy(alpha = 0.5f)
+        destructive -> readable(scheme.error, scheme.surfaceContainer, scheme.onSurface)
+        selected -> scheme.primary
+        iconTint != null -> readable(iconTint, scheme.surfaceContainer, scheme.onSurface)
+        else -> scheme.onSurfaceVariant
+    }
+    val titleColor = when {
+        !enabled -> scheme.onSurfaceVariant.copy(alpha = 0.5f)
+        destructive -> accent
+        else -> scheme.onSurface
+    }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = 56.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .then(if (onClick != null && enabled) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+    ) {
+        if (icon != null) {
+            Box(
+                Modifier.size(40.dp).background(
+                    if (selected) scheme.primaryContainer else accent.copy(alpha = 0.14f),
+                    RoundedCornerShape(12.dp),
+                ),
+                contentAlignment = Alignment.Center,
+            ) { Icon(icon, null, tint = if (selected) scheme.onPrimaryContainer else accent, modifier = Modifier.size(21.dp)) }
+            Spacer(Modifier.width(14.dp))
+        }
+        Column(Modifier.weight(1f)) {
+            Text(title, color = titleColor, style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+            if (detail != null) Text(
+                detail,
+                style = MaterialTheme.typography.bodySmall,
+                color = scheme.onSurfaceVariant.copy(alpha = if (enabled) 1f else 0.5f),
+                maxLines = 2,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            )
+        }
+        if (trailing != null) {
+            Spacer(Modifier.width(10.dp))
+            trailing()
+        } else if (chevron) {
+            Spacer(Modifier.width(6.dp))
+            Icon(
+                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                null,
+                tint = scheme.onSurfaceVariant,
+                modifier = Modifier.size(22.dp),
+            )
+        }
+    }
+}
+
+/** The bar of primary actions a form keeps at the bottom, in thumb reach. */
+@Composable
+fun BottomActionBar(modifier: Modifier = Modifier, content: @Composable RowScope.() -> Unit) {
+    Surface(color = MaterialTheme.colorScheme.surfaceContainerLow, tonalElevation = 3.dp, modifier = modifier.fillMaxWidth()) {
+        Row(
+            Modifier.navigationBarsPadding().imePadding().padding(horizontal = 16.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            content = content,
+        )
+    }
+}
+
+/** A filled button in the sheet/dialog palette, for the one action that matters. */
+@Composable
+fun PrimaryButton(text: String, modifier: Modifier = Modifier, enabled: Boolean = true, onClick: () -> Unit) {
+    Button(onClick = onClick, enabled = enabled, modifier = modifier.heightIn(min = 48.dp)) { Text(text) }
+}
+
+/** A destructive confirmation button: the error colour, readable text on it. */
+@Composable
+fun DangerButton(text: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    Button(
+        onClick = onClick,
+        shape = MaterialTheme.shapes.medium,
+        colors = ButtonDefaults.buttonColors(containerColor = scheme.error, contentColor = scheme.onError),
+        modifier = modifier.heightIn(min = 48.dp),
+    ) { Text(text) }
+}
