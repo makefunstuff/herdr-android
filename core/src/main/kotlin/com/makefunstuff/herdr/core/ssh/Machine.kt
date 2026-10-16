@@ -115,6 +115,21 @@ object HerdrCommands {
     fun sessionList(machine: Machine) = herdrNoSession(machine, "session", "list", "--json")
     fun machineList(machine: Machine) = herdrNoSession(machine, "machine", "list", "--json")
 
+    fun machineAdd(machine: Machine, sshTarget: String, label: String?, session: String?): String {
+        val args = mutableListOf("machine", "add")
+        if (!label.isNullOrBlank()) args += listOf("--label", label)
+        if (!session.isNullOrBlank()) args += listOf("--remote-session", session)
+        args += sshTarget
+        return herdrNoSession(machine, *args.toTypedArray())
+    }
+
+    fun machineRemove(machine: Machine, profileId: String) = herdrNoSession(machine, "machine", "remove", profileId)
+    fun version(machine: Machine) = herdrNoSession(machine, "--version")
+    fun channelShow(machine: Machine) = herdrNoSession(machine, "channel", "show")
+    fun channelSet(machine: Machine, channel: String) = herdrNoSession(machine, "channel", "set", channel)
+    fun update(machine: Machine, handoff: Boolean) =
+        if (handoff) herdrNoSession(machine, "update", "--handoff") else herdrNoSession(machine, "update")
+
     fun terminalControl(machine: Machine, target: String, cols: Int, rows: Int, takeover: Boolean = true): String {
         val args = mutableListOf("terminal", "session", "control", target)
         if (takeover) args += "--takeover"

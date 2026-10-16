@@ -35,6 +35,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.makefunstuff.herdr.core.api.AgentStatus
 import com.makefunstuff.herdr.data.IdentityStore
+import com.makefunstuff.herdr.ui.admin.AdminScreen
 import com.makefunstuff.herdr.ui.agents.AgentScreen
 import com.makefunstuff.herdr.ui.agents.AgentsScreen
 import com.makefunstuff.herdr.ui.common.LocalContainer
@@ -72,6 +73,7 @@ object Routes {
     const val TERMINAL = "terminal/{mid}/{pane}"
     const val LAYOUT = "layout/{mid}/{pane}"
     const val COORDINATOR = "coordinator/{mid}"
+    const val ADMIN = "admin/{mid}?tab={tab}"
     const val WORKTREES = "worktrees/{mid}?ws={ws}"
 
     fun machine(id: String) = "machine/$id"
@@ -80,6 +82,7 @@ object Routes {
     fun terminal(mid: String, pane: String) = "terminal/$mid/${Uri.encode(pane)}"
     fun layout(mid: String, pane: String) = "layout/$mid/${Uri.encode(pane)}"
     fun coordinator(mid: String) = "coordinator/$mid"
+    fun admin(mid: String, tab: Int = 0) = "admin/$mid?tab=$tab"
     fun worktrees(mid: String, workspaceId: String? = null) =
         if (workspaceId == null) "worktrees/$mid" else "worktrees/$mid?ws=${Uri.encode(workspaceId)}"
 }
@@ -142,6 +145,9 @@ private fun AppNav() {
             composable(Routes.EDIT) { EditMachineScreen(nav, it.arguments?.getString("id")) }
             composable(Routes.AGENT) {
                 AgentScreen(nav, it.arguments?.getString("mid").orEmpty(), Uri.decode(it.arguments?.getString("pane").orEmpty()))
+            }
+            composable(Routes.ADMIN) {
+                AdminScreen(nav, it.arguments?.getString("mid").orEmpty(), it.arguments?.getString("tab")?.toIntOrNull() ?: 0)
             }
             composable(Routes.WORKTREES) {
                 WorktreesScreen(nav, it.arguments?.getString("mid").orEmpty(), it.arguments?.getString("ws")?.let(Uri::decode))

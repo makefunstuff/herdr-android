@@ -37,6 +37,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -146,6 +147,11 @@ fun MachineScreen(nav: NavController, machineId: String) {
                     IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "More") }
                     DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                         DropdownMenuItem(text = { Text("Notify herdr…") }, onClick = { menu = false; showNotify = true })
+                        DropdownMenuItem(text = { Text("Plugins") }, onClick = { menu = false; nav.navigate(Routes.admin(machineId, 0)) })
+                        DropdownMenuItem(text = { Text("Integrations") }, onClick = { menu = false; nav.navigate(Routes.admin(machineId, 1)) })
+                        DropdownMenuItem(text = { Text("Server and updates") }, onClick = { menu = false; nav.navigate(Routes.admin(machineId, 2)) })
+                        DropdownMenuItem(text = { Text("herdr's saved machines") }, onClick = { menu = false; nav.navigate(Routes.admin(machineId, 3)) })
+                        HorizontalDivider()
                         DropdownMenuItem(text = { Text("Import herdr machines from here") }, onClick = {
                             menu = false
                             scope.launch {

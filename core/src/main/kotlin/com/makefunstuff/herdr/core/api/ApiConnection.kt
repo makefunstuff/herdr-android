@@ -36,6 +36,9 @@ class HerdrApiException(val code: String, val detail: String) : IOException(plai
     }
 }
 
+/** An error as a person should read it: herdr's own message as a sentence, without its code. */
+fun Throwable.plainMessage(): String = message?.takeIf { it.isNotBlank() } ?: javaClass.simpleName
+
 /** Something that can make one herdr API request. */
 interface ApiCaller {
     suspend fun call(method: String, params: JsonObject = JsonObject(emptyMap()), timeoutMs: Long = 20_000): JsonObject
