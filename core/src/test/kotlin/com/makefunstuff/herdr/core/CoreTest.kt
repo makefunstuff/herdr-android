@@ -9,6 +9,9 @@ import com.makefunstuff.herdr.core.keys.KeyGen
 import com.makefunstuff.herdr.core.keys.KeyImport
 import com.makefunstuff.herdr.core.keys.OpenSshKeyFile
 import com.makefunstuff.herdr.core.keys.PassphraseException
+import com.makefunstuff.herdr.core.ssh.HerdrBinaries
+import com.makefunstuff.herdr.core.ssh.HerdrBinary
+import com.makefunstuff.herdr.core.ssh.HerdrChoice
 import com.makefunstuff.herdr.core.ssh.HerdrCommands
 import com.makefunstuff.herdr.core.ssh.Machine
 import com.makefunstuff.herdr.core.terminal.Cell
@@ -214,14 +217,114 @@ class MachineTest {
         val out = ProcessBuilder("sh", "-c", cmd).redirectErrorStream(true).start().inputStream.readBytes().toString(Charsets.UTF_8)
         assertEquals("[--session][my session][terminal][session][control][w1:p1][--takeover][--cols][40][--rows][20]", out)
 
-        val missing = m.copy(herdrPath = "/nonexistent/herdr")
-        val pb = ProcessBuilder("sh", "-c", HerdrCommands.apiBridgeCheck(missing))
-        pb.environment()["PATH"] = "/usr/bin:/bin"
-        pb.environment()["HOME"] = dir.absolutePath
-        val p = pb.start()
-        val code = p.waitFor()
-        assertEquals(HerdrCommands.NOT_FOUND_EXIT, code)
-        assertTrue(p.errorStream.readBytes().toString(Charsets.UTF_8).contains(HerdrCommands.NOT_FOUND_MESSAGE))
+        // With no herdr anywhere the search gives up with its own exit code. The fixed install places
+        // can't be hidden from the test, so it only checks that on machines without them.
+        val fixed = listOf("/opt/homebrew/bin/herdr", "/usr/local/bin/herdr", "/run/current-system/sw/bin/herdr", "/home/linuxbrew/.linuxbrew/bin/herdr")
+        if (fixed.none { File(it).canExecute() }) {
+            val missing = m.copy(herdrPath = "/nonexistent/herdr")
+            val pb = ProcessBuilder("/bin/sh", "-c", HerdrCommands.apiBridgeCheck(missing))
+            // A PATH with nothing but sh on it.
+            val bare = File(dir, "bare").apply { mkdirs() }
+            java.nio.file.Files.createSymbolicLink(File(bare, "sh").toPath(), File("/bin/sh").toPath())
+            pb.environment()["PATH"] = bare.absolutePath
+            pb.environment()["HOME"] = dir.absolutePath
+            pb.environment()["USER"] = "nobody-herdr-test"
+            val p = pb.start()
+            val code = p.waitFor()
+            assertEquals(HerdrCommands.NOT_FOUND_EXIT, code)
+            assertTrue(p.errorStream.readBytes().toString(Charsets.UTF_8).contains(HerdrCommands.NOT_FOUND_MESSAGE))
+        }
+    }
+
+    @Test
+    fun probeListsEveryHerdrWithItsVersion() {
+        val dir = createTempDir()
+        fun fake(path: String, version: String) = File(dir, path).apply {
+            parentFile.mkdirs()
+            writeText("#!/bin/sh\necho 'herdr $version'\n")
+            setExecutable(true)
+        }
+        val home = fake("home/.local/bin/herdr", "0.9.5")
+        val old = fake("usr/bin/herdr", "0.8.2")
+        val pinned = fake("opt/herdr", "0.9.4")
+        val m = Machine("id", "box", "h", user = "u")
+        fun probe(machine: Machine): List<HerdrBinary> {
+            val pb = ProcessBuilder("/bin/sh", "-c", HerdrCommands.probe(machine))
+            pb.environment()["PATH"] = "${old.parent}:/usr/bin:/bin"
+            pb.environment()["HOME"] = File(dir, "home").absolutePath
+            pb.environment()["SHELL"] = "/bin/sh"
+            val p = pb.start()
+            val out = p.inputStream.readBytes().toString(Charsets.UTF_8)
+            assertEquals(0, p.waitFor())
+            return HerdrBinaries.parse(out)
+        }
+        val found = probe(m)
+        // A herdr server running on the test machine shows up too; only the fakes are certain.
+        assertTrue(HerdrBinary(home.absolutePath, "0.9.5", "home") in found, found.toString())
+        assertEquals("0.8.2", found.firstOrNull { it.path == old.absolutePath }?.version, found.toString())
+        assertTrue(found.indexOfFirst { it.path == home.absolutePath } < found.indexOfFirst { it.path == old.absolutePath })
+
+        val explicit = probe(m.copy(herdrPath = pinned.absolutePath))
+        assertEquals(HerdrBinary(pinned.absolutePath, "0.9.4", "explicit"), explicit.first())
+    }
+
+    @Test
+    fun probeFindsNamedServerOutsideTheInstallPaths() {
+        // Give a real process a herdr executable and named-server command line, without needing
+        // an installed herdr or touching any session on the test machine.
+        if (!File("/proc/self/exe").exists() || !File("/bin/bash").canExecute()) return
+        val dir = kotlin.io.path.createTempDirectory("herdr-named-server").toFile()
+        val binary = File(dir, "custom/herdr").apply {
+            parentFile.mkdirs()
+            File("/bin/sleep").copyTo(this)
+            setExecutable(true)
+        }
+        val process = ProcessBuilder(
+            "/bin/bash", "-c", "exec -a \"\$1 --session named-review server\" \"\$1\" 30", "sh", binary.path,
+        ).start()
+        try {
+            val machine = Machine("id", "box", "h", user = "u", session = "named-review")
+            var found = emptyList<HerdrBinary>()
+            val deadline = System.nanoTime() + 5_000_000_000L
+            do {
+                val probe = ProcessBuilder("/bin/sh", "-c", HerdrCommands.probe(machine)).start()
+                found = HerdrBinaries.parse(probe.inputStream.readBytes().toString(Charsets.UTF_8))
+                assertEquals(0, probe.waitFor())
+                if (found.any { it.path == binary.path }) break
+                Thread.sleep(20)
+            } while (System.nanoTime() < deadline)
+            assertEquals("server", found.firstOrNull { it.path == binary.path }?.source, found.toString())
+        } finally {
+            process.destroyForcibly().waitFor()
+            dir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun choosesTheHerdrMatchingTheServer() {
+        val out = listOf(
+            "motd noise",
+            "path\t/usr/bin/herdr\therdr 0.8.2",
+            "home\t/home/u/.local/bin/herdr\therdr 0.9.5",
+            "other\t/usr/local/bin/herdr\t",
+        ).joinToString("\n")
+        val found = HerdrBinaries.parse(out)
+        assertEquals(listOf("/usr/bin/herdr", "/home/u/.local/bin/herdr", "/usr/local/bin/herdr"), found.map { it.path })
+        assertEquals(null, found[2].version)
+        // Before the server answers: the first found. After: the one with the server's version.
+        assertEquals("/usr/bin/herdr", HerdrBinaries.choose(found, null)?.path)
+        assertEquals("/home/u/.local/bin/herdr", HerdrBinaries.choose(found, "0.9.5")?.path)
+        // No match: keep the best guess, and say so.
+        val none = HerdrChoice(HerdrBinaries.choose(found, "1.0.0")!!, "1.0.0", found)
+        assertTrue(none.mismatch)
+        val why = none.explain("box")
+        assertTrue("/usr/bin/herdr (0.8.2)" in why && "1.0.0" in why && "/home/u/.local/bin/herdr (0.9.5)" in why, why)
+        // The setting wins, even over a version match.
+        val pinned = HerdrBinaries.parse("explicit\t/opt/herdr\therdr 0.9.4\n$out")
+        assertEquals("/opt/herdr", HerdrBinaries.choose(pinned, "0.9.5")?.path)
+        val pinnedWhy = HerdrChoice(HerdrBinaries.choose(pinned, "0.9.5")!!, "0.9.5", pinned).explain("box")
+        assertTrue("herdr path to /home/u/.local/bin/herdr" in pinnedWhy, pinnedWhy)
+        assertTrue(!HerdrChoice(found[1], "0.9.5", found).mismatch)
     }
 }
 
