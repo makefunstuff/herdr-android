@@ -100,6 +100,13 @@ fun SessionSnapshot.entryPane(workspaceId: String): String? {
         ?: panes.firstOrNull { it.workspaceId == workspaceId }?.paneId
 }
 
+/** The folder a workspace's active pane is in, for resolving the repository it belongs to. */
+fun SessionSnapshot.workspaceFolder(workspaceId: String): String? {
+    val paneId = entryPane(workspaceId) ?: return null
+    val pane = panes.firstOrNull { it.paneId == paneId } ?: return null
+    return pane.foregroundCwd?.ifBlank { null } ?: pane.cwd?.ifBlank { null }
+}
+
 fun NavController.openPane(snap: SessionSnapshot, machineId: String, paneId: String) {
     val hasAgent = snap.agents.any { it.paneId == paneId }
     navigate(if (hasAgent) Routes.agent(machineId, paneId) else Routes.terminal(machineId, paneId))
@@ -139,6 +146,12 @@ fun WorktreesScreen(nav: NavController, machineId: String, workspaceId: String?)
 
     // What changes a listing: workspaces opening, closing or moving between checkouts.
     val fingerprint = snap?.workspaces?.map { it.workspaceId to it.worktree }
+    // Workspaces in a Git folder that herdr doesn't (yet) report as a worktree-backed checkout.
+    val plainFolders = snap?.let { s ->
+        s.workspaces.filter { it.worktree == null }.mapNotNull { ws ->
+            s.workspaceFolder(ws.workspaceId)?.let { ws.workspaceId to it }
+        }
+    }.orEmpty()
 
     LaunchedEffect(fingerprint) {
         val current = snap?.repos() ?: return@LaunchedEffect
@@ -148,6 +161,29 @@ fun WorktreesScreen(nav: NavController, machineId: String, workspaceId: String?)
         current.forEach { (key, repo) -> known[key] = repo }
         // A repository whose workspaces all closed is still reachable by its folder.
         known.keys.filter { it !in current && known[it]?.workspaceId != null }.forEach { known[it] = known[it]!!.copy(workspaceId = null) }
+    }
+
+    // Ask herdr to resolve the repository behind a plain workspace, so its worktrees are reachable
+    // from the workspace too, not only from checkouts herdr already calls worktrees.
+    LaunchedEffect(plainFolders, state.online) {
+        if (!state.online) return@LaunchedEffect
+        plainFolders.forEach { (wsId, folder) ->
+            val list = runCatching { session.awaitApi().worktrees(cwd = folder) }.getOrNull() ?: return@forEach
+            val source = list.source
+            if (source.repoKey.isEmpty()) return@forEach
+            if (known[source.repoKey] == null) {
+                known[source.repoKey] = Repo(
+                    source.repoKey,
+                    source.repoName.ifBlank { source.repoRoot.substringAfterLast('/') },
+                    source.repoRoot,
+                    source.sourceWorkspaceId ?: wsId,
+                )
+            }
+            if (listings[source.repoKey] == null) listings[source.repoKey] = Listing.Loaded(list)
+            if (workspaceId != null && onlyRepo == null && (wsId == workspaceId || source.sourceWorkspaceId == workspaceId)) {
+                onlyRepo = source.repoKey
+            }
+        }
     }
 
     val visible = known.values.filter { onlyRepo == null || it.key == onlyRepo }.sortedBy { it.name.lowercase() }

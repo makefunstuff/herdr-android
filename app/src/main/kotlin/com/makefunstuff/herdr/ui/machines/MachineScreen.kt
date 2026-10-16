@@ -243,7 +243,7 @@ private fun WorkspaceCard(
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 // Long-press the header for the workspace's Git actions.
-                modifier = if (repo != null) Modifier.combinedClickable(onClick = {}, onLongClick = { menu = true }) else Modifier,
+                modifier = Modifier.combinedClickable(onClick = {}, onLongClick = { menu = true }),
             ) {
                 StatusDot(ws.agentStatus.color())
                 Spacer(Modifier.width(10.dp))
@@ -251,22 +251,20 @@ private fun WorkspaceCard(
                 repo?.takeIf { it.isLinkedWorktree }?.let { Pill("worktree") }
                 Spacer(Modifier.width(6.dp))
                 Pill("${ws.tabCount} tab${if (ws.tabCount == 1) "" else "s"}")
-                if (repo != null) {
-                    Box {
-                        IconButton(onClick = { menu = true }, modifier = Modifier.size(32.dp)) { Icon(Icons.Filled.MoreVert, "Git actions for ${ws.label}") }
-                        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                Box {
+                    IconButton(onClick = { menu = true }, modifier = Modifier.size(32.dp)) { Icon(Icons.Filled.MoreVert, "Git actions for ${ws.label}") }
+                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                        DropdownMenuItem(
+                            text = { Text(if (repo != null) "Worktrees of ${repo.repoName.ifBlank { "this repository" }}" else "Worktrees in this folder") },
+                            onClick = { menu = false; onWorktrees() },
+                        )
+                        DropdownMenuItem(text = { Text("New worktree…") }, enabled = online, onClick = { menu = false; onNewWorktree() })
+                        if (repo?.isLinkedWorktree == true) {
                             DropdownMenuItem(
-                                text = { Text("Worktrees of ${repo.repoName.ifBlank { "this repository" }}") },
-                                onClick = { menu = false; onWorktrees() },
+                                text = { Text("Remove this worktree…", color = MaterialTheme.colorScheme.error) },
+                                enabled = online,
+                                onClick = { menu = false; onRemoveWorktree() },
                             )
-                            DropdownMenuItem(text = { Text("New worktree…") }, enabled = online, onClick = { menu = false; onNewWorktree() })
-                            if (repo.isLinkedWorktree) {
-                                DropdownMenuItem(
-                                    text = { Text("Remove this worktree…", color = MaterialTheme.colorScheme.error) },
-                                    enabled = online,
-                                    onClick = { menu = false; onRemoveWorktree() },
-                                )
-                            }
                         }
                     }
                 }
