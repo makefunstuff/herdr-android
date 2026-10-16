@@ -1,0 +1,74 @@
+package com.makefunstuff.herdr.core
+
+import com.makefunstuff.herdr.core.board.CoordinatorChat
+import com.makefunstuff.herdr.core.board.CoordinatorView
+import com.makefunstuff.herdr.core.board.Said
+import com.makefunstuff.herdr.core.chat.SentMatch
+import com.makefunstuff.herdr.core.chat.SentMatch.Pending
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
+
+class SentMatchTest {
+    private val msg = "I still don't get where why and how I can use pi durable"
+    private fun open(p: List<Pending>, seen: List<String>) = SentMatch.unconfirmed(p) { SentMatch.count(it, seen) }
+
+    @Test fun transcriptConfirms() {
+        assertEquals(1, open(listOf(Pending(msg, 0)), emptyList()).size)
+        assertEquals(0, open(listOf(Pending(msg, 0)), listOf(msg)).size)
+    }
+
+    @Test fun whitespaceMarkdownAndAppendedBoardLine() {
+        assertTrue(SentMatch.same("fix  the\nbug in *login* flow please", "fix the bug in login flow please\n\n[sent with tab]"))
+        assertTrue(SentMatch.same(msg, "$msg\n[sent with tab]"))
+    }
+
+    @Test fun truncation() {
+        val long = "word ".repeat(100)
+        assertTrue(SentMatch.same(long, long.take(300)))
+    }
+
+    @Test fun shortDifferentMessagesDontMatch() {
+        assertFalse(SentMatch.same("ok", "ok thanks a lot for that"))
+        assertFalse(SentMatch.same("yes", "no"))
+    }
+
+    @Test fun identicalMessagesStayTwo() {
+        val two = listOf(Pending(msg, 0), Pending(msg, 0))
+        assertEquals(2, open(two, emptyList()).size)
+        assertEquals(1, open(two, listOf(msg)).size)
+        assertEquals(0, open(two, listOf(msg, msg)).size)
+    }
+
+    @Test fun earlierIdenticalMessageDoesNotConfirm() {
+        // Same text was said before; only a second copy confirms the new one.
+        assertEquals(1, open(listOf(Pending(msg, 1)), listOf(msg)).size)
+        assertEquals(0, open(listOf(Pending(msg, 1)), listOf(msg, msg)).size)
+    }
+
+    @Test fun reconnectReplayDoesNotConfirmOrDuplicate() {
+        // A reconnect re-reads the same transcript: the count is unchanged, nothing is added or lost.
+        val seen = listOf(msg)
+        assertEquals(1, open(listOf(Pending(msg, 1)), seen).size)
+        assertEquals(1, open(open(listOf(Pending(msg, 1)), seen), seen).size)
+    }
+
+    @Test fun screenSource() {
+        val screen = "> I still don't get where why and\n  how I can use pi durable"
+        assertEquals(1, SentMatch.countOnScreen(msg, screen.replace("\n  ", " ")))
+        assertEquals(0, open(listOf(Pending(msg, 0)).also { }, emptyList()).size - 1)
+        assertEquals(0, SentMatch.unconfirmed(listOf(Pending(msg, 0))) { SentMatch.countOnScreen(it, "> $msg\nreply") }.size)
+        assertEquals(1, SentMatch.unconfirmed(listOf(Pending(msg, 1))) { SentMatch.countOnScreen(it, "> $msg\nreply") }.size)
+    }
+
+    @Test fun coordinatorLinesShowRepeatedMessageTwice() {
+        val talk = listOf(Said(true, msg), Said(false, "answer"))
+        val view = CoordinatorView(state = "working", sent = msg, talk = talk)
+        assertEquals(2, CoordinatorChat.lines(view, talk, baseline = 1).count { it.you })
+        // The board's conversation already holds the new one: shown once.
+        val both = talk + Said(true, "$msg\n[sent with tab]")
+        assertEquals(2, CoordinatorChat.lines(view, both, baseline = 1).count { it.you })
+        assertEquals(1, CoordinatorChat.lines(CoordinatorView(state = "working", sent = msg, talk = listOf(Said(true, "$msg\n[sent with tab]")))).count { it.you })
+    }
+}

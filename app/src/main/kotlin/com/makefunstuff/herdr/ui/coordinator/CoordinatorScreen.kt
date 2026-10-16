@@ -54,6 +54,7 @@ import androidx.navigation.NavController
 import com.makefunstuff.herdr.Routes
 import com.makefunstuff.herdr.core.board.ChatLine
 import com.makefunstuff.herdr.core.board.CoordinatorChat
+import com.makefunstuff.herdr.core.chat.SentMatch
 import com.makefunstuff.herdr.core.board.CoordinatorView
 import com.makefunstuff.herdr.core.board.Said
 import com.makefunstuff.herdr.ui.common.EmptyState
@@ -91,7 +92,8 @@ fun CoordinatorScreen(nav: NavController, machineId: String) {
     var tooOld by remember { mutableStateOf(false) }
     var host by remember { mutableStateOf("") }
     /** Sent from here, not yet seen in what the board answers. */
-    var outbox by remember { mutableStateOf<String?>(null) }
+    var outbox by remember { mutableStateOf<SentMatch.Pending?>(null) }
+    var outboxSeen by remember { mutableStateOf(false) }
     var sending by remember { mutableStateOf(false) }
     var draft by rememberSaveable { mutableStateOf("") }
     val readNow = remember { Channel<Unit>(Channel.CONFLATED) }
@@ -110,7 +112,13 @@ fun CoordinatorScreen(nav: NavController, machineId: String) {
                 if (v != null) {
                     talk = CoordinatorChat.merge(talk, v.talk)
                     val mine = outbox
-                    if (mine != null && (v.sent.isNotEmpty() || v.talk.any { it.you && it.text.contains(mine.take(200)) })) outbox = null
+                    if (mine != null) {
+                        if (v.sent.isNotEmpty()) outboxSeen = true
+                        val said = talk.filter { it.you }.map { it.text }
+                        // Confirmed by one more matching message than before it was sent; or the board took it
+                        // in and has since answered, though its conversation doesn't hold it.
+                        if (SentMatch.count(mine.text, said) > mine.baseline || (outboxSeen && v.sent.isEmpty())) outbox = null
+                    }
                 }
                 problem = null
             } catch (e: CancellationException) {
@@ -126,9 +134,9 @@ fun CoordinatorScreen(nav: NavController, machineId: String) {
 
     val v = view
     val lines = remember(v, talk, outbox) {
-        val base = v?.let { CoordinatorChat.lines(it, talk) }.orEmpty()
         val mine = outbox
-        if (mine != null && base.none { it.you && it.text.contains(mine.take(200)) }) base + ChatLine(true, mine, pending = true) else base
+        val base = v?.let { CoordinatorChat.lines(it, talk, mine?.takeIf { m -> m.text.trim() == it.sent.trim() }?.baseline) }.orEmpty()
+        if (mine != null && SentMatch.count(mine.text, base.filter { it.you }.map { it.text }) <= mine.baseline) base + ChatLine(true, mine.text, pending = true) else base
     }
     LaunchedEffect(lines.size, lines.lastOrNull()?.text?.length) {
         if (lines.isNotEmpty()) list.animateScrollToItem(lines.size)
@@ -141,14 +149,18 @@ fun CoordinatorScreen(nav: NavController, machineId: String) {
         val text = draft.trim()
         if (text.isEmpty() || sending) return
         sending = true
+        // Counted before the send, so a read that comes in while it runs can't be missed.
+        val before = SentMatch.count(text, talk.filter { it.you }.map { it.text })
+        val tracked = view != null
+        if (tracked) { outbox = SentMatch.Pending(text, before); outboxSeen = false }
         scope.launch {
             runCatching { session.awaitBoard().send(text, delegate) }
                 .onSuccess { msg ->
                     draft = ""
                     // With no Coordinator set up there, the board files the words as a task instead.
-                    if (view != null) outbox = text else context.toast(msg.ifEmpty { "Sent" })
+                    if (!tracked) context.toast(msg.ifEmpty { "Sent" })
                 }
-                .onFailure { context.toast(it.message ?: "Couldn't send") }
+                .onFailure { if (tracked) outbox = null; context.toast(it.message ?: "Couldn't send") }
             sending = false
             readNow.trySend(Unit)
         }
