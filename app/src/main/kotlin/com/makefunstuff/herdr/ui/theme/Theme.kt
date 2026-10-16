@@ -14,7 +14,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import com.makefunstuff.herdr.core.api.AgentStatus
 
-private val Dark = darkColorScheme(
+internal val Dark = darkColorScheme(
     primary = Color(0xFF7DD3B6),
     onPrimary = Color(0xFF00382B),
     primaryContainer = Color(0xFF0F5141),
@@ -39,7 +39,7 @@ private val Dark = darkColorScheme(
     error = Color(0xFFFFB4AB),
 )
 
-private val Light = lightColorScheme(
+internal val Light = lightColorScheme(
     primary = Color(0xFF1E6B58),
     onPrimary = Color.White,
     primaryContainer = Color(0xFFA6F2D4),

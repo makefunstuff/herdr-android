@@ -40,6 +40,7 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -121,10 +122,11 @@ fun HerdrDialog(
                             androidx.compose.material3.LocalTextStyle provides MaterialTheme.typography.bodyMedium,
                         ) { text() }
                     }
-                    Row(
+                    @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+                    androidx.compose.foundation.layout.FlowRow(
                         Modifier.fillMaxWidth().padding(top = 16.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
-                        verticalAlignment = Alignment.CenterVertically,
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
                         Box(Modifier.heightIn(min = 48.dp), contentAlignment = Alignment.Center) { dismissButton?.invoke() }
                         Box(Modifier.heightIn(min = 48.dp), contentAlignment = Alignment.Center) { confirmButton() }
@@ -302,4 +304,17 @@ fun ErrorState(title: String, body: String?, modifier: Modifier = Modifier, onRe
         if (body != null) Text(body.lineSequence().first().take(240), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
         if (onRetry != null) androidx.compose.material3.FilledTonalButton(onClick = onRetry, modifier = Modifier.heightIn(min = 48.dp)) { Text("Try again") }
     }
+}
+
+fun contrastRatio(a: Color, b: Color): Double {
+    val x = a.luminance().toDouble() + 0.05; val y = b.luminance().toDouble() + 0.05
+    return maxOf(x, y) / minOf(x, y)
+}
+
+/** [fg] nudged toward [towards] (usually onSurface) until it reads at 4.5:1 on [bg]; unchanged if it already does. */
+fun readable(fg: Color, bg: Color, towards: Color): Color {
+    var c = fg
+    var t = 0f
+    while (contrastRatio(c, bg) < 4.5 && t < 1f) { t += 0.05f; c = androidx.compose.ui.graphics.lerp(fg, towards, t) }
+    return c
 }

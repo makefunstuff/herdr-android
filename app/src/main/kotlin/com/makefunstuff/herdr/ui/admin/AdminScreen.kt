@@ -256,7 +256,7 @@ private fun PluginSheet(p: PluginInfo, model: AdminModel, onLog: (PluginLog) -> 
                 }
             }
             p.description?.let { item { Text(it, style = MaterialTheme.typography.bodyMedium) } }
-            p.warnings.forEach { w -> item { Text("⚠ $w", style = MaterialTheme.typography.bodySmall, color = WARN) } }
+            p.warnings.forEach { w -> item { Text("⚠ $w", style = MaterialTheme.typography.bodySmall, color = readableOnSurface(WARN)) } }
             item { SectionTitle("Actions") }
             if (actions.isEmpty()) {
                 item { Hint(if (p.enabled) "This plugin has no actions." else "Enable the plugin to run its actions.") }
@@ -338,7 +338,7 @@ private fun LogSheet(log: PluginLog, onDismiss: () -> Unit) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            log.error?.let { Text(it, color = BAD) }
+            log.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             Output("Command", log.command.joinToString(" "))
             Output("Output", log.stdout.orEmpty().ifBlank { "(none)" })
             if (!log.stderr.isNullOrBlank()) Output("Errors", log.stderr!!)
@@ -413,7 +413,7 @@ private fun IntegrationRow(i: IntegrationInfo, model: AdminModel, onRemove: () -
                 IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "More") }
                 HerdrMenu(expanded = menu, onDismissRequest = { menu = false }) {
                     HerdrMenuItem(text = { Text("Reinstall") }, onClick = { menu = false; model.install(i) })
-                    HerdrMenuItem(text = { Text("Remove", color = BAD) }, onClick = { menu = false; onRemove() })
+                    HerdrMenuItem(text = { Text("Remove", color = MaterialTheme.colorScheme.error) }, onClick = { menu = false; onRemove() })
                 }
             }
         }
@@ -496,19 +496,19 @@ private fun ServerTab(model: AdminModel, state: HostState) {
             if (showManifests) {
                 shown.forEach { a ->
                     KeyValue(a.agent, listOfNotNull(a.activeVersion, a.sourceKind.ifBlank { null }).joinToString(" · "))
-                    (a.remoteUpdateError ?: a.warning)?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = WARN) }
+                    (a.remoteUpdateError ?: a.warning)?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = readableOnSurface(WARN)) }
                 }
             }
         }
 
         SectionCard {
-            Text("Danger zone", style = MaterialTheme.typography.titleMedium, color = BAD)
+            Text("Danger zone", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.error)
             Hint("Stopping the server closes every pane and agent in this session. Start it again by running herdr on the machine.")
             OutlinedButton(
                 onClick = { confirmStop = true },
                 enabled = state.online && !model.isBusy("stop"),
                 modifier = Modifier.fillMaxWidth(),
-            ) { Text("Stop server", color = BAD) }
+            ) { Text("Stop server", color = MaterialTheme.colorScheme.error) }
         }
     }
 
@@ -623,7 +623,7 @@ private fun SavedMachineRow(m: SavedMachineEntry, model: AdminModel, onRemove: (
             if (busy) CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
         }
         HerdrMenu(expanded = menu, onDismissRequest = { menu = false }) {
-            HerdrMenuItem(text = { Text("Remove", color = BAD) }, enabled = !busy, onClick = { menu = false; onRemove() })
+            HerdrMenuItem(text = { Text("Remove", color = MaterialTheme.colorScheme.error) }, enabled = !busy, onClick = { menu = false; onRemove() })
         }
     }
 }
@@ -648,7 +648,7 @@ private fun AddMachineSheet(model: AdminModel, onDismiss: () -> Unit) {
             OutlinedTextField(label, { label = it }, label = { Text("Label (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
             OutlinedTextField(sessionName, { sessionName = it }, label = { Text("Remote session (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
             Busy(busy, "Connecting and preparing herdr there…")
-            model.addError?.let { Text(it, color = BAD, style = MaterialTheme.typography.bodyMedium) }
+            model.addError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
             Button(
                 onClick = { model.addMachine(target.trim(), label.trim(), sessionName.trim(), onDone = onDismiss) },
                 enabled = valid && !busy,
@@ -675,7 +675,7 @@ private fun Confirm(title: String, body: String, action: String, onConfirm: () -
         title = { Text(title) },
         text = { Text(body) },
         confirmButton = {
-            TextButton(onClick = { onDismiss(); onConfirm() }) { Text(action, color = if (destructive) BAD else Color.Unspecified) }
+            TextButton(onClick = { onDismiss(); onConfirm() }) { Text(action, color = if (destructive) MaterialTheme.colorScheme.error else Color.Unspecified) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
@@ -727,3 +727,8 @@ private fun Busy(busy: Boolean, text: String) {
 private fun Modifier.combinedClickableCompat(onClick: () -> Unit): Modifier = combinedClickable(onClick = onClick)
 
 private fun time(ms: Long): String = DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(ms))
+
+/** [c] darkened or lightened until it reads on the current surface. */
+@Composable
+private fun readableOnSurface(c: Color): Color =
+    com.makefunstuff.herdr.ui.design.readable(c, MaterialTheme.colorScheme.surface, MaterialTheme.colorScheme.onSurface)

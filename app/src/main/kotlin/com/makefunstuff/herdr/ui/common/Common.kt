@@ -23,6 +23,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.makefunstuff.herdr.AppContainer
@@ -36,13 +37,16 @@ fun StatusDot(color: Color, modifier: Modifier = Modifier, size: Int = 10) {
 }
 
 @Composable
-fun Pill(text: String, color: Color = MaterialTheme.colorScheme.onSurfaceVariant, container: Color = MaterialTheme.colorScheme.surfaceContainerHighest) {
-    Surface(color = container, shape = RoundedCornerShape(8.dp)) {
+fun Pill(text: String, color: Color = MaterialTheme.colorScheme.onSurfaceVariant, container: Color? = null) {
+    val scheme = MaterialTheme.colorScheme
+    val tint = container ?: if (color == scheme.onSurfaceVariant) scheme.surfaceContainerHighest else color.copy(alpha = 0.16f)
+    val bg = tint.compositeOver(scheme.surfaceContainer)
+    Surface(color = tint, shape = RoundedCornerShape(8.dp)) {
         Text(
             text,
-            color = color,
-            style = MaterialTheme.typography.labelSmall,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+            color = com.makefunstuff.herdr.ui.design.readable(color, bg, scheme.onSurface),
+            style = MaterialTheme.typography.labelMedium,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
             maxLines = 1,
         )
     }
