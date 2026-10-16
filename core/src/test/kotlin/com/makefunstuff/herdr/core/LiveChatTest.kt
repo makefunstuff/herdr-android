@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import java.io.File
+import org.junit.jupiter.api.Assumptions.assumeTrue
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -22,6 +23,17 @@ import kotlin.test.assertTrue
  * HERDR_LIVE_TARGET are set and HERDR_LIVE_CHAT_AGENT names a live claude agent (in
  * HERDR_LIVE_SESSION, default "default") started with `--permission-mode default`, so that a
  * shell command makes it ask first. HERDR_LIVE_CHAT_DIR is that agent's working directory.
+ * Without them the test is reported as skipped.
+ *
+ * To run it on a machine with herdr, in a throwaway session:
+ * ```
+ * herdr --session chattest server &
+ * herdr --session chattest workspace create --cwd "$DIR" --label test
+ * herdr --session chattest agent start tclaude --kind claude --pane w1:p1 -- --permission-mode default
+ * # answer the folder-trust question once (herdr --session chattest agent send-keys tclaude down enter)
+ * HERDR_LIVE_KEY=~/.ssh/id_ed25519 HERDR_LIVE_TARGET=$USER@127.0.0.1:22 HERDR_LIVE_SESSION=chattest \
+ *   HERDR_LIVE_CHAT_AGENT=tclaude HERDR_LIVE_CHAT_DIR="$DIR" ./gradlew -p core test --tests '*LiveChatTest'
+ * ```
  */
 class LiveChatTest {
     private val keyPath = System.getenv("HERDR_LIVE_KEY")
@@ -31,9 +43,13 @@ class LiveChatTest {
 
     @Test
     fun followsTranscriptAndAnswersAPermissionPrompt() {
-        if (keyPath == null || target == null || agentName == null || dir == null) return
-        val identity = KeyImport.fromPrivateKey(File(keyPath).readText(), "test")
-        val (user, host, port) = Machine.parseTarget(target)!!
+        // Without a live agent there is nothing to check: report the test as skipped, not passed.
+        assumeTrue(
+            keyPath != null && target != null && agentName != null && dir != null,
+            "set HERDR_LIVE_KEY, HERDR_LIVE_TARGET, HERDR_LIVE_CHAT_AGENT and HERDR_LIVE_CHAT_DIR to run",
+        )
+        val identity = KeyImport.fromPrivateKey(File(keyPath!!).readText(), "test")
+        val (user, host, port) = Machine.parseTarget(target!!)!!
         val machine = Machine("live", "live", host, port, user ?: "root", session = System.getenv("HERDR_LIVE_SESSION") ?: "default")
         runBlocking {
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
