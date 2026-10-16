@@ -60,6 +60,11 @@ class BoardTest {
         val b64 = cmd.substringAfterLast(' ')
         assertEquals("""{"text":"it's \"quoted\"\nline two","delegate":true}""", String(Base64.getDecoder().decode(b64)))
         assertEquals("'/p' remote 'list'", BoardCommands.command(machine, "/p", "list"))
+        // The herdr the app chose goes first on the launcher's PATH.
+        assertEquals(
+            "env PATH='/home/u/.local/bin':\"\$PATH\" '/p' remote 'list'",
+            BoardCommands.command(machine.copy(herdrPath = "/home/u/.local/bin/herdr"), "/p", "list"),
+        )
     }
 
     @Test

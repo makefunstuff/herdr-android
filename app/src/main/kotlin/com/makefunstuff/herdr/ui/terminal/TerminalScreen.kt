@@ -56,11 +56,13 @@ import com.makefunstuff.herdr.ui.common.EmptyState
 import com.makefunstuff.herdr.ui.common.LocalContainer
 import com.makefunstuff.herdr.ui.common.copyToClipboard
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
 private const val PREFS = "terminal"
 private const val FONT_SP = "font_sp"
+private const val SILENT_MS = 15_000L
 
 private val EXTRA_KEYS = listOf(
     "esc" to Keys.ESC, "tab" to Keys.TAB, "↑" to Keys.UP, "↓" to Keys.DOWN, "←" to Keys.LEFT, "→" to Keys.RIGHT,
@@ -109,7 +111,7 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
             } else {
                 grid ?: (80 to 24)
             }
-            TerminalStream(conn, session.machine, paneId, cols, rows, container.scope).also { it.open() }
+            TerminalStream(conn, session.state.value.herdrMachine, paneId, cols, rows, container.scope).also { it.open() }
         }
         val s = opened.getOrNull()
         if (s == null) {
@@ -135,6 +137,14 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
 
     val revision by (stream?.revision ?: NO_REVISION).collectAsStateWithLifecycle()
     val status by (stream?.status ?: NO_STATUS).collectAsStateWithLifecycle()
+    // herdr that can't talk to the server may neither draw nor exit; say so rather than stay blank.
+    var silent by remember { mutableStateOf(false) }
+    LaunchedEffect(stream) {
+        silent = false
+        val s = stream ?: return@LaunchedEffect
+        delay(SILENT_MS)
+        if (s.status.value == TerminalStream.Status.Opening) silent = true
+    }
     LaunchedEffect(revision, view) { view?.invalidate() }
     LaunchedEffect(stream, view) { view?.emulator = stream?.emulator }
     LaunchedEffect(ctrl, alt, view) {
@@ -208,10 +218,27 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
                     },
                     modifier = Modifier.fillMaxSize(),
                 )
+                val herdr = state.herdr
                 val message = failure ?: when (val st = status) {
-                    is TerminalStream.Status.Closed -> st.reason
-                    TerminalStream.Status.Opening -> if (state.online) null else "Waiting for ${session.machine.label}…"
+                    is TerminalStream.Status.Closed -> st.reason + (herdr?.let { "\n\n" + it.explain(session.machine.label) } ?: "")
+                    TerminalStream.Status.Opening -> when {
+                        !state.online -> "Waiting for ${session.machine.label}…"
+                        silent -> "herdr hasn't sent this pane yet." + (herdr?.let { "\n\n" + it.explain(session.machine.label) } ?: "")
+                        else -> null
+                    }
                     TerminalStream.Status.Live -> null
+                }
+                if (message == null && herdr?.mismatch == true) {
+                    Text(
+                        "herdr ${herdr.describe} differs from the server (${herdr.serverVersion})",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .fillMaxWidth()
+                            .background(MaterialTheme.colorScheme.errorContainer)
+                            .padding(horizontal = 8.dp, vertical = 2.dp),
+                    )
                 }
                 if (message != null) {
                     Surface(

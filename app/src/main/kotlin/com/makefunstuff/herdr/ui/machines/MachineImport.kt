@@ -37,7 +37,7 @@ object MachineImport {
 
     suspend fun discover(source: HostSession, existing: List<Machine>): List<ImportCandidate> {
         val conn = source.awaitConnection()
-        val out = conn.run(HerdrCommands.machineList(source.machine))
+        val out = conn.run(HerdrCommands.machineList(source.state.value.herdrMachine))
         val entries = runCatching {
             json.decodeFromString(ListSerializer(SavedMachineEntry.serializer()), out.stdout.trim().ifEmpty { "[]" })
         }.getOrElse {

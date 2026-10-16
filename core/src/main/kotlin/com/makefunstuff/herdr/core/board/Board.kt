@@ -47,9 +47,14 @@ object BoardCommands {
 
     /** What the login shell runs. */
     fun command(machine: Machine, path: String, what: String, request: JsonObject? = null): String {
-        val session = machine.session.takeIf { it.isNotEmpty() && it != "default" }?.let { "env HERDR_SESSION=${quote(it)} " }.orEmpty()
+        val env = listOfNotNull(
+            machine.session.takeIf { it.isNotEmpty() && it != "default" }?.let { "HERDR_SESSION=${quote(it)}" },
+            // The launcher calls `herdr` by name: put the server's own binary first on its PATH.
+            machine.herdrPath?.substringBeforeLast('/', "")?.takeIf { it.isNotEmpty() }?.let { "PATH=${quote(it)}:\"\$PATH\"" },
+        )
+        val prefix = if (env.isEmpty()) "" else "env ${env.joinToString(" ")} "
         val arg = request?.let { " " + Base64.getEncoder().encodeToString(it.toString().toByteArray()) }.orEmpty()
-        return "${session}${quote(path)} remote ${quote(what)}$arg"
+        return "${prefix}${quote(path)} remote ${quote(what)}$arg"
     }
 
     private const val LOGIN = "exec \"\${SHELL:-/bin/sh}\" -lc \"\$1\" </dev/null"
