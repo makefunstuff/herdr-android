@@ -25,7 +25,7 @@ import java.io.OutputStream
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
-class HerdrApiException(val code: String, message: String) : IOException("$code: $message")
+class HerdrApiException(val code: String, val detail: String) : IOException("$code: $detail")
 
 /** Something that can make one herdr API request. */
 interface ApiCaller {

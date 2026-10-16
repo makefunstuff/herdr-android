@@ -61,13 +61,77 @@ class HerdrApi(private val connection: ApiCaller) {
         )
     }
 
+    /**
+     * Lists the checkouts of the repository that a workspace ([workspaceId]) or a folder ([cwd]) is in.
+     * [trustRepository] grants Git trust for this one request; only after the user has vouched for the repository.
+     */
+    suspend fun worktrees(workspaceId: String? = null, cwd: String? = null, trustRepository: Boolean = false): WorktreeList =
+        decode(connection.call("worktree.list", repoParams(workspaceId, cwd, trustRepository)))
+
+    /**
+     * Creates a worktree of the repository a workspace or folder is in and opens it as a new workspace.
+     * Leaving [branch] out lets herdr pick a name; [base] is the ref the new branch starts from.
+     */
+    suspend fun createWorktree(
+        workspaceId: String? = null,
+        cwd: String? = null,
+        branch: String? = null,
+        base: String? = null,
+        path: String? = null,
+        label: String? = null,
+        trustRepository: Boolean = false,
+    ): WorktreeOpened = decode(
+        connection.call(
+            "worktree.create",
+            repoParams(workspaceId, cwd, trustRepository, "branch" to branch, "base" to base, "path" to path, "label" to label, "focus" to false),
+            timeoutMs = 60_000,
+        ),
+    )
+
+    /** Opens an existing worktree, by [path] or [branch], as a workspace (or finds the one it's already open in). */
+    suspend fun openWorktree(
+        workspaceId: String? = null,
+        cwd: String? = null,
+        path: String? = null,
+        branch: String? = null,
+        label: String? = null,
+        trustRepository: Boolean = false,
+    ): WorktreeOpened = decode(
+        connection.call(
+            "worktree.open",
+            repoParams(workspaceId, cwd, trustRepository, "path" to path, "branch" to branch, "label" to label, "focus" to false),
+            timeoutMs = 60_000,
+        ),
+    )
+
+    /**
+     * Deletes the linked worktree checkout that [workspaceId] is open on, and closes the workspace.
+     * herdr refuses a checkout with changes (`dirty_worktree_requires_force`) unless [force].
+     */
+    suspend fun removeWorktree(workspaceId: String, force: Boolean = false, trustRepository: Boolean = false): WorktreeRemoved =
+        decode(
+            connection.call(
+                "worktree.remove",
+                params("workspace_id" to workspaceId, "force" to force, "trust_repository" to trustRepository.takeIf { it }),
+                timeoutMs = 60_000,
+            ),
+        )
+
+    suspend fun closeWorkspace(workspaceId: String) {
+        connection.call("workspace.close", params("workspace_id" to workspaceId))
+    }
+
+    /** Names the repository by workspace or folder; trust is only sent when granted. */
+    private fun repoParams(workspaceId: String?, cwd: String?, trust: Boolean, vararg more: Pair<String, Any?>): JsonObject =
+        params("workspace_id" to workspaceId, "cwd" to cwd, "trust_repository" to trust.takeIf { it }, *more)
+
     private inline fun <reified T> decode(obj: JsonObject): T = HerdrJson.decodeFromJsonElement(obj)
 
     companion object {
         /** Lifecycle events that change what the app shows. */
         val LIFECYCLE_EVENTS = listOf(
             "workspace.created", "workspace.updated", "workspace.renamed", "workspace.closed",
-            "workspace.reordered", "tab.created", "tab.closed", "tab.renamed", "tab.moved",
+            "workspace.reordered", "worktree.created", "worktree.opened", "worktree.removed", "tab.created", "tab.closed", "tab.renamed", "tab.moved",
             "pane.created", "pane.closed", "pane.updated", "pane.moved", "pane.exited",
             "pane.agent_detected", "layout.updated",
         )
