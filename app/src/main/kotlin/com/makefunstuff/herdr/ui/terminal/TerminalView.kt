@@ -42,6 +42,18 @@ class TerminalView(context: Context) : View(context) {
     /** Called for vertical drags in fit mode: positive lines scroll back. */
     var onScroll: (lines: Int) -> Unit = {}
     var onLongPress: () -> Unit = {}
+    /** Called for a tap that lands on a cell (for links and the keyboard). */
+    var onCellTap: (CellPoint) -> Unit = {}
+    /** Called for a long press on a cell: the screen starts a text selection there. */
+    var onCellLongPress: (CellPoint) -> Unit = {}
+
+    /** Anchor and cursor of the current selection, in viewport cells. Drawn while set. */
+    var selection: Pair<CellPoint, CellPoint>? = null
+        set(value) { field = value; invalidate() }
+
+    /** True while a selection is being made: drags move its cursor instead of scrolling. */
+    var selecting = false
+        private set
 
     var fitToView = true
         set(value) { field = value; panX = 0f; reportGrid(); invalidate() }
@@ -102,6 +114,30 @@ class TerminalView(context: Context) : View(context) {
         onGridSize(cols, rows)
     }
 
+    /**
+     * Starts a text selection at [cell]: taps move its cursor, drags extend it, and the screen
+     * reads [selection] back to copy. Ends with [clearSelection].
+     */
+    fun startSelection(cell: CellPoint) {
+        selecting = true
+        selection = cell to cell
+    }
+
+    fun clearSelection() {
+        selecting = false
+        selection = null
+    }
+
+    /** The cell under a touch, or null in the padding or past the grid. */
+    private fun cellAt(x: Float, y: Float): CellPoint? {
+        val emu = emulator ?: return null
+        val pad = PAD * density
+        val col = floor((x - pad + panX) / cellW).toInt()
+        val row = floor((y - pad + panY) / cellH).toInt()
+        if (col < 0 || row < 0 || col >= emu.cols || row >= emu.rows) return null
+        return CellPoint(row, col)
+    }
+
     // ---- Drawing ------------------------------------------------------------------------
 
     override fun onDraw(canvas: Canvas) {
@@ -112,6 +148,7 @@ class TerminalView(context: Context) : View(context) {
             clampPan(emu)
             canvas.save()
             canvas.translate(Math.round(pad - panX).toFloat(), Math.round(pad - panY).toFloat())
+            drawSelection(canvas, emu)
             surface.canvas = canvas
             painter.paint(emu, surface, cellW, cellH, baseline)
             surface.canvas = null
@@ -129,6 +166,21 @@ class TerminalView(context: Context) : View(context) {
 
     private val painter = TerminalPainter()
     private val surface = AndroidSurface()
+    private val selectionPaint = Paint()
+
+    /** A translucent block over the selected cells, under the terminal's own text. */
+    private fun drawSelection(canvas: Canvas, emu: TerminalEmulator) {
+        val (a, b) = selection ?: return
+        val first = if (a.row < b.row || (a.row == b.row && a.col <= b.col)) a else b
+        val last = if (first === a) b else a
+        selectionPaint.color = 0x554A90D9
+        for (row in first.row..last.row) {
+            val from = if (row == first.row) first.col else 0
+            val to = if (row == last.row) last.col else emu.cols - 1
+            if (to < from) continue
+            canvas.drawRect(from * cellW, row * cellH, (to + 1) * cellW, (row + 1) * cellH, selectionPaint)
+        }
+    }
 
     /** Adapts the shared painter to an Android canvas. */
     private inner class AndroidSurface : TerminalCanvas {
@@ -164,16 +216,29 @@ class TerminalView(context: Context) : View(context) {
 
     private val gestures = GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
         override fun onSingleTapUp(e: MotionEvent): Boolean {
-            showKeyboard()
+            val cell = cellAt(e.x, e.y)
+            if (cell == null) {
+                showKeyboard()
+            } else if (selecting) {
+                selection = (selection?.first ?: cell) to cell
+            } else {
+                onCellTap(cell)
+            }
             return true
         }
 
         override fun onLongPress(e: MotionEvent) {
-            onLongPress()
+            val cell = cellAt(e.x, e.y)
+            if (cell != null) onCellLongPress(cell) else onLongPress()
         }
 
         override fun onScroll(e1: MotionEvent?, e2: MotionEvent, dx: Float, dy: Float): Boolean {
             if (scaleDetector.isInProgress) return true
+            if (selecting) {
+                val cell = cellAt(e2.x, e2.y) ?: return true
+                selection = (selection?.first ?: cell) to cell
+                return true
+            }
             val emu = emulator
             val horizontal = abs(dx) > abs(dy)
             if (!fitToView && emu != null) {
@@ -316,3 +381,6 @@ class TerminalView(context: Context) : View(context) {
         private const val PAD = 4f
     }
 }
+
+/** A cell in the pane's viewport: `row` 0 is the top line on screen, `col` 0 the first column. */
+data class CellPoint(val row: Int, val col: Int)
