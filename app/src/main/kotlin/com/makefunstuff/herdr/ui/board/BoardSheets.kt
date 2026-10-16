@@ -1,5 +1,6 @@
 package com.makefunstuff.herdr.ui.board
 
+import com.makefunstuff.herdr.ui.design.readableText
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -271,7 +272,7 @@ fun TaskDetailContent(
                 Row(Modifier.height(IntrinsicSize.Min)) {
                     Box(Modifier.width(5.dp).fillMaxHeight().background(color))
                     Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(if (t.needsYou) "Needs you" else "Status", style = MaterialTheme.typography.labelLarge, color = color, modifier = Modifier.semantics { heading() })
+                        Text(if (t.needsYou) "Needs you" else "Status", style = MaterialTheme.typography.labelLarge, color = color.readableText(), modifier = Modifier.semantics { heading() })
                         if (step != null) Text(step, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
                         if (doing.isNotEmpty() && d?.failure?.title?.startsWith(doing.trim().trimEnd('.'), ignoreCase = true) != true) MarkdownText(doing, style = MaterialTheme.typography.bodyMedium)
                         t.progress?.let { p ->
@@ -283,7 +284,7 @@ fun TaskDetailContent(
                     }
                 }
             }
-            problem?.let { Text(it, color = BoardStatus.Error.color(), style = MaterialTheme.typography.bodySmall) }
+            problem?.let { Text(it, color = BoardStatus.Error.color().readableText(), style = MaterialTheme.typography.bodySmall) }
             if (d == null && problem == null) LinearProgressIndicator(Modifier.fillMaxWidth())
             if (d != null) {
                 d.failure?.let { f ->
@@ -349,7 +350,7 @@ private fun UsageRow(label: String, used: String, limit: String) {
 private fun Card(title: String, color: Color, content: @Composable () -> Unit) {
     Surface(color = MaterialTheme.colorScheme.surfaceContainer, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(title, style = MaterialTheme.typography.labelLarge, color = color)
+            Text(title, style = MaterialTheme.typography.labelLarge, color = color.readableText())
             content()
         }
     }
@@ -408,7 +409,7 @@ private fun ReviewView(r: Review, startOpen: Boolean = true) {
                 findings.groupBy { it.severity.ifEmpty { "finding" } }.forEach { (sev, l) -> Pill("${l.size} $sev", color = severityColor(sev)) }
             }
             if (open) {
-                if (r.error.isNotEmpty()) MarkdownText(r.error, style = MaterialTheme.typography.bodySmall, color = BoardStatus.Error.color())
+                if (r.error.isNotEmpty()) MarkdownText(r.error, style = MaterialTheme.typography.bodySmall, color = BoardStatus.Error.color().readableText())
                 if (r.text.isNotEmpty()) MarkdownText(r.text, style = MaterialTheme.typography.bodySmall)
                 findings.forEach { FindingView(it) }
                 r.limitations.forEach { MarkdownText("Limit: $it", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
@@ -494,10 +495,10 @@ fun BoardDialogs(
                 val d = details
                 when {
                     d == null -> Text("Reading what failed…")
-                    d.isFailure -> Text(d.exceptionOrNull()?.message.orEmpty(), color = BoardStatus.Error.color())
+                    d.isFailure -> Text(d.exceptionOrNull()?.message.orEmpty(), color = BoardStatus.Error.color().readableText())
                     else -> {
                         val x = d.getOrThrow()
-                        x.failure?.let { f -> MarkdownText(listOf("**${f.title}**", f.detail).filter { it.isNotEmpty() }.joinToString("\n\n"), color = BoardStatus.Error.color()) }
+                        x.failure?.let { f -> MarkdownText(listOf("**${f.title}**", f.detail).filter { it.isNotEmpty() }.joinToString("\n\n"), color = BoardStatus.Error.color().readableText()) }
                         x.reviews.lastOrNull()?.let { r ->
                             if (r.text.isNotEmpty()) MarkdownText(r.text, style = MaterialTheme.typography.bodySmall)
                             r.findings.forEach { FindingView(it) }

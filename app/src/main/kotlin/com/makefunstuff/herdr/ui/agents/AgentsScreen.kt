@@ -1,5 +1,6 @@
 package com.makefunstuff.herdr.ui.agents
 
+import com.makefunstuff.herdr.ui.design.readableText
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -224,7 +225,7 @@ private fun AgentCard(row: AgentRow, showMachine: Boolean, onOpen: () -> Unit, o
                 Text(
                     preview,
                     style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-                    color = status.color(),
+                    color = status.color().readableText(),
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )

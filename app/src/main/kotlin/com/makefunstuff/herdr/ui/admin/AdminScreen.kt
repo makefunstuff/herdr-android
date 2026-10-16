@@ -1,5 +1,11 @@
 package com.makefunstuff.herdr.ui.admin
 
+import com.makefunstuff.herdr.ui.design.BarTitle
+import androidx.compose.foundation.layout.heightIn
+import com.makefunstuff.herdr.ui.design.HerdrDialog
+import com.makefunstuff.herdr.ui.design.HerdrMenu
+import com.makefunstuff.herdr.ui.design.HerdrMenuItem
+import com.makefunstuff.herdr.ui.design.HerdrSheet
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
@@ -29,14 +35,11 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
@@ -44,7 +47,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PrimaryScrollableTabRow
@@ -57,7 +59,6 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -146,14 +147,7 @@ fun AdminScreen(nav: NavController, machineId: String, initialTab: Int = 0) {
                 TopAppBar(
                     navigationIcon = { IconButton(onClick = { nav.popBackStack() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
                     title = {
-                        Column {
-                            Text("herdr on ${state.machine.label}")
-                            Text(
-                                listOfNotNull(state.herdrVersion?.let { "v$it" }, state.status.label()).joinToString(" · "),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
+                        BarTitle("herdr on ${state.machine.label}", listOfNotNull(state.herdrVersion?.let { "v$it" }, state.status.label()).joinToString(" · "))
                     },
                     actions = {
                         IconButton(onClick = { session.retry(); model.refreshAll() }) { Icon(Icons.Filled.Refresh, "Refresh") }
@@ -229,9 +223,9 @@ private fun PluginCard(p: PluginInfo, model: AdminModel, onOpen: () -> Unit) {
                 else Switch(checked = p.enabled, onCheckedChange = { model.setEnabled(p, it) })
             }
         }
-        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-            DropdownMenuItem(text = { Text("Actions and logs") }, onClick = { menu = false; onOpen() })
-            DropdownMenuItem(text = { Text(if (p.enabled) "Disable" else "Enable") }, onClick = { menu = false; model.setEnabled(p, !p.enabled) })
+        HerdrMenu(expanded = menu, onDismissRequest = { menu = false }) {
+            HerdrMenuItem(text = { Text("Actions and logs") }, onClick = { menu = false; onOpen() })
+            HerdrMenuItem(text = { Text(if (p.enabled) "Disable" else "Enable") }, onClick = { menu = false; model.setEnabled(p, !p.enabled) })
         }
     }
 }
@@ -241,9 +235,9 @@ private fun PluginCard(p: PluginInfo, model: AdminModel, onOpen: () -> Unit) {
 private fun PluginSheet(p: PluginInfo, model: AdminModel, onLog: (PluginLog) -> Unit, onDismiss: () -> Unit) {
     val actions = model.actions.filter { it.pluginId == p.pluginId && it.runsOn(model.os) }
     val logs = (model.logs as? Load.Ready)?.value?.filter { it.pluginId == p.pluginId }.orEmpty()
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    HerdrSheet(onDismissRequest = onDismiss) {
         LazyColumn(
-            Modifier.fillMaxWidth().navigationBarsPadding(),
+            Modifier.fillMaxWidth().heightIn(max = 560.dp).navigationBarsPadding(),
             contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
@@ -257,7 +251,7 @@ private fun PluginSheet(p: PluginInfo, model: AdminModel, onLog: (PluginLog) -> 
                 }
             }
             p.description?.let { item { Text(it, style = MaterialTheme.typography.bodyMedium) } }
-            p.warnings.forEach { w -> item { Text("⚠ $w", style = MaterialTheme.typography.bodySmall, color = WARN) } }
+            p.warnings.forEach { w -> item { Text("⚠ $w", style = MaterialTheme.typography.bodySmall, color = readableOnSurface(WARN)) } }
             item { SectionTitle("Actions") }
             if (actions.isEmpty()) {
                 item { Hint(if (p.enabled) "This plugin has no actions." else "Enable the plugin to run its actions.") }
@@ -323,9 +317,9 @@ private fun LogRow(log: PluginLog, showPlugin: Boolean, onClick: () -> Unit) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun LogSheet(log: PluginLog, onDismiss: () -> Unit) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    HerdrSheet(onDismissRequest = onDismiss) {
         Column(
-            Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 24.dp).navigationBarsPadding().verticalScroll(rememberScrollState()),
+            Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 24.dp).navigationBarsPadding(),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text("${log.pluginId} · ${log.trigger}", style = MaterialTheme.typography.titleMedium)
@@ -339,7 +333,7 @@ private fun LogSheet(log: PluginLog, onDismiss: () -> Unit) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            log.error?.let { Text(it, color = BAD) }
+            log.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             Output("Command", log.command.joinToString(" "))
             Output("Output", log.stdout.orEmpty().ifBlank { "(none)" })
             if (!log.stderr.isNullOrBlank()) Output("Errors", log.stderr!!)
@@ -412,9 +406,9 @@ private fun IntegrationRow(i: IntegrationInfo, model: AdminModel, onRemove: () -
         if (i.installed && !busy) {
             Box {
                 IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "More") }
-                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                    DropdownMenuItem(text = { Text("Reinstall") }, onClick = { menu = false; model.install(i) })
-                    DropdownMenuItem(text = { Text("Remove", color = BAD) }, onClick = { menu = false; onRemove() })
+                HerdrMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    HerdrMenuItem(text = { Text("Reinstall") }, onClick = { menu = false; model.install(i) })
+                    HerdrMenuItem(text = { Text("Remove", color = MaterialTheme.colorScheme.error) }, onClick = { menu = false; onRemove() })
                 }
             }
         }
@@ -490,26 +484,26 @@ private fun ServerTab(model: AdminModel, state: HostState) {
                         )
                     }
                 }
-                is Load.Failed -> Text(m.message, color = BAD, style = MaterialTheme.typography.bodySmall)
+                is Load.Failed -> com.makefunstuff.herdr.ui.design.ErrorMessage(m.message)
                 Load.Loading -> {}
             }
             val shown = (model.manifests as? Load.Ready)?.value.orEmpty()
             if (showManifests) {
                 shown.forEach { a ->
                     KeyValue(a.agent, listOfNotNull(a.activeVersion, a.sourceKind.ifBlank { null }).joinToString(" · "))
-                    (a.remoteUpdateError ?: a.warning)?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = WARN) }
+                    (a.remoteUpdateError ?: a.warning)?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = readableOnSurface(WARN)) }
                 }
             }
         }
 
         SectionCard {
-            Text("Danger zone", style = MaterialTheme.typography.titleMedium, color = BAD)
+            Text("Danger zone", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.error)
             Hint("Stopping the server closes every pane and agent in this session. Start it again by running herdr on the machine.")
             OutlinedButton(
                 onClick = { confirmStop = true },
                 enabled = state.online && !model.isBusy("stop"),
                 modifier = Modifier.fillMaxWidth(),
-            ) { Text("Stop server", color = BAD) }
+            ) { Text("Stop server", color = MaterialTheme.colorScheme.error) }
         }
     }
 
@@ -550,7 +544,7 @@ private fun ServerTab(model: AdminModel, state: HostState) {
 @Composable
 private fun UpdateDialog(canHandoff: Boolean, onConfirm: (Boolean) -> Unit, onDismiss: () -> Unit) {
     var handoff by remember { mutableStateOf(false) }
-    AlertDialog(
+    HerdrDialog(
         onDismissRequest = onDismiss,
         title = { Text("Update herdr?") },
         text = {
@@ -623,8 +617,8 @@ private fun SavedMachineRow(m: SavedMachineEntry, model: AdminModel, onRemove: (
             }
             if (busy) CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
         }
-        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-            DropdownMenuItem(text = { Text("Remove", color = BAD) }, enabled = !busy, onClick = { menu = false; onRemove() })
+        HerdrMenu(expanded = menu, onDismissRequest = { menu = false }) {
+            HerdrMenuItem(text = { Text("Remove", color = MaterialTheme.colorScheme.error) }, enabled = !busy, onClick = { menu = false; onRemove() })
         }
     }
 }
@@ -637,9 +631,9 @@ private fun AddMachineSheet(model: AdminModel, onDismiss: () -> Unit) {
     var sessionName by remember { mutableStateOf("") }
     val busy = model.isBusy("machine-add")
     val valid = target.isNotBlank() && !target.trim().startsWith("-") && target.trim().none { it.isWhitespace() }
-    ModalBottomSheet(onDismissRequest = { if (!busy) onDismiss() }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+    HerdrSheet(onDismissRequest = { if (!busy) onDismiss() }) {
         Column(
-            Modifier.fillMaxWidth().imePadding().verticalScroll(rememberScrollState())
+            Modifier.fillMaxWidth().imePadding()
                 .padding(horizontal = 20.dp).padding(bottom = 16.dp).navigationBarsPadding(),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
@@ -649,7 +643,7 @@ private fun AddMachineSheet(model: AdminModel, onDismiss: () -> Unit) {
             OutlinedTextField(label, { label = it }, label = { Text("Label (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
             OutlinedTextField(sessionName, { sessionName = it }, label = { Text("Remote session (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
             Busy(busy, "Connecting and preparing herdr there…")
-            model.addError?.let { Text(it, color = BAD, style = MaterialTheme.typography.bodyMedium) }
+            model.addError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
             Button(
                 onClick = { model.addMachine(target.trim(), label.trim(), sessionName.trim(), onDone = onDismiss) },
                 enabled = valid && !busy,
@@ -663,20 +657,20 @@ private fun AddMachineSheet(model: AdminModel, onDismiss: () -> Unit) {
 
 private fun <T> LazyListScope.loadState(load: Load<T>, empty: String, content: LazyListScope.(T) -> Unit) {
     when (load) {
-        Load.Loading -> item { Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
-        is Load.Failed -> item { Text(load.message, color = BAD, style = MaterialTheme.typography.bodyMedium) }
+        Load.Loading -> item { com.makefunstuff.herdr.ui.design.LoadingState() }
+        is Load.Failed -> item { com.makefunstuff.herdr.ui.design.ErrorState("Couldn't load this", load.message) }
         is Load.Ready -> if ((load.value as? Collection<*>)?.isEmpty() == true) item { Hint(empty) } else content(load.value)
     }
 }
 
 @Composable
 private fun Confirm(title: String, body: String, action: String, onConfirm: () -> Unit, onDismiss: () -> Unit, destructive: Boolean = true) {
-    AlertDialog(
+    HerdrDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = { Text(body) },
         confirmButton = {
-            TextButton(onClick = { onDismiss(); onConfirm() }) { Text(action, color = if (destructive) BAD else Color.Unspecified) }
+            TextButton(onClick = { onDismiss(); onConfirm() }) { Text(action, color = if (destructive) MaterialTheme.colorScheme.error else Color.Unspecified) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
@@ -728,3 +722,8 @@ private fun Busy(busy: Boolean, text: String) {
 private fun Modifier.combinedClickableCompat(onClick: () -> Unit): Modifier = combinedClickable(onClick = onClick)
 
 private fun time(ms: Long): String = DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(ms))
+
+/** [c] darkened or lightened until it reads on the current surface. */
+@Composable
+private fun readableOnSurface(c: Color): Color =
+    com.makefunstuff.herdr.ui.design.readable(c, MaterialTheme.colorScheme.surface, MaterialTheme.colorScheme.onSurface)

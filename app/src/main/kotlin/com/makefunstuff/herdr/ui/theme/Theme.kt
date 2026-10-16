@@ -1,14 +1,20 @@
 package com.makefunstuff.herdr.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Shapes
+import androidx.compose.material3.Typography
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import com.makefunstuff.herdr.core.api.AgentStatus
 
-private val Dark = darkColorScheme(
+internal val Dark = darkColorScheme(
     primary = Color(0xFF7DD3B6),
     onPrimary = Color(0xFF00382B),
     primaryContainer = Color(0xFF0F5141),
@@ -33,7 +39,7 @@ private val Dark = darkColorScheme(
     error = Color(0xFFFFB4AB),
 )
 
-private val Light = lightColorScheme(
+internal val Light = lightColorScheme(
     primary = Color(0xFF1E6B58),
     onPrimary = Color.White,
     primaryContainer = Color(0xFFA6F2D4),
@@ -51,7 +57,21 @@ private val Light = lightColorScheme(
 
 @Composable
 fun HerdrTheme(content: @Composable () -> Unit) {
-    MaterialTheme(colorScheme = if (isSystemInDarkTheme()) Dark else Light, content = content)
+    MaterialTheme(
+        colorScheme = if (isSystemInDarkTheme()) Dark else Light,
+        shapes = Shapes(
+            extraSmall = RoundedCornerShape(8.dp), small = RoundedCornerShape(12.dp), medium = RoundedCornerShape(16.dp),
+            large = RoundedCornerShape(24.dp), extraLarge = RoundedCornerShape(28.dp),
+        ),
+        typography = Typography().let {
+            it.copy(
+                titleLarge = it.titleLarge.copy(fontWeight = FontWeight.SemiBold),
+                titleMedium = it.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                labelSmall = it.labelSmall.copy(fontSize = 12.sp),
+            )
+        },
+        content = content,
+    )
 }
 
 /** herdr's own sidebar colours for agent states. */

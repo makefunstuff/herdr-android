@@ -1,5 +1,10 @@
 package com.makefunstuff.herdr.ui.board
 
+import com.makefunstuff.herdr.ui.design.readableText
+import com.makefunstuff.herdr.ui.design.HerdrDialog
+import com.makefunstuff.herdr.ui.design.HerdrMenu
+import com.makefunstuff.herdr.ui.design.HerdrMenuItem
+import com.makefunstuff.herdr.ui.design.HerdrSheet
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -45,8 +50,6 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
@@ -228,9 +231,9 @@ fun BoardScreen(nav: NavController, machineId: String) {
                     IconButton(onClick = { nav.navigate(Routes.coordinator(machineId)) }) { Icon(Icons.Filled.Email, "Coordinator chat") }
                     Box {
                         IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "Filter and more") }
-                        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                            DropdownMenuItem(text = { Text(if (archived) "Hide archived" else "Show archived") }, onClick = { archived = !archived; menu = false })
-                            DropdownMenuItem(text = { Text("Refresh") }, leadingIcon = { Icon(Icons.Filled.Refresh, null) }, onClick = { readNow.trySend(Unit); menu = false })
+                        HerdrMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                            HerdrMenuItem(text = { Text(if (archived) "Hide archived" else "Show archived") }, onClick = { archived = !archived; menu = false })
+                            HerdrMenuItem(text = { Text("Refresh") }, leadingIcon = { Icon(Icons.Filled.Refresh, null) }, onClick = { readNow.trySend(Unit); menu = false })
                         }
                     }
                 },
@@ -275,7 +278,7 @@ fun BoardScreen(nav: NavController, machineId: String) {
                     contentPadding = PaddingValues(12.dp, 8.dp, 12.dp, 88.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    problem?.let { p -> item(key = "problem") { Text(p, color = BoardStatus.Error.color(), style = MaterialTheme.typography.bodySmall) } }
+                    problem?.let { p -> item(key = "problem") { Text(p, color = BoardStatus.Error.color().readableText(), style = MaterialTheme.typography.bodySmall) } }
                     if (groups.isEmpty()) {
                         item(key = "empty") {
                             Text(
@@ -291,7 +294,7 @@ fun BoardScreen(nav: NavController, machineId: String) {
                             Text(
                                 (if (collapsible) (if (open) "▾ " else "▸ ") else "") + "$title · ${list.size}",
                                 style = MaterialTheme.typography.titleSmall,
-                                color = if (title == "Needs you") BoardStatus.Error.color() else MaterialTheme.colorScheme.onSurfaceVariant,
+                                color = if (title == "Needs you") BoardStatus.Error.color().readableText() else MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
                                     .then(if (collapsible) Modifier.clickable(onClickLabel = if (open) "Hide done tasks" else "Show done tasks") { showDone = !showDone } else Modifier)
                                     .heightIn(min = 40.dp).wrapContentHeight(Alignment.CenterVertically)
@@ -380,7 +383,7 @@ private fun TaskRow(t: BoardTask, onOpen: () -> Unit, onMenu: () -> Unit) {
                     Text("${t.eta}m left", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 if (t.pr.isNotEmpty()) {
-                    Text("PR " + t.prNumber.let { if (it.isEmpty()) t.pr else "#$it" }, style = MaterialTheme.typography.labelSmall, color = BoardStatus.Done.color())
+                    Text("PR " + t.prNumber.let { if (it.isEmpty()) t.pr else "#$it" }, style = MaterialTheme.typography.labelSmall, color = BoardStatus.Done.color().readableText())
                 }
             }
         }

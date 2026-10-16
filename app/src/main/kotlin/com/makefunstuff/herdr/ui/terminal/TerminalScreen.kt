@@ -1,5 +1,9 @@
 package com.makefunstuff.herdr.ui.terminal
 
+import com.makefunstuff.herdr.ui.design.HerdrDialog
+import com.makefunstuff.herdr.ui.design.HerdrMenu
+import com.makefunstuff.herdr.ui.design.HerdrMenuItem
+import com.makefunstuff.herdr.ui.design.HerdrSheet
 import android.content.Context
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -32,13 +36,10 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -323,6 +324,8 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
                             },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
                     }
                 },
@@ -332,12 +335,12 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
                 actions = {
                     if (!finding) IconButton(onClick = { finding = true }) { Icon(Icons.Default.Search, "Find") }
                     IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, "More") }
-                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                        DropdownMenuItem(
+                    HerdrMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                        HerdrMenuItem(
                             text = { Text(if (finding) "Hide find" else "Find in scrollback") },
                             onClick = { menu = false; finding = !finding },
                         )
-                        DropdownMenuItem(
+                        HerdrMenuItem(
                             text = { Text("Select text") },
                             onClick = {
                                 menu = false
@@ -346,20 +349,20 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
                                 context.toast("Drag to select, then Copy")
                             },
                         )
-                        DropdownMenuItem(
+                        HerdrMenuItem(
                             text = { Text("Copy screen") },
                             onClick = { menu = false; view?.let { context.copyToClipboard("terminal", it.screenText(), "Screen copied") } },
                         )
-                        DropdownMenuItem(text = { Text("Resize pane…") }, onClick = { menu = false; resizeOpen = true })
-                        DropdownMenuItem(
+                        HerdrMenuItem(text = { Text("Resize pane…") }, onClick = { menu = false; resizeOpen = true })
+                        HerdrMenuItem(
                             text = { Text("Layout…") },
                             onClick = { menu = false; nav.navigate(Routes.layout(machineId, paneId)) },
                         )
-                        DropdownMenuItem(
+                        HerdrMenuItem(
                             text = { Text(if (keepHost) "Fit to phone" else "Desktop size") },
                             onClick = { menu = false; keepHost = !keepHost },
                         )
-                        DropdownMenuItem(text = { Text("Reconnect") }, onClick = { menu = false; generation++ })
+                        HerdrMenuItem(text = { Text("Reconnect") }, onClick = { menu = false; generation++ })
                     }
                 },
             )
@@ -507,7 +510,7 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
     }
 
     if (resizeOpen) {
-        ModalBottomSheet(onDismissRequest = { resizeOpen = false }) {
+        HerdrSheet(onDismissRequest = { resizeOpen = false }) {
             ResizeSheet(
                 onPick = {
                     resize(it)

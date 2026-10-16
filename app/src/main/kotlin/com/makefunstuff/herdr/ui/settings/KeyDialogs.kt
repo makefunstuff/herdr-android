@@ -1,5 +1,9 @@
 package com.makefunstuff.herdr.ui.settings
 
+import com.makefunstuff.herdr.ui.design.HerdrDialog
+import com.makefunstuff.herdr.ui.design.HerdrMenu
+import com.makefunstuff.herdr.ui.design.HerdrMenuItem
+import com.makefunstuff.herdr.ui.design.HerdrSheet
 import android.content.Context
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -11,7 +15,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -67,11 +70,11 @@ fun ImportKeyDialog(replacing: Boolean, onDismiss: () -> Unit) {
         }
     }
 
-    AlertDialog(
+    HerdrDialog(
         onDismissRequest = { if (!busy) onDismiss() },
         title = { Text(if (replacing) "Replace the SSH key" else "Restore or import a key") },
         text = {
-            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(Modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
                     "Choose a key backup saved from this app, or an OpenSSH private key (a file like ~/.ssh/id_ed25519). You can also paste it.",
                     style = MaterialTheme.typography.bodySmall,
@@ -106,7 +109,7 @@ fun ImportKeyDialog(replacing: Boolean, onDismiss: () -> Unit) {
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                     modifier = Modifier.fillMaxWidth(),
                 )
-                error?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
+                error?.let { com.makefunstuff.herdr.ui.design.ErrorMessage(it) }
             }
         },
         confirmButton = {
@@ -165,11 +168,11 @@ fun ExportKeyDialog(onDismiss: () -> Unit) {
 
     val tooShort = passphrase.length < MIN_PASSPHRASE
     val mismatch = repeat.isNotEmpty() && repeat != passphrase
-    AlertDialog(
+    HerdrDialog(
         onDismissRequest = { if (!busy) onDismiss() },
         title = { Text("Back up the SSH key") },
         text = {
-            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(Modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
                     "Saves the private key as an OpenSSH key file protected by a passphrase. Restore it here after reinstalling the app or on a new phone, and your machines keep trusting it. Without the passphrase the file is useless, so don't lose it.",
                     style = MaterialTheme.typography.bodySmall,
@@ -214,7 +217,7 @@ fun NewKeyDialog(replacing: Boolean, onDismiss: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var busy by remember { mutableStateOf(false) }
-    AlertDialog(
+    HerdrDialog(
         onDismissRequest = { if (!busy) onDismiss() },
         title = { Text(if (replacing) "Replace the key with a new one?" else "Make a new key?") },
         text = {
@@ -254,7 +257,7 @@ fun KeySetupDialog(unreadable: String?, onDismiss: () -> Unit) {
     when {
         importing -> ImportKeyDialog(replacing = unreadable != null, onDismiss = { importing = false })
         creating -> NewKeyDialog(replacing = unreadable != null, onDismiss = { creating = false })
-        else -> AlertDialog(
+        else -> HerdrDialog(
             onDismissRequest = onDismiss,
             title = { Text(if (unreadable != null) "The SSH key can't be read" else "Set up the SSH key") },
             text = {

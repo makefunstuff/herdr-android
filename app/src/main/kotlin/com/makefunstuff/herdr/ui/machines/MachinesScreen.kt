@@ -32,6 +32,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
@@ -99,7 +102,8 @@ private fun MachineCard(host: HostState, via: String?, onOpen: () -> Unit, onRet
     val snap = host.snapshot
     val dim = !host.online
     Card(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onOpen),
+        modifier = Modifier.fillMaxWidth().clickable(onClickLabel = "Open ${m.label}", onClick = onOpen)
+            .semantics(mergeDescendants = true) { stateDescription = host.status.label() },
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
     ) {
@@ -146,9 +150,9 @@ private fun MachineCard(host: HostState, via: String?, onOpen: () -> Unit, onRet
                         }
                     }
                     if (status is HostStatus.Attention && status.kind == HostStatus.Attention.Kind.HostKey) {
-                        OutlinedButton(onClick = onEdit) { Text("Review") }
+                        OutlinedButton(onClick = onEdit, modifier = Modifier.heightIn(min = 48.dp)) { Text("Review") }
                     }
-                    OutlinedButton(onClick = onRetry) { Text("Retry") }
+                    OutlinedButton(onClick = onRetry, modifier = Modifier.heightIn(min = 48.dp)) { Text("Retry") }
                 }
             }
         }
