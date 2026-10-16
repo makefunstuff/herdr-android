@@ -43,7 +43,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="apk-${GITHUB_REF_NAME//\//-}"
+          # Branch names can hold characters (or a trailing "-") GitHub refuses in a release tag.
+          tag="apk-$(printf '%s' "$GITHUB_REF_NAME" | tr -c 'A-Za-z0-9._-' '-' | sed -E 's/-+/-/g; s/[-.]+$//')"
           gh release delete "$tag" --yes --cleanup-tag || true
           gh release create "$tag" out/*.apk --prerelease --target "$GITHUB_SHA" \
             --title "Herdr for Android build ${GITHUB_RUN_NUMBER} (${GITHUB_REF_NAME})" \
