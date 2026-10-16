@@ -46,6 +46,7 @@ import com.makefunstuff.herdr.ui.settings.KeySetupDialog
 import com.makefunstuff.herdr.ui.settings.SettingsScreen
 import com.makefunstuff.herdr.ui.terminal.TerminalScreen
 import com.makefunstuff.herdr.ui.theme.HerdrTheme
+import com.makefunstuff.herdr.ui.worktrees.WorktreesScreen
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -69,12 +70,15 @@ object Routes {
     const val AGENT = "agent/{mid}/{pane}"
     const val TERMINAL = "terminal/{mid}/{pane}"
     const val COORDINATOR = "coordinator/{mid}"
+    const val WORKTREES = "worktrees/{mid}?ws={ws}"
 
     fun machine(id: String) = "machine/$id"
     fun edit(id: String? = null) = if (id == null) "edit" else "edit?id=$id"
     fun agent(mid: String, pane: String) = "agent/$mid/${Uri.encode(pane)}"
     fun terminal(mid: String, pane: String) = "terminal/$mid/${Uri.encode(pane)}"
     fun coordinator(mid: String) = "coordinator/$mid"
+    fun worktrees(mid: String, workspaceId: String? = null) =
+        if (workspaceId == null) "worktrees/$mid" else "worktrees/$mid?ws=${Uri.encode(workspaceId)}"
 }
 
 @Composable
@@ -135,6 +139,9 @@ private fun AppNav() {
             composable(Routes.EDIT) { EditMachineScreen(nav, it.arguments?.getString("id")) }
             composable(Routes.AGENT) {
                 AgentScreen(nav, it.arguments?.getString("mid").orEmpty(), Uri.decode(it.arguments?.getString("pane").orEmpty()))
+            }
+            composable(Routes.WORKTREES) {
+                WorktreesScreen(nav, it.arguments?.getString("mid").orEmpty(), it.arguments?.getString("ws")?.let(Uri::decode))
             }
             composable(Routes.COORDINATOR) { CoordinatorScreen(nav, it.arguments?.getString("mid").orEmpty()) }
             composable(Routes.TERMINAL) {

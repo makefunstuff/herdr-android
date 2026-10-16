@@ -1,7 +1,10 @@
 package com.makefunstuff.herdr.ui.machines
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -71,6 +74,10 @@ import com.makefunstuff.herdr.ui.common.label
 import com.makefunstuff.herdr.ui.common.toast
 import com.makefunstuff.herdr.ui.coordinator.CoordinatorCard
 import com.makefunstuff.herdr.ui.theme.color
+import com.makefunstuff.herdr.ui.worktrees.CreateWorktreeSheet
+import com.makefunstuff.herdr.ui.worktrees.RemoveRequest
+import com.makefunstuff.herdr.ui.worktrees.RemoveWorktreeFlow
+import com.makefunstuff.herdr.ui.worktrees.RepoTarget
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -90,6 +97,9 @@ fun MachineScreen(nav: NavController, machineId: String) {
     var showNew by remember { mutableStateOf(false) }
     var importing by remember { mutableStateOf<List<ImportCandidate>?>(null) }
     val selectedTab = remember { mutableStateMapOf<String, String>() }
+
+    var newWorktreeFor by remember { mutableStateOf<WorkspaceInfo?>(null) }
+    var removing by remember { mutableStateOf<RemoveRequest?>(null) }
 
     fun openPane(pane: PaneInfo) {
         val hasAgent = snap?.agents?.any { it.paneId == pane.paneId } == true
@@ -124,6 +134,7 @@ fun MachineScreen(nav: NavController, machineId: String) {
                                     .onFailure { context.toast(it.message ?: "Couldn't read machines") }
                             }
                         })
+                        DropdownMenuItem(text = { Text("Worktrees") }, onClick = { menu = false; nav.navigate(Routes.worktrees(machineId)) })
                         DropdownMenuItem(text = { Text("Edit machine") }, onClick = { menu = false; nav.navigate(Routes.edit(machineId)) })
                     }
                 },
@@ -161,6 +172,13 @@ fun MachineScreen(nav: NavController, machineId: String) {
                     onSelectTab = { selectedTab[ws.workspaceId] = it },
                     onOpenPane = ::openPane,
                     onTerminal = { nav.navigate(Routes.terminal(machineId, it.paneId)) },
+                    online = state.online,
+                    onWorktrees = { nav.navigate(Routes.worktrees(machineId, ws.workspaceId)) },
+                    onNewWorktree = { newWorktreeFor = ws },
+                    onRemoveWorktree = {
+                        val wt = ws.worktree ?: return@WorkspaceCard
+                        removing = RemoveRequest(ws.label.ifBlank { wt.checkoutPath.substringAfterLast('/') }, wt.checkoutPath, ws.workspaceId, RepoTarget(ws.workspaceId, null))
+                    },
                 )
             }
         }
@@ -169,6 +187,19 @@ fun MachineScreen(nav: NavController, machineId: String) {
     if (showNew && snap != null) {
         NewSheet(session, snap, onDismiss = { showNew = false })
     }
+
+    newWorktreeFor?.let { ws ->
+        CreateWorktreeSheet(
+            session,
+            ws.worktree?.repoName?.ifBlank { null } ?: ws.label,
+            RepoTarget(ws.workspaceId, null),
+            branches = emptyList(),
+            onDismiss = { newWorktreeFor = null },
+            onNeedsTrust = { newWorktreeFor = null; nav.navigate(Routes.worktrees(machineId, ws.workspaceId)) },
+        )
+    }
+
+    removing?.let { req -> RemoveWorktreeFlow(session, req) { removing = null } }
 
     importing?.let { candidates ->
         ImportDialog(
@@ -184,6 +215,7 @@ fun MachineScreen(nav: NavController, machineId: String) {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun WorkspaceCard(
     ws: WorkspaceInfo,
@@ -192,7 +224,13 @@ private fun WorkspaceCard(
     onSelectTab: (String) -> Unit,
     onOpenPane: (PaneInfo) -> Unit,
     onTerminal: (PaneInfo) -> Unit,
+    online: Boolean,
+    onWorktrees: () -> Unit,
+    onNewWorktree: () -> Unit,
+    onRemoveWorktree: () -> Unit,
 ) {
+    var menu by remember { mutableStateOf(false) }
+    val repo = ws.worktree
     val tabs = snap.tabs.filter { it.workspaceId == ws.workspaceId }
     val tabId = tabs.firstOrNull { it.tabId == selectedTabId }?.tabId ?: tabs.firstOrNull()?.tabId
     val panes = snap.panes.filter { it.tabId == tabId }
@@ -202,13 +240,36 @@ private fun WorkspaceCard(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
     ) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                // Long-press the header for the workspace's Git actions.
+                modifier = if (repo != null) Modifier.combinedClickable(onClick = {}, onLongClick = { menu = true }) else Modifier,
+            ) {
                 StatusDot(ws.agentStatus.color())
                 Spacer(Modifier.width(10.dp))
                 Text(ws.label.ifBlank { ws.workspaceId }, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                ws.worktree?.takeIf { it.isLinkedWorktree }?.let { Pill("worktree") }
+                repo?.takeIf { it.isLinkedWorktree }?.let { Pill("worktree") }
                 Spacer(Modifier.width(6.dp))
                 Pill("${ws.tabCount} tab${if (ws.tabCount == 1) "" else "s"}")
+                if (repo != null) {
+                    Box {
+                        IconButton(onClick = { menu = true }, modifier = Modifier.size(32.dp)) { Icon(Icons.Filled.MoreVert, "Git actions for ${ws.label}") }
+                        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                            DropdownMenuItem(
+                                text = { Text("Worktrees of ${repo.repoName.ifBlank { "this repository" }}") },
+                                onClick = { menu = false; onWorktrees() },
+                            )
+                            DropdownMenuItem(text = { Text("New worktree…") }, enabled = online, onClick = { menu = false; onNewWorktree() })
+                            if (repo.isLinkedWorktree) {
+                                DropdownMenuItem(
+                                    text = { Text("Remove this worktree…", color = MaterialTheme.colorScheme.error) },
+                                    enabled = online,
+                                    onClick = { menu = false; onRemoveWorktree() },
+                                )
+                            }
+                        }
+                    }
+                }
             }
             if (tabs.size > 1) {
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
