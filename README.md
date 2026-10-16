@@ -1,6 +1,6 @@
 # <img src="docs/screenshots/icon.webp" alt="" width="48" align="center"> Herdr for Android
 
-A native Android client for [herdr](https://herdr.dev) hosts: see your agents across machines, answer the blocked ones, and open any pane as a live terminal. Kotlin, Jetpack Compose and Material 3.
+A native Android client for [herdr](https://herdr.dev) hosts: see your agents across machines, answer the blocked ones, and open any pane as a live terminal. Kotlin and Jetpack Compose, with the app's own design system on Material 3 ([`docs/DESIGN.md`](docs/DESIGN.md)).
 
 <table>
   <tr>
@@ -15,9 +15,15 @@ A native Android client for [herdr](https://herdr.dev) hosts: see your agents ac
     <td align="center"><img src="docs/screenshots/terminal.webp" alt="Terminal" width="200"><br><sub><b>Terminal</b>: any pane, live, sized to the phone</sub></td>
     <td align="center"><img src="docs/screenshots/settings.webp" alt="Settings" width="200"><br><sub><b>Settings</b>: the SSH key, with backup and restore</sub></td>
   </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshots/board.webp" alt="The work board" width="200"><br><sub><b>Board</b>: tasks in the board's colours, the ones that need you first</sub></td>
+    <td align="center"><img src="docs/screenshots/task.webp" alt="A task's details" width="200"><br><sub><b>A task</b>: next step, reviews, links, one tap to approve</sub></td>
+    <td align="center"><img src="docs/screenshots/agents-dark.webp" alt="Agents in dark mode" width="200"><br><sub><b>Dark mode</b>: follows the phone</sub></td>
+    <td align="center"><img src="docs/screenshots/board-dark.webp" alt="The board in dark mode" width="200"><br><sub><b>Board, dark</b></sub></td>
+  </tr>
 </table>
 
-The screenshots come from a demo host with made-up projects (see [`docs/screenshots/demo-host`](docs/screenshots/demo-host)).
+The screenshots come from a demo host with made-up projects (see [`docs/screenshots/demo-host`](docs/screenshots/demo-host)). The look (colours, type, spacing, components) is described in [`docs/DESIGN.md`](docs/DESIGN.md).
 
 ## Getting the app
 
@@ -83,4 +89,4 @@ On a machine with [herdr-projects](https://github.com/eliasstravik/herdr-project
 ## Layout
 
 - `core/`: pure Kotlin/JVM: SSH, herdr API, host sessions, terminal emulator. `./gradlew -p core test`.
-- `app/`: the Android app.
+- `app/`: the Android app. `ui/theme` and `ui/design` hold its look and shared components ([`docs/DESIGN.md`](docs/DESIGN.md)).
