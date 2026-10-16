@@ -60,6 +60,55 @@ class BoardTest {
         val b64 = cmd.substringAfterLast(' ')
         assertEquals("""{"text":"it's \"quoted\"\nline two","delegate":true}""", String(Base64.getDecoder().decode(b64)))
         assertEquals("'/p' remote 'list'", BoardCommands.command(machine, "/p", "list"))
+        // The board gets the exact executable as well as its directory on PATH.
+        assertEquals(
+            "env HERDR_BIN_PATH='/home/u/.local/bin/herdr' PATH='/home/u/.local/bin':\"\$PATH\" '/p' remote 'list'",
+            BoardCommands.command(machine.copy(herdrPath = "/home/u/.local/bin/herdr"), "/p", "list"),
+        )
+    }
+
+    @Test
+    fun launcherRunsTheSelectedExecutableIncludingVersionedFilenames() {
+        val dir = kotlin.io.path.createTempDirectory("board-binary").toFile()
+        try {
+            fun binary(path: String, version: String) = java.io.File(dir, path).apply {
+                parentFile.mkdirs()
+                writeText("#!/bin/sh\nprintf 'herdr %s\\n' '$version'\n")
+                setExecutable(true)
+            }
+            val old = binary("old/herdr", "0.8.2")
+            // Like the installed board, the launcher prefers HERDR_BIN_PATH over the name herdr.
+            val launcher = java.io.File(dir, "probe launcher").apply {
+                writeText("#!/bin/sh\nprintf 'session=%s\\n' \"\$HERDR_SESSION\"\n\"\${HERDR_BIN_PATH:-herdr}\" --version\n")
+                setExecutable(true)
+            }
+            val selected = listOf("herdr", "herdr-0.9.5").map { binary("server's binaries/$it", "0.9.5") }
+            for (executable in selected) {
+                val m = machine.copy(session = "named session", herdrPath = executable.path)
+                for (what in listOf("list", "dispatch")) {
+                    val request = if (what == "dispatch") BoardCommands.dispatchRequest("hello", true) else null
+                    val commands = listOf(
+                        BoardCommands.command(m, launcher.path, what, request),
+                        BoardCommands.remote(m, launcher.path, what, request),
+                    )
+                    for (command in commands) {
+                        val p = ProcessBuilder("/bin/sh", "-c", command).apply {
+                            environment().putAll(mapOf(
+                                "PATH" to "${old.parent}:/usr/bin:/bin", "HOME" to dir.path,
+                                "SHELL" to "/bin/sh",
+                                "HERDR_BIN_PATH" to if (what == "dispatch") old.path else "",
+                            ))
+                        }.redirectErrorStream(true).start()
+                        val output = p.inputStream.readBytes().toString(Charsets.UTF_8)
+                        assertEquals(0, p.waitFor(), output)
+                        assertEquals("session=named session\nherdr 0.9.5\n", output, command)
+                    }
+                }
+                executable.delete() // The versioned case must have no sibling named herdr.
+            }
+        } finally {
+            dir.deleteRecursively()
+        }
     }
 
     @Test

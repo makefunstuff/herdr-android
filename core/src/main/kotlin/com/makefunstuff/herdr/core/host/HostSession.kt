@@ -8,6 +8,9 @@ import com.makefunstuff.herdr.core.api.HerdrApi
 import com.makefunstuff.herdr.core.api.SessionSnapshot
 import com.makefunstuff.herdr.core.board.BoardClient
 import com.makefunstuff.herdr.core.ssh.ConnectError
+import com.makefunstuff.herdr.core.ssh.HerdrBinaries
+import com.makefunstuff.herdr.core.ssh.HerdrBinary
+import com.makefunstuff.herdr.core.ssh.HerdrChoice
 import com.makefunstuff.herdr.core.ssh.HerdrCommands
 import com.makefunstuff.herdr.core.ssh.Machine
 import com.makefunstuff.herdr.core.ssh.MachineConnection
@@ -54,6 +57,8 @@ data class HostState(
     val herdrVersion: String? = null,
     /** The herdr-projects launcher on the machine; null when the board isn't installed (or not checked yet). */
     val boardPath: String? = null,
+    /** The herdr executable the app runs on the machine; null until it connects, or when it couldn't be probed. */
+    val herdr: HerdrChoice? = null,
     /**
      * The metadata integrations report for each workspace (branch, PR, …), as key → value. Read
      * separately from [snapshot], which doesn't carry it, and kept for every workspace (empty when
@@ -66,6 +71,9 @@ data class HostState(
     val unreadNotices: Int = 0,
 ) {
     val hasBoard: Boolean get() = boardPath != null
+
+    /** [machine] with its herdr path set to the chosen binary: what every herdr command should run. */
+    val herdrMachine: Machine get() = herdr?.let { machine.copy(herdrPath = it.binary.path) } ?: machine
 
     val online: Boolean get() = status == HostStatus.Online
 }
@@ -95,6 +103,7 @@ class HostSession(
 
     @Volatile private var connection: MachineConnection? = null
     @Volatile private var api: HerdrApi? = null
+    @Volatile private var herdrMachine: Machine = machine
     @Volatile private var metaDirty = true
 
     val machine: Machine get() = _state.value.machine
@@ -170,7 +179,7 @@ class HostSession(
     suspend fun awaitBoard(timeoutMs: Long = 20_000): BoardClient {
         val conn = awaitConnection(timeoutMs)
         val path = state.value.boardPath ?: throw IOException("herdr-projects isn't installed on ${machine.label}")
-        return BoardClient(conn, machine, path)
+        return BoardClient(conn, state.value.herdrMachine, path)
     }
 
     /** Looks for the board again, for one installed or removed since the machine connected. */
@@ -226,16 +235,22 @@ class HostSession(
             onHostKeyLearned(m.id, conn.hostKeyFingerprint)
         }
 
-        val opener = apiOpener(conn, m)
+        // Run the same herdr as the server: the first one on SSH's PATH may be an older install.
+        val found = probeHerdr(conn, m)
+        var choice = HerdrBinaries.choose(found, null)?.let { HerdrChoice(it, null, found) }
+        herdrMachine = choice?.let { m.copy(herdrPath = it.binary.path) } ?: m
+        val opener = apiOpener(conn, m, found)
         val herdr = HerdrApi(ApiClient(opener))
         val pong = herdr.ping()
         api = herdr
+        choice = HerdrBinaries.choose(found, pong.version)?.let { HerdrChoice(it, pong.version, found) }
+        herdrMachine = choice?.let { m.copy(herdrPath = it.binary.path) } ?: m
 
         // Subscribe before the first snapshot so no change slips between them.
         val events = subscribe(opener, HerdrApi.subscriptionParams(emptyList()))
 
         val snapshot = herdr.snapshot()
-        applySnapshot(snapshot) { it.copy(status = HostStatus.Online, herdrVersion = pong.version) }
+        applySnapshot(snapshot) { it.copy(status = HostStatus.Online, herdrVersion = pong.version, herdr = choice) }
         launch { checkBoard() }
         launch { loadWorkspaceMeta(herdr, snapshot) }
 
@@ -273,13 +288,19 @@ class HostSession(
         throw error ?: IOException("Connection closed")
     }
 
+    /** Every herdr on the machine, best first; empty when the probe itself failed (the search script still runs then). */
+    private suspend fun probeHerdr(conn: MachineConnection, m: Machine): List<HerdrBinary> {
+        val out = runCatching { conn.run(HerdrCommands.probe(m)) }.getOrNull() ?: return emptyList()
+        return HerdrBinaries.parse(out.stdout)
+    }
+
     /**
      * Finds how to reach the session's API socket. Prefers a direct Unix-socket channel (no process
      * per request); falls back to `herdr remote-api-bridge` when the SSH server forbids socket
      * forwarding.
      */
-    private suspend fun apiOpener(conn: MachineConnection, m: Machine): suspend () -> Duplex {
-        val list = conn.run(HerdrCommands.sessionList(m))
+    private suspend fun apiOpener(conn: MachineConnection, m: Machine, found: List<HerdrBinary>): suspend () -> Duplex {
+        val list = conn.run(HerdrCommands.sessionList(herdrMachine))
         if (list.exitStatus == HerdrCommands.NOT_FOUND_EXIT) {
             throw ConnectError.HerdrMissing(
                 "herdr isn't installed on ${m.label}, or it's outside the usual paths. Install it, or set its path in this machine's settings.",
@@ -306,13 +327,9 @@ class HostSession(
             val works = runCatching { HerdrApi(ApiClient(viaSocket)).ping() }.isSuccess
             if (works) return viaSocket
         }
-        val check = conn.run(HerdrCommands.apiBridgeCheck(m))
-        if (check.stdout.trim() != "herdr-api-bridge-v1") {
-            throw ConnectError.HerdrMissing(
-                "herdr on ${m.label} is too old for the app, and SSH socket forwarding is off. Update herdr there (herdr update).",
-            )
-        }
-        return { conn.start(HerdrCommands.apiBridge(m)) }
+        herdrMachine = findApiBridge(m, found, { conn.run(it) }, { conn.start(it) })
+        // Read at each request, so the bridge follows the binary chosen once the server's version is known.
+        return { conn.start(HerdrCommands.apiBridge(herdrMachine)) }
     }
 
     private suspend fun subscribe(opener: suspend () -> Duplex, params: kotlinx.serialization.json.JsonObject): ApiConnection {
