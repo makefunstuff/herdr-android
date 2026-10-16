@@ -28,15 +28,74 @@ data class WorkspaceInfo(
     @SerialName("active_tab_id") val activeTabId: String = "",
     @SerialName("agent_status") val agentStatusRaw: String = "unknown",
     val worktree: WorktreeInfo? = null,
+    /** Metadata that integrations report for the workspace (branch, PR, …), as key → value. */
+    val tokens: Map<String, String> = emptyMap(),
 ) {
     val agentStatus: AgentStatus get() = AgentStatus.of(agentStatusRaw)
 }
 
+/** The Git checkout a workspace sits in, as herdr reports it on the workspace. */
 @Serializable
 data class WorktreeInfo(
+    @SerialName("repo_key") val repoKey: String = "",
     @SerialName("repo_name") val repoName: String = "",
+    @SerialName("repo_root") val repoRoot: String = "",
     @SerialName("checkout_path") val checkoutPath: String = "",
     @SerialName("is_linked_worktree") val isLinkedWorktree: Boolean = false,
+)
+
+/** One checkout of a repository, from `worktree.list`. */
+@Serializable
+data class GitWorktree(
+    val path: String,
+    val branch: String? = null,
+    val label: String = "",
+    @SerialName("is_bare") val isBare: Boolean = false,
+    @SerialName("is_detached") val isDetached: Boolean = false,
+    @SerialName("is_prunable") val isPrunable: Boolean = false,
+    @SerialName("is_linked_worktree") val isLinkedWorktree: Boolean = false,
+    @SerialName("open_workspace_id") val openWorkspaceId: String? = null,
+) {
+    val isOpen: Boolean get() = openWorkspaceId != null
+
+    /** What to call this checkout: its branch, or what it is when it has none. */
+    val title: String
+        get() = branch?.takeIf { it.isNotBlank() } ?: when {
+            isBare -> "bare repository"
+            isDetached -> "detached HEAD"
+            else -> path.substringAfterLast('/')
+        }
+}
+
+/** The repository a `worktree.list` call resolved to. */
+@Serializable
+data class WorktreeSource(
+    @SerialName("repo_key") val repoKey: String = "",
+    @SerialName("repo_name") val repoName: String = "",
+    @SerialName("repo_root") val repoRoot: String = "",
+    @SerialName("source_checkout_path") val sourceCheckoutPath: String = "",
+    @SerialName("source_workspace_id") val sourceWorkspaceId: String? = null,
+)
+
+@Serializable
+data class WorktreeList(
+    val source: WorktreeSource = WorktreeSource(),
+    val worktrees: List<GitWorktree> = emptyList(),
+)
+
+/** The workspace a worktree was created in or opened as. */
+@Serializable
+data class WorktreeOpened(
+    val workspace: WorkspaceInfo,
+    val worktree: GitWorktree,
+    @SerialName("already_open") val alreadyOpen: Boolean = false,
+)
+
+@Serializable
+data class WorktreeRemoved(
+    @SerialName("workspace_id") val workspaceId: String = "",
+    val path: String = "",
+    val forced: Boolean = false,
 )
 
 @Serializable
@@ -68,6 +127,7 @@ data class PaneInfo(
     @SerialName("display_agent") val displayAgent: String? = null,
     @SerialName("agent_status") val agentStatusRaw: String = "unknown",
     @SerialName("state_labels") val stateLabels: Map<String, String> = emptyMap(),
+    val scroll: PaneScroll? = null,
     val revision: Long = 0,
 ) {
     val agentStatus: AgentStatus get() = AgentStatus.of(agentStatusRaw)
@@ -131,6 +191,14 @@ data class LayoutPane(
 )
 
 @Serializable
+data class LayoutSplit(
+    val id: String = "",
+    val direction: String = "right",
+    val ratio: Float = 0.5f,
+    val rect: LayoutRect = LayoutRect(),
+)
+
+@Serializable
 data class TabLayout(
     @SerialName("workspace_id") val workspaceId: String,
     @SerialName("tab_id") val tabId: String,
@@ -138,6 +206,7 @@ data class TabLayout(
     val area: LayoutRect = LayoutRect(),
     @SerialName("focused_pane_id") val focusedPaneId: String = "",
     val panes: List<LayoutPane> = emptyList(),
+    val splits: List<LayoutSplit> = emptyList(),
 )
 
 @Serializable

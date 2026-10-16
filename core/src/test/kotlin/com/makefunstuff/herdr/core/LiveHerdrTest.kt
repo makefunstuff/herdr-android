@@ -31,7 +31,7 @@ class LiveHerdrTest {
 
     private fun machine(): Machine {
         val (user, host, port) = Machine.parseTarget(target)!!
-        return Machine("live", "live", host, port, user ?: "root")
+        return Machine("live", "live", host, port, user ?: "root", session = System.getenv("HERDR_LIVE_SESSION") ?: "default")
     }
 
     @Test
@@ -65,10 +65,15 @@ class LiveHerdrTest {
             api.createTab(pane.workspaceId, "from-test")
             withTimeout(10_000) { session.state.first { (it.snapshot?.tabs?.size ?: 0) > before } }
 
+            // The terminal runs the herdr matching the server, even when an older one is first on PATH.
+            val herdr = session.state.value.herdr!!
+            println("HERDR ${herdr.describe}, server ${herdr.serverVersion}, found ${herdr.found}")
+            assertEquals(state.herdrVersion, herdr.binary.version, herdr.explain("live"))
             val conn = session.awaitConnection()
-            val stream = TerminalStream(conn, session.machine, pane.paneId, 60, 15, scope)
+            val stream = TerminalStream(conn, session.state.value.herdrMachine, pane.paneId, 60, 15, scope)
             stream.open()
-            withTimeout(10_000) { stream.status.first { it == TerminalStream.Status.Live } }
+            withTimeout(10_000) { stream.status.first { it == TerminalStream.Status.Live || it is TerminalStream.Status.Closed } }
+            assertEquals(TerminalStream.Status.Live, stream.status.value)
             stream.send("echo stream-ok\r")
             withTimeout(10_000) {
                 while (!synchronized(stream.emulator.lock) { stream.emulator.screenText() }.contains("stream-ok")) delay(100)
@@ -82,7 +87,7 @@ class LiveHerdrTest {
             assertTrue(failure is com.makefunstuff.herdr.core.ssh.ConnectError.HostKeyChanged, "got $failure")
 
             // herdr session list works with the binary outside PATH.
-            val sessions = conn.run(HerdrCommands.sessionList(session.machine))
+            val sessions = conn.run(HerdrCommands.sessionList(session.state.value.herdrMachine))
             assertTrue(sessions.stdout.contains("\"sessions\""), sessions.stderr)
 
             session.stop()

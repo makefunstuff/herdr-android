@@ -91,7 +91,7 @@ class AdminApiTest {
 
         val e = assertFailsWith<HerdrApiException> { api.setPluginEnabled("nope", true) }
         assertEquals("plugin_not_found", e.code)
-        assertEquals("Plugin not found", e.plainMessage())
+        assertEquals("Plugin not found.", e.plainMessage())
     }
 
     @Test
@@ -120,7 +120,7 @@ class AdminApiTest {
         assertTrue(list[1].outdated)
         assertFalse(list[2].available)
         assertEquals(listOf("installed grok integration hook"), api.installIntegration("grok"))
-        assertEquals("No hook here", assertFailsWith<HerdrApiException> { api.uninstallIntegration("grok") }.plainMessage())
+        assertEquals("No hook here.", assertFailsWith<HerdrApiException> { api.uninstallIntegration("grok") }.plainMessage())
     }
 
     @Test

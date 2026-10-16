@@ -1,7 +1,11 @@
 package com.makefunstuff.herdr.ui.machines
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -20,8 +24,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
@@ -60,6 +67,7 @@ import androidx.navigation.NavController
 import com.makefunstuff.herdr.Routes
 import com.makefunstuff.herdr.core.api.PaneInfo
 import com.makefunstuff.herdr.core.api.SessionSnapshot
+import com.makefunstuff.herdr.core.api.TabInfo
 import com.makefunstuff.herdr.core.api.TabLayout
 import com.makefunstuff.herdr.core.api.WorkspaceInfo
 import com.makefunstuff.herdr.ui.common.EmptyState
@@ -71,7 +79,17 @@ import com.makefunstuff.herdr.ui.common.detail
 import com.makefunstuff.herdr.ui.common.label
 import com.makefunstuff.herdr.ui.common.toast
 import com.makefunstuff.herdr.ui.coordinator.CoordinatorCard
+import com.makefunstuff.herdr.ui.manage.NoticeRow
+import com.makefunstuff.herdr.ui.manage.NoticesSheet
+import com.makefunstuff.herdr.ui.manage.NotifySheet
+import com.makefunstuff.herdr.ui.manage.PaneActionsSheet
+import com.makefunstuff.herdr.ui.manage.TabActionsSheet
+import com.makefunstuff.herdr.ui.manage.WorkspaceActionsSheet
 import com.makefunstuff.herdr.ui.theme.color
+import com.makefunstuff.herdr.ui.worktrees.CreateWorktreeSheet
+import com.makefunstuff.herdr.ui.worktrees.RemoveRequest
+import com.makefunstuff.herdr.ui.worktrees.RemoveWorktreeFlow
+import com.makefunstuff.herdr.ui.worktrees.RepoTarget
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -90,7 +108,15 @@ fun MachineScreen(nav: NavController, machineId: String) {
     var menu by remember { mutableStateOf(false) }
     var showNew by remember { mutableStateOf(false) }
     var importing by remember { mutableStateOf<List<ImportCandidate>?>(null) }
+    var workspaceMenu by remember { mutableStateOf<WorkspaceInfo?>(null) }
+    var tabMenu by remember { mutableStateOf<TabInfo?>(null) }
+    var paneMenu by remember { mutableStateOf<PaneInfo?>(null) }
+    var showNotices by remember { mutableStateOf(false) }
+    var showNotify by remember { mutableStateOf(false) }
     val selectedTab = remember { mutableStateMapOf<String, String>() }
+
+    var newWorktreeFor by remember { mutableStateOf<WorkspaceInfo?>(null) }
+    var removing by remember { mutableStateOf<RemoveRequest?>(null) }
 
     fun openPane(pane: PaneInfo) {
         val hasAgent = snap?.agents?.any { it.paneId == pane.paneId } == true
@@ -112,9 +138,15 @@ fun MachineScreen(nav: NavController, machineId: String) {
                     }
                 },
                 actions = {
+                    if (state.notices.isNotEmpty()) {
+                        BadgedBox(badge = { if (state.unreadNotices > 0) Badge { Text("${state.unreadNotices}") } }) {
+                            IconButton(onClick = { showNotices = true; session.markNoticesRead() }) { Icon(Icons.Filled.Notifications, "Notifications") }
+                        }
+                    }
                     IconButton(onClick = { session.retry(); session.refresh(); scope.launch { session.checkBoard() } }) { Icon(Icons.Filled.Refresh, "Refresh") }
                     IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "More") }
                     DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                        DropdownMenuItem(text = { Text("Notify herdr…") }, onClick = { menu = false; showNotify = true })
                         DropdownMenuItem(text = { Text("Plugins") }, onClick = { menu = false; nav.navigate(Routes.admin(machineId, 0)) })
                         DropdownMenuItem(text = { Text("Integrations") }, onClick = { menu = false; nav.navigate(Routes.admin(machineId, 1)) })
                         DropdownMenuItem(text = { Text("Server and updates") }, onClick = { menu = false; nav.navigate(Routes.admin(machineId, 2)) })
@@ -130,6 +162,7 @@ fun MachineScreen(nav: NavController, machineId: String) {
                                     .onFailure { context.toast(it.message ?: "Couldn't read machines") }
                             }
                         })
+                        DropdownMenuItem(text = { Text("Worktrees") }, onClick = { menu = false; nav.navigate(Routes.worktrees(machineId)) })
                         DropdownMenuItem(text = { Text("Edit machine") }, onClick = { menu = false; nav.navigate(Routes.edit(machineId)) })
                     }
                 },
@@ -163,10 +196,21 @@ fun MachineScreen(nav: NavController, machineId: String) {
                 WorkspaceCard(
                     ws,
                     snap,
+                    meta = state.workspaceMeta[ws.workspaceId].orEmpty(),
                     selectedTabId = selectedTab[ws.workspaceId] ?: ws.activeTabId,
                     onSelectTab = { selectedTab[ws.workspaceId] = it },
                     onOpenPane = ::openPane,
                     onTerminal = { nav.navigate(Routes.terminal(machineId, it.paneId)) },
+                    online = state.online,
+                    onWorktrees = { nav.navigate(Routes.worktrees(machineId, ws.workspaceId)) },
+                    onNewWorktree = { newWorktreeFor = ws },
+                    onRemoveWorktree = {
+                        val wt = ws.worktree ?: return@WorkspaceCard
+                        removing = RemoveRequest(ws.label.ifBlank { wt.checkoutPath.substringAfterLast('/') }, wt.checkoutPath, ws.workspaceId, RepoTarget(ws.workspaceId, null))
+                    },
+                    onWorkspaceMenu = { workspaceMenu = ws },
+                    onTabMenu = { tabMenu = it },
+                    onPaneMenu = { paneMenu = it },
                 )
             }
         }
@@ -175,6 +219,19 @@ fun MachineScreen(nav: NavController, machineId: String) {
     if (showNew && snap != null) {
         NewSheet(session, snap, onDismiss = { showNew = false })
     }
+
+    newWorktreeFor?.let { ws ->
+        CreateWorktreeSheet(
+            session,
+            ws.worktree?.repoName?.ifBlank { null } ?: ws.label,
+            RepoTarget(ws.workspaceId, null),
+            branches = emptyList(),
+            onDismiss = { newWorktreeFor = null },
+            onNeedsTrust = { newWorktreeFor = null; nav.navigate(Routes.worktrees(machineId, ws.workspaceId)) },
+        )
+    }
+
+    removing?.let { req -> RemoveWorktreeFlow(session, req) { removing = null } }
 
     importing?.let { candidates ->
         ImportDialog(
@@ -188,17 +245,49 @@ fun MachineScreen(nav: NavController, machineId: String) {
             },
         )
     }
+
+    snap?.let { s ->
+        workspaceMenu?.let { ws ->
+            WorkspaceActionsSheet(session, ws, s, state.workspaceMeta[ws.workspaceId].orEmpty()) { workspaceMenu = null }
+        }
+        tabMenu?.let { tab -> TabActionsSheet(session, tab, s) { tabMenu = null } }
+        paneMenu?.let { pane -> PaneActionsSheet(session, pane, s) { paneMenu = null } }
+    }
+    if (showNotices) {
+        val rows = state.notices.map { NoticeRow(machineId, state.machine.label, it) }
+        NoticesSheet(
+            rows = rows,
+            showMachine = false,
+            onOpenAgent = { _, pane -> showNotices = false; nav.navigate(Routes.agent(machineId, pane)) },
+            onClear = { session.clearNotices() },
+            onDismiss = { showNotices = false },
+        )
+    }
+    if (showNotify) {
+        NotifySheet(session, state.machine.label) { showNotify = false }
+    }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun WorkspaceCard(
     ws: WorkspaceInfo,
     snap: SessionSnapshot,
+    meta: Map<String, String>,
     selectedTabId: String,
     onSelectTab: (String) -> Unit,
     onOpenPane: (PaneInfo) -> Unit,
     onTerminal: (PaneInfo) -> Unit,
+    online: Boolean,
+    onWorktrees: () -> Unit,
+    onNewWorktree: () -> Unit,
+    onRemoveWorktree: () -> Unit,
+    onWorkspaceMenu: () -> Unit,
+    onTabMenu: (TabInfo) -> Unit,
+    onPaneMenu: (PaneInfo) -> Unit,
 ) {
+    var menu by remember { mutableStateOf(false) }
+    val repo = ws.worktree
     val tabs = snap.tabs.filter { it.workspaceId == ws.workspaceId }
     val tabId = tabs.firstOrNull { it.tabId == selectedTabId }?.tabId ?: tabs.firstOrNull()?.tabId
     val panes = snap.panes.filter { it.tabId == tabId }
@@ -208,19 +297,56 @@ private fun WorkspaceCard(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
     ) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                // Long-press the header for the workspace's Git actions.
+                modifier = Modifier.combinedClickable(onClick = {}, onLongClick = { menu = true }),
+            ) {
                 StatusDot(ws.agentStatus.color())
                 Spacer(Modifier.width(10.dp))
                 Text(ws.label.ifBlank { ws.workspaceId }, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                ws.worktree?.takeIf { it.isLinkedWorktree }?.let { Pill("worktree") }
+                repo?.takeIf { it.isLinkedWorktree }?.let { Pill("worktree") }
                 Spacer(Modifier.width(6.dp))
                 Pill("${ws.tabCount} tab${if (ws.tabCount == 1) "" else "s"}")
-            }
-            if (tabs.size > 1) {
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items(tabs, key = { it.tabId }) { t ->
-                        FilterChip(selected = t.tabId == tabId, onClick = { onSelectTab(t.tabId) }, label = { Text(t.label.ifBlank { t.tabId }) })
+                IconButton(onClick = onWorkspaceMenu) { Icon(Icons.Filled.MoreVert, "Workspace actions") }
+                Box {
+                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                        DropdownMenuItem(
+                            text = { Text(if (repo != null) "Worktrees of ${repo.repoName.ifBlank { "this repository" }}" else "Worktrees in this folder") },
+                            onClick = { menu = false; onWorktrees() },
+                        )
+                        DropdownMenuItem(text = { Text("New worktree…") }, enabled = online, onClick = { menu = false; onNewWorktree() })
+                        if (repo?.isLinkedWorktree == true) {
+                            DropdownMenuItem(
+                                text = { Text("Remove this worktree…", color = MaterialTheme.colorScheme.error) },
+                                enabled = online,
+                                onClick = { menu = false; onRemoveWorktree() },
+                            )
+                        }
                     }
+                }
+            }
+            if (meta.isNotEmpty()) {
+                Text(
+                    meta.entries.joinToString(" · ") { "${it.key}: ${it.value}" },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (tabs.size > 1) {
+                    LazyRow(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        items(tabs, key = { it.tabId }) { t ->
+                            FilterChip(selected = t.tabId == tabId, onClick = { onSelectTab(t.tabId) }, label = { Text(t.label.ifBlank { t.tabId }) })
+                        }
+                    }
+                } else {
+                    Spacer(Modifier.weight(1f))
+                }
+                tabs.firstOrNull { it.tabId == tabId }?.let { active ->
+                    IconButton(onClick = { onTabMenu(active) }) { Icon(Icons.Filled.MoreVert, "Tab actions") }
                 }
             }
             Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -233,7 +359,9 @@ private fun WorkspaceCard(
                         val status = agent?.agentStatus ?: pane.agentStatus
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.fillMaxWidth().clickable { onOpenPane(pane) }.padding(vertical = 6.dp),
+                            modifier = Modifier.fillMaxWidth()
+                                .combinedClickable(onClick = { onOpenPane(pane) }, onLongClick = { onPaneMenu(pane) })
+                                .padding(vertical = 6.dp),
                         ) {
                             StatusDot(if (agent == null) Color(0xFF5B6560) else status.color(), size = 8)
                             Spacer(Modifier.width(8.dp))

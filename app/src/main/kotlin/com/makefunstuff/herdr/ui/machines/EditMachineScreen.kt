@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.makefunstuff.herdr.core.api.SessionEntry
+import com.makefunstuff.herdr.core.ssh.HerdrBinaries
 import com.makefunstuff.herdr.core.ssh.HerdrCommands
 import com.makefunstuff.herdr.core.ssh.Machine
 import com.makefunstuff.herdr.core.ssh.SshConnector
@@ -117,7 +118,9 @@ fun EditMachineScreen(nav: NavController, id: String?) {
             test = try {
                 val conn = SshConnector.connect(m.copy(hostKey = pinnedKey), container.identity.get(), { container.machines.get(it) })
                 try {
-                    val out = conn.run(HerdrCommands.sessionList(m))
+                    val found = HerdrBinaries.parse(runCatching { conn.run(HerdrCommands.probe(m)).stdout }.getOrDefault(""))
+                    val herdr = HerdrBinaries.choose(found, null)?.let { m.copy(herdrPath = it.path) } ?: m
+                    val out = conn.run(HerdrCommands.sessionList(herdr))
                     if (out.exitStatus == HerdrCommands.NOT_FOUND_EXIT) {
                         TestResult.Failed("Connected, but herdr wasn't found. Install it on this machine or set its path below.")
                     } else {

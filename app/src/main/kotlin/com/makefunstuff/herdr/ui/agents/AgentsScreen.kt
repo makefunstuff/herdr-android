@@ -16,11 +16,17 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -48,6 +54,9 @@ import com.makefunstuff.herdr.ui.common.LocalContainer
 import com.makefunstuff.herdr.ui.common.Pill
 import com.makefunstuff.herdr.ui.common.StatusDot
 import com.makefunstuff.herdr.ui.coordinator.CoordinatorCard
+import com.makefunstuff.herdr.ui.manage.AgentActionsSheet
+import com.makefunstuff.herdr.ui.manage.NoticeRow
+import com.makefunstuff.herdr.ui.manage.NoticesSheet
 import com.makefunstuff.herdr.ui.theme.color
 import com.makefunstuff.herdr.ui.theme.title
 
@@ -60,11 +69,33 @@ fun AgentsScreen(nav: NavController) {
     val agents by container.hosts.agents.collectAsStateWithLifecycle()
     val hosts by container.hosts.hosts.collectAsStateWithLifecycle()
     var filter by remember { mutableStateOf<String?>(null) }
+    var menuAgent by remember { mutableStateOf<AgentRow?>(null) }
+    var showNotices by remember { mutableStateOf(false) }
     val boards = hosts.filter { it.hasBoard }
+    val unread = hosts.sumOf { it.unreadNotices }
+    val noticeRows = remember(hosts) {
+        hosts.flatMap { h -> h.notices.map { NoticeRow(h.machine.id, h.machine.label, it) } }.sortedByDescending { it.notice.at }
+    }
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        topBar = { TopAppBar(title = { Text("Agents") }) },
+        topBar = {
+            TopAppBar(
+                title = { Text("Agents") },
+                actions = {
+                    IconButton(
+                        onClick = {
+                            hosts.forEach { container.hosts.session(it.machine.id)?.markNoticesRead() }
+                            showNotices = true
+                        },
+                    ) {
+                        BadgedBox(badge = { if (unread > 0) Badge { Text(if (unread > 99) "99+" else "$unread") } }) {
+                            Icon(Icons.Filled.Notifications, "Notifications")
+                        }
+                    }
+                },
+            )
+        },
     ) { padding ->
         when {
             hosts.isEmpty() -> EmptyState(
@@ -123,7 +154,7 @@ fun AgentsScreen(nav: NavController) {
                                 row,
                                 showMachine = hosts.size > 1,
                                 onOpen = { nav.navigate(Routes.agent(row.machine.id, row.agent.paneId)) },
-                                onTerminal = { nav.navigate(Routes.terminal(row.machine.id, row.agent.paneId)) },
+                                onMenu = { menuAgent = row },
                             )
                         }
                     }
@@ -131,16 +162,37 @@ fun AgentsScreen(nav: NavController) {
             }
         }
     }
+
+    menuAgent?.let { row ->
+        container.hosts.session(row.machine.id)?.let { session ->
+            AgentActionsSheet(
+                session = session,
+                agent = row.agent,
+                paneLabel = row.agent.paneId,
+                onDismiss = { menuAgent = null },
+                onTerminal = { menuAgent = null; nav.navigate(Routes.terminal(row.machine.id, row.agent.paneId)) },
+            )
+        }
+    }
+    if (showNotices) {
+        NoticesSheet(
+            rows = noticeRows,
+            showMachine = hosts.size > 1,
+            onOpenAgent = { mid, pane -> showNotices = false; nav.navigate(Routes.agent(mid, pane)) },
+            onClear = { hosts.forEach { container.hosts.session(it.machine.id)?.clearNotices() } },
+            onDismiss = { showNotices = false },
+        )
+    }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun AgentCard(row: AgentRow, showMachine: Boolean, onOpen: () -> Unit, onTerminal: () -> Unit) {
+private fun AgentCard(row: AgentRow, showMachine: Boolean, onOpen: () -> Unit, onMenu: () -> Unit) {
     val agent = row.agent
     val status = agent.agentStatus
     val preview = rememberLastLine(row)
     Card(
-        modifier = Modifier.fillMaxWidth().combinedClickable(onClick = onOpen, onLongClick = onTerminal),
+        modifier = Modifier.fillMaxWidth().combinedClickable(onClick = onOpen, onLongClick = onMenu),
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
     ) {
