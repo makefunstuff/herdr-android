@@ -39,8 +39,8 @@ object BoardCommands {
 
     /**
      * `herdr-projects remote <what> [base64 JSON]` for the machine's herdr session, through a login
-     * shell as another board runs it (so PATH is set): the launcher calls `herdr` by name, and SSH's
-     * own PATH may not have it. Started from `sh`, so it works whatever the account's shell is.
+     * shell as another board runs it (so PATH is set). Pass the selected executable through the
+     * board's HERDR_BIN_PATH override. Started from `sh`, so it works whatever the account's shell is.
      */
     fun remote(machine: Machine, path: String, what: String, request: JsonObject? = null): String =
         "sh -c ${quote(LOGIN)} sh ${quote(command(machine, path, what, request))}"
@@ -49,7 +49,9 @@ object BoardCommands {
     fun command(machine: Machine, path: String, what: String, request: JsonObject? = null): String {
         val env = listOfNotNull(
             machine.session.takeIf { it.isNotEmpty() && it != "default" }?.let { "HERDR_SESSION=${quote(it)}" },
-            // The launcher calls `herdr` by name: put the server's own binary first on its PATH.
+            // The board accepts an exact path, including versioned filenames such as herdr-0.9.5.
+            machine.herdrPath?.takeIf { it.isNotBlank() }?.let { "HERDR_BIN_PATH=${quote(it)}" },
+            // Keep the selected install directory available to helpers that call herdr by name.
             machine.herdrPath?.substringBeforeLast('/', "")?.takeIf { it.isNotEmpty() }?.let { "PATH=${quote(it)}:\"\$PATH\"" },
         )
         val prefix = if (env.isEmpty()) "" else "env ${env.joinToString(" ")} "
