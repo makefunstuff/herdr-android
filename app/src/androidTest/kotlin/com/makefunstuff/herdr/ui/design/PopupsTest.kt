@@ -1,6 +1,9 @@
 package com.makefunstuff.herdr.ui.design
 
 import androidx.compose.material3.Text
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -44,6 +47,34 @@ class PopupsTest {
         rule.waitForIdle()
         assertEquals(true, hit)
         rule.onNodeWithText("Refresh").assertDoesNotExistCompat()
+    }
+
+    /** A sheet longer than the screen scrolls, and a height-bounded list inside it doesn't crash (round 4 bug). */
+    @Test fun longSheetScrollsAndHoldsABoundedList() {
+        var hit = false
+        rule.setContent {
+            HerdrTheme {
+                HerdrSheet(onDismissRequest = {}) {
+                    androidx.compose.foundation.lazy.LazyColumn(
+                        androidx.compose.ui.Modifier.heightIn(max = 200.dp),
+                    ) { items(30) { Text("Listed $it") } }
+                    repeat(30) { i -> ActionRow("Row $i") }
+                    ActionRow("Last row", onClick = { hit = true })
+                }
+            }
+        }
+        rule.onNodeWithText("Listed 0").assertIsDisplayed()
+        rule.onNodeWithText("Last row").performScrollTo().assertIsDisplayed().performClick()
+        assertEquals(true, hit)
+    }
+
+    /** Manage rows are full-width targets of at least 48dp. */
+    @Test fun actionRowIsATallEnoughTarget() {
+        rule.setContent { HerdrTheme { ActionRow("Rename", detail = "Give it a name", chevron = true, onClick = {}) } }
+        rule.onNodeWithText("Rename", useUnmergedTree = true).assertIsDisplayed()
+        val h = rule.onAllNodes(androidx.compose.ui.test.hasClickAction())[0].fetchSemanticsNode().size.height
+        val min = with(rule.density) { 48.dp.roundToPx() }
+        assert(h >= min) { "row is $h px, needs $min" }
     }
 
     @Test fun toastShowsAndErrorStateRetries() {
