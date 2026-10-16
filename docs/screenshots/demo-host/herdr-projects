@@ -1,0 +1,22 @@
+#!/usr/bin/env python3
+# Demo stand-in for the work board's `remote` answers, for screenshots only.
+import base64, json, os, sys
+store = os.path.expanduser("~/.demo/talk.json")
+talk = [
+    {"you": True, "text": "The Android app needs screenshots in its README, and the jobs endpoint is slow on the big tenant."},
+    {"you": False, "text": "Added two tasks:\n\n- **AND-6** Add app screenshots to the README\n- **API-3** Speed up `/jobs` on large tables\n\nAPI-3 has an agent on **devbox** now. AND-6 waits for the chat view (AND-2) to land."},
+    {"you": True, "text": "AND-2 is merged, start AND-6 too."},
+    {"you": False, "text": "Started an agent on AND-6 in `herdr-android`. It runs the app against a demo host, so no real hostnames end up in the images."},
+]
+if os.path.exists(store):
+    talk = json.load(open(store))
+args = sys.argv[1:]
+if args[:2] == ["remote", "list"]:
+    print(json.dumps({"host": "devbox", "version": "0.9.0", "tasks": [], "coordinator": {"state": "idle", "queue": 0, "readable": True, "said": talk[-1]["text"], "sent": "", "talk": talk}}))
+elif args[:2] == ["remote", "dispatch"]:
+    req = json.loads(base64.b64decode(args[2]))
+    talk.append({"you": True, "text": req["text"]})
+    json.dump(talk, open(store, "w"))
+    print(json.dumps({"ok": True, "msg": "Sent to the Coordinator"}))
+else:
+    print(json.dumps({"ok": False, "msg": "demo board"}))

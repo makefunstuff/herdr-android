@@ -1,6 +1,23 @@
-# Herdr for Android
+# <img src="docs/screenshots/icon.webp" alt="" width="48" align="center"> Herdr for Android
 
 A native Android client for [herdr](https://herdr.dev) hosts: see your agents across machines, answer the blocked ones, and open any pane as a live terminal. Kotlin, Jetpack Compose and Material 3.
+
+<table>
+  <tr>
+    <td align="center" width="25%"><img src="docs/screenshots/agents.webp" alt="Agents list" width="200"><br><sub><b>Agents</b>: every agent on every machine, the blocked ones first</sub></td>
+    <td align="center" width="25%"><img src="docs/screenshots/chat.webp" alt="An agent's chat" width="200"><br><sub><b>Agent chat</b>: the agent's own transcript, with tool calls folded</sub></td>
+    <td align="center" width="25%"><img src="docs/screenshots/blocked.webp" alt="A blocked agent asking for approval" width="200"><br><sub><b>Needs you</b>: answer a blocked agent with one tap</sub></td>
+    <td align="center" width="25%"><img src="docs/screenshots/coordinator.webp" alt="Coordinator chat" width="200"><br><sub><b>Coordinator</b>: talk to the work board</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshots/machines.webp" alt="Machines list" width="200"><br><sub><b>Machines</b>: status per host, also through a jump host</sub></td>
+    <td align="center"><img src="docs/screenshots/machine.webp" alt="A machine's workspaces" width="200"><br><sub><b>A machine</b>: its workspaces, tabs and panes</sub></td>
+    <td align="center"><img src="docs/screenshots/terminal.webp" alt="Terminal" width="200"><br><sub><b>Terminal</b>: any pane, live, sized to the phone</sub></td>
+    <td align="center"><img src="docs/screenshots/settings.webp" alt="Settings" width="200"><br><sub><b>Settings</b>: the SSH key, with backup and restore</sub></td>
+  </tr>
+</table>
+
+The screenshots come from a demo host with made-up projects (see [`docs/screenshots/demo-host`](docs/screenshots/demo-host)).
 
 ## Getting the app
 
