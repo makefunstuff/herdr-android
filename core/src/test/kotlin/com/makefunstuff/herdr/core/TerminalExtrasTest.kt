@@ -22,7 +22,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /** Answers each method with canned JSON (or a herdr error) and records what was asked. */
-private class FakeCaller(private val answer: (method: String, params: JsonObject) -> String) : ApiCaller {
+private class ExtrasFakeCaller(private val answer: (method: String, params: JsonObject) -> String) : ApiCaller {
     val calls = mutableListOf<Pair<String, JsonObject>>()
 
     override suspend fun call(method: String, params: JsonObject, timeoutMs: Long): JsonObject {
@@ -74,7 +74,7 @@ class ScrollMathTest {
 class TerminalExtrasApiTest {
     @Test
     fun scrollSearchSelectionAndLinksSendHerdrsParams() = runBlocking {
-        val fake = FakeCaller { method, _ ->
+        val fake = ExtrasFakeCaller { method, _ ->
             when (method) {
                 "pane.scroll" -> """{"type":"pane_info","pane":{"pane_id":"w1:p1","workspace_id":"w1","tab_id":"w1:t1",
                     "scroll":{"offset_from_bottom":30,"max_offset_from_bottom":196,"viewport_rows":10}}}"""
@@ -113,7 +113,7 @@ class TerminalExtrasApiTest {
     fun searchStartsAtTheBottomStepsFromTheCurrentMatchAndRetriesStaleContent() = runBlocking {
         var revision = 294
         var stale = false
-        val fake = FakeCaller { method, params ->
+        val fake = ExtrasFakeCaller { method, params ->
             when (method) {
                 "pane.get" -> """{"type":"pane_info","pane":{"pane_id":"w1:p1","workspace_id":"w1","tab_id":"w1:t1",
                     "scroll":{"offset_from_bottom":0,"max_offset_from_bottom":164,"viewport_rows":40}}}"""
@@ -153,7 +153,7 @@ class TerminalExtrasApiTest {
 
     @Test
     fun otherSearchErrorsReachTheCaller() = runBlocking {
-        val fake = FakeCaller { method, _ ->
+        val fake = ExtrasFakeCaller { method, _ ->
             when (method) {
                 "pane.copy_motion" -> """{"error":{"code":"pane_not_found","message":"pane w1:p9 not found"}}"""
                 else -> error(method)
@@ -186,7 +186,7 @@ class TerminalExtrasApiTest {
 class LayoutTest {
     @Test
     fun exportDecodesTheSplitTree() = runBlocking {
-        val api = HerdrApi(FakeCaller { _, _ -> NESTED_EXPORT })
+        val api = HerdrApi(ExtrasFakeCaller { _, _ -> NESTED_EXPORT })
         val layout = api.exportLayout("w1:t6")
         val root = assertIs<LayoutNode.Split>(layout.root)
         assertEquals("down", root.direction)
@@ -201,7 +201,7 @@ class LayoutTest {
 
     @Test
     fun ratioAndApplySendTreesAndPaths() = runBlocking {
-        val fake = FakeCaller { _, _ -> NESTED_EXPORT.replace("layout_export", "layout_split_ratio_set") }
+        val fake = ExtrasFakeCaller { _, _ -> NESTED_EXPORT.replace("layout_export", "layout_split_ratio_set") }
         val api = HerdrApi(fake)
         api.setSplitRatio("w1:t6", listOf(true), 0.8f)
         assertEquals("""{"tab_id":"w1:t6","path":[true],"ratio":0.8}""", fake.calls.last().second.toString())
@@ -221,7 +221,7 @@ class LayoutTest {
 
     @Test
     fun templatesRoundTripThroughJson() {
-        val root = HerdrApi(FakeCaller { _, _ -> NESTED_EXPORT }).let { runBlocking { it.exportLayout("w1:t6").root } }
+        val root = HerdrApi(ExtrasFakeCaller { _, _ -> NESTED_EXPORT }).let { runBlocking { it.exportLayout("w1:t6").root } }
         val text = LayoutTemplates.encode(root.template())
         assertTrue("pane_id" !in text, text)
         assertEquals(root.template(), LayoutTemplates.decode(text))
@@ -238,7 +238,7 @@ class LayoutTest {
             "panes":[{"pane_id":"w1:p9","focused":true,"rect":{"x":0,"y":0,"width":60,"height":40}},
                      {"pane_id":"w1:pA","rect":{"x":60,"y":0,"width":60,"height":40}}],
             "splits":[{"id":"split_0_root","direction":"right","ratio":0.5,"rect":{"x":0,"y":0,"width":120,"height":40}}]}"""
-        val fake = FakeCaller { method, _ ->
+        val fake = ExtrasFakeCaller { method, _ ->
             when (method) {
                 "pane.resize" -> """{"type":"pane_resize","resize":{"changed":false,"reason":"unchanged","pane_id":"w1:p9","focused_pane_id":"w1:p9","layout":$layout}}"""
                 "pane.layout" -> """{"type":"pane_layout","layout":$layout}"""
@@ -257,7 +257,7 @@ class LayoutTest {
 
     @Test
     fun listsEverySplitWithItsPath() {
-        val root = HerdrApi(FakeCaller { _, _ -> NESTED_EXPORT }).let { runBlocking { it.exportLayout("w1:t6").root } }
+        val root = HerdrApi(ExtrasFakeCaller { _, _ -> NESTED_EXPORT }).let { runBlocking { it.exportLayout("w1:t6").root } }
         val splits = root.splits()
         assertEquals(2, splits.size)
         assertEquals(emptyList(), splits[0].path)
