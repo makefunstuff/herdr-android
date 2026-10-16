@@ -34,6 +34,7 @@ import com.makefunstuff.herdr.core.api.AgentStatus
 import com.makefunstuff.herdr.ui.agents.AgentScreen
 import com.makefunstuff.herdr.ui.agents.AgentsScreen
 import com.makefunstuff.herdr.ui.common.LocalContainer
+import com.makefunstuff.herdr.ui.coordinator.CoordinatorScreen
 import com.makefunstuff.herdr.ui.machines.EditMachineScreen
 import com.makefunstuff.herdr.ui.machines.MachineScreen
 import com.makefunstuff.herdr.ui.machines.MachinesScreen
@@ -62,11 +63,13 @@ object Routes {
     const val EDIT = "edit?id={id}"
     const val AGENT = "agent/{mid}/{pane}"
     const val TERMINAL = "terminal/{mid}/{pane}"
+    const val COORDINATOR = "coordinator/{mid}"
 
     fun machine(id: String) = "machine/$id"
     fun edit(id: String? = null) = if (id == null) "edit" else "edit?id=$id"
     fun agent(mid: String, pane: String) = "agent/$mid/${Uri.encode(pane)}"
     fun terminal(mid: String, pane: String) = "terminal/$mid/${Uri.encode(pane)}"
+    fun coordinator(mid: String) = "coordinator/$mid"
 }
 
 @Composable
@@ -118,6 +121,7 @@ private fun AppNav() {
             composable(Routes.AGENT) {
                 AgentScreen(nav, it.arguments?.getString("mid").orEmpty(), Uri.decode(it.arguments?.getString("pane").orEmpty()))
             }
+            composable(Routes.COORDINATOR) { CoordinatorScreen(nav, it.arguments?.getString("mid").orEmpty()) }
             composable(Routes.TERMINAL) {
                 TerminalScreen(nav, it.arguments?.getString("mid").orEmpty(), Uri.decode(it.arguments?.getString("pane").orEmpty()))
             }

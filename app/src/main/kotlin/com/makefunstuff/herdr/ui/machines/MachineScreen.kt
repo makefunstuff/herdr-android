@@ -69,6 +69,7 @@ import com.makefunstuff.herdr.ui.common.color
 import com.makefunstuff.herdr.ui.common.detail
 import com.makefunstuff.herdr.ui.common.label
 import com.makefunstuff.herdr.ui.common.toast
+import com.makefunstuff.herdr.ui.coordinator.CoordinatorCard
 import com.makefunstuff.herdr.ui.theme.color
 import kotlinx.coroutines.launch
 
@@ -110,7 +111,7 @@ fun MachineScreen(nav: NavController, machineId: String) {
                     }
                 },
                 actions = {
-                    IconButton(onClick = { session.retry(); session.refresh() }) { Icon(Icons.Filled.Refresh, "Refresh") }
+                    IconButton(onClick = { session.retry(); session.refresh(); scope.launch { session.checkBoard() } }) { Icon(Icons.Filled.Refresh, "Refresh") }
                     IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "More") }
                     DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                         DropdownMenuItem(text = { Text("Import herdr machines from here") }, onClick = {
@@ -145,6 +146,9 @@ fun MachineScreen(nav: NavController, machineId: String) {
         ) {
             if (!state.online) {
                 item { Text("Offline · showing the last known state", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+            }
+            if (state.hasBoard) {
+                item(key = "coordinator") { CoordinatorCard(state.machine.label, showMachine = false) { nav.navigate(Routes.coordinator(machineId)) } }
             }
             if (snap.workspaces.isEmpty()) {
                 item { Text("No workspaces yet. Tap New to create one.", color = MaterialTheme.colorScheme.onSurfaceVariant) }
