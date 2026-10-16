@@ -201,7 +201,7 @@ private fun AgentCard(row: AgentRow, showMachine: Boolean, onOpen: () -> Unit, o
             Text(
                 agent.displayName + (agent.subtitle?.let { " · $it" } ?: ""),
                 style = MaterialTheme.typography.titleMedium,
-                maxLines = 1,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
