@@ -12,7 +12,7 @@ import kotlin.test.assertTrue
 
 class SentMatchTest {
     private val msg = "I still don't get where why and how I can use pi durable"
-    private fun open(p: List<Pending>, seen: List<String>) = SentMatch.unconfirmed(p) { SentMatch.count(it, seen) }
+    private fun open(p: List<Pending>, seen: List<String>) = SentMatch.unconfirmed(p) { SentMatch.count(it.text, seen) }
 
     @Test fun transcriptConfirms() {
         assertEquals(1, open(listOf(Pending(msg, 0)), emptyList()).size)
@@ -58,8 +58,8 @@ class SentMatchTest {
         val screen = "> I still don't get where why and\n  how I can use pi durable"
         assertEquals(1, SentMatch.countOnScreen(msg, screen.replace("\n  ", " ")))
         assertEquals(0, open(listOf(Pending(msg, 0)).also { }, emptyList()).size - 1)
-        assertEquals(0, SentMatch.unconfirmed(listOf(Pending(msg, 0))) { SentMatch.countOnScreen(it, "> $msg\nreply") }.size)
-        assertEquals(1, SentMatch.unconfirmed(listOf(Pending(msg, 1))) { SentMatch.countOnScreen(it, "> $msg\nreply") }.size)
+        assertEquals(0, SentMatch.unconfirmed(listOf(Pending(msg, 0))) { SentMatch.countOnScreen(it.text, "> $msg\nreply") }.size)
+        assertEquals(1, SentMatch.unconfirmed(listOf(Pending(msg, 1))) { SentMatch.countOnScreen(it.text, "> $msg\nreply") }.size)
     }
 
     @Test fun coordinatorLinesShowRepeatedMessageTwice() {
@@ -76,5 +76,17 @@ class SentMatchTest {
         assertTrue(SentMatch.same("yes go ahead", "yes go ahead\n[sent with tab]"))
         assertFalse(SentMatch.same("Please look at task 5 now", "Please look at task 5 now and also task 6"))
         assertEquals(1, SentMatch.countOnScreen(msg, "> I still don't get where why an\nd how I can use pi durable"))
+    }
+
+    @Test fun slidingWindowStillConfirms() {
+        val p = Pending("yes", 3, sentAt = 1_000)
+        // An old copy scrolled out as the new one came in: 3 before, 3 now, but never fewer-and-stuck.
+        assertEquals(Int.MAX_VALUE, SentMatch.slid(p, 2, now = 2_000))
+        assertEquals(4, SentMatch.slid(p, 4, now = 2_000))
+        assertEquals(3, SentMatch.slid(p, 3, now = 2_000))
+        // Same count a while later (one in, one out): confirmed by age.
+        assertEquals(Int.MAX_VALUE, SentMatch.slid(p, 3, now = 40_000))
+        assertEquals(0, SentMatch.unconfirmed(listOf(p)) { SentMatch.slid(it, 3, 40_000) }.size)
+        assertEquals(1, SentMatch.unconfirmed(listOf(p)) { SentMatch.slid(it, 3, 2_000) }.size)
     }
 }

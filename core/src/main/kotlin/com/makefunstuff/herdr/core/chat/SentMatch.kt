@@ -45,16 +45,34 @@ object SentMatch {
     }
 
     /** A sent message waiting to be seen; [baseline] is how many like it were already shown when it was sent. */
-    data class Pending(val text: String, val baseline: Int)
+    data class Pending(
+        val text: String,
+        val baseline: Int,
+        /** Ids of the user messages in the transcript when it was sent: one not among them is new. */
+        val known: Set<String> = emptySet(),
+        val sentAt: Long = 0,
+    )
+
+    /**
+     * What to report as the shown count for [p] against a window that can slide: it is taken as
+     * confirmed ([Int.MAX_VALUE]) when the matches fell in number (older copies scrolled out as
+     * new text came in), or when a copy has stood there a while after the send.
+     */
+    fun slid(p: Pending, count: Int, now: Long, graceMs: Long = 30_000): Int = when {
+        count > p.baseline -> count
+        count in 1 until p.baseline -> Int.MAX_VALUE
+        count >= 1 && p.sentAt > 0 && now - p.sentAt > graceMs -> Int.MAX_VALUE
+        else -> count
+    }
 
     /** The pending messages not yet confirmed, where [counted] says how many matching messages are shown. */
-    fun unconfirmed(pending: List<Pending>, counted: (String) -> Int): List<Pending> {
+    fun unconfirmed(pending: List<Pending>, counted: (Pending) -> Int): List<Pending> {
         val nth = HashMap<String, Int>()
         return pending.filter { p ->
             val key = normalize(p.text).take(HEAD)
             val k = (nth[key] ?: 0) + 1
             nth[key] = k
-            counted(p.text) < p.baseline + k
+            counted(p) < p.baseline + k
         }
     }
 }

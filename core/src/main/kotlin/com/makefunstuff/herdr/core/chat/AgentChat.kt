@@ -66,12 +66,12 @@ class AgentChat(private val host: HostSession, val paneId: String, private val s
     /** Shows a prompt the app just sent until the transcript catches up with it. */
     fun addPending(text: String) {
         _state.update { s ->
+            val users = s.items.filterIsInstance<ChatItem.User>()
             val shown = when (s.source) {
                 Source.Screen -> SentMatch.countOnScreen(text, s.screen)
-                else -> SentMatch.count(text, s.items.filterIsInstance<ChatItem.User>().map { it.text })
+                else -> SentMatch.count(text, users.map { it.text })
             }
-            // Earlier identical pending copies are not shown yet: they count towards this one's turn.
-            s.copy(pending = s.pending + SentMatch.Pending(text, shown))
+            s.copy(pending = s.pending + SentMatch.Pending(text, shown, users.map { it.id }.toSet(), System.currentTimeMillis()))
         }
     }
 
@@ -133,8 +133,15 @@ class AgentChat(private val host: HostSession, val paneId: String, private val s
     /** Drops pending prompts once the transcript shows another user message like each. */
     private fun unseen(pending: List<SentMatch.Pending>, items: List<ChatItem>): List<SentMatch.Pending> {
         if (pending.isEmpty()) return pending
-        val users = items.filterIsInstance<ChatItem.User>().map { it.text }
-        return SentMatch.unconfirmed(pending) { SentMatch.count(it, users) }
+        val users = items.filterIsInstance<ChatItem.User>()
+        val texts = users.map { it.text }
+        val now = System.currentTimeMillis()
+        return SentMatch.unconfirmed(pending) { p ->
+            // A matching message that wasn't in the transcript at send time is the new one, even
+            // when older copies have slid out of a tail-only read; the count covers ids that repeat.
+            val fresh = users.count { it.id !in p.known && SentMatch.same(p.text, it.text) }
+            maxOf(p.baseline + fresh, SentMatch.slid(p, SentMatch.count(p.text, texts), now))
+        }
     }
 
     private suspend fun watchScreen() {
@@ -152,7 +159,7 @@ class AgentChat(private val host: HostSession, val paneId: String, private val s
                         s.copy(
                             screen = (recent ?: visible ?: s.screen).trimEnd(),
                             prompt = visible?.let { BlockedPrompt.parse(it) },
-                            pending = if (source == Source.Screen && recent != null) SentMatch.unconfirmed(s.pending) { SentMatch.countOnScreen(it, recent) } else s.pending,
+                            pending = if (source == Source.Screen && recent != null) SentMatch.unconfirmed(s.pending) { p -> SentMatch.slid(p, SentMatch.countOnScreen(p.text, recent), System.currentTimeMillis()) } else s.pending,
                         )
                     }
                 } catch (e: CancellationException) {
