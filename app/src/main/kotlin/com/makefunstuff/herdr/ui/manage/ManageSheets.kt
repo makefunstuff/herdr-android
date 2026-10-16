@@ -94,7 +94,7 @@ fun ManageSheet(
 ) {
     HerdrSheet(onDismissRequest = onDismiss) {
         Column(
-            Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(bottom = 28.dp),
+            Modifier.fillMaxWidth().padding(bottom = 28.dp),
         ) {
             Column(Modifier.padding(horizontal = 20.dp, vertical = 2.dp)) {
                 Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)

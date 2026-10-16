@@ -1,5 +1,6 @@
 package com.makefunstuff.herdr.ui.machines
 
+import com.makefunstuff.herdr.ui.design.BarTitle
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material.icons.filled.ArrowDropDown
@@ -152,7 +153,7 @@ fun EditMachineScreen(nav: NavController, id: String?) {
         topBar = {
             TopAppBar(
                 navigationIcon = { IconButton(onClick = { nav.popBackStack() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
-                title = { Text(if (existing == null) "Add machine" else "Edit ${existing.label}") },
+                title = { BarTitle(if (existing == null) "Add machine" else "Edit ${existing.label}") },
                 actions = {
                     if (existing != null) {
                         IconButton(onClick = { confirmDelete = true }) { Icon(Icons.Filled.Delete, "Remove machine") }

@@ -167,11 +167,15 @@ fun HerdrSheet(
 
 /** A menu is an action sheet: big rows, reachable with a thumb. Items are [HerdrMenuItem]s. */
 @Composable
-fun HerdrMenu(expanded: Boolean, onDismissRequest: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
+fun HerdrMenu(expanded: Boolean, onDismissRequest: () -> Unit, title: String? = null, content: @Composable ColumnScope.() -> Unit) {
     if (!expanded) return
     BackHandler(onBack = onDismissRequest)
     HerdrSheet(onDismissRequest) {
-        Column(Modifier.padding(horizontal = 8.dp, vertical = 4.dp), content = content)
+        if (title != null) Text(
+            title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp).semantics { heading() },
+        )
+        Column(Modifier.padding(start = 8.dp, end = 8.dp, top = 4.dp, bottom = 12.dp), content = content)
     }
 }
 
@@ -318,3 +322,19 @@ fun readable(fg: Color, bg: Color, towards: Color): Color {
     while (contrastRatio(c, bg) < 4.5 && t < 1f) { t += 0.05f; c = androidx.compose.ui.graphics.lerp(fg, towards, t) }
     return c
 }
+
+/** Top-bar title: one ellipsised line, optional quieter second line. Keeps long machine names from pushing the bar open. */
+@Composable
+fun BarTitle(title: String, subtitle: String? = null) {
+    Column {
+        Text(title, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, style = MaterialTheme.typography.titleLarge)
+        if (subtitle != null) Text(
+            subtitle, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/** This accent colour as text on the current surface (≥4.5:1). */
+@Composable
+fun Color.readableText(): Color = readable(this, MaterialTheme.colorScheme.surface, MaterialTheme.colorScheme.onSurface)

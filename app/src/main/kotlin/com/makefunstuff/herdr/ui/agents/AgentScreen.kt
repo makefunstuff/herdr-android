@@ -1,5 +1,6 @@
 package com.makefunstuff.herdr.ui.agents
 
+import com.makefunstuff.herdr.ui.design.readableText
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -288,7 +289,7 @@ private fun StatusStrip(status: AgentStatus, label: String?, activity: String?, 
                     else -> status.title()
                 },
                 style = MaterialTheme.typography.labelLarge,
-                color = status.color(),
+                color = status.color().readableText(),
             )
             if (activity != null && status != AgentStatus.Blocked) {
                 Text(

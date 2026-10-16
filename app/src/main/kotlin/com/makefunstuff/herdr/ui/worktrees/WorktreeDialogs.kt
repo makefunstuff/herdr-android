@@ -67,7 +67,7 @@ fun CreateWorktreeSheet(
 
     HerdrSheet(onDismissRequest = onDismiss) {
         Column(
-            Modifier.fillMaxWidth().imePadding().verticalScroll(rememberScrollState())
+            Modifier.fillMaxWidth().imePadding()
                 .padding(horizontal = 20.dp).padding(bottom = 16.dp).navigationBarsPadding(),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {

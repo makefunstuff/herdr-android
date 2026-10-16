@@ -1,5 +1,6 @@
 package com.makefunstuff.herdr.ui.manage
 
+import androidx.compose.foundation.layout.heightIn
 import com.makefunstuff.herdr.ui.design.HerdrDialog
 import com.makefunstuff.herdr.ui.design.HerdrMenu
 import com.makefunstuff.herdr.ui.design.HerdrMenuItem
@@ -71,7 +72,7 @@ fun NoticesSheet(
                 )
                 return@Column
             }
-            LazyColumn(contentPadding = PaddingValues(top = 4.dp)) {
+            LazyColumn(Modifier.heightIn(max = 560.dp), contentPadding = PaddingValues(top = 4.dp)) {
                 items(rows, key = { "${it.machineId}/${it.notice.id}" }) { row ->
                     NoticeItem(row, showMachine) { onOpenAgent(row.machineId, row.notice.paneId) }
                 }

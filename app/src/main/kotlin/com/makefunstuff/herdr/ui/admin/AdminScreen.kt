@@ -1,5 +1,7 @@
 package com.makefunstuff.herdr.ui.admin
 
+import com.makefunstuff.herdr.ui.design.BarTitle
+import androidx.compose.foundation.layout.heightIn
 import com.makefunstuff.herdr.ui.design.HerdrDialog
 import com.makefunstuff.herdr.ui.design.HerdrMenu
 import com.makefunstuff.herdr.ui.design.HerdrMenuItem
@@ -145,14 +147,7 @@ fun AdminScreen(nav: NavController, machineId: String, initialTab: Int = 0) {
                 TopAppBar(
                     navigationIcon = { IconButton(onClick = { nav.popBackStack() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
                     title = {
-                        Column {
-                            Text("herdr on ${state.machine.label}")
-                            Text(
-                                listOfNotNull(state.herdrVersion?.let { "v$it" }, state.status.label()).joinToString(" · "),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
+                        BarTitle("herdr on ${state.machine.label}", listOfNotNull(state.herdrVersion?.let { "v$it" }, state.status.label()).joinToString(" · "))
                     },
                     actions = {
                         IconButton(onClick = { session.retry(); model.refreshAll() }) { Icon(Icons.Filled.Refresh, "Refresh") }
@@ -242,7 +237,7 @@ private fun PluginSheet(p: PluginInfo, model: AdminModel, onLog: (PluginLog) -> 
     val logs = (model.logs as? Load.Ready)?.value?.filter { it.pluginId == p.pluginId }.orEmpty()
     HerdrSheet(onDismissRequest = onDismiss) {
         LazyColumn(
-            Modifier.fillMaxWidth().navigationBarsPadding(),
+            Modifier.fillMaxWidth().heightIn(max = 560.dp).navigationBarsPadding(),
             contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
@@ -324,7 +319,7 @@ private fun LogRow(log: PluginLog, showPlugin: Boolean, onClick: () -> Unit) {
 private fun LogSheet(log: PluginLog, onDismiss: () -> Unit) {
     HerdrSheet(onDismissRequest = onDismiss) {
         Column(
-            Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 24.dp).navigationBarsPadding().verticalScroll(rememberScrollState()),
+            Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 24.dp).navigationBarsPadding(),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text("${log.pluginId} · ${log.trigger}", style = MaterialTheme.typography.titleMedium)
@@ -638,7 +633,7 @@ private fun AddMachineSheet(model: AdminModel, onDismiss: () -> Unit) {
     val valid = target.isNotBlank() && !target.trim().startsWith("-") && target.trim().none { it.isWhitespace() }
     HerdrSheet(onDismissRequest = { if (!busy) onDismiss() }) {
         Column(
-            Modifier.fillMaxWidth().imePadding().verticalScroll(rememberScrollState())
+            Modifier.fillMaxWidth().imePadding()
                 .padding(horizontal = 20.dp).padding(bottom = 16.dp).navigationBarsPadding(),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {

@@ -74,7 +74,7 @@ fun ImportKeyDialog(replacing: Boolean, onDismiss: () -> Unit) {
         onDismissRequest = { if (!busy) onDismiss() },
         title = { Text(if (replacing) "Replace the SSH key" else "Restore or import a key") },
         text = {
-            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(Modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
                     "Choose a key backup saved from this app, or an OpenSSH private key (a file like ~/.ssh/id_ed25519). You can also paste it.",
                     style = MaterialTheme.typography.bodySmall,
@@ -172,7 +172,7 @@ fun ExportKeyDialog(onDismiss: () -> Unit) {
         onDismissRequest = { if (!busy) onDismiss() },
         title = { Text("Back up the SSH key") },
         text = {
-            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(Modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
                     "Saves the private key as an OpenSSH key file protected by a passphrase. Restore it here after reinstalling the app or on a new phone, and your machines keep trusting it. Without the passphrase the file is useless, so don't lose it.",
                     style = MaterialTheme.typography.bodySmall,

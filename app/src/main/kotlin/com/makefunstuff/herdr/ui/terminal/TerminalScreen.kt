@@ -324,6 +324,8 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
                             },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
                     }
                 },

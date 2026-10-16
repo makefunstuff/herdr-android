@@ -1,5 +1,6 @@
 package com.makefunstuff.herdr.ui.coordinator
 
+import com.makefunstuff.herdr.ui.design.BarTitle
 import com.makefunstuff.herdr.ui.common.MarkdownText
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -172,16 +173,7 @@ fun CoordinatorScreen(nav: NavController, machineId: String) {
             TopAppBar(
                 navigationIcon = { IconButton(onClick = { nav.popBackStack() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
                 title = {
-                    Column {
-                        Text("Coordinator")
-                        Text(
-                            "${state.machine.label} · " + (v?.let { stateWords(it) } ?: if (state.online) "work board" else state.status.label()),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
+                    BarTitle("Coordinator", "${state.machine.label} · " + (v?.let { stateWords(it) } ?: if (state.online) "work board" else state.status.label()))
                 },
                 actions = {
                     if (coordinatorPane != null) {
