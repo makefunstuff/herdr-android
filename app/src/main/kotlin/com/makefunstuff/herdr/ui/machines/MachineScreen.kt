@@ -341,7 +341,15 @@ private fun WorkspaceCard(
                         }
                     }
                 } else {
-                    Spacer(Modifier.weight(1f))
+                    // One tab: name it, so the row with its menu isn't an empty gap.
+                    Text(
+                        tabs.firstOrNull()?.let { t -> t.label.ifBlank { "Tab ${t.number}" } } ?: "",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f).padding(start = 4.dp),
+                    )
                 }
                 tabs.firstOrNull { it.tabId == tabId }?.let { active ->
                     IconButton(onClick = { onTabMenu(active) }) { Icon(Icons.Filled.MoreVert, "Tab actions") }

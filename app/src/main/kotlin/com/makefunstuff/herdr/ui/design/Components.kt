@@ -170,7 +170,8 @@ fun HerdrSheet(
         },
     ) {
         Box {
-            Column(content = content)
+            // Scrolls when longer than the screen. Callers with a list inside bound its height (heightIn(max)).
+            Column(Modifier.verticalScroll(rememberScrollState()), content = content)
             ToastHost(Modifier.matchParentSize())
         }
     }
