@@ -715,7 +715,7 @@ fun SegmentedPills(options: List<String>, selected: Int, onSelect: (Int) -> Unit
                 Text(
                     label, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     color = if (on) MaterialTheme.colorScheme.onPrimaryContainer else c.text,
-                    modifier = Modifier.padding(horizontal = Space.s),
+                    modifier = Modifier.padding(horizontal = Space.xxs),
                 )
             }
         }

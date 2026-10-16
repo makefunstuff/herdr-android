@@ -498,8 +498,8 @@ private fun ServerTab(model: AdminModel, state: HostState) {
         }
 
         SectionCard {
-            Text("Stop the server", style = MaterialTheme.typography.titleMedium)
-            Hint("Closes every pane and agent in this session. Start it again by running herdr on the machine.")
+            Text("Danger zone", style = MaterialTheme.typography.titleMedium, color = Herdr.colors.red)
+            Hint("Stopping the server closes every pane and agent in this session. Start it again by running herdr on the machine.")
             SecondaryButton(
                 onClick = { confirmStop = true },
                 enabled = state.online && !model.isBusy("stop"),
