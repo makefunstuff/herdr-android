@@ -7,64 +7,61 @@ import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.compositeOver
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.makefunstuff.herdr.AppContainer
 import com.makefunstuff.herdr.core.host.HostStatus
+import com.makefunstuff.herdr.ui.design.HerdrIcons
+import com.makefunstuff.herdr.ui.design.HerdrShapes
+import com.makefunstuff.herdr.ui.design.StateBlock
+import com.makefunstuff.herdr.ui.theme.Herdr
 
 val LocalContainer = staticCompositionLocalOf<AppContainer> { error("no container") }
 
 @Composable
-fun StatusDot(color: Color, modifier: Modifier = Modifier, size: Int = 10) {
+fun StatusDot(color: Color, modifier: Modifier = Modifier, size: Int = 8) {
     Box(modifier.size(size.dp).background(color, CircleShape))
 }
 
+/**
+ * A small label: neutral (grey fill, muted text) or, with [color], the status colour's tint with
+ * the colour itself as text. 8dp corners, 12sp.
+ */
 @Composable
-fun Pill(text: String, color: Color = MaterialTheme.colorScheme.onSurfaceVariant, container: Color? = null) {
-    val scheme = MaterialTheme.colorScheme
-    val tint = container ?: if (color == scheme.onSurfaceVariant) scheme.surfaceContainerHighest else color.copy(alpha = 0.16f)
-    val bg = tint.compositeOver(scheme.surfaceContainer)
-    Surface(color = tint, shape = RoundedCornerShape(8.dp)) {
-        Text(
-            text,
-            color = com.makefunstuff.herdr.ui.design.readable(color, bg, scheme.onSurface),
-            style = MaterialTheme.typography.labelMedium,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-            maxLines = 1,
-        )
-    }
+fun Pill(text: String, color: Color? = null, container: Color? = null) {
+    val c = Herdr.colors
+    val tone = color?.takeIf { it != MaterialTheme.colorScheme.onSurfaceVariant }
+    Text(
+        text,
+        color = tone ?: c.muted,
+        style = MaterialTheme.typography.labelMedium,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.clip(HerdrShapes.Badge).background(container ?: tone?.let { c.tint(it) } ?: c.field)
+            .padding(horizontal = 8.dp, vertical = 3.dp),
+    )
 }
 
+/** A whole screen with nothing to show: icon, title, a sentence, maybe a button. */
 @Composable
-fun EmptyState(title: String, body: String, action: (@Composable () -> Unit)? = null) {
-    Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(title, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
-            Text(
-                body,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-            )
-            action?.invoke()
-        }
+fun EmptyState(title: String, body: String, icon: ImageVector = HerdrIcons.Inbox, action: (@Composable () -> Unit)? = null) {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        StateBlock(icon, title, body, action = action)
     }
 }
 
@@ -74,18 +71,22 @@ fun HostStatus.label(): String = when (this) {
     HostStatus.Online -> "Online"
     is HostStatus.Reconnecting -> "Reconnecting in ${retryInSeconds}s"
     is HostStatus.Attention -> when (kind) {
-        HostStatus.Attention.Kind.Auth -> "! auth"
-        HostStatus.Attention.Kind.HostKey -> "! host key"
-        HostStatus.Attention.Kind.Herdr -> "! herdr"
-        HostStatus.Attention.Kind.Other -> "! error"
+        HostStatus.Attention.Kind.Auth -> "Key refused"
+        HostStatus.Attention.Kind.HostKey -> "Host key changed"
+        HostStatus.Attention.Kind.Herdr -> "herdr problem"
+        HostStatus.Attention.Kind.Other -> "Can't connect"
     }
 }
 
-fun HostStatus.color(): Color = when (this) {
-    HostStatus.Online -> Color(0xFF6CC993)
-    HostStatus.Connecting, is HostStatus.Reconnecting -> Color(0xFFE2B64A)
-    is HostStatus.Attention -> Color(0xFFEF7B70)
-    HostStatus.Stopped -> Color(0xFF7A847F)
+@Composable
+@ReadOnlyComposable
+fun HostStatus.color(): Color = Herdr.colors.let { c ->
+    when (this) {
+        HostStatus.Online -> c.green
+        HostStatus.Connecting, is HostStatus.Reconnecting -> c.amber
+        is HostStatus.Attention -> c.red
+        HostStatus.Stopped -> c.grey
+    }
 }
 
 fun HostStatus.detail(): String? = when (this) {

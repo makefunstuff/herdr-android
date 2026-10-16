@@ -1,40 +1,24 @@
 package com.makefunstuff.herdr.ui.machines
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExtendedFloatingActionButton
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
@@ -44,15 +28,24 @@ import com.makefunstuff.herdr.core.host.HostState
 import com.makefunstuff.herdr.core.host.HostStatus
 import com.makefunstuff.herdr.ui.common.EmptyState
 import com.makefunstuff.herdr.ui.common.LocalContainer
-import com.makefunstuff.herdr.ui.common.Pill
-import com.makefunstuff.herdr.ui.common.StatusDot
 import com.makefunstuff.herdr.ui.common.color
 import com.makefunstuff.herdr.ui.common.copyToClipboard
 import com.makefunstuff.herdr.ui.common.detail
 import com.makefunstuff.herdr.ui.common.label
+import com.makefunstuff.herdr.ui.design.BarAdd
+import com.makefunstuff.herdr.ui.design.HerdrIcons
+import com.makefunstuff.herdr.ui.design.HerdrTopBar
+import com.makefunstuff.herdr.ui.design.IconTile
+import com.makefunstuff.herdr.ui.design.ListRow
+import com.makefunstuff.herdr.ui.design.LocalRowBackground
+import com.makefunstuff.herdr.ui.design.PrimaryButton
+import com.makefunstuff.herdr.ui.design.QuietCard
+import com.makefunstuff.herdr.ui.design.SecondaryButton
+import com.makefunstuff.herdr.ui.design.StatusLabel
+import com.makefunstuff.herdr.ui.theme.Herdr
+import com.makefunstuff.herdr.ui.theme.Space
 import com.makefunstuff.herdr.ui.theme.color
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MachinesScreen(nav: NavController) {
     val container = LocalContainer.current
@@ -60,26 +53,25 @@ fun MachinesScreen(nav: NavController) {
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        topBar = { TopAppBar(title = { Text("Machines") }) },
-        floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = { nav.navigate(Routes.edit()) },
-                icon = { Icon(Icons.Filled.Add, null) },
-                text = { Text("Add machine") },
-            )
+        containerColor = Herdr.colors.ground,
+        topBar = {
+            HerdrTopBar("Machines") {
+                if (hosts.isNotEmpty()) BarAdd("Add machine") { nav.navigate(Routes.edit()) }
+            }
         },
     ) { padding ->
         if (hosts.isEmpty()) {
             EmptyState(
                 "Connect your first machine",
                 "Any Linux or macOS computer you can SSH into that runs herdr. You can import the rest of your herdr machines from it afterwards.",
-            ) { Button(onClick = { nav.navigate(Routes.edit()) }) { Text("Add machine") } }
+                icon = HerdrIcons.Dns,
+            ) { PrimaryButton("Add machine") { nav.navigate(Routes.edit()) } }
             return@Scaffold
         }
         LazyColumn(
             modifier = Modifier.padding(padding),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            contentPadding = PaddingValues(start = Space.screen, end = Space.screen, top = Space.xs, bottom = Space.xl),
+            verticalArrangement = Arrangement.spacedBy(Space.s),
         ) {
             items(hosts, key = { it.machine.id }) { host ->
                 MachineCard(
@@ -98,62 +90,72 @@ fun MachinesScreen(nav: NavController) {
 private fun MachineCard(host: HostState, via: String?, onOpen: () -> Unit, onRetry: () -> Unit, onEdit: () -> Unit) {
     val context = LocalContext.current
     val publicKey by LocalContainer.current.identity.publicKey.collectAsStateWithLifecycle()
+    val c = Herdr.colors
     val m = host.machine
     val snap = host.snapshot
-    val dim = !host.online
-    Card(
-        modifier = Modifier.fillMaxWidth().clickable(onClickLabel = "Open ${m.label}", onClick = onOpen)
-            .semantics(mergeDescendants = true) { stateDescription = host.status.label() },
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+    val status = host.status
+    QuietCard(
+        Modifier.semantics(mergeDescendants = true) { stateDescription = status.label() },
+        onClick = onOpen, onClickLabel = "Open ${m.label}",
     ) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                StatusDot(host.status.color())
-                Spacer(Modifier.width(10.dp))
-                Text(m.label, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                Pill(host.status.label(), color = host.status.color())
-            }
-            Text(
-                buildString {
+        CompositionLocalProvider(LocalRowBackground provides c.card) {
+            ListRow(
+                title = m.label,
+                subtitle = buildString {
                     append(m.target)
-                    append(" · session ").append(m.session)
-                    host.herdrVersion?.let { append(" · herdr ").append(it) }
                     via?.let { append(" · via ").append(it) }
                 },
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
+                leading = { IconTile(HerdrIcons.Dns, dot = status.color()) },
+                trailing = {
+                    Text(status.label(), style = MaterialTheme.typography.labelMedium, color = if (host.online) c.faint else status.color(), maxLines = 1)
+                },
+                modifier = Modifier.padding(top = Space.xs),
             )
+        }
+        val details = buildList {
             if (snap != null) {
                 val counts = snap.agents.groupingBy { it.agentStatus }.eachCount()
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    counts[AgentStatus.Blocked]?.let { Pill("$it blocked", color = AgentStatus.Blocked.color()) }
-                    counts[AgentStatus.Working]?.let { Pill("$it working", color = AgentStatus.Working.color()) }
-                    counts[AgentStatus.Done]?.let { Pill("$it done", color = AgentStatus.Done.color()) }
-                    Pill("${snap.workspaces.size} workspaces")
-                }
-                if (dim) {
-                    Text("Showing the last known state", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                counts[AgentStatus.Blocked]?.let { add("$it need${if (it == 1) "s" else ""} you" to AgentStatus.Blocked.color()) }
+                counts[AgentStatus.Working]?.let { add("$it working" to AgentStatus.Working.color()) }
+                counts[AgentStatus.Done]?.let { add("$it done" to AgentStatus.Done.color()) }
+                add("${snap.workspaces.size} workspace${if (snap.workspaces.size == 1) "" else "s"}" to null)
+            }
+            host.herdrVersion?.let { add("herdr $it" to null) }
+        }
+        if (details.isNotEmpty()) {
+            @OptIn(ExperimentalLayoutApi::class)
+            FlowRow(
+                Modifier.padding(start = 68.dp, end = Space.l, bottom = Space.m),
+                horizontalArrangement = Arrangement.spacedBy(Space.m),
+                verticalArrangement = Arrangement.spacedBy(Space.xs),
+            ) {
+                details.forEach { (text, color) ->
+                    if (color != null) StatusLabel(text, color) else Text(text, style = MaterialTheme.typography.labelMedium, color = c.faint)
                 }
             }
-            host.status.detail()?.let {
-                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            val status = host.status
-            if (status is HostStatus.Attention || status is HostStatus.Reconnecting) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (status is HostStatus.Attention && status.kind == HostStatus.Attention.Kind.Auth) {
-                        OutlinedButton(onClick = { publicKey?.let { context.copyToClipboard("public key", it, "Public key copied") } }) {
-                            Text("Copy public key")
-                        }
-                    }
-                    if (status is HostStatus.Attention && status.kind == HostStatus.Attention.Kind.HostKey) {
-                        OutlinedButton(onClick = onEdit, modifier = Modifier.heightIn(min = 48.dp)) { Text("Review") }
-                    }
-                    OutlinedButton(onClick = onRetry, modifier = Modifier.heightIn(min = 48.dp)) { Text("Retry") }
+        }
+        val note = listOfNotNull(
+            status.detail(),
+            if (snap != null && !host.online) "Showing the last known state" else null,
+        )
+        if (note.isNotEmpty()) Text(
+            note.joinToString("\n"),
+            style = MaterialTheme.typography.bodySmall,
+            color = c.muted,
+            modifier = Modifier.padding(start = 68.dp, end = Space.l, bottom = Space.m),
+        )
+        if (status is HostStatus.Attention || status is HostStatus.Reconnecting) {
+            Row(
+                Modifier.padding(start = 68.dp - Space.xs, end = Space.l, bottom = Space.m),
+                horizontalArrangement = Arrangement.spacedBy(Space.s),
+            ) {
+                if (status is HostStatus.Attention && status.kind == HostStatus.Attention.Kind.Auth) {
+                    SecondaryButton("Copy public key") { publicKey?.let { context.copyToClipboard("public key", it, "Public key copied") } }
                 }
+                if (status is HostStatus.Attention && status.kind == HostStatus.Attention.Kind.HostKey) {
+                    SecondaryButton("Review", onClick = onEdit)
+                }
+                SecondaryButton("Retry", onClick = onRetry)
             }
         }
     }
