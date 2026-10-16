@@ -78,6 +78,7 @@ import com.makefunstuff.herdr.ui.common.color
 import com.makefunstuff.herdr.ui.common.detail
 import com.makefunstuff.herdr.ui.common.label
 import com.makefunstuff.herdr.ui.common.toast
+import com.makefunstuff.herdr.ui.board.BoardCard
 import com.makefunstuff.herdr.ui.coordinator.CoordinatorCard
 import com.makefunstuff.herdr.ui.manage.NoticeRow
 import com.makefunstuff.herdr.ui.manage.NoticesSheet
@@ -187,6 +188,7 @@ fun MachineScreen(nav: NavController, machineId: String) {
                 item { Text("Offline · showing the last known state", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
             }
             if (state.hasBoard) {
+                item(key = "board") { BoardCard(state.machine.label, showMachine = false) { nav.navigate(Routes.board(machineId)) } }
                 item(key = "coordinator") { CoordinatorCard(state.machine.label, showMachine = false) { nav.navigate(Routes.coordinator(machineId)) } }
             }
             if (snap.workspaces.isEmpty()) {
