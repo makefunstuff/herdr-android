@@ -9,7 +9,7 @@ object Markdown {
     sealed interface Block {
         data class Heading(val level: Int, val text: List<Span>) : Block
         data class Paragraph(val text: List<Span>) : Block
-        data class ListItem(val depth: Int, val marker: String, val text: List<Span>) : Block
+        data class ListItem(val depth: Int, val marker: String, val text: List<Span>, val checked: Boolean? = null) : Block
         data class Quote(val text: List<Span>) : Block
         data class Code(val language: String, val text: String) : Block
 
@@ -29,6 +29,7 @@ object Markdown {
 
     private val HEADING = Regex("^(#{1,6})\\s+(.*?)\\s*#*\\s*$")
     private val BULLET = Regex("^(\\s*)([-*+])\\s+(.*)$")
+    private val TASK = Regex("^\\[([ xX])]\\s+(.*)$")
     private val ORDERED = Regex("^(\\s*)(\\d{1,3})[.)]\\s+(.*)$")
     private val FENCE = Regex("^\\s*(```+|~~~+)\\s*([\\w+#.-]*).*$")
     private val RULE = Regex("^\\s*([-*_])(\\s*\\1){2,}\\s*$")
@@ -85,7 +86,9 @@ object Markdown {
                     ) {
                         text += " " + lines[++i].trim()
                     }
-                    blocks += Block.ListItem(minOf(depth, 4), marker, inline(text))
+                    val task = TASK.matchEntire(text)
+                    if (task != null) text = task.groupValues[2]
+                    blocks += Block.ListItem(minOf(depth, 6), marker, inline(text), task?.let { it.groupValues[1] != " " })
                 }
                 line.trimStart().startsWith(">") -> {
                     flush()
@@ -100,6 +103,16 @@ object Markdown {
         }
         flush()
         return blocks
+    }
+
+    /** The first line of [source] as plain text, markers dropped: for a one-line summary in a list. */
+    fun plain(source: String): String {
+        var fenced = false
+        val first = source.lineSequence().map { it.trim() }.firstOrNull { line ->
+            if (FENCE.matches(line)) { fenced = !fenced; false } else !fenced && line.isNotEmpty()
+        }.orEmpty()
+        val bare = first.replace(Regex("^(#{1,6}\\s+|>\\s*|[-*+]\\s+(\\[[ xX]]\\s+)?|\\d{1,3}[.)]\\s+)"), "")
+        return inline(bare).joinToString("") { it.text }
     }
 
     private fun cells(line: String): List<String> =
@@ -164,10 +177,16 @@ object Markdown {
                         plain.append(c); i++
                     }
                 }
+                c == '<' && Regex("^<(https?://[^>\\s]+)>").find(text.substring(i)) != null -> {
+                    val url = Regex("^<(https?://[^>\\s]+)>").find(text.substring(i))!!
+                    flushPlain()
+                    emit(url.groupValues[1], link = url.groupValues[1])
+                    i += url.value.length
+                }
                 text.startsWith("https://", i) || text.startsWith("http://", i) -> {
                     var end = i
                     while (end < text.length && !text[end].isWhitespace() && text[end] !in "<>\"'`") end++
-                    while (end > i && text[end - 1] in ".,;:!?)") end--
+                    while (end > i && text[end - 1] in ".,;:!?)*_~") end--
                     flushPlain()
                     val url = text.substring(i, end)
                     emit(url, link = url)

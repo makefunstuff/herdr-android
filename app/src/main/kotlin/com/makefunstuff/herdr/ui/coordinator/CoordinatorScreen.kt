@@ -1,5 +1,6 @@
 package com.makefunstuff.herdr.ui.coordinator
 
+import com.makefunstuff.herdr.ui.common.MarkdownText
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -263,13 +264,7 @@ private fun Bubble(line: ChatLine) {
                 ),
                 modifier = Modifier.widthIn(max = 320.dp).alpha(if (line.pending) 0.7f else 1f),
             ) {
-                SelectionContainer {
-                    Text(
-                        Markdown.render(line.text, MaterialTheme.colorScheme.surfaceContainerHighest),
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                    )
-                }
+                MarkdownText(line.text, Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
             }
             if (line.pending) {
                 Text(
