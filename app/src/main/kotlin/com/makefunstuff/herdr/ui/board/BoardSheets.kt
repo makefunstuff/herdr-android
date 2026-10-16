@@ -1,5 +1,6 @@
 package com.makefunstuff.herdr.ui.board
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -194,7 +195,7 @@ fun TaskSheet(
                     modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
                 ) { Text(primary.label, style = MaterialTheme.typography.titleSmall) }
             }
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 (acts).forEach { a ->
                     OutlinedButton(
                         onClick = { onAction(a) }, enabled = busy == null, modifier = Modifier.heightIn(min = 48.dp),
