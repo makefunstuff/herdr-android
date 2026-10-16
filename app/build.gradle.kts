@@ -8,9 +8,12 @@ plugins {
 }
 
 val buildNumber = (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInt()
-val releaseKeystore = System.getenv("HERDR_KEYSTORE_FILE")?.takeIf { it.isNotBlank() }?.let { path ->
+// GitHub Actions passes a secret that isn't set as an empty string, so empty counts as unset.
+fun env(name: String): String? = System.getenv(name)?.takeIf { it.isNotEmpty() }
+
+val releaseKeystore = env("HERDR_KEYSTORE_FILE")?.let { path ->
     // A half-configured key must fail the build rather than quietly ship a debug-signed APK.
-    listOf("HERDR_KEYSTORE_PASSWORD", "HERDR_KEY_ALIAS").filter { System.getenv(it).isNullOrBlank() }.let { missing ->
+    listOf("HERDR_KEYSTORE_PASSWORD", "HERDR_KEY_ALIAS").filter { env(it) == null }.let { missing ->
         if (missing.isNotEmpty()) throw GradleException("HERDR_KEYSTORE_FILE is set but ${missing.joinToString()} is not")
     }
     file(path).also { if (!it.isFile) throw GradleException("Keystore $path not found") }
@@ -35,9 +38,9 @@ android {
         if (releaseKeystore != null) {
             create("herdr") {
                 storeFile = releaseKeystore
-                storePassword = System.getenv("HERDR_KEYSTORE_PASSWORD")
-                keyAlias = System.getenv("HERDR_KEY_ALIAS")
-                keyPassword = System.getenv("HERDR_KEY_PASSWORD") ?: System.getenv("HERDR_KEYSTORE_PASSWORD")
+                storePassword = env("HERDR_KEYSTORE_PASSWORD")
+                keyAlias = env("HERDR_KEY_ALIAS")
+                keyPassword = env("HERDR_KEY_PASSWORD") ?: env("HERDR_KEYSTORE_PASSWORD")
             }
         }
     }

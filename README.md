@@ -33,9 +33,9 @@ Then add these secrets under **Settings → Secrets and variables → Actions** 
 | `HERDR_KEYSTORE_BASE64` | contents of `herdr-release.jks.b64` (`gh secret set HERDR_KEYSTORE_BASE64 < herdr-release.jks.b64`) |
 | `HERDR_KEYSTORE_PASSWORD` | the keystore password |
 | `HERDR_KEY_ALIAS` | `herdr` |
-| `HERDR_KEY_PASSWORD` | the key password, if different from the keystore password (keytool uses the same one by default) |
+| `HERDR_KEY_PASSWORD` | optional: the key password, only if it differs from the keystore password (keytool uses the same one by default) |
 
-Without these secrets, and for local builds, the APK is signed with the normal debug key and the default branch skips publishing a release. To sign a local build with the real key, set `HERDR_KEYSTORE_FILE`, `HERDR_KEYSTORE_PASSWORD` and `HERDR_KEY_ALIAS` and run `./gradlew :app:assembleRelease`.
+Without these secrets, and for local builds, the APK is signed with the normal debug key and the default branch skips publishing a release (and keeps the old `apk-*` pre-releases until the first real one). To sign a local build with the real key, set `HERDR_KEYSTORE_FILE`, `HERDR_KEYSTORE_PASSWORD` and `HERDR_KEY_ALIAS` and run `./gradlew :app:assembleRelease`.
 
 ## Setting up a machine
 

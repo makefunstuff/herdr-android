@@ -82,9 +82,10 @@ jobs:
               --notes "Build ${GITHUB_RUN_NUMBER} of ${GITHUB_SHA}. On your phone, open herdr-android.apk below to install or update the app; it keeps its data and SSH key."
           fi
 
-      # Branch builds used to publish rolling apk-<branch> pre-releases; clear them out.
+      # Branch builds used to publish rolling apk-<branch> pre-releases; clear them out, but only
+      # once a real release has replaced them, so Releases always has an APK to install.
       - name: Remove old branch pre-releases
-        if: env.PUBLISH == 'true'
+        if: env.PUBLISH == 'true' && env.HERDR_KEYSTORE_FILE != ''
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
