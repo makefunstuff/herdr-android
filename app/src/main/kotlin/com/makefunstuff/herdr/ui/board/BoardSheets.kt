@@ -188,7 +188,6 @@ fun TaskDetailScreen(
     onMore: () -> Unit,
 ) {
     BackHandler(onBack = onBack)
-    val context = LocalContext.current
     val owner = LocalLifecycleOwner.current
     var details by remember { mutableStateOf<TaskDetails?>(null) }
     var problem by remember { mutableStateOf<String?>(null) }
@@ -207,9 +206,25 @@ fun TaskDetailScreen(
             }
         }
     }
+    TaskDetailContent(t, details, problem, busy, onBack, onAction, onPick, onMore)
+}
+
+/** The screen itself, from data alone: what [TaskDetailScreen] draws once it has read `details`. */
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+fun TaskDetailContent(
+    t: BoardTask,
+    d: TaskDetails?,
+    problem: String?,
+    busy: String?,
+    onBack: () -> Unit,
+    onAction: (BoardAction) -> Unit,
+    onPick: (String) -> Unit,
+    onMore: () -> Unit,
+) {
+    val context = LocalContext.current
     val primary = BoardActions.primary(t)
     val color = t.status.color()
-    val d = details
     Scaffold(
         topBar = {
             TopAppBar(
