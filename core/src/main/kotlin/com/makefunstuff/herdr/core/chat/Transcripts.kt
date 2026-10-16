@@ -1,0 +1,393 @@
+package com.makefunstuff.herdr.core.chat
+
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+
+/**
+ * Turns an agent's own JSONL transcript into chat items, one line at a time, so a file that is
+ * still being written can be followed. Lines it doesn't understand are skipped.
+ */
+abstract class Transcript {
+    private val entries = LinkedHashMap<String, ChatItem>()
+    private var version = 0L
+
+    /** Changes each time the items change, so a follower knows when to publish. */
+    val revision: Long get() = version
+
+    fun items(): List<ChatItem> = entries.values.toList()
+
+    fun feed(line: String) {
+        if (line.isBlank() || line[0] != '{') return
+        val obj = runCatching { TranscriptJson.parseToJsonElement(line).jsonObject }.getOrNull() ?: return
+        runCatching { read(obj) }
+    }
+
+    protected abstract fun read(obj: JsonObject)
+
+    protected fun put(item: ChatItem) {
+        entries[item.id] = item
+        version++
+    }
+
+    protected fun finishTool(id: String, output: String?, failed: Boolean) {
+        val tool = entries[id] as? ChatItem.Tool ?: return
+        entries[id] = tool.copy(output = output?.let(::clip), state = if (failed) ToolState.Failed else ToolState.Done)
+        version++
+    }
+
+    /** Marks every tool still running as done: the turn moved on, so it is no longer waiting. */
+    protected fun settleTools() {
+        for ((id, item) in entries) {
+            if (item is ChatItem.Tool && item.state == ToolState.Running) entries[id] = item.copy(state = ToolState.Done)
+        }
+        version++
+    }
+
+    companion object {
+        /** The parser for an agent kind herdr reports, or null when the app can't read its transcript. */
+        fun forAgent(agent: String): Transcript? = when (agent) {
+            "claude" -> ClaudeTranscript()
+            "codex" -> CodexTranscript()
+            "pi", "omp" -> PiTranscript()
+            else -> null
+        }
+
+        private const val MAX_OUTPUT = 6_000
+
+        internal fun clip(text: String): String =
+            if (text.length <= MAX_OUTPUT) text else text.take(MAX_OUTPUT) + "\n… (${text.length - MAX_OUTPUT} more characters)"
+    }
+}
+
+internal val TranscriptJson = Json { ignoreUnknownKeys = true; isLenient = true }
+
+internal fun JsonElement?.str(): String? = (this as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull
+
+internal fun JsonObject.str(key: String): String? = this[key].str()
+
+internal fun JsonObject.obj(key: String): JsonObject? = this[key] as? JsonObject
+
+internal fun JsonObject.arr(key: String): JsonArray? = this[key] as? JsonArray
+
+internal fun JsonObject.bool(key: String): Boolean = (this[key] as? JsonPrimitive)?.booleanOrNull == true
+
+/** Text from a string or a list of `{type: text, text}` blocks. */
+internal fun textOf(element: JsonElement?): String = when (element) {
+    null, JsonNull -> ""
+    is JsonPrimitive -> element.contentOrNull.orEmpty()
+    is JsonArray -> element.mapNotNull { (it as? JsonObject)?.let { b -> b.str("text") } ?: it.str() }.joinToString("\n")
+    is JsonObject -> element.str("text") ?: element["content"]?.let(::textOf).orEmpty()
+}
+
+/** Text the agent harness injects into the user turn, which the human never typed. */
+private val INJECTED = listOf(
+    "<system-reminder>", "<task-notification>", "<local-command-caveat>", "Caveat: The messages below",
+    "<user-prompt-submit-hook>", "<environment_context>", "<user_instructions>", "# AGENTS.md instructions",
+    "<turn_aborted>", "<subagent_notification>", "<system-notice>",
+)
+
+internal fun isInjected(text: String): Boolean {
+    val t = text.trimStart()
+    return INJECTED.any { t.startsWith(it) }
+}
+
+private val TAG = Regex("<([a-z-]+)>([\\s\\S]*?)</\\1>")
+
+/** Claude Code's transcript (`~/.claude/projects/<cwd>/<session>.jsonl`). */
+class ClaudeTranscript : Transcript() {
+    override fun read(obj: JsonObject) {
+        if (obj.bool("isSidechain") || obj.bool("isMeta")) return
+        val uuid = obj.str("uuid") ?: return
+        when (obj.str("type")) {
+            "user" -> user(uuid, obj.obj("message") ?: return)
+            "assistant" -> assistant(uuid, obj.obj("message") ?: return)
+            "system" -> if (obj.str("subtype") == "compact_boundary") put(ChatItem.Notice(uuid, "Conversation compacted"))
+        }
+    }
+
+    private fun user(uuid: String, message: JsonObject) {
+        when (val content = message["content"]) {
+            is JsonPrimitive -> userText(uuid, content.contentOrNull.orEmpty(), 0)
+            is JsonArray -> {
+                val texts = mutableListOf<String>()
+                var images = 0
+                for (block in content.filterIsInstance<JsonObject>()) {
+                    when (block.str("type")) {
+                        "text" -> texts += block.str("text").orEmpty()
+                        "image" -> images++
+                        "tool_result" -> finishTool(
+                            block.str("tool_use_id") ?: continue,
+                            textOf(block["content"]).ifBlank { null },
+                            block.bool("is_error"),
+                        )
+                    }
+                }
+                if (texts.isNotEmpty() || images > 0) userText(uuid, texts.joinToString("\n"), images)
+            }
+            else -> {}
+        }
+    }
+
+    private fun userText(uuid: String, raw: String, images: Int) {
+        val text = raw.trim()
+        if (text.startsWith("[Request interrupted")) {
+            settleTools()
+            put(ChatItem.Notice(uuid, "Interrupted"))
+            return
+        }
+        if (text.startsWith("<command-name>") || text.startsWith("<command-message>")) {
+            val tags = TAG.findAll(text).associate { it.groupValues[1] to it.groupValues[2].trim() }
+            val name = tags["command-name"] ?: return
+            put(ChatItem.User(uuid, (name + " " + tags["command-args"].orEmpty()).trim()))
+            return
+        }
+        if (text.startsWith("<local-command-stdout>") || text.startsWith("<local-command-stderr>")) {
+            val out = TAG.find(text)?.groupValues?.get(2)?.trim().orEmpty()
+            if (out.isNotEmpty()) put(ChatItem.Notice(uuid, stripAnsi(out)))
+            return
+        }
+        if (text.startsWith("<bash-input>")) {
+            put(ChatItem.User(uuid, "! " + TAG.find(text)?.groupValues?.get(2)?.trim().orEmpty()))
+            return
+        }
+        if (text.startsWith("<bash-stdout>")) {
+            val out = TAG.findAll(text).joinToString("\n") { it.groupValues[2].trim() }.trim()
+            if (out.isNotEmpty()) put(ChatItem.Notice(uuid, stripAnsi(out)))
+            return
+        }
+        if (isInjected(text)) return
+        if (text.isEmpty() && images == 0) return
+        put(ChatItem.User(uuid, text, images))
+    }
+
+    private fun assistant(uuid: String, message: JsonObject) {
+        val content = message["content"] as? JsonArray ?: return
+        content.filterIsInstance<JsonObject>().forEachIndexed { i, block ->
+            when (block.str("type")) {
+                "text" -> block.str("text")?.trim()?.takeIf { it.isNotEmpty() }?.let { put(ChatItem.Agent("$uuid/$i", it)) }
+                "tool_use" -> {
+                    val id = block.str("id") ?: return@forEachIndexed
+                    val name = block.str("name").orEmpty()
+                    val input = block.obj("input") ?: JsonObject(emptyMap())
+                    put(ChatItem.Tool(id, name, ToolSummary.of(name, input), ToolSummary.detail(input)))
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Codex's rollout file (`~/.codex/sessions/YYYY/MM/DD/rollout-…-<id>.jsonl`). Recent versions log
+ * completed UI items (`item_completed`), which read like the conversation; older ones log
+ * `user_message`/`agent_message` events and raw function calls.
+ */
+class CodexTranscript : Transcript() {
+    private var itemMode = false
+    private var seq = 0
+
+    override fun read(obj: JsonObject) {
+        val payload = obj.obj("payload") ?: return
+        val type = payload.str("type")
+        when (obj.str("type")) {
+            "event_msg" -> when (type) {
+                "item_completed" -> {
+                    itemMode = true
+                    item(payload.obj("item") ?: return)
+                }
+                "user_message" -> if (!itemMode) {
+                    val text = payload.str("message")?.trim().orEmpty()
+                    if (text.isNotEmpty() && !isInjected(text)) put(ChatItem.User("u${seq++}", text))
+                }
+                "agent_message" -> if (!itemMode) {
+                    payload.str("message")?.trim()?.takeIf { it.isNotEmpty() }?.let { put(ChatItem.Agent("a${seq++}", it)) }
+                }
+                "turn_aborted" -> {
+                    settleTools()
+                    put(ChatItem.Notice("abort${seq++}", "Interrupted"))
+                }
+            }
+            "response_item" -> if (!itemMode) legacyCall(payload)
+            "compacted" -> put(ChatItem.Notice("compact${seq++}", "Conversation compacted"))
+        }
+    }
+
+    private fun item(item: JsonObject) {
+        val id = item.str("id") ?: "i${seq++}"
+        val failed = item.str("status") == "failed"
+        val state = if (failed) ToolState.Failed else ToolState.Done
+        when (item.str("type")) {
+            "UserMessage" -> {
+                val content = item.arr("content") ?: return
+                val text = content.filterIsInstance<JsonObject>().mapNotNull { it.str("text") }.joinToString("\n").trim()
+                val images = content.count { (it as? JsonObject)?.str("type")?.contains("image", ignoreCase = true) == true }
+                if ((text.isNotEmpty() || images > 0) && !isInjected(text)) put(ChatItem.User(id, text, images))
+            }
+            "AgentMessage" -> textOf(item["content"]).trim().takeIf { it.isNotEmpty() }?.let { put(ChatItem.Agent(id, it)) }
+            "CommandExecution" -> {
+                val command = commandLine(item["command"])
+                val output = item.str("aggregated_output") ?: item.str("formatted_output") ?: item.str("stdout")
+                val exit = (item["exit_code"] as? JsonPrimitive)?.contentOrNull
+                put(
+                    ChatItem.Tool(
+                        id, "shell", command, null,
+                        output?.ifBlank { null }?.let(Transcript::clip),
+                        if (failed || (exit != null && exit != "0")) ToolState.Failed else ToolState.Done,
+                    ),
+                )
+            }
+            "FileChange" -> {
+                val changes = item.obj("changes")
+                val summary = changes?.entries?.joinToString(", ") { (path, change) ->
+                    val kind = (change as? JsonObject)?.str("type")
+                    (when (kind) { "add" -> "+ "; "delete" -> "− "; else -> "" }) + path
+                } ?: item.str("stdout")?.lines()?.drop(1)?.joinToString(", ") { it.trim() }.orEmpty()
+                put(ChatItem.Tool(id, "edit", summary, null, item.str("stdout")?.ifBlank { null }, state))
+            }
+            "McpToolCall" -> {
+                val args = item.obj("arguments") ?: JsonObject(emptyMap())
+                val name = "${item.str("server")}.${item.str("tool")}"
+                put(
+                    ChatItem.Tool(
+                        id, name, ToolSummary.of(item.str("tool").orEmpty(), args), ToolSummary.detail(args),
+                        textOf(item.obj("result")?.get("content")).ifBlank { null }?.let(Transcript::clip), state,
+                    ),
+                )
+            }
+            "WebSearch" -> put(ChatItem.Tool(id, "web search", item.str("query").orEmpty(), state = state))
+            "Extension" -> {
+                val query = item.str("query") ?: item.obj("action")?.arr("queries")?.joinToString(" · ") { it.str().orEmpty() }
+                put(ChatItem.Tool(id, item.str("kind") ?: "extension", query.orEmpty(), state = state))
+            }
+            "ImageView" -> put(ChatItem.Tool(id, "view image", item.str("path")?.removePrefix("file://").orEmpty(), state = state))
+            "ContextCompaction" -> put(ChatItem.Notice(id, "Conversation compacted"))
+        }
+    }
+
+    private fun legacyCall(payload: JsonObject) {
+        when (payload.str("type")) {
+            "function_call", "custom_tool_call" -> {
+                val callId = payload.str("call_id") ?: return
+                val name = payload.str("name").orEmpty()
+                val raw = payload.str("arguments") ?: payload.str("input").orEmpty()
+                val args = runCatching { TranscriptJson.parseToJsonElement(raw) as? JsonObject }.getOrNull()
+                val summary = when {
+                    args == null -> raw.lineSequence().firstOrNull { it.isNotBlank() }.orEmpty()
+                    args["command"] != null || args["cmd"] != null -> commandLine(args["command"] ?: args["cmd"])
+                    else -> ToolSummary.of(name, args)
+                }
+                put(ChatItem.Tool(callId, name, summary, raw.takeIf { it.length > summary.length }?.let(Transcript::clip)))
+            }
+            "function_call_output", "custom_tool_call_output" -> {
+                val callId = payload.str("call_id") ?: return
+                val output = payload["output"]
+                val text = (output as? JsonPrimitive)?.contentOrNull?.let { o ->
+                    runCatching { TranscriptJson.parseToJsonElement(o).jsonObject.str("output") }.getOrNull() ?: o
+                } ?: textOf(output)
+                finishTool(callId, text.ifBlank { null }, false)
+            }
+        }
+    }
+
+    private fun commandLine(element: JsonElement?): String = when (element) {
+        is JsonArray -> {
+            val parts = element.mapNotNull { it.str() }
+            // ["bash", "-lc", "<script>"] → the script.
+            if (parts.size >= 3 && parts[parts.size - 2].startsWith("-") && parts[parts.size - 2].endsWith("c")) parts.last() else parts.joinToString(" ")
+        }
+        else -> element.str().orEmpty()
+    }
+}
+
+/** pi's and omp's session file (`~/.pi/agent/sessions/<cwd>/<time>_<id>.jsonl`). */
+class PiTranscript : Transcript() {
+    override fun read(obj: JsonObject) {
+        val id = obj.str("id") ?: return
+        when (obj.str("type")) {
+            "message" -> message(id, obj.obj("message") ?: return)
+            "compaction" -> put(ChatItem.Notice(id, "Conversation compacted"))
+        }
+    }
+
+    private fun message(id: String, message: JsonObject) {
+        when (message.str("role")) {
+            "user" -> {
+                val content = message["content"]
+                val text = textOf(content).trim()
+                val images = (content as? JsonArray)?.count { (it as? JsonObject)?.str("type") == "image" } ?: 0
+                if ((text.isNotEmpty() || images > 0) && !isInjected(text)) put(ChatItem.User(id, text, images))
+            }
+            "assistant" -> {
+                val content = message["content"] as? JsonArray ?: JsonArray(emptyList())
+                content.filterIsInstance<JsonObject>().forEachIndexed { i, block ->
+                    when (block.str("type")) {
+                        "text" -> block.str("text")?.trim()?.takeIf { it.isNotEmpty() }?.let { put(ChatItem.Agent("$id/$i", it)) }
+                        "toolCall" -> {
+                            val callId = block.str("id") ?: return@forEachIndexed
+                            val name = block.str("name").orEmpty()
+                            val args = block.obj("arguments") ?: JsonObject(emptyMap())
+                            put(ChatItem.Tool(callId, name, ToolSummary.of(name, args), ToolSummary.detail(args)))
+                        }
+                    }
+                }
+                if (message.str("stopReason") == "aborted") {
+                    settleTools()
+                    put(ChatItem.Notice("$id/abort", "Interrupted"))
+                } else if (message.str("stopReason") == "error") {
+                    put(ChatItem.Notice("$id/error", message.str("errorMessage") ?: "The agent hit an error"))
+                }
+            }
+            "toolResult" -> finishTool(message.str("toolCallId") ?: return, textOf(message["content"]).ifBlank { null }, message.bool("isError"))
+            "bashExecution" -> put(
+                ChatItem.Tool(
+                    id, "bash", message.str("command").orEmpty(), null,
+                    message.str("output")?.ifBlank { null }?.let(Transcript::clip), ToolState.Done,
+                ),
+            )
+        }
+    }
+}
+
+/** Picks the one line worth showing for a tool call. */
+object ToolSummary {
+    // A human description of the call (claude's Bash `description`, omp's intent `i`) reads best on a
+    // phone; the raw command stays in the expanded view.
+    private val PREFERRED = listOf(
+        "description", "i", "command", "cmd", "file_path", "path", "pattern", "query", "url", "prompt", "skill", "name", "title",
+    )
+
+    fun of(name: String, input: JsonObject): String {
+        when (name) {
+            "TodoWrite", "todo", "update_plan" -> return "Updated the plan"
+            "AskUserQuestion" -> {
+                val q = input.arr("questions")?.firstOrNull() as? JsonObject
+                q?.str("question")?.let { return it }
+            }
+        }
+        val key = PREFERRED.firstOrNull { input.str(it)?.isNotBlank() == true }
+        val value = key?.let { input.str(it) }
+            ?: input.values.firstNotNullOfOrNull { it.str()?.takeIf { s -> s.isNotBlank() } }
+            ?: ""
+        return value.trim()
+    }
+
+    /** The full input when it says more than the summary, for the expanded view. */
+    fun detail(input: JsonObject): String? {
+        if (input.isEmpty()) return null
+        val parts = input.entries.mapNotNull { (k, v) ->
+            val text = v.str() ?: v.takeIf { it !is JsonNull }?.toString() ?: return@mapNotNull null
+            "$k: $text"
+        }
+        return parts.joinToString("\n").takeIf { it.isNotBlank() }?.let(Transcript::clip)
+    }
+}
+
+private val ANSI = Regex("\u001B\\[[0-9;?]*[ -/]*[@-~]")
+
+internal fun stripAnsi(text: String): String = text.replace(ANSI, "")

@@ -41,6 +41,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.makefunstuff.herdr.Routes
 import com.makefunstuff.herdr.core.api.AgentStatus
+import com.makefunstuff.herdr.core.chat.BlockedPrompt
 import com.makefunstuff.herdr.data.AgentRow
 import com.makefunstuff.herdr.ui.common.EmptyState
 import com.makefunstuff.herdr.ui.common.LocalContainer
@@ -183,7 +184,7 @@ private fun rememberLastLine(row: AgentRow): String? {
         val session = container.hosts.session(row.machine.id) ?: return@LaunchedEffect
         runCatching {
             val text = session.awaitApi(5_000).readPane(row.agent.paneId, source = "visible", lines = 40).text
-            cache[key] = PromptGuess.question(text) ?: return@runCatching
+            cache[key] = BlockedPrompt.parse(text)?.question ?: PromptGuess.question(text) ?: return@runCatching
         }
     }
     return cache[key]
