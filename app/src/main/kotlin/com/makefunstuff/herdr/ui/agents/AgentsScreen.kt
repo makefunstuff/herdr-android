@@ -53,6 +53,7 @@ import com.makefunstuff.herdr.ui.common.EmptyState
 import com.makefunstuff.herdr.ui.common.LocalContainer
 import com.makefunstuff.herdr.ui.common.Pill
 import com.makefunstuff.herdr.ui.common.StatusDot
+import com.makefunstuff.herdr.ui.board.BoardCard
 import com.makefunstuff.herdr.ui.coordinator.CoordinatorCard
 import com.makefunstuff.herdr.ui.manage.AgentActionsSheet
 import com.makefunstuff.herdr.ui.manage.NoticeRow
@@ -136,6 +137,7 @@ fun AgentsScreen(nav: NavController) {
                     }
                     // The Coordinator of each machine with the work board, above its agents.
                     items(boards.filter { filter == null || it.machine.id == filter }, key = { "coordinator/${it.machine.id}" }) { h ->
+                        BoardCard(h.machine.label, showMachine = hosts.size > 1) { nav.navigate(Routes.board(h.machine.id)) }
                         CoordinatorCard(h.machine.label, showMachine = hosts.size > 1) { nav.navigate(Routes.coordinator(h.machine.id)) }
                     }
                     for (status in ORDER) {

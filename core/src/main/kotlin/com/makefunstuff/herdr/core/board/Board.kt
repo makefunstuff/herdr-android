@@ -45,8 +45,25 @@ object BoardCommands {
     fun remote(machine: Machine, path: String, what: String, request: JsonObject? = null): String =
         "sh -c ${quote(LOGIN)} sh ${quote(command(machine, path, what, request))}"
 
-    /** What the login shell runs. */
-    fun command(machine: Machine, path: String, what: String, request: JsonObject? = null): String {
+    /** `herdr-projects <args>` (the CLI itself, not `remote`) through the same login shell. */
+    fun cli(machine: Machine, path: String, args: List<String>): String =
+        "sh -c ${quote(LOGIN)} sh ${quote(envPrefix(machine) + quote(path) + " " + args.joinToString(" ") { quote(it) })}"
+
+    /** `list --json` and the plain `list` (which names each task by its short key), one after the other. */
+    fun listCommand(machine: Machine, path: String, filter: BoardFilter): String {
+        val flags = buildList {
+            if (filter.archived) add("--archived")
+            if (filter.query.isNotBlank()) { add("--query"); add(filter.query.trim()) }
+        }
+        val json = (listOf("list", "--json") + flags).joinToString(" ") { quote(it) }
+        val plain = (listOf("list") + flags).joinToString(" ") { quote(it) }
+        val p = envPrefix(machine) + quote(path)
+        return "sh -c ${quote(LOGIN)} sh ${quote("$p $json; echo $LIST_MARK; $p $plain")}"
+    }
+
+    const val LIST_MARK = "@@herdr-board-plain@@"
+
+    private fun envPrefix(machine: Machine): String {
         val env = listOfNotNull(
             machine.session.takeIf { it.isNotEmpty() && it != "default" }?.let { "HERDR_SESSION=${quote(it)}" },
             // The board accepts an exact path, including versioned filenames such as herdr-0.9.5.
@@ -54,7 +71,12 @@ object BoardCommands {
             // Keep the selected install directory available to helpers that call herdr by name.
             machine.herdrPath?.substringBeforeLast('/', "")?.takeIf { it.isNotEmpty() }?.let { "PATH=${quote(it)}:\"\$PATH\"" },
         )
-        val prefix = if (env.isEmpty()) "" else "env ${env.joinToString(" ")} "
+        return if (env.isEmpty()) "" else "env ${env.joinToString(" ")} "
+    }
+
+    /** What the login shell runs. */
+    fun command(machine: Machine, path: String, what: String, request: JsonObject? = null): String {
+        val prefix = envPrefix(machine)
         val arg = request?.let { " " + Base64.getEncoder().encodeToString(it.toString().toByteArray()) }.orEmpty()
         return "${prefix}${quote(path)} remote ${quote(what)}$arg"
     }
@@ -209,6 +231,51 @@ class BoardClient(private val conn: MachineConnection, private val machine: Mach
             throw IOException(err ?: it.message, it)
         }
     }
+
+    /** The tasks, as `list --json` gives them, with their short keys from the plain list. */
+    suspend fun tasks(filter: BoardFilter = BoardFilter()): List<BoardTask> {
+        val r = conn.run(BoardCommands.listCommand(machine, path, filter), timeoutSeconds = 25)
+        val json = r.stdout.substringBefore(BoardCommands.LIST_MARK)
+        val plain = r.stdout.substringAfter(BoardCommands.LIST_MARK, "")
+        val bare = BoardTasks.list(json, archivedView = filter.archived)
+        return bare.map { it.copy(key = BoardTasks.keys(plain, bare)[it.id].orEmpty()) }
+    }
+
+    /** `details <id>`. */
+    suspend fun details(id: String): TaskDetails {
+        val r = conn.run(BoardCommands.cli(machine, path, listOf("details", id)), timeoutSeconds = 20)
+        return BoardTasks.details(r.stdout.ifBlank { r.stderr })
+    }
+
+    /** Runs a board command about a task; the board's own sentence on success, its own reason in the exception. */
+    suspend fun run(args: List<String>): String {
+        val r = conn.run(BoardCommands.cli(machine, path, args), timeoutSeconds = 40)
+        val say = BoardTasks.plain(r.stdout).ifEmpty { BoardTasks.plain(r.stderr) }
+        if (r.exitStatus != 0) throw IOException(say.ifEmpty { "herdr-projects refused the command" })
+        return say
+    }
+
+    suspend fun act(action: BoardAction, id: String, text: String = "", letter: String = ""): String = run(
+        when (action) {
+            BoardAction.Tell, BoardAction.SendPlanBack -> listOf("tell", id, text)
+            BoardAction.ApproveAnyway -> listOf("approve", id, "--anyway")
+            BoardAction.Pick -> listOf("pick", id, letter)
+            else -> listOf(action.verb, id)
+        },
+    )
+
+    suspend fun rename(id: String, title: String) = run(listOf("rename", id, title))
+    suspend fun describe(id: String, text: String) = run(listOf("describe", id, text))
+
+    /** Adds a task; [start] puts an agent on it at once. */
+    suspend fun add(title: String, repo: String = "", description: String = "", research: Boolean = false, start: Boolean = false): String =
+        run(buildList {
+            add("add"); add(title)
+            if (description.isNotBlank()) { add("--desc"); add(description) }
+            if (repo.isNotBlank()) { add("--repo"); add(repo) }
+            if (research) add("--research")
+            if (start) add("--delegate")
+        })
 
     companion object {
         /** The launcher's path on the machine, or null when the board isn't installed there. */

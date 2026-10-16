@@ -39,6 +39,7 @@ import com.makefunstuff.herdr.ui.admin.AdminScreen
 import com.makefunstuff.herdr.ui.agents.AgentScreen
 import com.makefunstuff.herdr.ui.agents.AgentsScreen
 import com.makefunstuff.herdr.ui.common.LocalContainer
+import com.makefunstuff.herdr.ui.board.BoardScreen
 import com.makefunstuff.herdr.ui.coordinator.CoordinatorScreen
 import com.makefunstuff.herdr.ui.layout.LayoutScreen
 import com.makefunstuff.herdr.ui.machines.EditMachineScreen
@@ -73,6 +74,7 @@ object Routes {
     const val TERMINAL = "terminal/{mid}/{pane}"
     const val LAYOUT = "layout/{mid}/{pane}"
     const val COORDINATOR = "coordinator/{mid}"
+    const val BOARD = "board/{mid}"
     const val ADMIN = "admin/{mid}?tab={tab}"
     const val WORKTREES = "worktrees/{mid}?ws={ws}"
 
@@ -82,6 +84,7 @@ object Routes {
     fun terminal(mid: String, pane: String) = "terminal/$mid/${Uri.encode(pane)}"
     fun layout(mid: String, pane: String) = "layout/$mid/${Uri.encode(pane)}"
     fun coordinator(mid: String) = "coordinator/$mid"
+    fun board(mid: String) = "board/$mid"
     fun admin(mid: String, tab: Int = 0) = "admin/$mid?tab=$tab"
     fun worktrees(mid: String, workspaceId: String? = null) =
         if (workspaceId == null) "worktrees/$mid" else "worktrees/$mid?ws=${Uri.encode(workspaceId)}"
@@ -152,6 +155,7 @@ private fun AppNav() {
             composable(Routes.WORKTREES) {
                 WorktreesScreen(nav, it.arguments?.getString("mid").orEmpty(), it.arguments?.getString("ws")?.let(Uri::decode))
             }
+            composable(Routes.BOARD) { BoardScreen(nav, it.arguments?.getString("mid").orEmpty()) }
             composable(Routes.COORDINATOR) { CoordinatorScreen(nav, it.arguments?.getString("mid").orEmpty()) }
             composable(Routes.TERMINAL) {
                 TerminalScreen(nav, it.arguments?.getString("mid").orEmpty(), Uri.decode(it.arguments?.getString("pane").orEmpty()))
