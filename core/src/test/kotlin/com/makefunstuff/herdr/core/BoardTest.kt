@@ -95,7 +95,8 @@ class BoardTest {
                         val p = ProcessBuilder("/bin/sh", "-c", command).apply {
                             environment().putAll(mapOf(
                                 "PATH" to "${old.parent}:/usr/bin:/bin", "HOME" to dir.path,
-                                "SHELL" to "/bin/sh", "HERDR_BIN_PATH" to old.path,
+                                "SHELL" to "/bin/sh",
+                                "HERDR_BIN_PATH" to if (what == "dispatch") old.path else "",
                             ))
                         }.redirectErrorStream(true).start()
                         val output = p.inputStream.readBytes().toString(Charsets.UTF_8)
