@@ -34,8 +34,10 @@ class HerdrCli(
 
     suspend fun channel(): UpdateChannel? = UpdateChannel.of(check(HerdrCommands.channelShow(machine)).stdout)
 
-    suspend fun setChannel(channel: UpdateChannel) {
-        check(HerdrCommands.channelSet(machine, channel.wire))
+    /** Switches channel. herdr then installs the newest build on it right away; returns its output. */
+    suspend fun setChannel(channel: UpdateChannel): String {
+        val r = check(HerdrCommands.channelSet(machine, channel.wire), timeoutSeconds = 600)
+        return (r.stdout + "\n" + r.stderr).trim()
     }
 
     /** Downloads and installs the latest herdr on the channel; returns herdr's output. */
