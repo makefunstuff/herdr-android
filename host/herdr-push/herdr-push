@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# version: 3
+# version: 4
 """herdr-push: tells your phone when a herdr agent or a work board task needs you.
 
 It runs on the machine with herdr, watches its agents (`herdr api snapshot`) and, where the board
@@ -14,6 +14,10 @@ subscribed (Herdr for Android sets this up over SSH) when:
   - the machine runs low on RAM (under 10% available) or on a disk, naming what uses the most, and
     when it has room again. It also keeps the last hour of RAM and CPU readings for the app's chart.
 
+It also keeps a journal of the last week: each time a board task is done, starts waiting for you,
+goes wrong, starts or is added, and each time an agent finishes or asks something. The app reads it
+(`herdr-push journal`) for its brief of what happened while you weren't looking.
+
 A push goes to the phone's UnifiedPush address (a push app such as ntfy gives it), sealed with a key
 only that phone and this machine know: the push server reads nothing, and the phone takes no push
 that wasn't sealed with it. Python 3 alone, no packages.
@@ -27,6 +31,8 @@ that wasn't sealed with it. Python 3 alone, no packages.
   herdr-push install             start it now and with the machine (systemd, launchd or cron)
   herdr-push uninstall [--purge] stop it and remove the start-up entry (--purge: and its settings)
   herdr-push once [--dry-run]    one look, printing what it would send
+  herdr-push journal [--session NAME] [--since SECONDS]
+                                 what happened, as JSON (the app's brief reads it)
 
 See host/herdr-push/README.md in the herdr-android repo.
 """
@@ -49,7 +55,7 @@ import urllib.parse
 import urllib.request
 import zlib
 
-VERSION = "3"
+VERSION = "4"
 NAME = "herdr-push"
 
 HOME = os.path.expanduser("~")
@@ -92,6 +98,12 @@ DF = os.environ.get("HERDR_PUSH_DF")  # a file with `df -kPT`'s output, read ins
 SKIP_FS = {"tmpfs", "devtmpfs", "squashfs", "overlay", "efivarfs", "proc", "sysfs", "cgroup", "cgroup2", "devfs", "autofs",
            "ramfs", "nsfs", "fusectl", "debugfs", "tracefs", "securityfs", "pstore", "bpf", "configfs", "mqueue", "hugetlbfs",
            "binfmt_misc", "nullfs", "fdescfs", "rpc_pipefs", "fuse.portal", "fuse.gvfsd-fuse", "iso9660", "udf"}
+# The journal: what tasks and agents did, for the app's brief. Kept JOURNAL_DAYS, at most JOURNAL_MAX
+# entries per herdr session, in its own file (state.json is written every few seconds).
+JOURNAL = os.path.join(STATE_DIR, "journal.json")
+JOURNAL_DAYS = float(os.environ.get("HERDR_PUSH_JOURNAL_DAYS", "8"))
+JOURNAL_MAX = 600
+
 SKIP_MOUNTS = ("/boot", "/dev", "/proc", "/sys", "/run", "/snap", "/var/lib/docker", "/var/snap", "/System/Volumes/",
                "/private/var/vm", "/Volumes/Recovery")
 
@@ -598,6 +610,102 @@ def health_look(st, now):
     return None
 
 
+# ---- the journal (the app's brief) ---------------------------------------------------------------
+
+def task_phase(task):
+    """What the brief tells apart about a task: done, waiting for you (and on what), queued, working, to do."""
+    if task.get("archivedAt"):
+        return "archived"
+    if task.get("state") == "done":
+        return "done"
+    if needs_you(task):
+        return "needs " + task_sig(task)
+    if task.get("stage") in QUEUED_STAGES:
+        return "queued"
+    if task.get("state") == "working":
+        return "working"
+    return "todo"
+
+
+def small_task(task):
+    """A task as the journal keeps it: what the app needs to name it and tell how it stands."""
+    keep = ("id", "title", "state", "stage", "kind", "msg", "pr", "research", "reviewRound", "app",
+            "mergeFailed", "syncBlocked", "prFailure", "prState", "archivedAt")
+    out = {k: (_short(task[k], 240) if isinstance(task[k], str) else task[k]) for k in keep if task.get(k) is not None}
+    review = task.get("review")
+    if isinstance(review, dict):
+        out["review"] = {k: review[k] for k in ("pass", "meets") if k in review}
+    return out
+
+
+def journal_tasks(tasks, seen, first, now):
+    """A journal entry for each task whose phase changed (or that is new) since the last look. Updates [seen]."""
+    entries = []
+    now_seen = {}
+    for key, t in tasks:
+        tid = str(t.get("id", ""))
+        # Another machine's task: that machine keeps its own journal.
+        if not tid or ":" in tid:
+            continue
+        phase = task_phase(t)
+        now_seen[tid] = phase
+        before = seen.get(tid)
+        if first or phase == before:
+            continue
+        entries.append({"at": int(now), "type": "task", "key": key, "task": small_task(t),
+                        "was": before.split(" ")[0] if before else "new"})
+    seen.clear()
+    seen.update(now_seen)
+    return entries
+
+
+def journal_agents(snap, seen, first, now):
+    """A journal entry for each agent that finished or started asking since the last look. Updates [seen]."""
+    entries = []
+    now_seen = {}
+    for a in snap.get("agents", []):
+        pane = a.get("pane_id")
+        if not pane:
+            continue
+        status = a.get("agent_status", "unknown")
+        # The state's number: an agent that finished again since the last look still counts once more.
+        mark = "%s#%s" % (status, a.get("state_change_seq", ""))
+        now_seen[pane] = mark
+        if first or mark == seen.get(pane) or status not in ("done", "blocked"):
+            continue
+        keep = ("pane_id", "workspace_id", "tab_id", "agent", "name", "title", "display_agent", "agent_status", "state_change_seq")
+        agent = {k: (_short(a[k]) if isinstance(a[k], str) else a[k]) for k in keep if a.get(k) is not None}
+        ws = next((w for w in snap.get("workspaces", []) if w.get("workspace_id") == a.get("workspace_id")), {})
+        entries.append({"at": int(now), "type": "agent", "agent": agent, "where": _short(location(snap, a), 80),
+                        "workspace": _short(ws.get("label"), 80)})
+    seen.clear()
+    seen.update(now_seen)
+    return entries
+
+
+def journal_add(key, entries, now):
+    """Adds [entries] to session [key]'s journal, dropping what is older than JOURNAL_DAYS."""
+    j = read_json(JOURNAL, {})
+    sessions = j.setdefault("sessions", {})
+    s = sessions.setdefault(key, {})
+    s.setdefault("from", int(now))
+    keep = now - JOURNAL_DAYS * 86400
+    s["entries"] = ([e for e in s.get("entries", []) if isinstance(e, dict) and float(e.get("at") or 0) >= keep] + entries)[-JOURNAL_MAX:]
+    j["v"] = 1
+    write_json(JOURNAL, j)
+
+
+def journal_start(key, now):
+    """The first look at session [key]: from now on its journal is complete."""
+    j = read_json(JOURNAL, {})
+    s = j.setdefault("sessions", {}).setdefault(key, {})
+    if "from" not in s:
+        s["from"] = int(now)
+        s.setdefault("entries", [])
+        j["v"] = 1
+        write_json(JOURNAL, j)
+
+
 # ---- sending -------------------------------------------------------------------------------------
 
 def messages(events):
@@ -701,11 +809,16 @@ def tick(state, n, dry_run=False, now=None):
         live = any(s.get("live") for s in group)
         events = []
         agents = tasks = None
+        # What the journal saw last; its first look only learns how things stand.
+        jst = st.setdefault("journal", {})
+        noted = []
         if src.herdr:
             try:
                 snap = src.snapshot()
                 first = "agents" not in st
                 events += agent_events(src, snap, st.setdefault("agents", {}), first)
+                learn = "agents" not in jst or first
+                noted += journal_agents(snap, jst.setdefault("agents", {}), learn, now)
                 if live:
                     agents = live_agents(snap, st, now)
                 st.pop("problem", None)
@@ -718,10 +831,21 @@ def tick(state, n, dry_run=False, now=None):
                 first = "tasks" not in st
                 listed = src.tasks()
                 events += task_events(listed, st.setdefault("tasks", {}), first)
+                learn = "tasks" not in jst or first
+                noted += journal_tasks(listed, jst.setdefault("tasks", {}), learn, now)
                 if live:
                     tasks = live_tasks(src, listed, st, now)
             except Exception as e:  # noqa: BLE001
                 log("board:", e)
+        try:
+            if noted:
+                journal_add(key, noted, now)
+            elif "at" not in jst:
+                journal_start(key, now)
+            # Up to when the journal is complete (the watcher may be stopped for a while).
+            jst["at"] = int(now)
+        except Exception as e:  # noqa: BLE001 - the journal is a nicety next to the pushes
+            log("journal:", e)
         if live:
             ev = live_event(st, agents, tasks, now, first="live_sent" not in st)
             if ev is not None:
@@ -1014,6 +1138,17 @@ def cmd_once(dry_run):
     return 0
 
 
+def cmd_journal(session, since):
+    """What happened in herdr session [session] since [since] (seconds), oldest first."""
+    key = session or "default"
+    s = (read_json(JOURNAL, {}).get("sessions") or {}).get(key) or {}
+    upto = (((read_json(STATE, {}).get("sessions") or {}).get(key) or {}).get("journal") or {}).get("at")
+    entries = [e for e in s.get("entries", []) if isinstance(e, dict) and float(e.get("at") or 0) >= since]
+    out({"ok": True, "version": VERSION, "now": int(time.time()), "from": s.get("from"), "upto": upto,
+         "running": running_pid() is not None, "entries": entries})
+    return 0
+
+
 SYSTEMD = """[Unit]
 Description=herdr-push: tells your phone when a herdr agent or board task needs you
 After=network-online.target
@@ -1063,6 +1198,13 @@ def main(argv):
         return cmd_uninstall("--purge" in rest)
     if cmd == "once":
         return cmd_once("--dry-run" in rest)
+    if cmd == "journal":
+        session = rest[rest.index("--session") + 1] if "--session" in rest[:-1] else None
+        try:
+            since = float(rest[rest.index("--since") + 1]) if "--since" in rest[:-1] else 0
+        except ValueError:
+            since = 0
+        return cmd_journal(session, since)
     if cmd == "version":
         print(VERSION)
         return 0
