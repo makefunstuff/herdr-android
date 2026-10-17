@@ -272,6 +272,8 @@ class QuickTest {
         assertEquals(42, run.tokens)
         assertEquals("pi/x/y", run.model)
         assertEquals("The answer", run.preview)
+        assertEquals("7 TODOs and 2 FIXMEs, most in board", com.makefunstuff.herdr.core.quick.QuickText.line("```\n**7 TODOs** and `2 FIXMEs`, most in board\n"))
+        assertEquals("BUILD FAILED", com.makefunstuff.herdr.core.quick.QuickText.line("a\nBUILD FAILED\n---\n", fromEnd = true))
         // The worker went to the machine, and its package.json beside it.
         val worker = File(m.home, ".local/share/herdr-android/quick")
         assertEquals(QuickWorker.script, File(worker, "herdr-quick.mjs").readText())
@@ -322,5 +324,84 @@ class QuickTest {
         assertNotNull(one.run)
         assertEquals(RunState.Starting, one.run!!.state)
         assertEquals("line 1\n@@out\nline 2", one.text)
+    }
+}
+
+class QuickNewTest {
+    @Test
+    fun asksForTheRightFile() {
+        assertEquals("deploy-staging.sh", com.makefunstuff.herdr.core.quick.QuickNew.fileName("Deploy staging!", QuickKind.Script))
+        assertEquals("why-did-ci-fail.prompt.md", com.makefunstuff.herdr.core.quick.QuickNew.fileName("Why did CI fail?", QuickKind.Prompt))
+        val m = com.makefunstuff.herdr.core.quick.QuickNew.message(QuickKind.Script, "run the tests ", "/r/.herdr/commands", "Tests")
+        assertTrue("`/r/.herdr/commands/tests.sh`" in m, m)
+        assertTrue("It should: run the tests\n" in m && "# name: Tests" in m && "chmod +x" in m, m)
+        val p = com.makefunstuff.herdr.core.quick.QuickNew.message(QuickKind.Prompt, "explain the error", "~/.config/herdr/commands")
+        assertTrue("`~/.config/herdr/commands/<short-name>.prompt.md`" in p && "{{selection}}" in p && "# model:" in p, p)
+    }
+}
+
+/**
+ * An AI quick command for real, through the app's own commands: the worker copied to a home folder of
+ * its own, pi-durable installed there (or [HERDR_QUICK_MODULES] linked in), a real model answering.
+ * Only with `HERDR_QUICK_LIVE=1` (it needs Node 22 and a model pi knows: `HERDR_QUICK_MODEL`, by default
+ * pi/deepseek/deepseek-flash, with ~/.pi/agent's keys).
+ */
+class QuickLiveTest {
+    @Test
+    fun answersAndCarriesOnAfterBeingKilled() = runBlocking {
+        org.junit.jupiter.api.Assumptions.assumeTrue(System.getenv("HERDR_QUICK_LIVE") == "1", "HERDR_QUICK_LIVE isn't set")
+        val home = Files.createTempDirectory("herdr-quick-live").toFile()
+        System.getenv("HERDR_QUICK_MODULES")?.let { modules ->
+            val q = File(home, ".local/share/herdr-android/quick").apply { mkdirs() }
+            Files.createSymbolicLink(File(q, "node_modules").toPath(), File(modules).toPath())
+        }
+        val pi = System.getenv("PI_AGENT_DIR") ?: File(System.getProperty("user.home"), ".pi/agent").path
+        fun exec(command: String, input: String?): CommandResult {
+            val pb = ProcessBuilder("sh", "-c", command).directory(home)
+            pb.environment().putAll(mapOf("HOME" to home.path, "PI_AGENT_DIR" to pi))
+            pb.environment().remove("XDG_STATE_HOME")
+            val p = pb.start()
+            if (input != null) p.outputStream.use { it.write(input.toByteArray()) } else p.outputStream.close()
+            val out = p.inputStream.readBytes().toString(Charsets.UTF_8)
+            val err = p.errorStream.readBytes().toString(Charsets.UTF_8)
+            p.waitFor(300, TimeUnit.SECONDS)
+            return CommandResult(p.exitValue(), out, err)
+        }
+        val q = QuickClient({ c, _ -> exec(c, null) }, { c, i, _ -> exec(c, i) })
+        // Mark the linked modules installed, as a first run would.
+        System.getenv("HERDR_QUICK_MODULES")?.let {
+            File(home, ".local/share/herdr-android/quick/package.json").writeText(QuickWorker.packageJson + "\n")
+            File(home, ".local/share/herdr-android/quick/node_modules/.herdr-quick").let { m -> if (!m.exists()) m.writeText("") }
+            File(home, ".local/share/herdr-android/quick/node_modules/.herdr-quick").setLastModified(System.currentTimeMillis() + 60_000)
+        }
+        val repo = File(System.getProperty("user.dir")).parentFile.canonicalPath
+        val command = QuickCommand(
+            "Last commits", QuickKind.Prompt, QuickScope.Global, "/x/last.prompt.md",
+            model = System.getenv("HERDR_QUICK_MODEL") ?: "pi/deepseek/deepseek-flash", timeoutMinutes = 4,
+            body = "Using git, list the 3 most recent commits in {{repo}} as one line each, then say in one sentence what the newest did.",
+        )
+        val ctx = QuickContext(cwd = repo, repo = repo)
+        val id = QuickClient.newId(System.currentTimeMillis())
+        q.ask(id, command, ctx, "", QuickPrompt.fill(command.body, "", ctx), System.currentTimeMillis())
+        // Kill the worker as soon as it is at work; started again, it carries on where it was.
+        val until = System.currentTimeMillis() + 240_000
+        var killed = false
+        while (true) {
+            val r = q.read(id).run!!
+            if (!killed && r.state == RunState.Running) {
+                exec("kill -9 \$(cat \"\$HOME/.local/state/herdr-android/quick/$id/worker.pid\")", null)
+                kotlinx.coroutines.delay(1500)
+                val lost = q.read(id).run!!
+                if (lost.state == RunState.Lost) { q.resume(lost); killed = true }
+            }
+            if (r.state.finished) break
+            check(System.currentTimeMillis() < until) { "No answer in time: ${q.read(id)}" }
+            kotlinx.coroutines.delay(1000)
+        }
+        val read = q.read(id)
+        println("LIVE: killed=$killed ${read.run}\n${read.text}")
+        assertEquals(RunState.Done, read.run!!.state, read.run!!.error)
+        assertTrue(read.text.isNotBlank())
+        assertTrue(read.run!!.tokens > 0)
     }
 }

@@ -94,6 +94,17 @@ data class QuickListing(
     val globalFolder: String get() = if (home.isNotEmpty()) "$home/.config/herdr/commands" else "~/.config/herdr/commands"
 }
 
+/** Plain words from Markdown or a script's output, for a list's line and a notification. */
+object QuickText {
+    /** The first line that says something (the last with [fromEnd]), without Markdown's marks, at most 200 characters. */
+    fun line(text: String, fromEnd: Boolean = false): String {
+        val lines = text.split('\n')
+            .map { it.trim().trimStart('#', '-', '>', '*', ' ').replace("**", "").replace("__", "").replace("`", "").trim() }
+            .filter { it.isNotEmpty() && !it.startsWith("```") && it.any(Char::isLetterOrDigit) }
+        return (if (fromEnd) lines.lastOrNull() else lines.firstOrNull()).orEmpty().take(200)
+    }
+}
+
 object QuickReader {
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
 
@@ -210,10 +221,7 @@ object QuickReader {
     }
 
     /** One line of what it said: the first that says something (a prompt's), or the last (a script's). */
-    private fun previewLine(text: String, fromEnd: Boolean): String {
-        val lines = text.split('\n').map { it.trim().trimStart('#', '*', '-', '>', ' ').trimEnd('*').trim() }.filter { it.isNotEmpty() && it != "```" }
-        return (if (fromEnd) lines.lastOrNull() else lines.firstOrNull()).orEmpty().take(200)
-    }
+    private fun previewLine(text: String, fromEnd: Boolean): String = QuickText.line(text, fromEnd)
 
     private fun b64(s: String): String =
         runCatching { String(Base64.getMimeDecoder().decode(s.trim()), Charsets.UTF_8) }.getOrDefault("").replace("�", "")

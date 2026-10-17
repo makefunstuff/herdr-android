@@ -234,7 +234,7 @@ object Alerts {
      */
     fun quick(machineId: String, machineLabel: String, e: PushEvent.Quick): AlertChange {
         val tag = quickTag(machineId, e.id)
-        val answer = e.text.lines().map { it.trim().trimStart('#', '*', '-', '>', ' ').trimEnd('*').trim() }.firstOrNull { it.isNotEmpty() && it != "```" }.orEmpty()
+        val answer = com.makefunstuff.herdr.core.quick.QuickText.line(e.text)
         val (title, text) = when (e.state) {
             "done" -> "${e.name} is done" to answer.ifEmpty { "Its answer is ready" }
             "failed" -> "${e.name} failed" to e.error.ifEmpty { "It stopped with an error" }
@@ -255,6 +255,18 @@ object Alerts {
                 quickRun = e.id,
             ),
         )
+    }
+
+    /** [Alerts.quick] for a run the app read itself (its own look while closed, or a run it showed); null for a script's or one not ended. */
+    fun quickRun(machineId: String, machineLabel: String, run: com.makefunstuff.herdr.core.quick.QuickRun): AlertChange? {
+        if (run.kind != com.makefunstuff.herdr.core.quick.QuickKind.Prompt) return null
+        val state = when (run.state) {
+            com.makefunstuff.herdr.core.quick.RunState.Done -> "done"
+            com.makefunstuff.herdr.core.quick.RunState.Failed -> "failed"
+            com.makefunstuff.herdr.core.quick.RunState.Limit -> "limit"
+            else -> return null
+        }
+        return quick(machineId, machineLabel, PushEvent.Quick(run.id, run.name, state, run.preview, run.error, run.cwd))
     }
 
     /** What the Coordinator is sent for a reply to a task's notification. */

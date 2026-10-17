@@ -214,3 +214,55 @@ object QuickArgs {
         return out
     }
 }
+
+/** What "New command" asks an agent (the Coordinator, or the one at work there) to write. */
+object QuickNew {
+    /** A file name for [name]: lower case words joined by dashes, `.prompt.md` for a prompt. */
+    fun fileName(name: String, kind: QuickKind): String {
+        val slug = name.lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-').take(40).trimEnd('-').ifEmpty { "command" }
+        return if (kind == QuickKind.Prompt) slug + QuickHeader.PROMPT_SUFFIX else "$slug.sh"
+    }
+
+    /**
+     * The request: write a [kind] command that does [what] into [folder] (as [name], or one the agent
+     * picks), with the header the app reads.
+     */
+    fun message(kind: QuickKind, what: String, folder: String, name: String = ""): String {
+        val file = if (name.isNotBlank()) "$folder/${fileName(name, kind)}" else "$folder/<short-name>${if (kind == QuickKind.Prompt) QuickHeader.PROMPT_SUFFIX else ".sh"}"
+        val title = name.trim().ifEmpty { "<a short name>" }
+        return if (kind == QuickKind.Script) listOf(
+            "Please write a quick command for Herdr for Android (I run it from my phone): an executable shell script at `$file`.",
+            "",
+            "It should: ${what.trim()}",
+            "",
+            "Start it with the comment header the app reads, one line each:",
+            "```",
+            "#!/usr/bin/env bash",
+            "# name: $title",
+            "# desc: <what it does, in one line>",
+            "# icon: <a Lucide icon name, such as rocket or git-branch>",
+            "# confirm: true        (only when it changes or deletes something)",
+            "# args: <a question>   (only when it needs input: the answer comes as its arguments, and whole in \$HERDR_ARGS)",
+            "```",
+            "It runs in the repository's folder (the home folder for one in ~/.config/herdr/commands) with no terminal and nobody to answer: " +
+                "print what it does, and exit with an error when it fails. Make it executable (`chmod +x`). Create the folder if it isn't there.",
+        ).joinToString("\n") else listOf(
+            "Please write an AI quick command for Herdr for Android (I run it from my phone): a prompt file at `$file`.",
+            "",
+            "It should: ${what.trim()}",
+            "",
+            "The file is a header, one line each, then a blank line and the prompt itself:",
+            "```",
+            "# name: $title",
+            "# desc: <what it does, in one line>",
+            "# icon: <a Lucide icon name, such as sparkles or file-search>",
+            "# model: <claude/<model> or pi/<provider>/<model>; leave it out for this machine's default>",
+            "# tools: read-only   (or shell, web: only what it needs)",
+            "# args: <a question> (only when it needs input)",
+            "```",
+            "The prompt can use {{args}}, {{repo}}, {{worktree}}, {{branch}}, {{selection}}, {{file}}, {{clipboard}} and {{date}}. " +
+                "It runs as a durable worker in the repository's folder, with nobody to answer its questions, and its answer shows on a phone: " +
+                "ask for a short Markdown answer. Create the folder if it isn't there.",
+        ).joinToString("\n")
+    }
+}

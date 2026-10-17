@@ -119,7 +119,8 @@ object QuickCommands {
 
     /**
      * The worker's job, detached: install pi-durable the first time (or when its package.json
-     * changed), then run the worker; a worker that died before it said so is marked failed.
+     * changed), then run the worker; a worker that failed before it said so is marked failed, and
+     * one that was killed is left to carry on ([resume]).
      */
     private val WORKER_JOB = "d=\$1; q=\$2; n=\$3; echo \$\$ > \"\$d/pid\"; t=\$(date +%s); " +
         "esc() { printf '%s' \"\$1\" | tr '\\n\\t\\r' '   ' | sed 's/\\\\/\\\\\\\\/g; s/\"/\\\\\"/g' | cut -c1-400; }; " +
@@ -135,8 +136,9 @@ object QuickCommands {
         "if (cd \"\$q\" && PATH=\"\$(dirname \"\$n\"):\$PATH\" \"\$m\" install --no-audit --no-fund --omit=dev --loglevel=error) > \"\$d/setup.log\" 2>&1; " +
         "then : > \"\$q/node_modules/.herdr-quick\"; else rmdir \"\$q/.installing\" 2>/dev/null; " +
         "fail \"Couldn't install pi-durable with npm: \$(tail -n 1 \"\$d/setup.log\")\"; fi; fi; rmdir \"\$q/.installing\" 2>/dev/null; fi; " +
-        "\"\$n\" --no-warnings \"\$q/herdr-quick.mjs\" run \"\$d\" >> \"\$d/worker.log\" 2>&1; " +
-        "grep -q '\"ended\"' \"\$d/status.json\" 2>/dev/null || fail \"The worker stopped: \$(tail -n 1 \"\$d/worker.log\")\""
+        "\"\$n\" --no-warnings \"\$q/herdr-quick.mjs\" run \"\$d\" >> \"\$d/worker.log\" 2>&1; s=\$?; " +
+        // Killed (the OOM killer, a shutdown): left as it was, to carry on. Failed by itself without saying why: said here.
+        "[ \$s -gt 128 ] && exit 0; grep -q '\"ended\"' \"\$d/status.json\" 2>/dev/null || fail \"The worker stopped: \$(tail -n 1 \"\$d/worker.log\")\""
 
     /** One run's facts, as [runs] and [read] print them: `@@run <id>`, then `key<TAB>value` lines. */
     private const val INFO = "info() { printf '@@run\\t%s\\n' \"\$2\"; printf 'meta\\t'; head -c 8192 \"\$1/meta.json\" | tr -d '\\n\\r'; echo; " +
