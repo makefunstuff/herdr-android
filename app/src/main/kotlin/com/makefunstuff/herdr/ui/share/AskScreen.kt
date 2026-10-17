@@ -29,6 +29,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
+import com.makefunstuff.herdr.LocalPanes
 import com.makefunstuff.herdr.Routes
 import com.makefunstuff.herdr.core.host.HostState
 import com.makefunstuff.herdr.core.host.HostStatus
@@ -70,6 +71,7 @@ object Ask {
 @Composable
 fun AskScreen(nav: NavController, to: String) {
     val container = LocalContainer.current
+    val panes = LocalPanes.current
     val machines by container.machines.machines.collectAsStateWithLifecycle()
     val hosts by container.hosts.hosts.collectAsStateWithLifecycle()
     val shared by container.shares.pending.collectAsStateWithLifecycle()
@@ -79,9 +81,17 @@ fun AskScreen(nav: NavController, to: String) {
     val on = machines.filter { it.enabled }
     val candidates = on.map { m -> AskTargets.Candidate(m.id, boardOf(hosts.firstOrNull { it.machine.id == m.id })) }
 
-    fun go(route: String) = nav.navigate(route) {
-        popUpTo(Routes.ASK) { inclusive = true }
-        launchSingleTop = true
+    fun go(route: String) {
+        // On a wide window a board opens on the right, beside what was open.
+        val board = Routes.boardOf(route)
+        if (board != null && panes.wide) {
+            nav.popBackStack(Routes.ASK, inclusive = true)
+            return panes.openBoard(nav, board.first)
+        }
+        nav.navigate(route) {
+            popUpTo(Routes.ASK) { inclusive = true }
+            launchSingleTop = true
+        }
     }
 
     fun leave() {

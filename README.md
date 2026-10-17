@@ -121,6 +121,10 @@ The Coordinator is a tap away from outside the app too:
 
 The counts are what the app knows: what it sees while open (and each board's list, read every 5 minutes while the app is in front), its own looks while closed, and the machines' pushes (see Notifications above). An agent that needs you and the board task it works for count once, as do a task and its own agents at work, and another machine's task counts on that machine. What works and nothing confirmed for 75 minutes stops counting.
 
+## Big screens
+
+On a window 840 dp wide or wider (a tablet, an open foldable, a large window or desktop windowing), the app shows three panes side by side, like Puggie: the agents list (with Agents, Machines and Settings under it), then what you opened from it (an agent's chat, a terminal, the Coordinator, a machine, Settings), then the work board. What is open in the middle is marked in the list, and opening another agent replaces it instead of piling up; Back closes it. A board opened from a notification, the widget or a Board card shows on the right, with its task open; with several machines that have a board, their Board cards choose which. A narrower window keeps the phone layout. Rotating or resizing across the line keeps what is open as it was: the chat, its draft and scroll, the board's search, filters and open task (kept while a narrow window hides the board, and back when it is wide again).
+
 ## Screen previews
 
 UI changes are checked, and shown in review, with screen previews instead of an emulator: the app's real Compose screens rendered on the desktop JVM against a fake herdr machine with fixed demo data, in dark and light.
@@ -130,7 +134,7 @@ UI changes are checked, and shown in review, with screen previews instead of an 
 ./gradlew -p tools/ui-preview render -Ponly=board,chat   # some of them
 ```
 
-It needs JDK 17, no Android SDK, and takes about 2 minutes for all 23 scenes (agents, machines, a machine, agent chats, the Coordinator, the board and a task, the terminal, settings with its notifications, and the dialogs and sheets). CI renders them too and uploads them as the `herdr-screens-<run>` artifact. See [`tools/ui-preview/README.md`](tools/ui-preview/README.md) for how it works and how to add a scene, and [`AGENTS.md`](AGENTS.md) for how changes are reviewed.
+It needs JDK 17, no Android SDK, and takes about 2½ minutes for all 37 scenes (agents, machines, a machine, agent chats, the Coordinator, the board and a task, the terminal, settings with its notifications, the dialogs and sheets, and the three panes of a wide window, also across a rotation). CI renders them too and uploads them as the `herdr-screens-<run>` artifact. See [`tools/ui-preview/README.md`](tools/ui-preview/README.md) for how it works and how to add a scene, and [`AGENTS.md`](AGENTS.md) for how changes are reviewed.
 
 ## Layout
 

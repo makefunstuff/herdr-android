@@ -49,6 +49,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
+import com.makefunstuff.herdr.LocalPanes
 import com.makefunstuff.herdr.Routes
 import com.makefunstuff.herdr.core.api.AgentStatus
 import com.makefunstuff.herdr.core.api.PaneInfo
@@ -103,6 +104,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun MachineScreen(nav: NavController, machineId: String) {
     val container = LocalContainer.current
+    val panes = LocalPanes.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val session = container.hosts.session(machineId)
@@ -180,7 +182,7 @@ fun MachineScreen(nav: NavController, machineId: String) {
                 item { Notice("Offline · showing the last known state", color = Herdr.colors.notice, icon = HerdrIcons.Clock) }
             }
             if (state.hasBoard) {
-                item(key = "board") { BoardCard(state.machine.label, showMachine = false) { nav.navigate(Routes.board(machineId)) } }
+                item(key = "board") { BoardCard(state.machine.label, showMachine = false) { panes.openBoard(nav, machineId) } }
                 item(key = "coordinator") { CoordinatorCard(state.machine.label, showMachine = false) { nav.navigate(Routes.coordinator(machineId)) } }
             }
             if (snap.workspaces.isEmpty()) {

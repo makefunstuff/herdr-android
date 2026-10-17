@@ -13,6 +13,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.makefunstuff.herdr.ui.common.Pill
@@ -23,19 +25,23 @@ import com.makefunstuff.herdr.ui.theme.Space
 
 /** The way into a machine's task board, shown where the machine has herdr-projects. */
 @Composable
-fun BoardCard(machineLabel: String, showMachine: Boolean, onOpen: () -> Unit) =
-    EntryCard(HerdrIcons.SquareKanban, if (showMachine) "Board · $machineLabel" else "Board", "Tasks, reviews and approvals", "tasks", onOpen)
+fun BoardCard(machineLabel: String, showMachine: Boolean, selected: Boolean = false, onOpen: () -> Unit) =
+    EntryCard(HerdrIcons.SquareKanban, if (showMachine) "Board · $machineLabel" else "Board", "Tasks, reviews and approvals", "tasks", selected, onOpen)
 
 /** The way into a machine's Coordinator chat, shown where the machine has the work board. */
 @Composable
-fun CoordinatorCard(machineLabel: String, showMachine: Boolean, onOpen: () -> Unit) =
-    EntryCard(HerdrIcons.MessagesSquare, if (showMachine) "Coordinator · $machineLabel" else "Coordinator", "Chat with the board's Coordinator", "work board", onOpen)
+fun CoordinatorCard(machineLabel: String, showMachine: Boolean, selected: Boolean = false, onOpen: () -> Unit) =
+    EntryCard(HerdrIcons.MessagesSquare, if (showMachine) "Coordinator · $machineLabel" else "Coordinator", "Chat with the board's Coordinator", "work board", selected, onOpen)
 
-/** A card that opens a part of the work board: its mark, its name and what it is for, a small tag. */
+/** A card that opens a part of the work board: its mark, its name and what it is for, a small tag. [selected]: shown beside the list on a wide window. */
 @Composable
-private fun EntryCard(icon: ImageVector, title: String, body: String, tag: String, onOpen: () -> Unit) {
+private fun EntryCard(icon: ImageVector, title: String, body: String, tag: String, selected: Boolean, onOpen: () -> Unit) {
     val c = Herdr.colors
-    QuietCard(onClick = onOpen, padded = true) {
+    QuietCard(
+        Modifier.semantics { this.selected = selected },
+        onClick = onOpen, padded = true,
+        color = if (selected) c.hover else c.card, edge = if (selected) c.lineStrong else c.line,
+    ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(icon, null, tint = c.text, modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(Space.m))

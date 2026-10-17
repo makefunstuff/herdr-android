@@ -49,6 +49,8 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.NavController
+import com.makefunstuff.herdr.BoardChoice
+import com.makefunstuff.herdr.LocalPanes
 import com.makefunstuff.herdr.Routes
 import com.makefunstuff.herdr.core.board.BoardAction
 import com.makefunstuff.herdr.core.board.BoardFilter
@@ -110,12 +112,14 @@ sealed interface Pending {
 
 /**
  * The work board on one machine, as a phone screen: its tasks as `herdr-projects list --json` gives
- * them, read again while the screen is in front, every action the board's CLI has.
+ * them, read again while the screen is in front, every action the board's CLI has. With [pane] it is
+ * the right pane of a wide window ([Panes]): no way back, and the task asked for in [pane] opens once.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun BoardScreen(nav: NavController, machineId: String, openTask: String? = null) {
+fun BoardScreen(nav: NavController, machineId: String, openTask: String? = null, pane: BoardChoice? = null) {
     val container = LocalContainer.current
+    val panes = LocalPanes.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val session = container.hosts.session(machineId)
@@ -134,6 +138,10 @@ fun BoardScreen(nav: NavController, machineId: String, openTask: String? = null)
     var machine by rememberSaveable { mutableStateOf("") }
     var menu by remember { mutableStateOf(false) }
     var openId by rememberSaveable { mutableStateOf(openTask) }
+    // A task asked for from elsewhere (a notification, the widget) while this board is on the right.
+    if (pane != null) LaunchedEffect(pane.machine, pane.task) {
+        if (pane.machine == machineId) pane.task?.let { openId = it; pane.task = null }
+    }
     // An open task's notification has done its job.
     LaunchedEffect(openId) { openId?.let { container.inbox.dismiss(Alerts.taskTag(machineId, it)) } }
     var actionsFor by remember { mutableStateOf<BoardTask?>(null) }
@@ -211,7 +219,7 @@ fun BoardScreen(nav: NavController, machineId: String, openTask: String? = null)
             HerdrTopBar(
                 "Board",
                 subtitle = "${state.machine.label} · ${if (archived) "archived" else "${tasks.count { it.needsYou }} need you"}",
-                onBack = { nav.popBackStack() },
+                onBack = if (pane == null) ({ nav.popBackStack() }) else null,
                 titleContent = if (searching) ({
                     HerdrField(
                         value = query, onValueChange = { query = it }, singleLine = true,
@@ -222,7 +230,10 @@ fun BoardScreen(nav: NavController, machineId: String, openTask: String? = null)
                 }) else null,
             ) {
                 BarIcon(if (searching) HerdrIcons.X else HerdrIcons.Search, "Search", { if (searching) query = ""; searching = !searching })
-                BarIcon(HerdrIcons.MessagesSquare, "Coordinator chat", { nav.navigate(Routes.coordinator(machineId)) })
+                BarIcon(HerdrIcons.MessagesSquare, "Coordinator chat", {
+                    // From the right pane the chat opens in the middle, beside this board.
+                    if (pane != null) panes.open(nav, Routes.coordinator(machineId)) else nav.navigate(Routes.coordinator(machineId))
+                })
                 BarIcon(HerdrIcons.Ellipsis, "Filter and more", { menu = true })
                 HerdrMenu(expanded = menu, onDismissRequest = { menu = false }) {
                     MenuRow(if (archived) "Hide archived" else "Show archived", if (archived) HerdrIcons.ArchiveRestore else HerdrIcons.Archive, { archived = !archived; menu = false })

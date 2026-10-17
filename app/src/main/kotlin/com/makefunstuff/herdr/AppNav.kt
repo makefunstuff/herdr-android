@@ -6,17 +6,34 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -33,6 +50,7 @@ import com.makefunstuff.herdr.ui.admin.AdminScreen
 import com.makefunstuff.herdr.ui.agents.AgentScreen
 import com.makefunstuff.herdr.ui.agents.AgentsScreen
 import com.makefunstuff.herdr.ui.board.BoardScreen
+import com.makefunstuff.herdr.ui.common.EmptyState
 import com.makefunstuff.herdr.ui.common.LocalContainer
 import com.makefunstuff.herdr.ui.coordinator.CoordinatorScreen
 import com.makefunstuff.herdr.ui.design.HerdrIcons
@@ -105,19 +123,32 @@ object Routes {
     fun admin(mid: String, tab: Int = 0) = "admin/$mid?tab=$tab"
     fun worktrees(mid: String, workspaceId: String? = null) =
         if (workspaceId == null) "worktrees/$mid" else "worktrees/$mid?ws=${Uri.encode(workspaceId)}"
+
+    /** The machine and the task of a [board] route; null for any other route. */
+    fun boardOf(route: String): Pair<String, String?>? {
+        if (!route.startsWith("board/")) return null
+        val rest = route.removePrefix("board/")
+        return rest.substringBefore('?') to rest.substringAfter("?task=", "").takeIf { it.isNotEmpty() }?.let(Uri::decode)
+    }
 }
 
 @Composable
 private fun AppNav(nav: NavHostController) {
+    val container = LocalContainer.current
     val entry by nav.currentBackStackEntryAsState()
     val route = entry?.destination?.route
     val topLevel = route in setOf(Routes.AGENTS, Routes.MACHINES, Routes.SETTINGS)
-    val agents by LocalContainer.current.hosts.agents.collectAsStateWithLifecycle()
+    val agents by container.hosts.agents.collectAsStateWithLifecycle()
+    val hosts by container.hosts.hosts.collectAsStateWithLifecycle()
     val blocked = agents.count { it.agent.agentStatus == AgentStatus.Blocked }
-    val keyState by LocalContainer.current.identity.state.collectAsStateWithLifecycle()
+    val keyState by container.identity.state.collectAsStateWithLifecycle()
     var keySetupDismissed by rememberSaveable { mutableStateOf(false) }
-
-    LaunchedEffect(nav) { Links.flow.collect { nav.navigate(it) { launchSingleTop = true } } }
+    // The agents list's machine filter and scroll, kept here: the list moves between the phone layout and the left pane.
+    val agentsFilter = rememberSaveable { mutableStateOf<String?>(null) }
+    val agentsList = rememberLazyListState()
+    val chosenBoard = rememberSaveable(saver = BoardChoice.Saver) { BoardChoice() }
+    // The right pane's board keeps its search, filters and open task while a narrower window hides it.
+    val boardStates = rememberSaveableStateHolder()
 
     // No usable key yet: offer to restore one before a new key is made.
     if (!keySetupDismissed && (keyState == IdentityStore.State.Missing || keyState is IdentityStore.State.Unreadable)) {
@@ -127,57 +158,124 @@ private fun AppNav(nav: NavHostController) {
         )
     }
 
-    Scaffold(
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        containerColor = Herdr.colors.ground,
-        bottomBar = {
-            if (topLevel) {
-                HerdrNavBar {
-                    NavItem("Agents", HerdrIcons.House, route == Routes.AGENTS, badge = blocked) { nav.goTop(Routes.AGENTS) }
-                    NavItem("Machines", HerdrIcons.List, route == Routes.MACHINES) { nav.goTop(Routes.MACHINES) }
-                    NavItem("Settings", HerdrIcons.Settings, route == Routes.SETTINGS) { nav.goTop(Routes.SETTINGS) }
+    // The window's width, not the screen's: a tablet in split screen or a resized desktop window counts as what it shows.
+    BoxWithConstraints(Modifier.fillMaxSize().background(Herdr.colors.ground)) {
+        val wide = maxWidth >= WIDE
+        val boards = hosts.filter { it.hasBoard }.map { it.machine.id }
+        // A board already open in the middle (it was open when the window grew) isn't shown twice.
+        val board = if (wide && route != Routes.BOARD) chosenBoard.machine?.takeIf { it in boards } ?: boards.firstOrNull() else null
+        val panes = remember(wide, board, chosenBoard) { Panes(wide, board, chosenBoard) }
+        val (leftWidth, rightWidth) = Panes.widths(maxWidth, board != null)
+        val current by rememberUpdatedState(panes)
+        LaunchedEffect(nav) { Links.flow.collect { current.link(nav, it) } }
+
+        CompositionLocalProvider(LocalPanes provides panes) {
+            Scaffold(
+                contentWindowInsets = WindowInsets(0, 0, 0, 0),
+                containerColor = Herdr.colors.ground,
+                bottomBar = { if (topLevel && !wide) AppNavBar(nav, blocked) },
+            ) { padding ->
+                // One Row in both layouts, with the NavHost always in the same place in it, so a rotation or a
+                // resize across the line keeps every open screen as it was (the activity isn't recreated for them).
+                Row(
+                    Modifier.fillMaxSize()
+                        .then(if (wide) Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)) else Modifier),
+                ) {
+                    if (wide) {
+                        Column(Modifier.width(leftWidth).fillMaxHeight()) {
+                            Box(Modifier.weight(1f)) { AgentsScreen(nav, agentsFilter, agentsList) }
+                            AppNavBar(nav, blocked)
+                        }
+                        PaneEdge()
+                    }
+                    NavHost(
+                        nav,
+                        startDestination = Routes.AGENTS,
+                        modifier = Modifier.weight(1f).fillMaxHeight().padding(
+                            bottom = when {
+                                !topLevel -> 0.dp
+                                // Machines and Settings in the middle: the nav bar is under the list, only the system's bar is below them.
+                                wide -> WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+                                else -> padding.calculateBottomPadding()
+                            },
+                        ),
+                        // Short and quiet: a detail slides in a little from the side, tabs cross-fade.
+                        enterTransition = { fadeIn(tween(200)) + slideInHorizontally(tween(220)) { it / 12 } },
+                        exitTransition = { fadeOut(tween(150)) },
+                        popEnterTransition = { fadeIn(tween(200)) },
+                        popExitTransition = { fadeOut(tween(150)) + slideOutHorizontally(tween(200)) { it / 12 } },
+                    ) {
+                        composable(Routes.AGENTS) {
+                            // On a wide window the list is on the left already; the middle waits for what it opens.
+                            if (LocalPanes.current.wide) NothingOpen() else AgentsScreen(nav, agentsFilter, agentsList)
+                        }
+                        composable(Routes.MACHINES) { MachinesScreen(nav) }
+                        composable(Routes.SETTINGS) { SettingsScreen(nav) }
+                        composable(Routes.QUIET) { QuietHoursScreen(nav) }
+                        composable(Routes.MACHINE) { MachineScreen(nav, it.arguments?.getString("id").orEmpty()) }
+                        composable(Routes.EDIT) { EditMachineScreen(nav, it.arguments?.getString("id")) }
+                        composable(Routes.AGENT) {
+                            AgentScreen(nav, it.arguments?.getString("mid").orEmpty(), Uri.decode(it.arguments?.getString("pane").orEmpty()))
+                        }
+                        composable(Routes.ADMIN) {
+                            AdminScreen(nav, it.arguments?.getString("mid").orEmpty(), it.arguments?.getString("tab")?.toIntOrNull() ?: 0)
+                        }
+                        composable(Routes.WORKTREES) {
+                            WorktreesScreen(nav, it.arguments?.getString("mid").orEmpty(), it.arguments?.getString("ws")?.let(Uri::decode))
+                        }
+                        composable(Routes.BOARD) {
+                            BoardScreen(nav, it.arguments?.getString("mid").orEmpty(), it.arguments?.getString("task")?.let(Uri::decode))
+                        }
+                        composable(Routes.ASK) { AskScreen(nav, it.arguments?.getString("to").orEmpty()) }
+                        composable(Routes.COORDINATOR) { CoordinatorScreen(nav, it.arguments?.getString("mid").orEmpty()) }
+                        composable(Routes.TERMINAL) {
+                            TerminalScreen(nav, it.arguments?.getString("mid").orEmpty(), Uri.decode(it.arguments?.getString("pane").orEmpty()))
+                        }
+                        composable(Routes.LAYOUT) {
+                            LayoutScreen(nav, it.arguments?.getString("mid").orEmpty(), Uri.decode(it.arguments?.getString("pane").orEmpty()))
+                        }
+                    }
+                    if (board != null) {
+                        PaneEdge()
+                        Box(Modifier.width(rightWidth).fillMaxHeight()) {
+                            boardStates.SaveableStateProvider("board/$board") { BoardScreen(nav, board, pane = chosenBoard) }
+                        }
+                    }
                 }
-            }
-        },
-    ) { padding ->
-        NavHost(
-            nav,
-            startDestination = Routes.AGENTS,
-            modifier = Modifier.padding(bottom = if (topLevel) padding.calculateBottomPadding() else 0.dp),
-            // Short and quiet: a detail slides in a little from the side, tabs cross-fade.
-            enterTransition = { fadeIn(tween(200)) + slideInHorizontally(tween(220)) { it / 12 } },
-            exitTransition = { fadeOut(tween(150)) },
-            popEnterTransition = { fadeIn(tween(200)) },
-            popExitTransition = { fadeOut(tween(150)) + slideOutHorizontally(tween(200)) { it / 12 } },
-        ) {
-            composable(Routes.AGENTS) { AgentsScreen(nav) }
-            composable(Routes.MACHINES) { MachinesScreen(nav) }
-            composable(Routes.SETTINGS) { SettingsScreen(nav) }
-            composable(Routes.QUIET) { QuietHoursScreen(nav) }
-            composable(Routes.MACHINE) { MachineScreen(nav, it.arguments?.getString("id").orEmpty()) }
-            composable(Routes.EDIT) { EditMachineScreen(nav, it.arguments?.getString("id")) }
-            composable(Routes.AGENT) {
-                AgentScreen(nav, it.arguments?.getString("mid").orEmpty(), Uri.decode(it.arguments?.getString("pane").orEmpty()))
-            }
-            composable(Routes.ADMIN) {
-                AdminScreen(nav, it.arguments?.getString("mid").orEmpty(), it.arguments?.getString("tab")?.toIntOrNull() ?: 0)
-            }
-            composable(Routes.WORKTREES) {
-                WorktreesScreen(nav, it.arguments?.getString("mid").orEmpty(), it.arguments?.getString("ws")?.let(Uri::decode))
-            }
-            composable(Routes.BOARD) {
-                BoardScreen(nav, it.arguments?.getString("mid").orEmpty(), it.arguments?.getString("task")?.let(Uri::decode))
-            }
-            composable(Routes.ASK) { AskScreen(nav, it.arguments?.getString("to").orEmpty()) }
-            composable(Routes.COORDINATOR) { CoordinatorScreen(nav, it.arguments?.getString("mid").orEmpty()) }
-            composable(Routes.TERMINAL) {
-                TerminalScreen(nav, it.arguments?.getString("mid").orEmpty(), Uri.decode(it.arguments?.getString("pane").orEmpty()))
-            }
-            composable(Routes.LAYOUT) {
-                LayoutScreen(nav, it.arguments?.getString("mid").orEmpty(), Uri.decode(it.arguments?.getString("pane").orEmpty()))
             }
         }
     }
+}
+
+/** The three top-level screens: under the whole screen on a phone, under the agents list on a wide window. */
+@Composable
+private fun AppNavBar(nav: NavHostController, blocked: Int) {
+    val entry by nav.currentBackStackEntryAsState()
+    // In the middle of a wide window a chat or a machine may be open: the tab is the one it was opened from.
+    val tab = remember(entry) {
+        listOf(Routes.SETTINGS, Routes.MACHINES).firstOrNull { runCatching { nav.getBackStackEntry(it) }.isSuccess } ?: Routes.AGENTS
+    }
+    HerdrNavBar {
+        NavItem("Agents", HerdrIcons.House, tab == Routes.AGENTS, badge = blocked) { nav.goTop(Routes.AGENTS) }
+        NavItem("Machines", HerdrIcons.List, tab == Routes.MACHINES) { nav.goTop(Routes.MACHINES) }
+        NavItem("Settings", HerdrIcons.Settings, tab == Routes.SETTINGS) { nav.goTop(Routes.SETTINGS) }
+    }
+}
+
+/** The hairline between two panes. */
+@Composable
+private fun PaneEdge() {
+    Box(Modifier.width(1.dp).fillMaxHeight().background(Herdr.colors.line))
+}
+
+/** The middle of a wide window before anything is opened from the list. */
+@Composable
+private fun NothingOpen() {
+    EmptyState(
+        "No chat open",
+        "Choose an agent on the left to open its chat here. The Coordinator, terminals and machines open here too.",
+        icon = HerdrIcons.MessagesSquare,
+    )
 }
 
 private fun NavHostController.goTop(route: String) {
