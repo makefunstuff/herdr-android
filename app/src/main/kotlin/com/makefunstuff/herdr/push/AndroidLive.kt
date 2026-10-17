@@ -1,6 +1,7 @@
 package com.makefunstuff.herdr.push
 
 import android.Manifest
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -40,6 +41,15 @@ class AndroidLive(private val context: Context) : LiveSink {
     }
 
     override fun show(item: LiveItem, look: LiveLook, note: String?) {
+        // Without the permission there is nothing to post; the app's Settings say so.
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ActivityCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) return
+        runCatching { nm.notify(item.tag, ID, build(item, look, note)) }
+    }
+
+    /** [item]'s notification, as [show] posts it. */
+    fun build(item: LiveItem, look: LiveLook = LiveLook.Normal, note: String? = null): Notification {
         val ask = look == LiveLook.Ask
         val b = NotificationCompat.Builder(context, CHANNEL)
             .setSmallIcon(R.drawable.ic_notification)
@@ -71,11 +81,7 @@ class AndroidLive(private val context: Context) : LiveSink {
             }
             LiveLook.Busy -> {}
         }
-        // Without the permission there is nothing to post; the app's Settings say so.
-        if (Build.VERSION.SDK_INT >= 33 &&
-            ActivityCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-        ) return
-        runCatching { nm.notify(item.tag, ID, b.build()) }
+        return b.build()
     }
 
     override fun cancel(tag: String) = nm.cancel(tag, ID)
