@@ -47,6 +47,12 @@ fun scenes(): List<Scene> = listOf(
         setup = { shared = Demo.shared().let { s -> s.copy(files = s.files.map { f -> f.copy(path = Demo.sharedFile().path) }) } },
         actions = { tapText("devbox"); settle() },
     ),
+    // Shared to a machine that isn't connected: the words wait in the box, the screenshot to be copied once it is.
+    Scene(
+        "share-waiting", route = Routes.ask(Ask.SHARE),
+        setup = { shared = Demo.shared().let { s -> s.copy(files = s.files.map { f -> f.copy(path = Demo.sharedFile().path) }) } },
+        actions = { tapText("mac-mini"); settle() },
+    ),
     Scene("board", route = Routes.board(DEVBOX)),
     Scene("task", route = Routes.board(DEVBOX), actions = { tapText("Show when each machine last answered") }),
     Scene("task-review-failed", route = Routes.board(DEVBOX), actions = { tapText("Rewrite the install page") }),

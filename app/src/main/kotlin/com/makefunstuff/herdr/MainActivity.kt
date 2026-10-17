@@ -14,7 +14,10 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val container = (application as HerdrApp).container
         setContent { HerdrRoot(container) }
-        if (savedInstanceState == null) open(intent)
+        if (savedInstanceState == null && !open(intent) && container.shares.pending.value != null) {
+            // Something shared was waiting for a machine when Android ended the app: ask again.
+            Links.open(Routes.ask(Ask.SHARE))
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -22,10 +25,10 @@ class MainActivity : ComponentActivity() {
         open(intent)
     }
 
-    /** A tapped notification: its agent's chat, or its task on the board. The tile, a widget or a share: [Ask]. */
-    private fun open(intent: Intent?) {
-        intent?.getStringExtra(OPEN_ASK)?.takeIf { it in ASKS }?.let { return Links.open(Routes.ask(it)) }
-        val machine = intent?.getStringExtra(OPEN_MACHINE)?.takeIf { it.isNotEmpty() } ?: return
+    /** A tapped notification: its agent's chat, or its task on the board. The tile, a widget or a share: [Ask]. False when it opens nothing. */
+    private fun open(intent: Intent?): Boolean {
+        intent?.getStringExtra(OPEN_ASK)?.takeIf { it in ASKS }?.let { Links.open(Routes.ask(it)); return true }
+        val machine = intent?.getStringExtra(OPEN_MACHINE)?.takeIf { it.isNotEmpty() } ?: return false
         val pane = intent.getStringExtra(OPEN_PANE).orEmpty()
         val task = intent.getStringExtra(OPEN_TASK).orEmpty()
         when {
@@ -33,6 +36,7 @@ class MainActivity : ComponentActivity() {
             task.isNotEmpty() -> Links.open(Routes.board(machine, task))
             else -> Links.open(Routes.SETTINGS)
         }
+        return true
     }
 
     companion object {

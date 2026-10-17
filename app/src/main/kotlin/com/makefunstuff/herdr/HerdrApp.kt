@@ -85,7 +85,7 @@ class AppContainer(app: Application) {
     val identity = IdentityStore(app, scope)
     val hosts = HostManager(scope, machines, identity)
     val drafts = DraftStore(app)
-    val shares = Shares(app)
+    val shares = Shares(java.io.File(app.filesDir, "shares.json"), java.io.File(app.cacheDir, "shared"))
     val push = PushStore(app)
     val inbox = Inbox(java.io.File(app.filesDir, "alerts.json"), AndroidAlerts(app))
     val phone = AndroidPhone(app, push)
@@ -103,6 +103,8 @@ class AppContainer(app: Application) {
         liveWork.start()
         quietWork.start()
         tally.start(scope, hosts)
+        // Shared files waiting for a machine taken out of the app go with it.
+        scope.launch { machines.machines.collect { list -> shares.keep(list.map { it.id }.toSet()) } }
         // The push app's address may have lapsed while the app was closed: ask again, it answers with the same or a new one.
         if (push.state.value.on) phone.register()
     }

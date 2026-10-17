@@ -118,6 +118,7 @@ fun CoordinatorScreen(nav: NavController, machineId: String) {
     val attach = rememberAttacher(session) { path -> draft = Attachments.withMention(draft, path) }
     // Files shared to the app for this Coordinator (a screenshot, a log): copied over as attached ones, once connected.
     var copyingShared by remember { mutableStateOf(false) }
+    val sharedWaiting by remember(machineId) { container.shares.files(machineId) }.collectAsStateWithLifecycle(emptyList())
     LaunchedEffect(machineId) { container.shares.used(machineId) }
     LaunchedEffect(machineId, state.online) {
         if (!state.online) return@LaunchedEffect
@@ -125,6 +126,8 @@ fun CoordinatorScreen(nav: NavController, machineId: String) {
             for (f in files) {
                 copyingShared = true
                 try {
+                    // Android may have cleared the app's cache while the share waited.
+                    if (!java.io.File(f.path).exists()) throw java.io.IOException("${f.name} was no longer on the phone, so it wasn't attached. Share it again.")
                     val path = withContext(Dispatchers.IO) { java.io.File(f.path).inputStream().use { session.upload(f.name, it) } }
                     draft = Attachments.withMention(draft, path)
                 } catch (e: CancellationException) {
@@ -139,6 +142,12 @@ fun CoordinatorScreen(nav: NavController, machineId: String) {
         }
     }
     val uploading = attach.uploading || copyingShared
+    /** Shared files that wait for this machine to connect, said where the chat shows what is going on. */
+    val waitNote = if (state.online || sharedWaiting.isEmpty()) null else {
+        val one = sharedWaiting.singleOrNull()
+        if (one != null) "${one.name} waits to be copied to ${state.machine.label}, and is attached to your message once it connects."
+        else "${sharedWaiting.size} shared files wait to be copied to ${state.machine.label}, and are attached to your message once it connects."
+    }
     val readNow = remember { Channel<Unit>(Channel.CONFLATED) }
     val list = rememberLazyListState()
 
@@ -254,7 +263,11 @@ fun CoordinatorScreen(nav: NavController, machineId: String) {
             ) { bottom ->
                 when {
                     !state.online && v == null -> Box(Modifier.padding(bottom = bottom)) {
-                        ChatEmpty(HerdrIcons.Monitor, state.status.label(), state.status.detail() ?: "Waiting for ${state.machine.label}…")
+                        ChatEmpty(
+                            HerdrIcons.Monitor,
+                            state.status.label(),
+                            listOfNotNull(state.status.detail() ?: "Waiting for ${state.machine.label}…", waitNote).joinToString("\n\n"),
+                        )
                     }
                     state.online && state.boardPath == null -> Box(Modifier.padding(bottom = bottom)) {
                         ChatEmpty(HerdrIcons.SquareKanban, "No work board here", "herdr-projects isn't installed on ${state.machine.label}.")
@@ -273,7 +286,7 @@ fun CoordinatorScreen(nav: NavController, machineId: String) {
                         verticalArrangement = Arrangement.spacedBy(Space.m, Alignment.Bottom),
                     ) {
                         val foot: @Composable () -> Unit = {
-                            Foot(v, tooOld, problem, onTerminal = coordinatorPane?.let { p -> { nav.navigate(Routes.terminal(machineId, p)) } })
+                            Foot(v, tooOld, problem, waitNote, onTerminal = coordinatorPane?.let { p -> { nav.navigate(Routes.terminal(machineId, p)) } })
                         }
                         if (lines.isEmpty()) {
                             item(key = "empty") {
@@ -368,7 +381,7 @@ private fun Bubble(line: ChatLine) {
 
 /** Under the conversation: that it's working, that it waits for you on its screen, or what went wrong. */
 @Composable
-private fun Foot(v: CoordinatorView?, tooOld: Boolean, problem: String?, onTerminal: (() -> Unit)?) {
+private fun Foot(v: CoordinatorView?, tooOld: Boolean, problem: String?, waitNote: String?, onTerminal: (() -> Unit)?) {
     val c = Herdr.colors
     Column(verticalArrangement = Arrangement.spacedBy(Space.s)) {
         if (v != null && (v.state == "working" || v.state == "starting" || v.queue > 0) && v.error.isEmpty()) Working()
@@ -385,6 +398,7 @@ private fun Foot(v: CoordinatorView?, tooOld: Boolean, problem: String?, onTermi
         if (!v?.error.isNullOrEmpty()) Notice("The Coordinator could not be started: ${v?.error}", c.red)
         if (tooOld) Notice("This machine's herdr-projects is too old to send its Coordinator. Update it there (herdr-projects update).", c.notice)
         if (problem != null) Notice(problem, c.red)
+        if (waitNote != null) Notice(waitNote, null)
     }
 }
 

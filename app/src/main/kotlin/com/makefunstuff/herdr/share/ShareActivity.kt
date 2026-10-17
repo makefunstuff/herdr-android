@@ -66,7 +66,7 @@ class ShareActivity : ComponentActivity() {
         // Only what another app hands over through a content provider: never a file path, which could name the app's own files.
         val content = uris.filter { it.scheme == ContentResolver.SCHEME_CONTENT && it.authority?.startsWith(packageName) != true }
         if (content.size < uris.size) problems += "Some of it couldn't be read, so it was left out"
-        val dir = shareDir()
+        val dir = (application as HerdrApp).container.shares.newDir()
         val files = content.take(MAX_FILES).mapIndexedNotNull { i, uri ->
             runCatching { copy(uri, File(dir, "$i").apply { mkdirs() }, intent.type) }
                 .onFailure { problems += it.message ?: "A file couldn't be read" }
@@ -74,13 +74,6 @@ class ShareActivity : ComponentActivity() {
         }
         if (content.size > MAX_FILES) problems += "Only the first $MAX_FILES files go with it"
         return Shared(text, files) to problems
-    }
-
-    /** A new folder for this share's files; those of shares days old (never sent on) go. */
-    private fun shareDir(): File {
-        val root = File(cacheDir, "shared")
-        root.listFiles()?.filter { System.currentTimeMillis() - it.lastModified() > 2L * 24 * 3600 * 1000 }?.forEach { it.deleteRecursively() }
-        return File(root, System.currentTimeMillis().toString()).apply { mkdirs() }
     }
 
     private fun copy(uri: Uri, dir: File, type: String?): SharedFile {

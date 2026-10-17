@@ -1,15 +1,19 @@
 package com.makefunstuff.herdr.core.share
 
+import kotlinx.serialization.Serializable
+
 /**
  * Something shared to the app from elsewhere on the phone (the share sheet, or "Send to
  * Coordinator" in the text-selection menu), on its way to a Coordinator chat: its words, and its
  * files already copied into the app (a screenshot, a log).
  */
+@Serializable
 data class Shared(val text: String, val files: List<SharedFile> = emptyList()) {
     val isEmpty: Boolean get() = text.isBlank() && files.isEmpty()
 }
 
 /** A shared file, copied to [path] on the phone; [name] as the app it came from called it. */
+@Serializable
 data class SharedFile(val name: String, val path: String, val size: Long)
 
 object ShareText {

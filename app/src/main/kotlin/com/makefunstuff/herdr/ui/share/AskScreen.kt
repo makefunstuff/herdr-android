@@ -35,6 +35,7 @@ import com.makefunstuff.herdr.core.host.HostStatus
 import com.makefunstuff.herdr.core.share.AskTargets
 import com.makefunstuff.herdr.core.share.Shared
 import com.makefunstuff.herdr.core.ssh.Machine
+import com.makefunstuff.herdr.data.DraftStore
 import com.makefunstuff.herdr.ui.common.EmptyState
 import com.makefunstuff.herdr.ui.common.LocalContainer
 import com.makefunstuff.herdr.ui.common.StatusDot
@@ -104,7 +105,8 @@ fun AskScreen(nav: NavController, to: String) {
     val start = first ?: picked
     LaunchedEffect(start) {
         if (start == null) return@LaunchedEffect
-        if (share && start.machineId != null) container.shares.deliver(start.machineId, container.drafts)
+        val id = start.machineId
+        if (share && id != null) container.shares.deliver(id) { container.drafts.add(DraftStore.coordinator(id), it) }
         go(start.route)
     }
     if (first != null) {
