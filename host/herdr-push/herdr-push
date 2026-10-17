@@ -1,0 +1,720 @@
+#!/usr/bin/env python3
+# version: 1
+"""herdr-push: tells your phone when a herdr agent or a work board task needs you.
+
+It runs on the machine with herdr, watches its agents (`herdr api snapshot`) and, where the board
+is installed, its tasks (`herdr-projects list --json`), and sends a push to every phone that
+subscribed (Herdr for Android sets this up over SSH) when:
+
+  - an agent becomes blocked (it asks something) or finishes, and when that is over again;
+  - a board task starts waiting for you (ready to approve, review failed, plan ready, pick one,
+    asks you, stopped, went wrong), and when it no longer does.
+
+A push goes to the phone's UnifiedPush address (a push app such as ntfy gives it), sealed with a key
+only that phone and this machine know: the push server reads nothing, and the phone takes no push
+that wasn't sealed with it. Python 3 alone, no packages.
+
+  herdr-push run                 watch and send (what the service runs)
+  herdr-push subscribe           add or replace a phone, its JSON on stdin
+  herdr-push unsubscribe <id>    remove a phone
+  herdr-push test [<id>]         send a test notification now
+  herdr-push status              how it stands, as JSON
+  herdr-push ensure              start the watcher when it isn't running
+  herdr-push install             start it now and with the machine (systemd, launchd or cron)
+  herdr-push uninstall [--purge] stop it and remove the start-up entry (--purge: and its settings)
+  herdr-push once [--dry-run]    one look, printing what it would send
+
+See host/herdr-push/README.md in the herdr-android repo.
+"""
+
+import base64
+import fcntl
+import hashlib
+import hmac
+import json
+import os
+import shutil
+import signal
+import socket
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+import zlib
+
+VERSION = "1"
+NAME = "herdr-push"
+
+HOME = os.path.expanduser("~")
+# HERDR_PUSH_HOME keeps both in one folder (tests); herdr itself reads XDG_CONFIG_HOME, so that one stays.
+_own = os.environ.get("HERDR_PUSH_HOME")
+CONFIG_DIR = _own or os.path.join(os.environ.get("XDG_CONFIG_HOME") or os.path.join(HOME, ".config"), NAME)
+STATE_DIR = _own or os.path.join(os.environ.get("XDG_STATE_HOME") or os.path.join(HOME, ".local", "state"), NAME)
+SUBSCRIBERS = os.path.join(CONFIG_DIR, "subscribers.json")
+STATE = os.path.join(STATE_DIR, "state.json")
+LOCK = os.path.join(STATE_DIR, "run.lock")
+LOG = os.path.join(STATE_DIR, NAME + ".log")
+
+INTERVAL = float(os.environ.get("HERDR_PUSH_INTERVAL", "4"))
+BOARD_EVERY = int(os.environ.get("HERDR_PUSH_BOARD_EVERY", "3"))  # ticks between board reads
+# ntfy and most push servers take 4 KB; the sealed text stays under this.
+MAX_SEALED = 3800
+SCREEN_CHARS = 1600
+
+NEEDS_YOU_STAGES = ("pick", "stopped", "nosummary")
+
+
+def log(*parts):
+    sys.stderr.write(time.strftime("%Y-%m-%d %H:%M:%S ") + " ".join(str(p) for p in parts) + "\n")
+    sys.stderr.flush()
+
+
+# ---- sealing -------------------------------------------------------------------------------------
+#
+# hp1.<base64url(nonce ‖ ciphertext ‖ tag)>, without padding. Two keys come from the shared one:
+# enc = HMAC(key, "herdr-push enc"), mac = HMAC(key, "herdr-push mac"). The keystream is
+# HMAC-SHA256(enc, nonce ‖ counter) for counter 0, 1, … (32-bit big-endian), XORed with the
+# zlib-compressed JSON; tag = HMAC-SHA256(mac, "hp1" ‖ nonce ‖ ciphertext). HMAC-SHA256 as a PRF in
+# counter mode, then encrypt-then-MAC: only the standard library's hmac and hashlib. The app's
+# core/…/push/PushSeal.kt opens it.
+
+def _hmac(key, data):
+    return hmac.new(key, data, hashlib.sha256).digest()
+
+
+def seal(key, plain, nonce=None):
+    nonce = nonce if nonce is not None else os.urandom(16)
+    enc = _hmac(key, b"herdr-push enc")
+    mac = _hmac(key, b"herdr-push mac")
+    stream = bytearray()
+    counter = 0
+    while len(stream) < len(plain):
+        stream += _hmac(enc, nonce + counter.to_bytes(4, "big"))
+        counter += 1
+    ct = bytes(a ^ b for a, b in zip(plain, stream))
+    tag = _hmac(mac, b"hp1" + nonce + ct)
+    return "hp1." + base64.urlsafe_b64encode(nonce + ct + tag).decode().rstrip("=")
+
+
+def seal_message(key, message):
+    return seal(key, zlib.compress(json.dumps(message, separators=(",", ":"), ensure_ascii=False).encode(), 9))
+
+
+# ---- files ---------------------------------------------------------------------------------------
+
+def read_json(path, default):
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return default
+
+
+def write_json(path, value, private=False):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = path + ".tmp"
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600 if private else 0o644)
+    with os.fdopen(fd, "w") as f:
+        json.dump(value, f, indent=1)
+    os.replace(tmp, path)
+
+
+def subscribers():
+    subs = read_json(SUBSCRIBERS, [])
+    return [s for s in subs if isinstance(s, dict) and s.get("id") and s.get("endpoint") and s.get("key")]
+
+
+# ---- herdr and the board -------------------------------------------------------------------------
+
+def find_herdr(sub):
+    for c in (sub.get("herdr"), shutil.which("herdr"), os.path.join(HOME, ".local", "bin", "herdr")):
+        if c and os.access(c, os.X_OK):
+            return c
+    return None
+
+
+def find_board(sub):
+    for c in (sub.get("board"), os.path.join(HOME, ".herdr-projects", "data", "bin", "herdr-projects"),
+              shutil.which("herdr-projects"), os.path.join(HOME, ".local", "bin", "herdr-projects")):
+        if c and os.access(c, os.X_OK):
+            return c
+    return None
+
+
+class Source:
+    """One herdr session on this machine, with the board next to it: what a group of phones watch."""
+
+    def __init__(self, session, herdr, board):
+        self.session = session or "default"
+        self.herdr = herdr
+        self.board = board
+
+    @property
+    def key(self):
+        return self.session
+
+    def env(self):
+        env = dict(os.environ)
+        # The watcher may run inside a herdr pane (tests, `once`): its own session must not win.
+        for k in ("HERDR_SOCKET_PATH", "HERDR_CLIENT_SOCKET_PATH", "HERDR_PANE_ID", "HERDR_TAB_ID", "HERDR_WORKSPACE_ID"):
+            env.pop(k, None)
+        if self.session != "default":
+            env["HERDR_SESSION"] = self.session
+        else:
+            env.pop("HERDR_SESSION", None)
+        if self.herdr:
+            env["HERDR_BIN_PATH"] = self.herdr
+            env["PATH"] = os.path.dirname(self.herdr) + os.pathsep + env.get("PATH", "/usr/bin:/bin")
+        return env
+
+    def run(self, args, timeout=20):
+        r = subprocess.run(args, env=self.env(), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                           stderr=subprocess.PIPE, timeout=timeout)
+        if r.returncode != 0:
+            raise RuntimeError((r.stderr.decode(errors="replace").strip().splitlines() or ["exit %d" % r.returncode])[-1])
+        return r.stdout.decode(errors="replace")
+
+    def snapshot(self):
+        out = json.loads(self.run([self.herdr, "api", "snapshot"]))
+        snap = (out.get("result") or {}).get("snapshot") or out.get("snapshot") or out
+        return snap
+
+    def screen(self, pane):
+        try:
+            text = self.run([self.herdr, "pane", "read", pane, "--source", "visible", "--lines", "60"])
+        except Exception as e:  # noqa: BLE001 - a screen is a nicety
+            log("can't read", pane, e)
+            return None
+        return trim_screen(text)
+
+    def tasks(self):
+        """`list --json` with each task's short key from the plain list, matched as the app does."""
+        tasks = json.loads(self.run([self.board, "list", "--json"], timeout=30) or "[]")
+        if not isinstance(tasks, list):
+            return []
+        try:
+            plain = self.run([self.board, "list"], timeout=30)
+        except Exception:  # noqa: BLE001
+            plain = ""
+        rows = [l.strip().split(" ")[0] for l in plain.splitlines() if l.strip()]
+        keyed = len(rows) == len(tasks)
+        out = []
+        for i, t in enumerate(tasks):
+            if not isinstance(t, dict) or not t.get("id"):
+                continue
+            key = ""
+            if keyed and "-" in rows[i] and rows[i].rsplit("-", 1)[1] == str(t["id"]).rsplit("/", 1)[-1]:
+                key = rows[i]
+            out.append((key, t))
+        return out
+
+
+def trim_screen(text):
+    lines = text.rstrip().splitlines()[-40:]
+    text = "\n".join(l.rstrip() for l in lines)
+    return text[-SCREEN_CHARS:]
+
+
+def location(snap, agent):
+    ws = next((w for w in snap.get("workspaces", []) if w.get("workspace_id") == agent.get("workspace_id")), {})
+    tab = next((t for t in snap.get("tabs", []) if t.get("tab_id") == agent.get("tab_id")), {})
+    return "%s › %s" % (ws.get("label") or agent.get("workspace_id", ""), tab.get("label") or agent.get("tab_id", ""))
+
+
+# ---- what changed --------------------------------------------------------------------------------
+
+def agent_events(source, snap, seen, first):
+    """Agents that became blocked or done, and ones that were and no longer are. Updates [seen]."""
+    events = []
+    now = {}
+    for a in snap.get("agents", []):
+        pane = a.get("pane_id")
+        if not pane:
+            continue
+        status = a.get("agent_status", "unknown")
+        now[pane] = status
+        before = seen.get(pane)
+        if first or status == before:
+            continue
+        if status in ("blocked", "done") or before in ("blocked", "done"):
+            ev = {"type": "agent", "agent": a, "where": location(snap, a)}
+            if status == "blocked":
+                ev["screen"] = source.screen(pane)
+            events.append(ev)
+    for pane, before in seen.items():
+        if pane not in now and before in ("blocked", "done"):
+            events.append({"type": "agent", "agent": {"pane_id": pane, "workspace_id": "", "tab_id": "", "agent_status": "gone"},
+                           "where": ""})
+    seen.clear()
+    seen.update(now)
+    return events
+
+
+def needs_you(task):
+    return not task.get("archivedAt") and (task.get("state") in ("blocked", "error") or task.get("stage") in NEEDS_YOU_STAGES)
+
+
+def task_sig(task):
+    review = task.get("review") or {}
+    return json.dumps([task.get("state"), task.get("stage"), task.get("kind"), task.get("reviewRound"),
+                       review.get("pass", review.get("meets")), bool(task.get("mergeFailed") or task.get("prFailure"))])
+
+
+def task_events(tasks, seen, first):
+    """Tasks that started waiting for you (or wait for something else now), and ones that stopped."""
+    events = []
+    now = {}
+    for key, t in tasks:
+        sig = task_sig(t) if needs_you(t) else ""
+        now[t["id"]] = sig
+        before = seen.get(t["id"], "")
+        if first or sig == before:
+            continue
+        if sig or before:
+            events.append({"type": "task", "key": key, "task": t})
+    for tid, before in seen.items():
+        if tid not in now and before:
+            events.append({"type": "task", "key": "", "task": {"id": tid, "state": "gone"}})
+    seen.clear()
+    seen.update(now)
+    return events
+
+
+# ---- sending -------------------------------------------------------------------------------------
+
+def messages(events):
+    """The events in as few pushes as fit, shortening a screen that alone is too long."""
+    host = socket.gethostname()
+    out, batch = [], []
+    for ev in events:
+        if batch and _too_big(host, batch + [ev]):
+            out.append(batch)
+            batch = []
+        batch.append(ev)
+        while _too_big(host, batch) and ev.get("screen"):
+            ev["screen"] = ev["screen"][len(ev["screen"]) // 2:] if len(ev["screen"]) > 200 else None
+    if batch:
+        out.append(batch)
+    return [{"v": 1, "host": host, "at": int(time.time()), "events": b} for b in out]
+
+
+def _too_big(host, batch):
+    msg = {"v": 1, "host": host, "at": int(time.time()), "events": batch}
+    return len(seal_message(b"\0" * 32, msg)) > MAX_SEALED
+
+
+def shows(event):
+    """Whether [event] puts a notification up (rather than taking one down)."""
+    if event.get("type") == "agent":
+        return event["agent"].get("agent_status") in ("blocked", "done")
+    if event.get("type") == "task":
+        return needs_you(event["task"])
+    return True
+
+
+def post(sub, text, urgent):
+    req = urllib.request.Request(sub["endpoint"], data=text.encode(), method="POST", headers={
+        "Content-Type": "text/plain",
+        "TTL": "86400",
+        "Urgency": "high" if urgent else "normal",
+    })
+    with urllib.request.urlopen(req, timeout=15) as r:
+        r.read()
+
+
+def send(sub, events, record):
+    """Sends [events] to one phone, a few tries each; notes how it went in [record]."""
+    key = base64.b64decode(sub["key"])
+    urgent = any(shows(e) for e in events)
+    ok = True
+    for msg in messages(events):
+        text = seal_message(key, msg)
+        for attempt in range(3):
+            try:
+                post(sub, text, urgent)
+                record["ok"] = int(time.time())
+                record.pop("error", None)
+                break
+            except urllib.error.HTTPError as e:
+                record["error"] = "HTTP %d from %s" % (e.code, urllib.parse.urlsplit(sub["endpoint"]).netloc)
+                if e.code in (404, 410):
+                    # The push app dropped this address; the phone gives a new one when it connects.
+                    record["gone"] = True
+                    return False
+            except Exception as e:  # noqa: BLE001
+                record["error"] = str(e)
+            if attempt < 2:
+                time.sleep(1 + attempt * 2)
+        else:
+            ok = False
+            log("couldn't send to", sub.get("name") or sub["id"], record.get("error"))
+    return ok
+
+
+# ---- the loop ------------------------------------------------------------------------------------
+
+def sources(subs):
+    out = {}
+    for s in subs:
+        src = Source(s.get("session"), find_herdr(s), find_board(s))
+        out.setdefault(src.key, (src, []))[1].append(s)
+    return out
+
+
+def tick(state, n, dry_run=False):
+    subs = subscribers()
+    sent = {}
+    for key, (src, group) in sources(subs).items():
+        st = state.setdefault("sessions", {}).setdefault(key, {})
+        events = []
+        if src.herdr:
+            try:
+                snap = src.snapshot()
+                first = "agents" not in st
+                events += agent_events(src, snap, st.setdefault("agents", {}), first)
+                st.pop("problem", None)
+            except Exception as e:  # noqa: BLE001
+                if st.get("problem") != str(e):
+                    log("herdr session %s:" % key, e)
+                st["problem"] = str(e)
+        if src.board and (n % BOARD_EVERY == 0 or "tasks" not in st):
+            try:
+                first = "tasks" not in st
+                events += task_events(src.tasks(), st.setdefault("tasks", {}), first)
+            except Exception as e:  # noqa: BLE001
+                log("board:", e)
+        if not events:
+            continue
+        sent[key] = events
+        for sub in group:
+            record = state.setdefault("phones", {}).setdefault(sub["id"], {})
+            if record.get("gone") and record.get("endpoint") == sub["endpoint"]:
+                continue
+            record["endpoint"] = sub["endpoint"]
+            record.pop("gone", None)
+            if dry_run:
+                continue
+            send(sub, events, record)
+    return sent
+
+
+def run():
+    os.makedirs(STATE_DIR, exist_ok=True)
+    lock = open(LOCK, "w")
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        log("already running")
+        return 0
+    lock.write(str(os.getpid()))
+    lock.flush()
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
+    log(NAME, VERSION, "watching for", len(subscribers()), "phone(s)")
+    state = read_json(STATE, {})
+    n = 0
+    while True:
+        if not subscribers():
+            time.sleep(30)
+            continue
+        try:
+            tick(state, n)
+            write_json(STATE, state)
+        except Exception as e:  # noqa: BLE001 - keep watching
+            log("tick failed:", e)
+        n += 1
+        time.sleep(INTERVAL)
+
+
+def running_pid():
+    """The watcher's pid while one holds the lock, else None."""
+    try:
+        f = open(LOCK, "r+")
+    except OSError:
+        return None
+    with f:
+        try:
+            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            f.seek(0)
+            pid = f.read().strip()
+            return int(pid) if pid.isdigit() else -1
+        fcntl.flock(f, fcntl.LOCK_UN)
+        return None
+
+
+# ---- commands ------------------------------------------------------------------------------------
+
+def out(value):
+    print(json.dumps(value))
+
+
+def cmd_subscribe():
+    try:
+        sub = json.loads(sys.stdin.read())
+        key = base64.b64decode(sub["key"])
+    except Exception as e:  # noqa: BLE001
+        out({"ok": False, "msg": "bad subscription: %s" % e})
+        return 2
+    endpoint = str(sub.get("endpoint", ""))
+    if len(key) != 32 or not sub.get("id") or not endpoint.startswith(("https://", "http://")):
+        out({"ok": False, "msg": "a subscription needs an id, an http(s) endpoint and a 32-byte key"})
+        return 2
+    keep = ("id", "name", "endpoint", "key", "session", "herdr", "board")
+    entry = {k: sub[k] for k in keep if sub.get(k)}
+    subs = [s for s in subscribers() if s["id"] != entry["id"]] + [entry]
+    write_json(SUBSCRIBERS, subs, private=True)
+    out({"ok": True, "msg": "subscribed", "phones": len(subs), "version": VERSION})
+    return 0
+
+
+def cmd_unsubscribe(pid):
+    subs = subscribers()
+    left = [s for s in subs if s["id"] != pid]
+    write_json(SUBSCRIBERS, left, private=True)
+    out({"ok": True, "msg": "unsubscribed" if len(left) < len(subs) else "not subscribed", "phones": len(left)})
+    return 0
+
+
+def cmd_test(pid=None):
+    subs = [s for s in subscribers() if pid in (None, s["id"])]
+    if not subs:
+        out({"ok": False, "msg": "no phone subscribed" if pid is None else "this phone isn't subscribed"})
+        return 1
+    state = read_json(STATE, {})
+    results = []
+    for s in subs:
+        record = state.setdefault("phones", {}).setdefault(s["id"], {})
+        ok = send(s, [{"type": "test"}], record)
+        results.append({"id": s["id"], "ok": ok, "error": record.get("error")})
+    write_json(STATE, state)
+    good = all(r["ok"] for r in results)
+    out({"ok": good, "msg": "sent" if good else (results[0].get("error") or "couldn't send"), "phones": results})
+    return 0 if good else 1
+
+
+def autostart():
+    if sys.platform == "darwin":
+        return "launchd" if os.path.exists(launchd_plist()) else "none"
+    if os.path.exists(systemd_unit()):
+        return "systemd"
+    try:
+        tab = subprocess.run(["crontab", "-l"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL).stdout.decode()
+        if NAME in tab:
+            return "cron"
+    except OSError:
+        pass
+    return "none"
+
+
+def cmd_status():
+    state = read_json(STATE, {})
+    phones = []
+    for s in subscribers():
+        r = state.get("phones", {}).get(s["id"], {})
+        phones.append({"id": s["id"], "name": s.get("name", ""), "server": urllib.parse.urlsplit(s["endpoint"]).netloc,
+                       "ok": r.get("ok"), "error": r.get("error"), "gone": bool(r.get("gone"))})
+    problems = {k: v["problem"] for k, v in state.get("sessions", {}).items() if v.get("problem")}
+    pid = running_pid()
+    out({"ok": True, "version": VERSION, "running": pid is not None, "pid": pid, "autostart": autostart(),
+         "phones": phones, "problems": problems, "path": os.path.abspath(__file__)})
+    return 0
+
+
+def start_background():
+    os.makedirs(STATE_DIR, exist_ok=True)
+    logf = open(LOG, "a")
+    subprocess.Popen([sys.executable, os.path.abspath(__file__), "run"], stdin=subprocess.DEVNULL, stdout=logf,
+                     stderr=logf, start_new_session=True, close_fds=True)
+    for _ in range(20):
+        if running_pid() is not None:
+            return True
+        time.sleep(0.1)
+    return running_pid() is not None
+
+
+def cmd_ensure():
+    if running_pid() is None:
+        kind = autostart()
+        if kind == "systemd":
+            subprocess.run(["systemctl", "--user", "restart", NAME], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            time.sleep(0.5)
+        if running_pid() is None:
+            start_background()
+    return cmd_status()
+
+
+def systemd_unit():
+    base = os.environ.get("XDG_CONFIG_HOME") or os.path.join(HOME, ".config")
+    return os.path.join(base, "systemd", "user", NAME + ".service")
+
+
+def launchd_plist():
+    return os.path.join(HOME, "Library", "LaunchAgents", "dev.herdr.push.plist")
+
+
+def has_systemd():
+    try:
+        return subprocess.run(["systemctl", "--user", "show-environment"], stdout=subprocess.DEVNULL,
+                              stderr=subprocess.DEVNULL, timeout=10).returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
+def cmd_install():
+    me = os.path.abspath(__file__)
+    note = ""
+    if sys.platform == "darwin":
+        plist = launchd_plist()
+        os.makedirs(os.path.dirname(plist), exist_ok=True)
+        with open(plist, "w") as f:
+            f.write(LAUNCHD % {"py": sys.executable, "me": me, "log": LOG})
+        subprocess.run(["launchctl", "unload", plist], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(["launchctl", "load", "-w", plist], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    elif has_systemd():
+        unit = systemd_unit()
+        os.makedirs(os.path.dirname(unit), exist_ok=True)
+        with open(unit, "w") as f:
+            f.write(SYSTEMD % {"py": sys.executable, "me": me})
+        if running_pid() is not None:
+            stop()
+        for args in (["daemon-reload"], ["enable", NAME], ["restart", NAME]):
+            subprocess.run(["systemctl", "--user"] + args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        # Without lingering, user services stop when the last login ends and start with the next one.
+        user = os.environ.get("USER") or os.path.basename(HOME)
+        linger = subprocess.run(["loginctl", "show-user", user, "-p", "Linger"], stdout=subprocess.PIPE,
+                                stderr=subprocess.DEVNULL).stdout.decode().strip()
+        if linger != "Linger=yes":
+            try:
+                subprocess.run(["loginctl", "enable-linger", user], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                               stderr=subprocess.DEVNULL, timeout=10)
+            except (OSError, subprocess.TimeoutExpired):
+                pass
+            linger = subprocess.run(["loginctl", "show-user", user, "-p", "Linger"], stdout=subprocess.PIPE,
+                                    stderr=subprocess.DEVNULL).stdout.decode().strip()
+            if linger != "Linger=yes":
+                note = "it stops when you log out: `loginctl enable-linger` (as root: `loginctl enable-linger %s`) keeps it running" % user
+    elif shutil.which("crontab"):
+        tab = subprocess.run(["crontab", "-l"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL).stdout.decode()
+        lines = [l for l in tab.splitlines() if NAME not in l]
+        lines.append("@reboot %s %s ensure >/dev/null 2>&1" % (sys.executable, me))
+        subprocess.run(["crontab", "-"], input=("\n".join(lines) + "\n").encode(), stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL)
+    else:
+        note = "nothing starts it with the machine: the app starts it again when it connects"
+    for _ in range(30):
+        if running_pid() is not None:
+            break
+        time.sleep(0.1)
+    if running_pid() is None:
+        start_background()
+    pid = running_pid()
+    out({"ok": pid is not None, "msg": note or "running", "autostart": autostart(), "pid": pid, "version": VERSION})
+    return 0 if pid is not None else 1
+
+
+def stop():
+    pid = running_pid()
+    if pid and pid > 0:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except OSError:
+            pass
+        for _ in range(30):
+            if running_pid() is None:
+                break
+            time.sleep(0.1)
+
+
+def cmd_uninstall(purge):
+    if sys.platform == "darwin" and os.path.exists(launchd_plist()):
+        subprocess.run(["launchctl", "unload", "-w", launchd_plist()], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        os.remove(launchd_plist())
+    if os.path.exists(systemd_unit()):
+        subprocess.run(["systemctl", "--user", "disable", "--now", NAME], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        os.remove(systemd_unit())
+        subprocess.run(["systemctl", "--user", "daemon-reload"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if shutil.which("crontab"):
+        tab = subprocess.run(["crontab", "-l"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL).stdout.decode()
+        if NAME in tab:
+            lines = [l for l in tab.splitlines() if NAME not in l]
+            subprocess.run(["crontab", "-"], input=("\n".join(lines) + "\n").encode(), stdout=subprocess.DEVNULL,
+                           stderr=subprocess.DEVNULL)
+    stop()
+    if purge:
+        shutil.rmtree(CONFIG_DIR, ignore_errors=True)
+        shutil.rmtree(STATE_DIR, ignore_errors=True)
+    out({"ok": True, "msg": "removed"})
+    return 0
+
+
+def cmd_once(dry_run):
+    state = read_json(STATE, {})
+    sent = tick(state, 0, dry_run=dry_run)
+    write_json(STATE, state)
+    out({"ok": True, "events": sent})
+    return 0
+
+
+SYSTEMD = """[Unit]
+Description=herdr-push: tells your phone when a herdr agent or board task needs you
+After=network-online.target
+
+[Service]
+ExecStart=%(py)s %(me)s run
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target
+"""
+
+LAUNCHD = """<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>dev.herdr.push</string>
+  <key>ProgramArguments</key><array><string>%(py)s</string><string>%(me)s</string><string>run</string></array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>StandardErrorPath</key><string>%(log)s</string>
+  <key>EnvironmentVariables</key><dict><key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string></dict>
+</dict>
+</plist>
+"""
+
+
+def main(argv):
+    cmd = argv[1] if len(argv) > 1 else "help"
+    rest = argv[2:]
+    if cmd == "run":
+        return run()
+    if cmd == "subscribe":
+        return cmd_subscribe()
+    if cmd == "unsubscribe" and rest:
+        return cmd_unsubscribe(rest[0])
+    if cmd == "test":
+        return cmd_test(rest[0] if rest else None)
+    if cmd == "status":
+        return cmd_status()
+    if cmd == "ensure":
+        return cmd_ensure()
+    if cmd == "install":
+        return cmd_install()
+    if cmd == "uninstall":
+        return cmd_uninstall("--purge" in rest)
+    if cmd == "once":
+        return cmd_once("--dry-run" in rest)
+    if cmd == "version":
+        print(VERSION)
+        return 0
+    if cmd == "_seal" and len(rest) == 2:  # for the app's interop test: key (base64) and JSON
+        print(seal_message(base64.b64decode(rest[0]), json.loads(rest[1])))
+        return 0
+    sys.stdout.write(__doc__)
+    return 0 if cmd in ("help", "-h", "--help") else 2
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

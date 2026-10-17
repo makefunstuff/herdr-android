@@ -23,7 +23,18 @@ data class BlockedPrompt(
         return List(kotlin.math.abs(delta)) { move } + "enter"
     }
 
+    /** The option that says yes ("Yes", "Yes, proceed", "Trust and continue"), when one does. */
+    val approveIndex: Int? get() = options.indexOfFirst { YES.containsMatchIn(it.label) }.takeIf { it >= 0 }
+
+    /** The option that says no ("No", "No, exit", "No, and tell Codex what to do differently"), when one does. */
+    val denyIndex: Int? get() = options.indexOfFirst { NO.containsMatchIn(it.label) }.takeIf { it >= 0 }
+
+    /** A plain yes-or-no question: both a yes and a no option, and they differ. */
+    val yesNo: Boolean get() = approveIndex != null && denyIndex != null && approveIndex != denyIndex
+
     companion object {
+        private val YES = Regex("^(yes|allow|approve|proceed|accept|trust|continue|ok)\\b", RegexOption.IGNORE_CASE)
+        private val NO = Regex("^(no|deny|reject|decline|cancel|don'?t|do not)\\b", RegexOption.IGNORE_CASE)
         private val CURSOR = Regex("^(\\s*)[❯›▶►➤→>]\\s+(\\S.*)$")
         private val NUMBERED = Regex("^(\\d{1,2})[.)]\\s+(.+)$")
         private val HARD_RULE = Regex("^[─━═▔▁]{6,}$")

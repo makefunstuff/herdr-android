@@ -109,30 +109,32 @@ object BoardTasks {
     /** `list --json`. Tasks come as an array; anything else is the board's plain message. */
     fun list(stdout: String, keys: Map<String, String> = emptyMap(), archivedView: Boolean = false): List<BoardTask> {
         val arr = element(stdout, '[') as? JsonArray ?: throw IOException(plain(stdout).ifEmpty { "herdr-projects gave no task list" })
-        return arr.mapNotNull { e ->
-            val o = e as? JsonObject ?: return@mapNotNull null
-            val id = o.str("id").ifEmpty { return@mapNotNull null }
-            val rev = o["review"] as? JsonObject
-            BoardTask(
-                id = id,
-                key = keys[id].orEmpty(),
-                title = o.str("title").ifEmpty { id },
-                state = o.str("state"),
-                stage = o.str("stage"),
-                kind = o.str("kind"),
-                agent = o["app"].let { a -> (a as? JsonPrimitive)?.takeIf { it.isString }?.content ?: (a as? JsonObject)?.str("name").orEmpty() },
-                msg = o.str("msg"),
-                progress = o.num("progress")?.toInt(),
-                eta = o.num("eta")?.toInt(),
-                research = o.bool("research"),
-                pr = o.str("pr"),
-                archived = archivedView || o.bool("archivedAt") || o.num("archivedAt") != null,
-                pinned = o.bool("pinned"),
-                reviewRound = o.num("reviewRound")?.toInt() ?: 0,
-                reviewPassed = rev?.let { r -> (r["pass"] as? JsonPrimitive)?.booleanOrNull ?: (r["meets"] as? JsonPrimitive)?.booleanOrNull },
-                approvalBlocked = o.bool("mergeFailed") || o.bool("syncBlocked") || o.bool("prFailure") || o.str("prState") == "failing",
-            )
-        }
+        return arr.mapNotNull { e -> (e as? JsonObject)?.let { task(it, keys[it.str("id")].orEmpty(), archivedView) } }
+    }
+
+    /** One task as `list --json` gives it (herdr-push sends the same object); null without an id. */
+    fun task(o: JsonObject, key: String = "", archivedView: Boolean = false): BoardTask? {
+        val id = o.str("id").ifEmpty { return null }
+        val rev = o["review"] as? JsonObject
+        return BoardTask(
+            id = id,
+            key = key,
+            title = o.str("title").ifEmpty { id },
+            state = o.str("state"),
+            stage = o.str("stage"),
+            kind = o.str("kind"),
+            agent = o["app"].let { a -> (a as? JsonPrimitive)?.takeIf { it.isString }?.content ?: (a as? JsonObject)?.str("name").orEmpty() },
+            msg = o.str("msg"),
+            progress = o.num("progress")?.toInt(),
+            eta = o.num("eta")?.toInt(),
+            research = o.bool("research"),
+            pr = o.str("pr"),
+            archived = archivedView || o.bool("archivedAt") || o.num("archivedAt") != null,
+            pinned = o.bool("pinned"),
+            reviewRound = o.num("reviewRound")?.toInt() ?: 0,
+            reviewPassed = rev?.let { r -> (r["pass"] as? JsonPrimitive)?.booleanOrNull ?: (r["meets"] as? JsonPrimitive)?.booleanOrNull },
+            approvalBlocked = o.bool("mergeFailed") || o.bool("syncBlocked") || o.bool("prFailure") || o.str("prState") == "failing",
+        )
     }
 
     /**

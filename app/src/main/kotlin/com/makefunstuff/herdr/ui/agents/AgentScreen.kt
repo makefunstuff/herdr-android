@@ -38,8 +38,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.makefunstuff.herdr.Routes
 import com.makefunstuff.herdr.core.api.AgentStatus
-import com.makefunstuff.herdr.core.api.HerdrApiException
 import com.makefunstuff.herdr.core.chat.AgentChat
+import com.makefunstuff.herdr.core.chat.AgentInput
 import com.makefunstuff.herdr.core.chat.ChatItem
 import com.makefunstuff.herdr.ui.common.EmptyState
 import com.makefunstuff.herdr.ui.common.LocalContainer
@@ -108,13 +108,7 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
 
     fun keys(k: List<String>) {
         scope.launch {
-            runCatching {
-                val api = session.awaitApi()
-                // agent.send_keys reaches agents herdr started itself; one an integration reported
-                // answers "not an active named agent", so its keys go to the pane instead.
-                val sent = if (agent != null) runCatching { api.agentSendKeys(paneId, k) } else null
-                if (sent == null || sent.isFailure) api.sendKeys(paneId, k)
-            }.onFailure { context.toast(it.message ?: "Couldn't send keys") }
+            runCatching { AgentInput.keys(session.awaitApi(), paneId, k, named = agent != null) }.onFailure { context.toast(it.message ?: "Couldn't send keys") }
             session.refresh()
         }
     }
@@ -130,23 +124,7 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
         // What you just said is the newest line: bring the chat to its end, also if you had scrolled up.
         scope.launch { listState.animateScrollToItem(0) }
         scope.launch {
-            runCatching {
-                val api = session.awaitApi()
-                suspend fun typeIt() {
-                    api.sendText(paneId, text)
-                    api.sendKeys(paneId, listOf("enter"))
-                }
-                if (agent == null || blocked) {
-                    typeIt()
-                } else {
-                    try {
-                        api.prompt(paneId, text)
-                    } catch (e: HerdrApiException) {
-                        // It became blocked between the snapshot and the send: answer the question instead.
-                        if (e.code == "agent_blocked") typeIt() else throw e
-                    }
-                }
-            }.onSuccess {
+            runCatching { AgentInput.send(session.awaitApi(), paneId, text, named = agent != null, blocked = blocked) }.onSuccess {
                 draft = DraftStore.afterSend(draft, typed)
             }.onFailure {
                 if (!blocked) chat.dropPending(text)
