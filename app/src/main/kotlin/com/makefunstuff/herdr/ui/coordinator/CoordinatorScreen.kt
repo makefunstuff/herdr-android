@@ -60,6 +60,7 @@ import com.makefunstuff.herdr.ui.design.BubbleShape
 import com.makefunstuff.herdr.ui.design.ReplyBubbleShape
 import com.makefunstuff.herdr.ui.design.ChatComposer
 import com.makefunstuff.herdr.ui.design.ChatSurface
+import com.makefunstuff.herdr.ui.design.typingInShortWindow
 import com.makefunstuff.herdr.ui.design.ComposerToggle
 import com.makefunstuff.herdr.ui.common.rememberDraft
 import com.makefunstuff.herdr.data.DraftStore
@@ -183,10 +184,11 @@ fun CoordinatorScreen(nav: NavController, machineId: String) {
         }
     }
 
+    val typing = typingInShortWindow()
     Scaffold(
         containerColor = Herdr.colors.ground,
         topBar = {
-            HerdrTopBar(
+            if (!typing) HerdrTopBar(
                 "Coordinator",
                 subtitle = "${state.machine.label} · " + (v?.let { stateWords(it) } ?: if (state.online) "work board" else state.status.label()),
                 onBack = { nav.popBackStack() },

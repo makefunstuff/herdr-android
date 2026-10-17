@@ -8,6 +8,11 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.isImeVisible
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.selection.LocalTextSelectionColors
@@ -150,15 +155,26 @@ fun ChatComposer(
     val value = if (field.text == draft) field else field.copy(text = draft)
     SideEffect { if (value != field) field = value }
 
-    BoxWithConstraints(modifier.fillMaxWidth()) {
-        val textMax = if (constraints.hasBoundedHeight) (maxHeight * 0.4f).coerceAtLeast(72.dp) else 320.dp
+    BoxWithConstraints(modifier.fillMaxWidth(), contentAlignment = Alignment.BottomCenter) {
+        val room = if (constraints.hasBoundedHeight) maxHeight else Dp.Infinity
+        // A short window (a phone on its side with the keyboard up) keeps the card whole: no fade over
+        // it, and the box gives up lines before the controls do.
+        val short = room < 240.dp
+        val glide = floating && !short
+        val textMax = when {
+            room == Dp.Infinity -> 320.dp
+            short -> (room - 72.dp).coerceAtLeast(48.dp)
+            else -> (room * 0.4f).coerceAtLeast(72.dp)
+        }
         Column(
             Modifier.fillMaxWidth()
+                // Never clipped by its slot: on a short screen it rises over what is above it.
+                .wrapContentHeight(Alignment.Bottom, unbounded = true)
                 .background(
-                    if (floating) Brush.verticalGradient(0f to Color.Transparent, 1f to c.ground, endY = with(LocalDensity.current) { (fade + Space.m).toPx() })
+                    if (glide) Brush.verticalGradient(0f to Color.Transparent, 1f to c.ground, endY = with(LocalDensity.current) { (fade + Space.m).toPx() })
                     else SolidColor(c.ground),
                 )
-                .padding(start = Space.m, end = Space.m, top = if (floating) fade else Space.s, bottom = Space.s),
+                .padding(start = Space.m, end = Space.m, top = if (glide) fade else Space.s, bottom = Space.s),
         ) {
             if (above != null) Box(Modifier.padding(bottom = Space.s)) { above() }
             Column(
@@ -307,6 +323,14 @@ fun ComposerToggle(label: String, icon: ImageVector, checked: Boolean, onChecked
         }
     }
 }
+
+/**
+ * A phone on its side with the keyboard up: room for the composer and little else, so a chat
+ * screen puts its bars aside while you type (they come back with the keyboard's going).
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun typingInShortWindow(): Boolean = WindowInsets.isImeVisible && LocalConfiguration.current.screenHeightDp < 520
 
 /**
  * A chat screen's body as the web UI lays it out on a phone: the transcript fills the space and

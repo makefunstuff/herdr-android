@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
+import com.makefunstuff.herdr.ui.design.typingInShortWindow
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -98,6 +99,7 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
     var sending by remember { mutableStateOf(false) }
     var showKeys by rememberSaveable { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
+    val listState = rememberLazyListState()
 
     fun keys(k: List<String>) {
         scope.launch {
@@ -120,6 +122,8 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
         val blocked = status == AgentStatus.Blocked
         // Counted before the send, so a transcript that is quicker than this call still confirms it.
         if (!blocked) chat.addPending(text)
+        // What you just said is the newest line: bring the chat to its end, also if you had scrolled up.
+        scope.launch { listState.animateScrollToItem(0) }
         scope.launch {
             runCatching {
                 val api = session.awaitApi()
@@ -164,17 +168,17 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
             state.pending.forEachIndexed { i, p -> add(ChatRow.User(ChatItem.User("$i", p.text), pending = true)) }
         }
     }
-    val listState = rememberLazyListState()
     val atBottom by remember { derivedStateOf { listState.firstVisibleItemIndex <= 1 } }
     // Stay pinned to the newest message unless the reader scrolled up.
     LaunchedEffect(rows.lastOrNull()?.key, rows.size, status) {
         if (atBottom) listState.animateScrollToItem(0)
     }
 
+    val typing = typingInShortWindow()
     Scaffold(
         containerColor = Herdr.colors.ground,
         topBar = {
-            HerdrTopBar(
+            if (!typing) HerdrTopBar(
                 agent?.let { it.name?.takeIf { n -> n.isNotBlank() } ?: it.displayName } ?: pane?.displayName ?: paneId,
                 subtitle = listOfNotNull(
                     agent?.agent?.takeIf { it != agent.name },
@@ -190,7 +194,7 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
     ) { padding ->
         // The top bar's inset comes from the scaffold; the bottom follows the keyboard or the nav bar.
         Column(Modifier.padding(top = padding.calculateTopPadding()).fillMaxSize().imePadding().navigationBarsPadding()) {
-            StatusStrip(status, agent?.statusLabel, activity, online = host.online)
+            if (!typing) StatusStrip(status, agent?.statusLabel, activity, online = host.online)
             ChatSurface(
                 Modifier.weight(1f).fillMaxWidth(),
                 composer = {
