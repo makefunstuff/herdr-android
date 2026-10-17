@@ -28,6 +28,11 @@ class HostManager(
 ) {
     private val sessions = MutableStateFlow<Map<String, HostSession>>(emptyMap())
     @Volatile private var foreground = false
+    /** Machines connected for work while the app is closed (a notification's button, a look), with how many uses. */
+    private val borrowed = HashMap<String, Int>()
+
+    /** Whether the app is on screen. */
+    val isForeground: Boolean get() = foreground
 
     /** Live state of every machine, in saved order. */
     val hosts: StateFlow<List<HostState>> = combine(sessions, machines.machines) { map, list ->
@@ -45,6 +50,8 @@ class HostManager(
     }.stateIn(scope, SharingStarted.Eagerly, emptyList())
 
     init {
+        // Now, not on the first collect: a push or an alarm that started the process asks for a session at once.
+        sync(machines.machines.value)
         scope.launch {
             machines.machines.collect { list -> sync(list) }
         }
@@ -55,12 +62,35 @@ class HostManager(
     fun setForeground(value: Boolean) {
         foreground = value
         sessions.value.values.forEach { s ->
-            if (value && s.machine.enabled) s.start() else if (!value) s.stop()
+            if (value && s.machine.enabled) s.start() else if (!value && !isBorrowed(s.machine.id)) s.stop()
         }
     }
 
+    /**
+     * Connects [machineId] for [block] also while the app is closed, and disconnects it after unless
+     * the app came on screen meanwhile or another use still needs it.
+     */
+    suspend fun <T> borrow(machineId: String, block: suspend (HostSession) -> T): T {
+        val s = session(machineId) ?: throw java.io.IOException("This machine isn't in the app any more")
+        synchronized(borrowed) { borrowed[machineId] = (borrowed[machineId] ?: 0) + 1 }
+        s.start()
+        try {
+            return block(s)
+        } finally {
+            val last = synchronized(borrowed) {
+                val n = (borrowed[machineId] ?: 1) - 1
+                if (n <= 0) borrowed.remove(machineId) else borrowed[machineId] = n
+                n <= 0
+            }
+            if (last && !foreground) s.stop()
+        }
+    }
+
+    private fun isBorrowed(id: String) = synchronized(borrowed) { id in borrowed }
+
     fun retryAll() = sessions.value.values.forEach { it.retry() }
 
+    @Synchronized
     private fun sync(list: List<Machine>) {
         val current = sessions.value.toMutableMap()
         val ids = list.map { it.id }.toSet()

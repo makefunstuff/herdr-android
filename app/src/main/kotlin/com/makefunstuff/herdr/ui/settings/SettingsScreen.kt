@@ -98,6 +98,7 @@ fun SettingsScreen() {
                     }
                 }
             }
+            QuietCard(padded = true) { NotificationsCard() }
             QuietCard(padded = true) {
                 Column(verticalArrangement = Arrangement.spacedBy(Space.xs)) {
                     Text("About", style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })

@@ -3,6 +3,8 @@
 // gpu-box and ci-runner are reached through it; mac-mini refuses the app's key.
 package preview
 
+import com.makefunstuff.herdr.push.MachinePush
+import com.makefunstuff.herdr.push.PushState
 import com.makefunstuff.herdr.core.ssh.ConnectError
 import com.makefunstuff.herdr.core.ssh.Machine
 import kotlinx.serialization.json.JsonObject
@@ -35,6 +37,20 @@ object Demo {
 
     private fun machine(id: String, label: String, host: String = label, port: Int = 22, user: String = "demo", via: String? = null) =
         Machine(id = id, label = label, host = host, port = port, user = user, viaMachineId = via, hostKey = FakeMachine(id).fingerprint)
+
+    /** Notifications on: devbox and gpu-box send, ci-runner is left out, mac-mini has no python3. */
+    fun push(): PushState {
+        val endpoint = "https://ntfy.sh/upDemoTopic?up=1"
+        return PushState(
+            on = true, phoneId = "demo-phone", endpoint = endpoint, distributor = "io.heckel.ntfy",
+            machines = mapOf(
+                DEVBOX to MachinePush(key = "demo", sentTo = endpoint, version = "1"),
+                GPU to MachinePush(key = "demo", sentTo = endpoint, version = "1", note = "it stops when you log out (loginctl enable-linger keeps it running)"),
+                CI to MachinePush(off = true),
+                MINI to MachinePush(key = "demo", problem = "herdr-push needs python3 on mac-mini, and it isn't installed"),
+            ),
+        )
+    }
 
     /** What each machine has and answers. */
     fun hosts(): Map<String, FakeMachine> = mapOf(

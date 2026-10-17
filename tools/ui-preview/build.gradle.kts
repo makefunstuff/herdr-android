@@ -47,6 +47,9 @@ val androidOnly = listOf(
     "com/makefunstuff/herdr/ui/terminal/TerminalView.kt",
     "com/makefunstuff/herdr/ui/common/Attach.kt",
     "com/makefunstuff/herdr/core/ssh/SshConnector.kt",
+    "com/makefunstuff/herdr/push/AndroidPush.kt",
+    "com/makefunstuff/herdr/push/AndroidAlerts.kt",
+    "com/makefunstuff/herdr/push/WorkService.kt",
 )
 
 sourceSets.main {

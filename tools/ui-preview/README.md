@@ -20,6 +20,7 @@ Needs JDK 17 and, the first time, network for Gradle to fetch Compose Desktop. E
   - `ui/terminal/TerminalView.kt` (an Android View) → the same grid drawn by the shared `TerminalPainter` on Skia;
   - `ui/common/Attach.kt` (ContentResolver) → no file picker;
   - `core/…/ssh/SshConnector.kt` → connections to the fake machines below;
+  - `push/AndroidPush.kt`, `push/AndroidAlerts.kt` and `push/WorkService.kt` (UnifiedPush, Android's notifications, the service and alarms) are left out: the container stand-in gives the shared push code `preview/PreviewPush.kt` instead (ntfy installed, notifications allowed, nothing posted);
   - `MainActivity.kt` is left out; the scenes render `HerdrRoot` (`AppNav.kt`), as the activity does.
 - `src/main/kotlin/shims/` has the handful of `android.*` and Android-only androidx calls the shared code makes (`Context`, `SharedPreferences`, `Uri`, `LocalContext`, `BackHandler`, `AndroidView`, `Font(resId)`, `R.font`, `BuildConfig`). The app's own fonts come from `app/src/main/res/font`.
 - `preview/FakeMachine.kt` is a herdr machine without SSH: it answers herdr's socket API (`session.snapshot`, `pane.read`, …), the shell commands the app runs (the herdr probe, `session list`, the work board's CLI in `FakeBoard.kt`), and the streams it opens (an agent's transcript, a terminal). Everything above it, `HostSession`, `HerdrApi`, the board client, the transcript readers, is the app's real code.
@@ -38,8 +39,8 @@ Scene("key-setup", key = IdentityStore.State.Missing),
 Scene("chat-blocked", route = Routes.agent(DEVBOX, API_AGENT), setup = { host(DEVBOX).screens += API_AGENT to "…" }),
 ```
 
-- `route` opens a screen by its `Routes` entry; `actions` taps what is on screen: `tapText`, `tapLabel` (an icon's content description), `longPressText`, `type`, and `settle()` to let the app catch up. `ctx.data.host(id)` changes a machine while the app runs, and `ctx.refresh(id)` makes the app read it again (see the `notifications` scene).
-- `setup` changes the demo data before the app starts: `machines`, `hosts` (each a `FakeMachine`: `snapshot`, `screens`, `transcripts`, `board`, `refuse`, or `on("method") { params -> result }` for one API call), `drafts`.
+- `route` opens a screen by its `Routes` entry; `actions` taps what is on screen: `tapText`, `tapLabel` (an icon's content description), `longPressText`, `type`, and `settle()` to let the app catch up. Scrolling never settles in the desktop harness: a scene that needs what is further down sets a taller `heightDp`. `ctx.data.host(id)` changes a machine while the app runs, and `ctx.refresh(id)` makes the app read it again (see the `notifications` scene).
+- `setup` changes the demo data before the app starts: `push` (the notification settings, `Demo.push()`), `pushApps` and `notificationsAllowed` (the phone's side, `PreviewPhone`), `machines`, `hosts` (each a `FakeMachine`: `snapshot`, `screens`, `transcripts`, `board`, `refuse`, or `on("method") { params -> result }` for one API call), `drafts`.
 - Keep the data fixed: no clocks, random ids or files from outside the repo, so a scene renders the same every time.
 
 ## When it doesn't compile

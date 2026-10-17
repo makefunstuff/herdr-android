@@ -29,6 +29,14 @@ dependencies {
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
 }
 
+// The host-side watcher (host/herdr-push) rides along as a resource: the app copies it to a machine.
+sourceSets.main {
+    resources.srcDir("../host/herdr-push")
+    resources.include("herdr-push")
+}
+
 tasks.test {
     useJUnitPlatform()
+    // The interop tests run the watcher itself with python3.
+    systemProperty("herdrPush", file("../host/herdr-push/herdr-push").absolutePath)
 }
