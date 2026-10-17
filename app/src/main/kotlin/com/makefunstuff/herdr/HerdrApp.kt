@@ -10,8 +10,10 @@ import com.makefunstuff.herdr.data.IdentityStore
 import com.makefunstuff.herdr.data.MachineStore
 import com.makefunstuff.herdr.push.AlertWork
 import com.makefunstuff.herdr.push.AndroidAlerts
+import com.makefunstuff.herdr.push.AndroidLive
 import com.makefunstuff.herdr.push.AndroidPhone
 import com.makefunstuff.herdr.push.Inbox
+import com.makefunstuff.herdr.push.LiveWork
 import com.makefunstuff.herdr.push.PushHosts
 import com.makefunstuff.herdr.push.PushStore
 import com.makefunstuff.herdr.push.Wakes
@@ -55,13 +57,15 @@ class AppContainer(app: Application) {
     val inbox = Inbox(java.io.File(app.filesDir, "alerts.json"), AndroidAlerts(app))
     val phone = AndroidPhone(app, push)
     val pushHosts = PushHosts(scope, hosts, machines, push, phone)
-    val alertWork = AlertWork(hosts, machines, push, inbox)
+    val liveWork = LiveWork(scope, hosts, machines, push, AndroidLive(app))
+    val alertWork = AlertWork(hosts, machines, push, inbox, liveWork)
 
     init {
         // Read the key up front so the public key is ready to show. A missing key is never made
         // here: the first launch offers to restore one first.
         scope.launch { runCatching { identity.load() } }
         pushHosts.start()
+        liveWork.start()
         // The push app's address may have lapsed while the app was closed: ask again, it answers with the same or a new one.
         if (push.state.value.on) phone.register()
     }

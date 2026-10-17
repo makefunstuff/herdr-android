@@ -42,6 +42,12 @@ interface PushPhone {
 
     fun openNotificationSettings()
 
+    /** Whether Android shows the app's Live Updates as such (Android 16 and later; the person can turn them off). Null before Android 16. */
+    fun liveAllowed(): Boolean?
+
+    /** Opens Android's switch for the app's Live Updates. */
+    fun openLiveSettings()
+
     /** Opens the store (or ntfy's page) to get a push app. */
     fun getPushApp()
 

@@ -4,6 +4,7 @@ import com.makefunstuff.herdr.core.api.AgentStatus
 import com.makefunstuff.herdr.core.api.HerdrApi
 import com.makefunstuff.herdr.core.api.SessionSnapshot
 import com.makefunstuff.herdr.core.board.BoardClient
+import com.makefunstuff.herdr.core.board.BoardTask
 import com.makefunstuff.herdr.core.ssh.HerdrCommands.quote
 import com.makefunstuff.herdr.core.ssh.MachineConnection
 import kotlinx.coroutines.CancellationException
@@ -75,6 +76,7 @@ object HerdrPush {
         session: String,
         herdrPath: String?,
         boardPath: String?,
+        live: Boolean = false,
     ): String = buildJsonObject {
         put("id", id)
         put("name", phoneName)
@@ -83,6 +85,8 @@ object HerdrPush {
         put("session", session.ifEmpty { "default" })
         herdrPath?.takeIf { it.isNotBlank() }?.let { put("herdr", it) }
         boardPath?.takeIf { it.isNotBlank() }?.let { put("board", it) }
+        // Live Updates: also what is running, as it changes.
+        if (live) put("live", true)
     }.toString()
 
     /** herdr-push's answer: its last JSON line with an `ok`. */
@@ -142,7 +146,14 @@ object HerdrPush {
 /** The app's own look at a machine while it is closed: what herdr-push would have sent about it. */
 object PushLook {
     /** Every agent and, with [board], every task, as events; the notifications sort out what is new. */
-    suspend fun events(api: HerdrApi, snapshot: SessionSnapshot, board: BoardClient?): List<PushEvent> {
+    suspend fun events(api: HerdrApi, snapshot: SessionSnapshot, board: BoardClient?): List<PushEvent> =
+        events(api, snapshot, board?.let { tasks(it) })
+
+    /** The board's tasks, or null when it didn't answer. */
+    suspend fun tasks(board: BoardClient): List<BoardTask>? =
+        runCatching { board.tasks() }.getOrElse { if (it is CancellationException) throw it; null }
+
+    suspend fun events(api: HerdrApi, snapshot: SessionSnapshot, tasks: List<BoardTask>?): List<PushEvent> {
         val agents = snapshot.agents.map { a ->
             val screen = if (a.agentStatus == AgentStatus.Blocked) {
                 try {
@@ -155,8 +166,6 @@ object PushLook {
             } else null
             PushEvent.Agent(a, snapshot.location(a.workspaceId, a.tabId), screen)
         }
-        val tasks = board?.let { b -> runCatching { b.tasks() }.getOrElse { if (it is CancellationException) throw it; emptyList() } }
-            .orEmpty().map { PushEvent.Task(it) }
-        return agents + tasks
+        return agents + tasks.orEmpty().map { PushEvent.Task(it) }
     }
 }

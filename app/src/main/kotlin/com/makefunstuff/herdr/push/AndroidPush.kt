@@ -121,6 +121,16 @@ class AndroidPhone(private val context: Context, private val store: PushStore) :
         runCatching { context.startActivity(direct.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
     }
 
+    override fun liveAllowed(): Boolean? {
+        if (Build.VERSION.SDK_INT < 36) return null
+        return runCatching { context.getSystemService(NotificationManager::class.java).canPostPromotedNotifications() }.getOrNull()
+    }
+
+    override fun openLiveSettings() {
+        val direct = Intent(Settings.ACTION_APP_NOTIFICATION_PROMOTION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+        runCatching { context.startActivity(direct.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }.onFailure { openNotificationSettings() }
+    }
+
     override fun getPushApp() {
         val store = Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=${UnifiedPush.NTFY}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         runCatching { context.startActivity(store) }.onFailure {

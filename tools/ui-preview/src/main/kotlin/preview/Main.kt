@@ -74,6 +74,8 @@ class SceneData {
     /** The phone's push apps (packages) and whether it lets the app notify. */
     var pushApps: List<String> = listOf("io.heckel.ntfy")
     var notificationsAllowed: Boolean = true
+    /** Whether Android shows Live Updates as such (null: before Android 16). */
+    var liveAllowed: Boolean? = true
     fun host(id: String): FakeMachine = hosts.getValue(id)
 }
 
@@ -116,6 +118,7 @@ fun render(scene: Scene, dark: Boolean, file: File) {
     data.push?.let { context.filesDir.resolve("push.json").writeText(Json.encodeToString(PushState.serializer(), it)) }
     PreviewPhone.apps = data.pushApps
     PreviewPhone.allowed = data.notificationsAllowed
+    PreviewPhone.liveAllowed = data.liveAllowed
     IdentityStore.initial = scene.key
     FakeMachines.machines = data.hosts
     Toasts.dismiss()

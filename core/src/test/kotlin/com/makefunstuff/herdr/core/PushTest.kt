@@ -9,7 +9,11 @@ import com.makefunstuff.herdr.core.push.AlertAction
 import com.makefunstuff.herdr.core.push.AlertChange
 import com.makefunstuff.herdr.core.push.Alerts
 import com.makefunstuff.herdr.core.push.HerdrPush
+import com.makefunstuff.herdr.core.push.LiveItem
+import com.makefunstuff.herdr.core.push.LiveItems
+import com.makefunstuff.herdr.core.push.LiveTracker
 import com.makefunstuff.herdr.core.push.PushEvent
+import com.makefunstuff.herdr.core.push.PushMessage
 import com.makefunstuff.herdr.core.push.PushMessages
 import com.makefunstuff.herdr.core.push.PushSeal
 import com.sun.net.httpserver.HttpServer
@@ -211,7 +215,7 @@ class HerdrPushTest {
     @Test
     fun bundledScriptIsTheOneInHost() {
         assertEquals(script.readText(), HerdrPush.script)
-        assertEquals("1", HerdrPush.version)
+        assertEquals("2", HerdrPush.version)
     }
 
     @Test
@@ -314,7 +318,7 @@ class HerdrPushTest {
             val (_, t) = assertNotNull(PushMessages.open(received[2], mapOf("m1" to key)))
             assertEquals(listOf<PushEvent>(PushEvent.Test), t.events)
             val status = HerdrPush.status(assertNotNull(HerdrPush.answer(sh(dir, env, HerdrPush.command("status")).out)), "phone1:m1")
-            assertEquals("1", status.version)
+            assertEquals("2", status.version)
             assertTrue(status.subscribed)
             assertNull(status.error)
 
@@ -393,6 +397,114 @@ class HerdrPushTest {
             val after = assertNotNull(HerdrPush.answer(sh(dir, env, HerdrPush.command("status")).out))
             assertTrue(!HerdrPush.status(after, a).subscribed)
             assertTrue(HerdrPush.status(after, b).subscribed)
+        } finally {
+            server.stop(0)
+            dir.deleteRecursively()
+        }
+    }
+
+    /** Live Updates: what runs goes to a phone that asked for it, at once when it starts, stops or moves on, and not to one that didn't. */
+    @Test
+    fun liveUpdates() {
+        assumeTrue(python(), "python3 isn't installed")
+        val dir = Files.createTempDirectory("herdr-push").toFile()
+        val received = CopyOnWriteArrayList<Pair<String, String>>()
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+        server.createContext("/") { ex ->
+            received += ex.requestURI.path to ex.requestBody.readBytes().toString(Charsets.UTF_8)
+            ex.sendResponseHeaders(200, -1)
+            ex.close()
+        }
+        server.start()
+        try {
+            val fake = File(dir, "fake").apply { mkdirs() }
+            val herdr = File(fake, "herdr").apply {
+                writeText("#!/bin/sh\ncase \"\$1 \$2\" in\n\"api snapshot\") cat \"\$FAKE/snapshot.json\";;\n\"pane read\") echo;;\n*) exit 3;;\nesac\n")
+                setExecutable(true)
+            }
+            // `show <id>` answers the task's settings, review.rounds among them.
+            val board = File(fake, "herdr-projects").apply {
+                writeText(
+                    "#!/bin/sh\nif [ \"\$2\" = --json ]; then cat \"\$FAKE/tasks.json\"; elif [ \"\$1\" = show ]; then " +
+                        "echo \"  review.mustFix   major   built in\"; echo \"  review.rounds     3       built in\"; " +
+                        "else echo \"AND-7    working  [claude]  Board view\"; fi\n",
+                )
+                setExecutable(true)
+            }
+            fun agents(status: String) = File(fake, "snapshot.json").writeText(
+                """{"result":{"snapshot":{"workspaces":[{"workspace_id":"w1","label":"api"}],"tabs":[{"tab_id":"t1","label":"agents"}],
+                "agents":[{"pane_id":"w1:p1","workspace_id":"w1","tab_id":"t1","agent":"claude","name":"api","title":"Speed up /jobs","agent_status":"$status","state_change_seq":4}]}}}""",
+            )
+            fun task(json: String) = File(fake, "tasks.json").writeText("""[{"id":"herdr-android/7","title":"Board view","app":"claude",$json}]""")
+            agents("working")
+            task(""""state":"working","stage":"working","msg":"Writing the list","progress":40""")
+
+            val env = mapOf("HOME" to dir.path, "FAKE" to fake.path, "HERDR_PUSH_HOME" to File(dir, "state").path)
+            assertEquals(0, sh(dir, env, HerdrPush.installCommand(), HerdrPush.script).exit)
+            val base = "http://127.0.0.1:${server.address.port}"
+            val key = PushSeal.newKey()
+            val plainKey = PushSeal.newKey()
+            sh(dir, env, HerdrPush.command("subscribe"), HerdrPush.subscription("phone1:m1", "Pixel", "$base/live", key, "default", herdr.path, board.path, live = true))
+            sh(dir, env, HerdrPush.command("subscribe"), HerdrPush.subscription("phone2:m1", "Old", "$base/plain", plainKey, "default", herdr.path, board.path))
+            fun pushes(path: String, k: ByteArray) = received.filter { it.first == path }.map { assertNotNull(PushMessages.open(it.second, mapOf("m1" to k))).second }
+            fun live(msg: PushMessage) = msg.events.filterIsInstance<PushEvent.Live>().single()
+
+            // The first look sends what runs (the notifications only learn how things stand).
+            assertEquals(0, sh(dir, env, HerdrPush.command("once")).exit)
+            val first = pushes("/live", key).single()
+            assertEquals(1, first.events.size)
+            val (agentItems, taskItems) = LiveItems.of("m1", "devbox", live(first), first.at, System.currentTimeMillis())
+            assertEquals("api", agentItems!!.single().title)
+            assertEquals("Working · Speed up /jobs · api › agents", agentItems.single().text)
+            val t = taskItems!!.single()
+            assertEquals("AND-7 Board view", t.title)
+            assertEquals("40%", t.chip)
+            assertTrue(t.since > 0 && System.currentTimeMillis() - t.since < 60_000)
+            assertTrue(pushes("/plain", plainKey).isEmpty(), "a phone without Live Updates gets none")
+
+            // Nothing new, or only progress (sent at most every 90 s): no push.
+            assertEquals(0, sh(dir, env, HerdrPush.command("once")).exit)
+            task(""""state":"working","stage":"working","msg":"Writing the list","progress":45""")
+            assertEquals(0, sh(dir, env, HerdrPush.command("once")).exit)
+            assertEquals(1, received.size)
+
+            // On to review, round 2: at once, with the most reviews from the task's settings. Its reviewer
+            // works in the task's workspace (the board names it after the task), beside its worker.
+            task(""""state":"working","stage":"reviewing","msg":"Reviewing","reviewRound":2""")
+            File(fake, "snapshot.json").writeText(
+                """{"result":{"snapshot":{"workspaces":[{"workspace_id":"w1","label":"api"},{"workspace_id":"w7","label":"AND-7 Board view"}],
+                "tabs":[{"tab_id":"t1","label":"agents"},{"tab_id":"t7","label":"Agent"},{"tab_id":"t8","label":"Reviewer #2"}],
+                "agents":[{"pane_id":"w1:p1","workspace_id":"w1","tab_id":"t1","agent":"claude","name":"api","title":"Speed up /jobs","agent_status":"working","state_change_seq":4},
+                {"pane_id":"w7:p1","workspace_id":"w7","tab_id":"t7","agent":"claude","name":"sw-herdr-android-7","title":"AND-7 Board view","agent_status":"working"},
+                {"pane_id":"w7:p2","workspace_id":"w7","tab_id":"t8","agent":"claude","name":"sw-task-7-r","agent_status":"working"}]}}}""",
+            )
+            assertEquals(0, sh(dir, env, HerdrPush.command("once")).exit)
+            val review = pushes("/live", key)
+            assertEquals(2, review.size)
+            val (reviewAgents, reviewTasks) = LiveItems.of("m1", "devbox", live(review[1]), review[1].at, System.currentTimeMillis())
+            val reviewed = reviewTasks!!.single()
+            assertEquals("Rev 2/4", reviewed.chip)
+            assertEquals("Review 2 of 4 · Reviewing", reviewed.text)
+            assertEquals(listOf("api", "AND-7 Board view", "AND-7 Board view"), reviewAgents!!.map { it.workspace })
+            // On the phone: the task, and the agent that isn't the task's. Its worker and reviewer are the task.
+            val tracker = LiveTracker()
+            tracker.update("m1", LiveItem.Kind.Agent, reviewAgents)
+            tracker.update("m1", LiveItem.Kind.Task, reviewTasks)
+            assertEquals(listOf("live:agent:m1:w1:p1", "live:task:m1:herdr-android/7"), tracker.items().map { it.tag })
+
+            // The agent asks and the task waits for approval: their notifications, and nothing runs any more.
+            agents("blocked")
+            task(""""state":"blocked","stage":"approval","kind":"permission","review":{"pass":true}""")
+            assertEquals(0, sh(dir, env, HerdrPush.command("once")).exit)
+            val last = pushes("/live", key).last()
+            assertEquals(listOf("api needs you", "AND-7 ready to approve"), Alerts.all("m1", "devbox", last.events).map { (it as AlertChange.Show).alert.title })
+            val (noAgents, noTasks) = LiveItems.of("m1", "devbox", live(last), last.at, 0)
+            assertEquals(emptyList(), noAgents)
+            assertEquals(emptyList(), noTasks)
+            // The other phone got the same notifications, without the live part.
+            val plain = pushes("/plain", plainKey).single()
+            assertTrue(plain.events.none { it is PushEvent.Live })
+            assertEquals(2, plain.events.size)
         } finally {
             server.stop(0)
             dir.deleteRecursively()

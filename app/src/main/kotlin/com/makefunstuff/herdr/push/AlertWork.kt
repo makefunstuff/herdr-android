@@ -27,6 +27,7 @@ class AlertWork(
     private val machines: MachineStore,
     private val store: PushStore,
     private val inbox: Inbox,
+    private val live: LiveWork,
 ) {
     /** A push from a push app: opened with the machine's key and shown. False when it isn't one of ours. */
     fun received(text: String, now: Long = System.currentTimeMillis()): Boolean {
@@ -36,7 +37,8 @@ class AlertWork(
         val last = store.state.value.machine(machineId).lastAt
         if (!PushMessages.fresh(msg.at, last, now / 1000)) return true
         if (msg.at > last) store.machine(machineId) { it.copy(lastAt = msg.at) }
-        val changes = msg.events.map { Alerts.of(machineId, label, it, msg.host) }
+        val changes = Alerts.all(machineId, label, msg.events, msg.host)
+        msg.events.filterIsInstance<com.makefunstuff.herdr.core.push.PushEvent.Live>().forEach { live.received(machineId, label, it, msg.at, now) }
         if (msg.events.any { it is com.makefunstuff.herdr.core.push.PushEvent.Test }) {
             store.machine(machineId) { it.copy(testedAt = now, problem = null) }
         }
@@ -122,8 +124,11 @@ class AlertWork(
         val api = s.awaitApi(30_000)
         s.checkBoard()
         val board = if (s.state.value.hasBoard) s.awaitBoard() else null
-        val events = PushLook.events(api, api.snapshot(), board)
-        inbox.apply(events.map { Alerts.of(machineId, s.machine.label, it) }, quiet = hosts.isForeground)
+        val snapshot = api.snapshot()
+        val tasks = board?.let { PushLook.tasks(it) }
+        val events = PushLook.events(api, snapshot, tasks)
+        inbox.apply(Alerts.all(machineId, s.machine.label, events), quiet = hosts.isForeground)
+        live.looked(machineId, s.machine.label, snapshot, tasks)
     }
 
     /** As the app leaves the screen: what its machines show now was seen, so a later look stays quiet about it. */

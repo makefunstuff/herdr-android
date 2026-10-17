@@ -4,6 +4,7 @@ import com.makefunstuff.herdr.core.api.AgentInfo
 import com.makefunstuff.herdr.core.api.HerdrJson
 import com.makefunstuff.herdr.core.board.BoardTask
 import com.makefunstuff.herdr.core.board.BoardTasks
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
@@ -17,7 +18,19 @@ sealed interface PushEvent {
     data class Task(val task: BoardTask) : PushEvent
 
     data object Test : PushEvent
+
+    /**
+     * What runs on the machine now, for Live Updates: every working agent and, where the machine has
+     * the board, every running task. A list that is null wasn't looked at; the one before still holds.
+     */
+    data class Live(val agents: List<LiveAgent>?, val tasks: List<LiveTask>?) : PushEvent
 }
+
+/** A working agent; [since] is when it started working (the machine's clock, seconds; 0 unknown). [workspace]: its workspace's label. */
+data class LiveAgent(val agent: AgentInfo, val where: String, val since: Long = 0, val workspace: String = "")
+
+/** A running task; [reviews] is how many reviews it gets at most, when known. [since]: when its current part began. */
+data class LiveTask(val task: BoardTask, val reviews: Int? = null, val since: Long = 0)
 
 /** A push from herdr-push (host/herdr-push): `{"v":1,"host":…,"at":…,"events":[…]}`, sealed. */
 data class PushMessage(val host: String, val at: Long, val events: List<PushEvent>)
@@ -48,7 +61,7 @@ object PushMessages {
 
     fun parse(json: String): PushMessage? {
         val o = runCatching { HerdrJson.parseToJsonElement(json).jsonObject }.getOrNull() ?: return null
-        val events = (o["events"] as? kotlinx.serialization.json.JsonArray).orEmpty().mapNotNull { e -> event(e as? JsonObject ?: return@mapNotNull null) }
+        val events = (o["events"] as? JsonArray).orEmpty().mapNotNull { e -> event(e as? JsonObject ?: return@mapNotNull null) }
         return PushMessage(o.str("host"), (o["at"] as? JsonPrimitive)?.longOrNull ?: 0, events)
     }
 
@@ -58,8 +71,22 @@ object PushMessages {
         }?.let { PushEvent.Agent(it, e.str("where"), e.str("screen").ifEmpty { null }) }
         "task" -> (e["task"] as? JsonObject)?.let { BoardTasks.task(it, e.str("key")) }?.let { PushEvent.Task(it) }
         "test" -> PushEvent.Test
+        "live" -> PushEvent.Live(
+            agents = (e["agents"] as? JsonArray)?.mapNotNull { x ->
+                val o = x as? JsonObject ?: return@mapNotNull null
+                val a = (o["agent"] as? JsonObject)?.let { runCatching { HerdrJson.decodeFromJsonElement(AgentInfo.serializer(), it) }.getOrNull() }
+                a?.let { LiveAgent(it, o.str("where"), o.long("since"), o.str("workspace")) }
+            },
+            tasks = (e["tasks"] as? JsonArray)?.mapNotNull { x ->
+                val o = x as? JsonObject ?: return@mapNotNull null
+                (o["task"] as? JsonObject)?.let { BoardTasks.task(it, o.str("key")) }
+                    ?.let { LiveTask(it, o.long("reviews").takeIf { r -> r > 0 }?.toInt(), o.long("since")) }
+            },
+        )
         else -> null
     }
+
+    private fun JsonObject.long(key: String): Long = (this[key] as? JsonPrimitive)?.takeIf { !it.isString }?.longOrNull ?: 0
 
     private fun JsonObject.str(key: String): String = (this[key] as? JsonPrimitive)?.takeIf { it.isString }?.content.orEmpty()
 }

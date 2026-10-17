@@ -15,12 +15,13 @@ import androidx.core.app.ServiceCompat
 import com.makefunstuff.herdr.HerdrApp
 import com.makefunstuff.herdr.R
 import com.makefunstuff.herdr.core.push.Alert
+import com.makefunstuff.herdr.core.push.LiveItem
 import kotlinx.coroutines.launch
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Work that has to finish while the app is closed: a notification's button (Approve, a reply, Approve
- * and merge…) and the app's own look at its machines when an alarm rings. A foreground service, so
+ * and merge…, a Live Update's Stop) and the app's own look at its machines when an alarm rings. A foreground service, so
  * Android lets it connect over SSH and keeps it alive until the work is done.
  */
 class WorkService : Service() {
@@ -35,6 +36,7 @@ class WorkService : Service() {
         val action = intent?.action
         val words = when (action) {
             ACT -> "Answering…"
+            LIVE_STOP -> "Stopping…"
             CHECK -> "Looking at your machines…"
             else -> null
         }
@@ -58,6 +60,10 @@ class WorkService : Service() {
                         val text = RemoteInput.getResultsFromIntent(intent)?.getCharSequence(REPLY)?.toString()
                         if (alert != null && chosen != null) container.alertWork.perform(alert, chosen, text)
                     }
+                    LIVE_STOP -> {
+                        val item = intent.getStringExtra(LIVE)?.let { runCatching { AndroidAlerts.json.decodeFromString(LiveItem.serializer(), it) }.getOrNull() }
+                        if (item != null) container.liveWork.stop(item)
+                    }
                     CHECK -> container.alertWork.checkAll()
                 }
             } finally {
@@ -74,6 +80,9 @@ class WorkService : Service() {
     companion object {
         const val ACT = "com.makefunstuff.herdr.ACT"
         const val CHECK = "com.makefunstuff.herdr.CHECK"
+        /** A Live Update's Stop. */
+        const val LIVE_STOP = "com.makefunstuff.herdr.LIVE_STOP"
+        const val LIVE = "live"
         const val ALERT = "alert"
         const val INDEX = "index"
         const val REPLY = "reply"
