@@ -56,6 +56,7 @@ import com.makefunstuff.herdr.ui.coordinator.CoordinatorScreen
 import com.makefunstuff.herdr.ui.design.HerdrIcons
 import com.makefunstuff.herdr.ui.design.HerdrNavBar
 import com.makefunstuff.herdr.ui.design.NavItem
+import com.makefunstuff.herdr.ui.health.HealthScreen
 import com.makefunstuff.herdr.ui.layout.LayoutScreen
 import com.makefunstuff.herdr.ui.machines.EditMachineScreen
 import com.makefunstuff.herdr.ui.machines.MachineScreen
@@ -109,6 +110,7 @@ object Routes {
     const val BOARD = "board/{mid}?task={task}"
     const val ADMIN = "admin/{mid}?tab={tab}"
     const val WORKTREES = "worktrees/{mid}?ws={ws}"
+    const val HEALTH = "health/{mid}"
     /** From outside the app (the tile, the widgets, a share): see [com.makefunstuff.herdr.ui.share.Ask]. */
     const val ASK = "ask/{to}"
 
@@ -121,6 +123,7 @@ object Routes {
     fun ask(to: String) = "ask/$to"
     fun board(mid: String, task: String? = null) = if (task == null) "board/$mid" else "board/$mid?task=${Uri.encode(task)}"
     fun admin(mid: String, tab: Int = 0) = "admin/$mid?tab=$tab"
+    fun health(mid: String) = "health/$mid"
     fun worktrees(mid: String, workspaceId: String? = null) =
         if (workspaceId == null) "worktrees/$mid" else "worktrees/$mid?ws=${Uri.encode(workspaceId)}"
 
@@ -223,6 +226,7 @@ private fun AppNav(nav: NavHostController) {
                         composable(Routes.WORKTREES) {
                             WorktreesScreen(nav, it.arguments?.getString("mid").orEmpty(), it.arguments?.getString("ws")?.let(Uri::decode))
                         }
+                        composable(Routes.HEALTH) { HealthScreen(nav, it.arguments?.getString("mid").orEmpty()) }
                         composable(Routes.BOARD) {
                             BoardScreen(nav, it.arguments?.getString("mid").orEmpty(), it.arguments?.getString("task")?.let(Uri::decode))
                         }

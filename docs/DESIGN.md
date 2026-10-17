@@ -82,6 +82,10 @@ carries ink, as in the web UI.
 | Done | `--status-done` | `#93C36B` | `#2F6317` | done | ready to approve, done |
 | Idle | `--status-idle` | `#9B9183` | `#685E52` | idle, other | to do, queued, archived |
 
+A chart's series (a machine's RAM and CPU over the hour) take `chart1` (blue) and `chart2`
+(orange): not states and not amber, checked for colour-blind separation and 3:1 on `card` in both
+themes. The second series is also dashed, and a legend names both.
+
 The board's task statuses fold onto the same four (`HerdrColors.tone`), so a task and an agent
 in the same state look the same; the board's written status always tells them apart. A machine's
 dot follows the web UI's PC dot: done = connected, working = connecting, blocked = error, idle =

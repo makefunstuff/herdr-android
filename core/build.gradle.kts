@@ -39,4 +39,12 @@ tasks.test {
     useJUnitPlatform()
     // The interop tests run the watcher itself with python3.
     systemProperty("herdrPush", file("../host/herdr-push/herdr-push").absolutePath)
+    // A failure says why in the build's own log (CI shows nothing else): its message and where.
+    testLogging {
+        events("failed", "skipped")
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+        showExceptions = true
+        showCauses = true
+        showStackTraces = true
+    }
 }

@@ -84,6 +84,7 @@ import com.makefunstuff.herdr.ui.design.MenuRow
 import com.makefunstuff.herdr.ui.design.Notice
 import com.makefunstuff.herdr.ui.design.QuietButton
 import com.makefunstuff.herdr.ui.design.QuietCard
+import com.makefunstuff.herdr.ui.health.HealthCard
 import com.makefunstuff.herdr.ui.manage.NoticeRow
 import com.makefunstuff.herdr.ui.manage.NoticesSheet
 import com.makefunstuff.herdr.ui.manage.NotifySheet
@@ -163,6 +164,7 @@ fun MachineScreen(nav: NavController, machineId: String) {
                         }
                     })
                     MenuRow("Worktrees", HerdrIcons.FolderGit2, { menu = false; nav.navigate(Routes.worktrees(machineId)) })
+                    MenuRow("Health and cleanup", HerdrIcons.Activity, { menu = false; nav.navigate(Routes.health(machineId)) })
                     MenuRow("Edit machine", HerdrIcons.Pencil, { menu = false; nav.navigate(Routes.edit(machineId)) })
                 }
             }
@@ -185,6 +187,7 @@ fun MachineScreen(nav: NavController, machineId: String) {
                 item(key = "board") { BoardCard(state.machine.label, showMachine = false) { panes.openBoard(nav, machineId) } }
                 item(key = "coordinator") { CoordinatorCard(state.machine.label, showMachine = false) { nav.navigate(Routes.coordinator(machineId)) } }
             }
+            if (state.online) item(key = "health") { HealthCard(session) { nav.navigate(Routes.health(machineId)) } }
             if (snap.workspaces.isEmpty()) {
                 item { Text("No workspaces yet. Tap New to create one.", color = Herdr.colors.muted, style = MaterialTheme.typography.bodyMedium) }
             }

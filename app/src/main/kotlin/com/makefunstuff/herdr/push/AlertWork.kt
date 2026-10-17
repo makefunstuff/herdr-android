@@ -4,6 +4,9 @@ import com.makefunstuff.herdr.core.api.AgentStatus
 import com.makefunstuff.herdr.core.board.BoardAction
 import com.makefunstuff.herdr.core.chat.AgentInput
 import com.makefunstuff.herdr.core.chat.BlockedPrompt
+import com.makefunstuff.herdr.core.health.HealthClient
+import com.makefunstuff.herdr.core.health.HealthReport
+import com.makefunstuff.herdr.core.health.ProcLabels
 import com.makefunstuff.herdr.core.host.HostSession
 import com.makefunstuff.herdr.core.push.Alert
 import com.makefunstuff.herdr.core.push.AlertAction
@@ -134,6 +137,12 @@ class AlertWork(
         tasks?.let { tally.tasks(machineId, it) }
         inbox.apply(Alerts.all(machineId, s.machine.label, events), quiet = hosts.isForeground, hold = quiet.check())
         live.looked(machineId, s.machine.label, snapshot, tasks)
+        // Low on RAM or disk, for a machine without herdr-push (where it runs, the push said so already: shown once).
+        val conn = s.awaitConnection()
+        runCatching { HealthClient { cmd, timeout -> conn.run(cmd, timeout) }.sample() }.getOrNull()?.let { sample ->
+            val report = HealthReport.of(sample, ProcLabels.label(sample, null, snapshot)) ?: return@let
+            inbox.apply(listOf(Alerts.health(machineId, s.machine.label, report)), quiet = hosts.isForeground, hold = quiet.check())
+        }
     }
 
     /** As the app leaves the screen: what its machines show now was seen, so a later look stays quiet about it. */
