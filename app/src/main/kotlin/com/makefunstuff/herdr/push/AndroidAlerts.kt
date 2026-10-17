@@ -1,0 +1,118 @@
+package com.makefunstuff.herdr.push
+
+import android.Manifest
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Build
+import androidx.core.app.ActivityCompat
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
+import androidx.core.app.RemoteInput
+import com.makefunstuff.herdr.MainActivity
+import com.makefunstuff.herdr.R
+import com.makefunstuff.herdr.core.push.Alert
+import kotlinx.serialization.json.Json
+
+/** [AlertSink] on Android: notifications with their buttons, on two channels. */
+class AndroidAlerts(private val context: Context) : AlertSink {
+    private val nm = NotificationManagerCompat.from(context)
+
+    init {
+        val system = context.getSystemService(NotificationManager::class.java)
+        system.createNotificationChannels(
+            listOf(
+                NotificationChannel(NEEDS_YOU, "Needs you", NotificationManager.IMPORTANCE_HIGH).apply {
+                    description = "An agent asks something, or a board task waits for you"
+                },
+                NotificationChannel(FINISHED, "Finished", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                    description = "An agent finished its work"
+                },
+                NotificationChannel(WORKING, "Working", NotificationManager.IMPORTANCE_LOW).apply {
+                    description = "While the app answers from a notification or looks at your machines"
+                    setShowBadge(false)
+                },
+            ),
+        )
+    }
+
+    override fun show(alert: Alert, quiet: Boolean, note: String?) {
+        val b = base(alert, quiet || note != null)
+            .setContentText(note ?: alert.text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(listOfNotNull(note, alert.detail.ifEmpty { alert.text }).joinToString("\n\n")))
+        alert.actions.take(3).forEachIndexed { i, a ->
+            val action = NotificationCompat.Action.Builder(0, a.label, actionIntent(alert, i, a.reply))
+            if (a.reply) {
+                action.addRemoteInput(RemoteInput.Builder(WorkService.REPLY).setLabel(a.hint.ifEmpty { a.label }).build())
+                    .setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_REPLY)
+                    .setAllowGeneratedReplies(false)
+            }
+            b.addAction(action.build())
+        }
+        post(alert.tag, b)
+    }
+
+    override fun working(alert: Alert, words: String) {
+        post(alert.tag, base(alert, quiet = true).setContentText(words).setProgress(0, 0, true).setOngoing(true))
+    }
+
+    override fun finished(alert: Alert, words: String) {
+        post(alert.tag, base(alert, quiet = true).setContentText(words).setStyle(NotificationCompat.BigTextStyle().bigText(words)).setTimeoutAfter(6_000))
+    }
+
+    override fun cancel(tag: String) = nm.cancel(tag, ID)
+
+    private fun base(alert: Alert, quiet: Boolean): NotificationCompat.Builder =
+        NotificationCompat.Builder(context, if (alert.kind == Alert.Kind.NeedsYou) NEEDS_YOU else FINISHED)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setColor(0xFFF0A830.toInt())
+            .setContentTitle(alert.title)
+            .setContentIntent(openIntent(alert))
+            .setAutoCancel(true)
+            .setSilent(quiet)
+            .setCategory(if (alert.kind == Alert.Kind.NeedsYou) NotificationCompat.CATEGORY_MESSAGE else NotificationCompat.CATEGORY_STATUS)
+            .setPriority(if (alert.kind == Alert.Kind.NeedsYou) NotificationCompat.PRIORITY_HIGH else NotificationCompat.PRIORITY_DEFAULT)
+
+    private fun post(tag: String, b: NotificationCompat.Builder) {
+        // Without the permission there is nothing to post; the app's Settings say so.
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ActivityCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) return
+        runCatching { nm.notify(tag, ID, b.build()) }
+    }
+
+    /** A tap: the agent's chat, or the task on the board. */
+    private fun openIntent(alert: Alert): PendingIntent {
+        val intent = Intent(context, MainActivity::class.java)
+            .setData(Uri.parse("herdr://alert/${Uri.encode(alert.tag)}"))
+            .putExtra(MainActivity.OPEN_MACHINE, alert.machineId)
+            .putExtra(MainActivity.OPEN_PANE, alert.paneId)
+            .putExtra(MainActivity.OPEN_TASK, alert.taskId)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        return PendingIntent.getActivity(context, alert.tag.hashCode(), intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+    }
+
+    /** A button: carried out by [WorkService], which may start from a notification while the app is closed. */
+    private fun actionIntent(alert: Alert, index: Int, reply: Boolean): PendingIntent {
+        val intent = Intent(context, WorkService::class.java)
+            .setAction(WorkService.ACT)
+            .setData(Uri.parse("herdr://alert/${Uri.encode(alert.tag)}/$index"))
+            .putExtra(WorkService.ALERT, json.encodeToString(Alert.serializer(), alert))
+            .putExtra(WorkService.INDEX, index)
+        // A reply's intent must be mutable for Android to add the words to it.
+        val flags = PendingIntent.FLAG_UPDATE_CURRENT or if (reply) PendingIntent.FLAG_MUTABLE else PendingIntent.FLAG_IMMUTABLE
+        return PendingIntent.getForegroundService(context, alert.tag.hashCode() * 31 + index, intent, flags)
+    }
+
+    companion object {
+        const val NEEDS_YOU = "needs-you"
+        const val FINISHED = "finished"
+        const val WORKING = "working"
+        private const val ID = 1
+        val json = Json { ignoreUnknownKeys = true }
+    }
+}

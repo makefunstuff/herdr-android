@@ -55,6 +55,7 @@ import com.makefunstuff.herdr.core.board.BoardFilter
 import com.makefunstuff.herdr.core.board.BoardStatus
 import com.makefunstuff.herdr.core.board.BoardTask
 import com.makefunstuff.herdr.core.chat.Markdown
+import com.makefunstuff.herdr.core.push.Alerts
 import com.makefunstuff.herdr.ui.common.EmptyState
 import com.makefunstuff.herdr.ui.common.LocalContainer
 import com.makefunstuff.herdr.ui.common.MarkdownText
@@ -113,7 +114,7 @@ sealed interface Pending {
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun BoardScreen(nav: NavController, machineId: String) {
+fun BoardScreen(nav: NavController, machineId: String, openTask: String? = null) {
     val container = LocalContainer.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -132,7 +133,9 @@ fun BoardScreen(nav: NavController, machineId: String) {
     var repo by rememberSaveable { mutableStateOf("") }
     var machine by rememberSaveable { mutableStateOf("") }
     var menu by remember { mutableStateOf(false) }
-    var openId by rememberSaveable { mutableStateOf<String?>(null) }
+    var openId by rememberSaveable { mutableStateOf(openTask) }
+    // An open task's notification has done its job.
+    LaunchedEffect(openId) { openId?.let { container.inbox.dismiss(Alerts.taskTag(machineId, it)) } }
     var actionsFor by remember { mutableStateOf<BoardTask?>(null) }
     var pending by remember { mutableStateOf<Pending?>(null) }
     var busy by remember { mutableStateOf<String?>(null) }

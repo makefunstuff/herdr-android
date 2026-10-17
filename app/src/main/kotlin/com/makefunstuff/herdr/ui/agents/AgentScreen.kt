@@ -40,6 +40,7 @@ import com.makefunstuff.herdr.Routes
 import com.makefunstuff.herdr.core.api.AgentStatus
 import com.makefunstuff.herdr.core.chat.AgentChat
 import com.makefunstuff.herdr.core.chat.AgentInput
+import com.makefunstuff.herdr.core.push.Alerts
 import com.makefunstuff.herdr.core.chat.ChatItem
 import com.makefunstuff.herdr.ui.common.EmptyState
 import com.makefunstuff.herdr.ui.common.LocalContainer
@@ -89,6 +90,9 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
 
     // What the agent is working on: herdr's title for it, or the title the agent gives its terminal.
     val activity = agent?.let { it.title?.takeIf { t -> t.isNotBlank() } ?: it.terminalTitle?.takeIf { t -> t.isNotBlank() } }
+
+    // The chat is open: its notification has done its job.
+    LaunchedEffect(machineId, paneId) { container.inbox.dismiss(Alerts.agentTag(machineId, paneId)) }
 
     val chat = remember(session, paneId) { AgentChat(session, paneId, scope) }
     DisposableEffect(chat) {

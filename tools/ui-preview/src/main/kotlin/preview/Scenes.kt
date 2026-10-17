@@ -48,4 +48,12 @@ fun scenes(): List<Scene> = listOf(
     Scene("settings", route = Routes.SETTINGS),
     Scene("settings-new-key", route = Routes.SETTINGS, actions = { tapText("New key") }),
     Scene("key-setup", key = IdentityStore.State.Missing),
+
+    // Notifications while the app is closed: each machine's herdr-push, and before a push app is there.
+    // A taller window shows the whole section under the SSH key (scrolling never settles in the desktop test harness).
+    Scene("settings-notifications", route = Routes.SETTINGS, heightDp = 1460, setup = { push = Demo.push() }),
+    Scene(
+        "settings-no-push-app", route = Routes.SETTINGS, heightDp = 1200,
+        setup = { push = Demo.push().copy(endpoint = null, distributor = null); pushApps = emptyList(); notificationsAllowed = false },
+    ),
 )

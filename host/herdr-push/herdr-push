@@ -305,6 +305,11 @@ def _too_big(host, batch):
     return len(seal_message(b"\0" * 32, msg)) > MAX_SEALED
 
 
+def gone(record, sub):
+    """Whether the push server said this phone's address is gone since the phone last subscribed."""
+    return float(record.get("gone") or 0) > float(sub.get("since") or 0)
+
+
 def shows(event):
     """Whether [event] puts a notification up (rather than taking one down)."""
     if event.get("type") == "agent":
@@ -341,7 +346,7 @@ def send(sub, events, record):
                 record["error"] = "HTTP %d from %s" % (e.code, urllib.parse.urlsplit(sub["endpoint"]).netloc)
                 if e.code in (404, 410):
                     # The push app dropped this address; the phone gives a new one when it connects.
-                    record["gone"] = True
+                    record["gone"] = time.time()
                     return False
             except Exception as e:  # noqa: BLE001
                 record["error"] = str(e)
@@ -390,10 +395,8 @@ def tick(state, n, dry_run=False):
         sent[key] = events
         for sub in group:
             record = state.setdefault("phones", {}).setdefault(sub["id"], {})
-            if record.get("gone") and record.get("endpoint") == sub["endpoint"]:
+            if gone(record, sub):
                 continue
-            record["endpoint"] = sub["endpoint"]
-            record.pop("gone", None)
             if dry_run:
                 continue
             send(sub, events, record)
@@ -402,12 +405,15 @@ def tick(state, n, dry_run=False):
 
 def run():
     os.makedirs(STATE_DIR, exist_ok=True)
-    lock = open(LOCK, "w")
+    # Not "w": that would wipe the running watcher's pid before finding out it runs.
+    lock = open(LOCK, "a+")
     try:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except OSError:
         log("already running")
         return 0
+    lock.seek(0)
+    lock.truncate()
     lock.write(str(os.getpid()))
     lock.flush()
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
@@ -419,6 +425,8 @@ def run():
             time.sleep(30)
             continue
         try:
+            # `test` notes how its sends went in the same file: keep that.
+            state["phones"] = read_json(STATE, {}).get("phones", state.get("phones", {}))
             tick(state, n)
             write_json(STATE, state)
         except Exception as e:  # noqa: BLE001 - keep watching
@@ -463,6 +471,7 @@ def cmd_subscribe():
         return 2
     keep = ("id", "name", "endpoint", "key", "session", "herdr", "board")
     entry = {k: sub[k] for k in keep if sub.get(k)}
+    entry["since"] = time.time()
     subs = [s for s in subscribers() if s["id"] != entry["id"]] + [entry]
     write_json(SUBSCRIBERS, subs, private=True)
     out({"ok": True, "msg": "subscribed", "phones": len(subs), "version": VERSION})
@@ -514,7 +523,7 @@ def cmd_status():
     for s in subscribers():
         r = state.get("phones", {}).get(s["id"], {})
         phones.append({"id": s["id"], "name": s.get("name", ""), "server": urllib.parse.urlsplit(s["endpoint"]).netloc,
-                       "ok": r.get("ok"), "error": r.get("error"), "gone": bool(r.get("gone"))})
+                       "ok": r.get("ok"), "error": r.get("error"), "gone": gone(r, s)})
     problems = {k: v["problem"] for k, v in state.get("sessions", {}).items() if v.get("problem")}
     pid = running_pid()
     out({"ok": True, "version": VERSION, "running": pid is not None, "pid": pid, "autostart": autostart(),
@@ -594,7 +603,7 @@ def cmd_install():
             linger = subprocess.run(["loginctl", "show-user", user, "-p", "Linger"], stdout=subprocess.PIPE,
                                     stderr=subprocess.DEVNULL).stdout.decode().strip()
             if linger != "Linger=yes":
-                note = "it stops when you log out: `loginctl enable-linger` (as root: `loginctl enable-linger %s`) keeps it running" % user
+                note = "it stops when you log out (loginctl enable-linger %s keeps it running)" % user
     elif shutil.which("crontab"):
         tab = subprocess.run(["crontab", "-l"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL).stdout.decode()
         lines = [l for l in tab.splitlines() if NAME not in l]

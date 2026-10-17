@@ -3,6 +3,7 @@
 // FakeMachine, and scenes move through the app by its routes and by tapping what is on screen.
 package preview
 
+import com.makefunstuff.herdr.push.PushState
 import android.content.Context
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.toAwtImage
@@ -68,6 +69,11 @@ class SceneData {
     val hosts: MutableMap<String, FakeMachine> = Demo.hosts().toMutableMap()
     /** Chat drafts saved before the app opens, by DraftStore key. */
     val drafts = HashMap<String, String>()
+    /** Notifications while closed, as saved before the app opens (PushStore). */
+    var push: PushState? = null
+    /** The phone's push apps (packages) and whether it lets the app notify. */
+    var pushApps: List<String> = listOf("io.heckel.ntfy")
+    var notificationsAllowed: Boolean = true
     fun host(id: String): FakeMachine = hosts.getValue(id)
 }
 
@@ -107,6 +113,9 @@ fun render(scene: Scene, dark: Boolean, file: File) {
     val context = Context(root)
     context.filesDir.resolve("machines.json").writeText(Json.encodeToString(ListSerializer(Machine.serializer()), data.machines))
     data.drafts.forEach { (k, v) -> context.getSharedPreferences("drafts", 0).edit().putString(k, v).apply() }
+    data.push?.let { context.filesDir.resolve("push.json").writeText(Json.encodeToString(PushState.serializer(), it)) }
+    PreviewPhone.apps = data.pushApps
+    PreviewPhone.allowed = data.notificationsAllowed
     IdentityStore.initial = scene.key
     FakeMachines.machines = data.hosts
     Toasts.dismiss()

@@ -3,6 +3,19 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Notifications while the app is closed (push/): posting them, the service that answers from them
+         or looks at the machines, the exact alarm for those looks, and setting it again after a restart. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <!-- Push apps (UnifiedPush distributors such as ntfy) that give the app an address for its machines. -->
+    <queries>
+        <intent><action android:name="org.unifiedpush.android.distributor.REGISTER" /></intent>
+    </queries>
 
     <application
         android:name=".HerdrApp"
@@ -16,6 +29,7 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTop"
             android:windowSoftInputMode="adjustResize"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|density|uiMode">
             <intent-filter>
@@ -23,5 +37,25 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- A notification's button, and the app's own look at its machines while it is closed. -->
+        <service android:name=".push.WorkService" android:exported="false" android:foregroundServiceType="dataSync" />
+        <!-- The alarm for that look, set again when the phone restarts or the app updates. -->
+        <receiver android:name=".push.WakeReceiver" android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+        <!-- Pushes from the machines through a push app (UnifiedPush). Only its token is taken, and only
+             pushes sealed with a machine's own key are shown. -->
+        <receiver android:name=".push.PushReceiver" android:exported="true">
+            <intent-filter>
+                <action android:name="org.unifiedpush.android.connector.NEW_ENDPOINT" />
+                <action android:name="org.unifiedpush.android.connector.MESSAGE" />
+                <action android:name="org.unifiedpush.android.connector.REGISTRATION_FAILED" />
+                <action android:name="org.unifiedpush.android.connector.UNREGISTERED" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>

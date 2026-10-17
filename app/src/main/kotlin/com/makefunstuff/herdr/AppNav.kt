@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -47,6 +48,8 @@ import com.makefunstuff.herdr.ui.terminal.TerminalScreen
 import com.makefunstuff.herdr.ui.theme.Herdr
 import com.makefunstuff.herdr.ui.theme.HerdrTheme
 import com.makefunstuff.herdr.ui.worktrees.WorktreesScreen
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.receiveAsFlow
 
 /** The whole app: theme, container, navigation and toasts. [nav] and [dark] are given by the desktop preview's scenes. */
 @Composable
@@ -61,6 +64,17 @@ fun HerdrRoot(container: AppContainer, dark: Boolean = isSystemInDarkTheme(), na
     }
 }
 
+/** Screens to open from outside the app's own navigation: a tapped notification. Each is opened once. */
+object Links {
+    private val routes = Channel<String>(Channel.BUFFERED)
+
+    fun open(route: String) {
+        routes.trySend(route)
+    }
+
+    val flow get() = routes.receiveAsFlow()
+}
+
 object Routes {
     const val AGENTS = "agents"
     const val MACHINES = "machines"
@@ -71,7 +85,7 @@ object Routes {
     const val TERMINAL = "terminal/{mid}/{pane}"
     const val LAYOUT = "layout/{mid}/{pane}"
     const val COORDINATOR = "coordinator/{mid}"
-    const val BOARD = "board/{mid}"
+    const val BOARD = "board/{mid}?task={task}"
     const val ADMIN = "admin/{mid}?tab={tab}"
     const val WORKTREES = "worktrees/{mid}?ws={ws}"
 
@@ -81,7 +95,7 @@ object Routes {
     fun terminal(mid: String, pane: String) = "terminal/$mid/${Uri.encode(pane)}"
     fun layout(mid: String, pane: String) = "layout/$mid/${Uri.encode(pane)}"
     fun coordinator(mid: String) = "coordinator/$mid"
-    fun board(mid: String) = "board/$mid"
+    fun board(mid: String, task: String? = null) = if (task == null) "board/$mid" else "board/$mid?task=${Uri.encode(task)}"
     fun admin(mid: String, tab: Int = 0) = "admin/$mid?tab=$tab"
     fun worktrees(mid: String, workspaceId: String? = null) =
         if (workspaceId == null) "worktrees/$mid" else "worktrees/$mid?ws=${Uri.encode(workspaceId)}"
@@ -96,6 +110,8 @@ private fun AppNav(nav: NavHostController) {
     val blocked = agents.count { it.agent.agentStatus == AgentStatus.Blocked }
     val keyState by LocalContainer.current.identity.state.collectAsStateWithLifecycle()
     var keySetupDismissed by rememberSaveable { mutableStateOf(false) }
+
+    LaunchedEffect(nav) { Links.flow.collect { nav.navigate(it) { launchSingleTop = true } } }
 
     // No usable key yet: offer to restore one before a new key is made.
     if (!keySetupDismissed && (keyState == IdentityStore.State.Missing || keyState is IdentityStore.State.Unreadable)) {
@@ -142,7 +158,9 @@ private fun AppNav(nav: NavHostController) {
             composable(Routes.WORKTREES) {
                 WorktreesScreen(nav, it.arguments?.getString("mid").orEmpty(), it.arguments?.getString("ws")?.let(Uri::decode))
             }
-            composable(Routes.BOARD) { BoardScreen(nav, it.arguments?.getString("mid").orEmpty()) }
+            composable(Routes.BOARD) {
+                BoardScreen(nav, it.arguments?.getString("mid").orEmpty(), it.arguments?.getString("task")?.let(Uri::decode))
+            }
             composable(Routes.COORDINATOR) { CoordinatorScreen(nav, it.arguments?.getString("mid").orEmpty()) }
             composable(Routes.TERMINAL) {
                 TerminalScreen(nav, it.arguments?.getString("mid").orEmpty(), Uri.decode(it.arguments?.getString("pane").orEmpty()))

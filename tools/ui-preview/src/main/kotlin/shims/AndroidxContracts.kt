@@ -10,4 +10,5 @@ class ActivityResultContracts {
     class OpenDocument : ActivityResultContract<Array<String>, Uri?>()
     class CreateDocument(mimeType: String) : ActivityResultContract<String, Uri?>()
     class GetMultipleContents : ActivityResultContract<String, List<Uri>>()
+    class RequestPermission : ActivityResultContract<String, Boolean>()
 }

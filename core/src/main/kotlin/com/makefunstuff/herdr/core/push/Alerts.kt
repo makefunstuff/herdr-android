@@ -27,6 +27,8 @@ data class Alert(
     /** What a tap opens: the agent's chat, or the task on the board. */
     val paneId: String = "",
     val taskId: String = "",
+    /** The task's short key (`AND-7`), or its id where it has none. */
+    val taskName: String = "",
     val actions: List<AlertAction> = emptyList(),
 ) {
     enum class Kind { NeedsYou, Finished, Test }
@@ -178,6 +180,7 @@ object Alerts {
                 text = t.title,
                 detail = listOf(t.title, t.msg, machineLabel).filter { it.isNotBlank() }.joinToString("\n"),
                 taskId = t.id,
+                taskName = t.name,
                 actions = actions,
             ),
         )
