@@ -32,6 +32,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.test.fail
 
 class HealthTest {
     private val linux = File("/proc/meminfo").canRead()
@@ -89,14 +90,23 @@ class HealthTest {
         val wt = File(home, ".herdr/worktrees/demo/work-7-old-task").apply { mkdirs() }
         val p = ProcessBuilder("sleep", "300").directory(wt).start()
         try {
-            Thread.sleep(200)
+            // Wait until it runs as sleep in the worktree (Java starts it through a helper first).
+            val pid = p.pid()
+            fun seen() = sh("readlink /proc/$pid/cwd; cat /proc/$pid/comm").stdout.lines()
+            val until = System.currentTimeMillis() + 5_000
+            while (seen() != listOf(wt.canonicalPath, "sleep", "") && System.currentTimeMillis() < until) Thread.sleep(50)
+            // The probe reads other processes' folders as any other program of the account would. Some
+            // sandboxes hide those from a process that isn't their parent; there is nothing to find then.
+            assumeTrue(seen().firstOrNull() == wt.canonicalPath, "this system doesn't let a shell read another process's folder: ${seen()}")
             val s = client.sample(listOf("demo/work-7-"))
-            val mine = assertNotNull(s.procs.firstOrNull { it.pid.toLong() == p.pid() }, "the sleep in the finished worktree is listed")
+            val mine = s.procs.firstOrNull { it.pid.toLong() == pid }
+                ?: fail("the sleep in the finished worktree isn't listed; the probe printed for it: " +
+                    sh(HealthCommands.probe(listOf("demo/work-7-"))).stdout.lines().filter { "\t$pid\t" in it || it.startsWith("@") }.take(20))
             assertEquals("sleep", mine.comm)
             assertEquals(wt.canonicalPath, mine.cwd)
             assertEquals("sleep 300", mine.args)
             // Without the worktree in [keep] a small process stays home.
-            assertNull(client.sample().procs.firstOrNull { it.pid.toLong() == p.pid() })
+            assertNull(client.sample().procs.firstOrNull { it.pid.toLong() == pid })
         } finally {
             p.destroyForcibly()
             home.deleteRecursively()
