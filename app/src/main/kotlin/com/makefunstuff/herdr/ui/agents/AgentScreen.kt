@@ -45,6 +45,9 @@ import com.makefunstuff.herdr.ui.common.LocalContainer
 import com.makefunstuff.herdr.ui.common.toast
 import com.makefunstuff.herdr.ui.design.BarIcon
 import com.makefunstuff.herdr.ui.design.ChatComposer
+import com.makefunstuff.herdr.ui.design.ChatSurface
+import com.makefunstuff.herdr.ui.common.rememberDraft
+import com.makefunstuff.herdr.data.DraftStore
 import com.makefunstuff.herdr.ui.design.HerdrIcons
 import com.makefunstuff.herdr.ui.design.HerdrTopBar
 import com.makefunstuff.herdr.ui.design.LoadingState
@@ -90,7 +93,8 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
     }
     val state by chat.state.collectAsStateWithLifecycle()
 
-    var draft by rememberSaveable { mutableStateOf("") }
+    // Kept per chat across navigation, rotation and restarts; cleared only once the message is sent.
+    var draft by rememberDraft(DraftStore.agent(machineId, paneId))
     var sending by remember { mutableStateOf(false) }
     var showKeys by rememberSaveable { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
@@ -109,7 +113,8 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
     }
 
     fun send() {
-        val text = draft.trim()
+        val typed = draft
+        val text = typed.trim()
         if (text.isEmpty() || sending) return
         sending = true
         val blocked = status == AgentStatus.Blocked
@@ -133,7 +138,7 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
                     }
                 }
             }.onSuccess {
-                draft = ""
+                draft = DraftStore.afterSend(draft, typed)
             }.onFailure {
                 if (!blocked) chat.dropPending(text)
                 context.toast(it.message ?: "Couldn't send")
@@ -186,20 +191,47 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
         // The top bar's inset comes from the scaffold; the bottom follows the keyboard or the nav bar.
         Column(Modifier.padding(top = padding.calculateTopPadding()).fillMaxSize().imePadding().navigationBarsPadding()) {
             StatusStrip(status, agent?.statusLabel, activity, online = host.online)
-            Box(Modifier.weight(1f).fillMaxWidth()) {
+            ChatSurface(
+                Modifier.weight(1f).fillMaxWidth(),
+                composer = {
+                    ChatComposer(
+                        draft = draft,
+                        onDraft = { draft = it },
+                        placeholder = when {
+                            status == AgentStatus.Blocked -> "Type an answer…"
+                            agent != null -> "Message ${agent.name?.takeIf { it.isNotBlank() } ?: agent.displayName}…"
+                            else -> "Type into the pane…"
+                        },
+                        onSend = ::send,
+                        sending = sending,
+                        status = when {
+                            sending -> "Sending…"
+                            !host.online -> "Not connected"
+                            else -> null
+                        },
+                        stop = if (status == AgentStatus.Working) ({ keys(listOf("esc")) }) else null,
+                        floating = true,
+                        above = if (showKeys) ({ KeyRow(onKeys = ::keys) }) else null,
+                    )
+                },
+            ) { bottom ->
                 when {
-                    agent == null && pane == null && snapshot != null ->
+                    agent == null && pane == null && snapshot != null -> Box(Modifier.padding(bottom = bottom)) {
                         EmptyState("This agent is gone", "Its pane closed, or the agent exited.", icon = HerdrIcons.Bot)
-                    rows.isEmpty() && state.source == AgentChat.Source.Loading ->
+                    }
+                    rows.isEmpty() && state.source == AgentChat.Source.Loading -> Box(Modifier.fillMaxSize().padding(bottom = bottom)) {
                         if (host.online) LoadingState("Loading the conversation", Modifier.align(Alignment.Center))
                         else EmptyState("Not connected", host.machine.label, icon = HerdrIcons.Monitor)
-                    rows.isEmpty() ->
+                    }
+                    rows.isEmpty() -> Box(Modifier.padding(bottom = bottom)) {
                         EmptyState("No messages yet", "Send a prompt to get started.", icon = HerdrIcons.MessagesSquare)
+                    }
                     else -> LazyColumn(
                         state = listState,
                         reverseLayout = true,
-                        contentPadding = PaddingValues(horizontal = Space.screen, vertical = Space.m),
-                        verticalArrangement = Arrangement.spacedBy(Space.m),
+                        // The composer floats over the list's end: its height stays free under the newest entry.
+                        contentPadding = PaddingValues(start = Space.screen, end = Space.screen, top = Space.m, bottom = bottom + Space.xs),
+                        verticalArrangement = Arrangement.spacedBy(Space.m, Alignment.Bottom),
                         modifier = Modifier.fillMaxSize(),
                     ) {
                         // The newest entry: the question the agent is waiting on, or what it is doing.
@@ -209,23 +241,11 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
                     }
                 }
                 if (!atBottom) {
-                    Box(Modifier.align(Alignment.BottomEnd).padding(Space.m)) {
+                    Box(Modifier.align(Alignment.BottomEnd).padding(end = Space.m, bottom = bottom + Space.xs)) {
                         RoundAction(HerdrIcons.ArrowDown, "Newest", primary = false) { scope.launch { listState.animateScrollToItem(0) } }
                     }
                 }
             }
-            if (showKeys) KeyRow(onKeys = ::keys)
-            ChatComposer(
-                draft = draft,
-                onDraft = { draft = it },
-                placeholder = when {
-                    status == AgentStatus.Blocked -> "Type an answer"
-                    agent != null -> "Message ${agent.name?.takeIf { it.isNotBlank() } ?: agent.displayName}"
-                    else -> "Type into the pane"
-                },
-                onSend = ::send,
-                stop = if (status == AgentStatus.Working) ({ keys(listOf("esc")) }) else null,
-            )
         }
     }
 
@@ -280,7 +300,7 @@ private fun StatusStrip(status: AgentStatus, label: String?, activity: String?, 
 @Composable
 private fun KeyRow(onKeys: (List<String>) -> Unit) {
     Row(
-        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = Space.m),
+        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(Space.xs),
     ) {
         listOf(

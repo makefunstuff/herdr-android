@@ -5,7 +5,6 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,7 +14,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -24,7 +22,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -62,11 +59,15 @@ import com.makefunstuff.herdr.ui.common.toast
 import com.makefunstuff.herdr.ui.design.BubbleShape
 import com.makefunstuff.herdr.ui.design.ReplyBubbleShape
 import com.makefunstuff.herdr.ui.design.ChatComposer
+import com.makefunstuff.herdr.ui.design.ChatSurface
+import com.makefunstuff.herdr.ui.design.ComposerToggle
+import com.makefunstuff.herdr.ui.common.rememberDraft
+import com.makefunstuff.herdr.data.DraftStore
+import androidx.compose.foundation.layout.navigationBarsPadding
 import com.makefunstuff.herdr.ui.design.HerdrIcons
 import com.makefunstuff.herdr.ui.design.HerdrTopBar
 import com.makefunstuff.herdr.ui.design.LoadingState
 import com.makefunstuff.herdr.ui.design.QuietButton
-import com.makefunstuff.herdr.ui.design.SecondaryButton
 import com.makefunstuff.herdr.ui.design.StateBlock
 import com.makefunstuff.herdr.ui.theme.Herdr
 import com.makefunstuff.herdr.ui.theme.Space
@@ -103,7 +104,10 @@ fun CoordinatorScreen(nav: NavController, machineId: String) {
     var outbox by remember { mutableStateOf<SentMatch.Pending?>(null) }
     var outboxSeen by remember { mutableStateOf(false) }
     var sending by remember { mutableStateOf(false) }
-    var draft by rememberSaveable { mutableStateOf("") }
+    // Kept per machine across navigation, rotation and restarts; cleared only once the message is sent.
+    var draft by rememberDraft(DraftStore.coordinator(machineId))
+    /** The board's Tab for the next message: what the Coordinator adds from it gets an agent at once. */
+    var startAgents by rememberSaveable { mutableStateOf(false) }
     val readNow = remember { Channel<Unit>(Channel.CONFLATED) }
     val list = rememberLazyListState()
 
@@ -146,25 +150,30 @@ fun CoordinatorScreen(nav: NavController, machineId: String) {
         val base = v?.let { CoordinatorChat.lines(it, talk, mine?.takeIf { m -> m.text.trim() == it.sent.trim() }?.baseline) }.orEmpty()
         if (mine != null && SentMatch.count(mine.text, base.filter { it.you }.map { it.text }) <= mine.baseline) base + ChatLine(true, mine.text, pending = true) else base
     }
+    // The list is reversed, so it stays at its end by itself (new lines, the keyboard, a growing
+    // composer); this brings a reader who is just above the end back down to a new answer.
     LaunchedEffect(lines.size, lines.lastOrNull()?.text?.length) {
-        if (lines.isNotEmpty()) list.animateScrollToItem(lines.size)
+        if (lines.isNotEmpty() && list.firstVisibleItemIndex <= 1) list.animateScrollToItem(0)
     }
     val coordinatorPane = state.snapshot?.let { s ->
         s.agents.firstOrNull { a -> s.tab(a.tabId)?.label == "Coordinator" }?.paneId
     }
 
     fun send(delegate: Boolean) {
-        val text = draft.trim()
+        val typed = draft
+        val text = typed.trim()
         if (text.isEmpty() || sending) return
         sending = true
         // Counted before the send, so a read that comes in while it runs can't be missed.
         val before = SentMatch.count(text, talk.filter { it.you }.map { it.text })
         val tracked = view != null
         if (tracked) { outbox = SentMatch.Pending(text, before); outboxSeen = false }
+        scope.launch { list.animateScrollToItem(0) }
         scope.launch {
             runCatching { session.awaitBoard().send(text, delegate) }
                 .onSuccess { msg ->
-                    draft = ""
+                    draft = DraftStore.afterSend(draft, typed)
+                    startAgents = false
                     // With no Coordinator set up there, the board files the words as a task instead.
                     if (!tracked) context.toast(msg.ifEmpty { "Sent" })
                 }
@@ -186,60 +195,80 @@ fun CoordinatorScreen(nav: NavController, machineId: String) {
             }
         },
     ) { padding ->
-        Column(Modifier.padding(padding).fillMaxSize().imePadding()) {
-            when {
-                !state.online && v == null -> {
-                    Box(Modifier.weight(1f)) {
+        // The top bar's inset comes from the scaffold; the bottom follows the keyboard or the nav bar.
+        Column(Modifier.padding(top = padding.calculateTopPadding()).fillMaxSize().imePadding().navigationBarsPadding()) {
+            ChatSurface(
+                Modifier.weight(1f).fillMaxWidth(),
+                composer = {
+                    CoordinatorComposer(
+                        draft = draft,
+                        onDraft = { draft = it },
+                        enabled = state.online && state.boardPath != null,
+                        sending = sending,
+                        hint = if (v == null && loaded) "Add a task on ${state.machine.label}…" else "Tell the Coordinator…",
+                        startAgents = startAgents,
+                        onStartAgents = { startAgents = it },
+                        status = when {
+                            sending -> "Sending…"
+                            !state.online -> "Not connected"
+                            else -> null
+                        },
+                        onSend = ::send,
+                    )
+                },
+            ) { bottom ->
+                when {
+                    !state.online && v == null -> Box(Modifier.padding(bottom = bottom)) {
                         ChatEmpty(HerdrIcons.Monitor, state.status.label(), state.status.detail() ?: "Waiting for ${state.machine.label}…")
                     }
-                }
-                state.online && state.boardPath == null -> {
-                    Box(Modifier.weight(1f)) {
+                    state.online && state.boardPath == null -> Box(Modifier.padding(bottom = bottom)) {
                         ChatEmpty(HerdrIcons.SquareKanban, "No work board here", "herdr-projects isn't installed on ${state.machine.label}.")
                     }
-                }
-                !loaded -> Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                    LoadingState("Reading the board")
-                }
-                else -> {
-                    LazyColumn(
+                    !loaded -> Box(Modifier.fillMaxSize().padding(bottom = bottom), contentAlignment = Alignment.Center) {
+                        LoadingState("Reading the board")
+                    }
+                    else -> LazyColumn(
                         state = list,
-                        modifier = Modifier.weight(1f).fillMaxWidth(),
-                        contentPadding = PaddingValues(horizontal = Space.screen, vertical = Space.m),
-                        verticalArrangement = Arrangement.spacedBy(Space.m),
+                        // Newest at the bottom, as the agent's chat: it stays at its end when the keyboard opens
+                        // or the message box grows.
+                        reverseLayout = true,
+                        modifier = Modifier.fillMaxSize(),
+                        // The composer floats over the list's end: its height stays free under the newest line.
+                        contentPadding = PaddingValues(start = Space.screen, end = Space.screen, top = Space.m, bottom = bottom + Space.xs),
+                        verticalArrangement = Arrangement.spacedBy(Space.m, Alignment.Bottom),
                     ) {
+                        val foot: @Composable () -> Unit = {
+                            Foot(v, tooOld, problem, onTerminal = coordinatorPane?.let { p -> { nav.navigate(Routes.terminal(machineId, p)) } })
+                        }
                         if (lines.isEmpty()) {
-                            item {
-                                Box(Modifier.fillParentMaxSize(), contentAlignment = Alignment.Center) {
-                                    if (v == null) {
-                                        ChatEmpty(
-                                            HerdrIcons.MessagesSquare,
-                                            "No Coordinator here",
-                                            "Nothing on ${host.ifEmpty { state.machine.label }} answers as the Coordinator, so what you send is added to the board as a task.",
-                                        )
-                                    } else {
-                                        ChatEmpty(
-                                            HerdrIcons.MessagesSquare,
-                                            "Nothing said yet",
-                                            "Tell the Coordinator what needs doing and it turns it into tasks.",
-                                        )
+                            item(key = "empty") {
+                                Column(Modifier.fillParentMaxSize()) {
+                                    Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                        if (v == null) {
+                                            ChatEmpty(
+                                                HerdrIcons.MessagesSquare,
+                                                "No Coordinator here",
+                                                "Nothing on ${host.ifEmpty { state.machine.label }} answers as the Coordinator, so what you send is added to the board as a task.",
+                                            )
+                                        } else {
+                                            ChatEmpty(
+                                                HerdrIcons.MessagesSquare,
+                                                "Nothing said yet",
+                                                "Tell the Coordinator what needs doing and it turns it into tasks.",
+                                            )
+                                        }
                                     }
+                                    foot()
                                 }
                             }
+                        } else {
+                            item(key = "foot") { foot() }
+                            val last = lines.lastIndex
+                            itemsIndexed(lines.asReversed(), key = { i, l -> "${last - i}/${l.you}" }) { _, line -> Bubble(line) }
                         }
-                        itemsIndexed(lines, key = { i, l -> "$i/${l.you}" }) { _, line -> Bubble(line) }
-                        item(key = "foot") { Foot(v, tooOld, problem, onTerminal = coordinatorPane?.let { p -> { nav.navigate(Routes.terminal(machineId, p)) } }) }
                     }
                 }
             }
-            Composer(
-                draft = draft,
-                onDraft = { draft = it },
-                enabled = state.online && state.boardPath != null && !sending,
-                hint = if (v == null && loaded) "Add a task on ${state.machine.label}" else "Message the Coordinator",
-                onSend = { send(false) },
-                onSendAndStart = { send(true) },
-            )
         }
     }
 }
@@ -344,29 +373,36 @@ private fun Notice(text: String, tint: Color?, action: Pair<String, () -> Unit>?
     }
 }
 
+/**
+ * The Coordinator's composer: the shared [ChatComposer], with the board's Tab as a "Start agents"
+ * switch beside Send. Off, Send hands the message to the Coordinator; on (amber), Send also gives
+ * an agent to every task the Coordinator adds from it, and Send says so to a screen reader. It
+ * turns itself off again once that message is sent.
+ */
 @Composable
-private fun Composer(
+internal fun CoordinatorComposer(
     draft: String,
     onDraft: (String) -> Unit,
     enabled: Boolean,
     hint: String,
-    onSend: () -> Unit,
-    onSendAndStart: () -> Unit,
+    startAgents: Boolean,
+    onStartAgents: (Boolean) -> Unit,
+    onSend: (startAgents: Boolean) -> Unit,
+    sending: Boolean = false,
+    status: String? = null,
 ) {
     ChatComposer(
         draft = draft,
         onDraft = onDraft,
         placeholder = hint,
-        onSend = onSend,
+        onSend = { onSend(startAgents) },
         enabled = enabled,
-        below = if (draft.isNotBlank()) {
-            {
-                // The board's Tab: what the Coordinator adds from this message gets an agent at once.
-                SecondaryButton(onClick = onSendAndStart, enabled = enabled, modifier = Modifier.fillMaxWidth()) {
-                    Icon(HerdrIcons.Zap, null, Modifier.size(18.dp))
-                    Text("Send and start agents")
-                }
-            }
-        } else null,
+        sending = sending,
+        status = status,
+        sendLabel = if (startAgents) "Send and start agents" else "Send",
+        floating = true,
+        trailing = {
+            ComposerToggle("Start agents", HerdrIcons.Zap, startAgents, onStartAgents, enabled = enabled && !sending)
+        },
     )
 }

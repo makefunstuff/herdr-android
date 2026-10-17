@@ -100,6 +100,9 @@ class HerdrColors(
     /** `--accent-tint`: a chosen pick, a marked line. */
     val accentTint: Color get() = accent.copy(alpha = if (dark) 0.13f else 0.10f)
 
+    /** `--shadow-card`'s colour: black at 35% on graphite, warm ink at a tenth on paper. */
+    val shadow: Color get() = if (dark) Color.Black.copy(alpha = 0.35f) else Color(0xFF282016).copy(alpha = 0.10f)
+
     /** `--danger-tint`: the destructive button's fill. */
     val dangerTint: Color get() = red.copy(alpha = if (dark) 0.12f else 0.10f)
 }

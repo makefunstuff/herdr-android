@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
+import com.makefunstuff.herdr.data.DraftStore
 import com.makefunstuff.herdr.data.HostManager
 import com.makefunstuff.herdr.data.IdentityStore
 import com.makefunstuff.herdr.data.MachineStore
@@ -37,6 +38,7 @@ class AppContainer(app: Application) {
     val machines = MachineStore(app)
     val identity = IdentityStore(app, scope)
     val hosts = HostManager(scope, machines, identity)
+    val drafts = DraftStore(app)
 
     init {
         // Read the key up front so the public key is ready to show. A missing key is never made
