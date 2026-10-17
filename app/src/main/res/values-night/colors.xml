@@ -1,3 +1,13 @@
 <resources>
     <color name="background">#FF12100E</color>
+
+    <color name="widget_panel">#FF181613</color>
+    <color name="widget_line">#FF2D2924</color>
+    <color name="widget_tile">#FF2A2621</color>
+    <color name="widget_text">#FFD8D0C3</color>
+    <color name="widget_strong">#FFF2EBDF</color>
+    <color name="widget_muted">#FF9B9183</color>
+    <color name="widget_accent">#FFF0A830</color>
+    <color name="widget_blocked">#FFFF7B70</color>
+    <color name="widget_working">#FF6CB8D6</color>
 </resources>

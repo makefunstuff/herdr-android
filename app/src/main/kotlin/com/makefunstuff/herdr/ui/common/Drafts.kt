@@ -19,13 +19,22 @@ import kotlinx.coroutines.flow.collectLatest
 fun rememberDraft(key: String): MutableState<String> {
     val store = LocalContainer.current.drafts
     val draft = remember(key) { mutableStateOf(store.get(key)) }
+    /** What was last read from or written to the store: leaving the chat writes only what is newer. */
+    val stored = remember(key) { arrayOf(draft.value) }
     LaunchedEffect(key) {
         snapshotFlow { draft.value }.collectLatest { text ->
             // An emptied box (sent, or erased) is saved at once; typing is saved when it pauses.
             if (text.isNotEmpty()) delay(300)
             store.put(key, text)
+            stored[0] = text
         }
     }
-    DisposableEffect(key) { onDispose { store.put(key, draft.value) } }
+    // Something shared into this chat from outside while it is open: in the box at once.
+    LaunchedEffect(key) {
+        store.added.collect { k ->
+            if (k == key) store.get(key).let { stored[0] = it; draft.value = it }
+        }
+    }
+    DisposableEffect(key) { onDispose { if (draft.value != stored[0]) store.put(key, draft.value) } }
     return draft
 }

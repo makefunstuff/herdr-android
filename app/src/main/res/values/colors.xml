@@ -1,4 +1,15 @@
 <resources>
     <color name="background">#FFEEEAE2</color>
     <color name="ic_launcher_background">#FFD9DAD8</color>
+
+    <!-- The widgets, in the app's tokens (docs/DESIGN.md): light here, dark in values-night. -->
+    <color name="widget_panel">#FFFAF8F3</color>
+    <color name="widget_line">#FFDCD4C6</color>
+    <color name="widget_tile">#FFE8E2D6</color>
+    <color name="widget_text">#FF2A251F</color>
+    <color name="widget_strong">#FF16120D</color>
+    <color name="widget_muted">#FF685E52</color>
+    <color name="widget_accent">#FF8C5000</color>
+    <color name="widget_blocked">#FFA82323</color>
+    <color name="widget_working">#FF155A72</color>
 </resources>

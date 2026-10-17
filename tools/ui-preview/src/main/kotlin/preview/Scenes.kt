@@ -6,6 +6,7 @@ import com.makefunstuff.herdr.Routes
 import com.makefunstuff.herdr.core.push.PhoneQuiet
 import com.makefunstuff.herdr.core.push.QuietHours
 import com.makefunstuff.herdr.data.IdentityStore
+import com.makefunstuff.herdr.ui.share.Ask
 import preview.Demo.API_AGENT
 import preview.Demo.APP_AGENT
 import preview.Demo.APP_SHELL
@@ -37,6 +38,21 @@ fun scenes(): List<Scene> = listOf(
 
     // The work board and its Coordinator.
     Scene("coordinator", route = Routes.coordinator(DEVBOX)),
+    // Reaching the Coordinator from outside the app: a share (a log line and a screenshot) choosing its machine,
+    // the tile or widget when it can't tell which, and the chat it lands in with the shared words in its box.
+    Scene("share", route = Routes.ask(Ask.SHARE), setup = { shared = Demo.shared() }),
+    Scene("ask", route = Routes.ask(Ask.COORDINATOR)),
+    Scene(
+        "share-sent", route = Routes.ask(Ask.SHARE),
+        setup = { shared = Demo.shared().let { s -> s.copy(files = s.files.map { f -> f.copy(path = Demo.sharedFile().path) }) } },
+        actions = { tapText("devbox"); settle() },
+    ),
+    // Shared to a machine that isn't connected: the words wait in the box, the screenshot to be copied once it is.
+    Scene(
+        "share-waiting", route = Routes.ask(Ask.SHARE),
+        setup = { shared = Demo.shared().let { s -> s.copy(files = s.files.map { f -> f.copy(path = Demo.sharedFile().path) }) } },
+        actions = { tapText("mac-mini"); settle() },
+    ),
     Scene("board", route = Routes.board(DEVBOX)),
     Scene("task", route = Routes.board(DEVBOX), actions = { tapText("Show when each machine last answered") }),
     Scene("task-review-failed", route = Routes.board(DEVBOX), actions = { tapText("Rewrite the install page") }),

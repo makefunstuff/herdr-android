@@ -57,6 +57,8 @@ data class HostState(
     val herdrVersion: String? = null,
     /** The herdr-projects launcher on the machine; null when the board isn't installed (or not checked yet). */
     val boardPath: String? = null,
+    /** Whether the look for herdr-projects answered since the machine connected, so a null [boardPath] means it isn't there. */
+    val boardChecked: Boolean = false,
     /** The herdr executable the app runs on the machine; null until it connects, or when it couldn't be probed. */
     val herdr: HerdrChoice? = null,
     /**
@@ -200,7 +202,7 @@ class HostSession(
     suspend fun checkBoard() {
         val conn = connection ?: return
         val path = runCatching { BoardClient.locate(conn) }.getOrElse { return }
-        _state.update { it.copy(boardPath = path) }
+        _state.update { it.copy(boardPath = path, boardChecked = true) }
     }
 
     private fun statusMessage(): String = when (val s = state.value.status) {

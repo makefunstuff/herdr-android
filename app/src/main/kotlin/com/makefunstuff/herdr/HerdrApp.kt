@@ -15,6 +15,7 @@ import com.makefunstuff.herdr.data.DraftStore
 import com.makefunstuff.herdr.data.HostManager
 import com.makefunstuff.herdr.data.IdentityStore
 import com.makefunstuff.herdr.data.MachineStore
+import com.makefunstuff.herdr.data.Shares
 import com.makefunstuff.herdr.push.AlertWork
 import com.makefunstuff.herdr.push.AndroidAlerts
 import com.makefunstuff.herdr.push.AndroidLive
@@ -24,10 +25,15 @@ import com.makefunstuff.herdr.push.LiveWork
 import com.makefunstuff.herdr.push.PushHosts
 import com.makefunstuff.herdr.push.PushStore
 import com.makefunstuff.herdr.push.QuietWork
+import com.makefunstuff.herdr.push.TallyStore
 import com.makefunstuff.herdr.push.Wakes
+import com.makefunstuff.herdr.share.Widgets
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import org.bouncycastle.jce.provider.BouncyCastleProvider
 import java.security.Security
@@ -63,6 +69,13 @@ class HerdrApp : Application() {
                 container.quietWork.check()
             }
         }, modes, ContextCompat.RECEIVER_NOT_EXPORTED)
+        // The widgets follow the counts (their time to the minute) and the Coordinator used last.
+        container.scope.launch {
+            combine(
+                container.tally.counts.map { it.copy(at = it.at / 60_000) }.distinctUntilChanged(),
+                container.shares.last,
+            ) { _, _ -> }.collect { Widgets.update(this@HerdrApp) }
+        }
     }
 }
 
@@ -72,13 +85,15 @@ class AppContainer(app: Application) {
     val identity = IdentityStore(app, scope)
     val hosts = HostManager(scope, machines, identity)
     val drafts = DraftStore(app)
+    val shares = Shares(java.io.File(app.filesDir, "shares.json"), java.io.File(app.cacheDir, "shared"))
     val push = PushStore(app)
     val inbox = Inbox(java.io.File(app.filesDir, "alerts.json"), AndroidAlerts(app))
     val phone = AndroidPhone(app, push)
     val pushHosts = PushHosts(scope, hosts, machines, push, phone)
     val quietWork = QuietWork(scope, push.state, phone, inbox, foreground = { hosts.isForeground })
     val liveWork = LiveWork(scope, hosts, machines, push, AndroidLive(app), quietWork)
-    val alertWork = AlertWork(hosts, machines, push, inbox, liveWork, quietWork)
+    val tally = TallyStore(java.io.File(app.filesDir, "tally.json"), machines)
+    val alertWork = AlertWork(hosts, machines, push, inbox, liveWork, quietWork, tally)
 
     init {
         // Read the key up front so the public key is ready to show. A missing key is never made
@@ -87,6 +102,9 @@ class AppContainer(app: Application) {
         pushHosts.start()
         liveWork.start()
         quietWork.start()
+        tally.start(scope, hosts)
+        // Shared files waiting for a machine taken out of the app go with it.
+        scope.launch { machines.machines.collect { list -> shares.keep(list.map { it.id }.toSet()) } }
         // The push app's address may have lapsed while the app was closed: ask again, it answers with the same or a new one.
         if (push.state.value.on) phone.register()
     }
