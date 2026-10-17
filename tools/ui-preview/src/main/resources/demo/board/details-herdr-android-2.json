@@ -1,0 +1,19 @@
+{
+  "task": {
+    "id": "AND-2",
+    "title": "Replace agent terminals with native chat views",
+    "stage": "done",
+    "msg": "Merged",
+    "description": ""
+  },
+  "failure": null,
+  "reviews": [],
+  "agent": "claude",
+  "handovers": [],
+  "research": false,
+  "plan": "",
+  "pr": "https://github.com/demo/herdr-android/pull/3",
+  "branch": "",
+  "worktree": "",
+  "limits": {}
+}

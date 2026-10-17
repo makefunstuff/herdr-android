@@ -1,0 +1,183 @@
+// The made-up world every scene starts from: the README screenshots' demo host
+// (docs/screenshots/demo-host) as fixed data. devbox runs three agents and the work board;
+// gpu-box and ci-runner are reached through it; mac-mini refuses the app's key.
+package preview
+
+import com.makefunstuff.herdr.core.ssh.ConnectError
+import com.makefunstuff.herdr.core.ssh.Machine
+import kotlinx.serialization.json.JsonObject
+
+object Demo {
+    const val PUBLIC_KEY = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHd2Zm9sZGVkLXByZXZpZXcta2V5LWZvci1oZXJkcg herdr-android@Pixel-7"
+
+    const val DEVBOX = "devbox"
+    const val GPU = "gpu-box"
+    const val CI = "ci-runner"
+    const val MINI = "mac-mini"
+
+    /** Panes the scenes open. */
+    const val APP_AGENT = "w1:p1"
+    const val APP_SHELL = "w1:p2"
+    const val API_AGENT = "w2:p1"
+    const val SITE_AGENT = "w3:p1"
+
+    fun resource(path: String): String =
+        Demo::class.java.classLoader.getResourceAsStream("demo/$path")?.readBytes()?.toString(Charsets.UTF_8)
+            ?: error("missing demo resource $path")
+
+    /** The saved machines, in the order the app lists them. */
+    fun machines(): List<Machine> = listOf(
+        machine(DEVBOX, "devbox", port = 2201),
+        machine(GPU, "gpu-box", via = DEVBOX),
+        machine(CI, "ci-runner", via = DEVBOX),
+        machine(MINI, "mac-mini", host = "192.168.1.40", user = "jpl"),
+    )
+
+    private fun machine(id: String, label: String, host: String = label, port: Int = 22, user: String = "demo", via: String? = null) =
+        Machine(id = id, label = label, host = host, port = port, user = user, viaMachineId = via, hostKey = FakeMachine(id).fingerprint)
+
+    /** What each machine has and answers. */
+    fun hosts(): Map<String, FakeMachine> = mapOf(
+        DEVBOX to FakeMachine(
+            DEVBOX,
+            snapshot = devbox(),
+            screens = mapOf(
+                APP_AGENT to resource("screen-claude-app.txt"),
+                APP_SHELL to SHELL,
+                API_AGENT to resource("screen-claude-api.txt"),
+                SITE_AGENT to resource("screen-codex.txt"),
+            ),
+            transcripts = mapOf(
+                APP_SESSION to resource("claude-app.jsonl"),
+                API_SESSION to resource("claude-api.jsonl"),
+                SITE_SESSION to resource("codex-site.jsonl"),
+            ),
+            board = FakeBoard(),
+            workspaceTokens = mapOf("w1" to mapOf("branch" to "work/9-last-answered", "pr" to "#9")),
+        ),
+        GPU to FakeMachine(
+            GPU,
+            snapshot = snapshot(
+                Ws("w1", "llm-eval", "/home/demo/llm-eval", listOf(Pane("w1:p1", agent = Agent("codex", "working", EVAL_SESSION, "Long-context eval on ckpt-0612")))),
+                Ws("w2", "notebooks", "/home/demo/notebooks", listOf(Pane("w2:p1", label = "shell"))),
+            ),
+            screens = mapOf("w1:p1" to resource("screen-codex-eval.txt")),
+            transcripts = mapOf(EVAL_SESSION to resource("codex-eval.jsonl")),
+        ),
+        CI to FakeMachine(
+            CI,
+            snapshot = snapshot(
+                Ws("w1", "runners", "/home/demo/runners", listOf(Pane("w1:p1", label = "shell"))),
+                Ws("w2", "deploy", "/home/demo/deploy", listOf(Pane("w2:p1", label = "shell"))),
+            ),
+        ),
+        MINI to FakeMachine(MINI, refuse = ConnectError.Auth(null)),
+    )
+
+    private const val APP_SESSION = "3f6c2a1e-8b7d-4c2a-9e51-0a1b2c3d4e5f"
+    private const val API_SESSION = "9d2e4b7a-1c3f-4e6a-8b90-5f4e3d2c1b0a"
+    private const val SITE_SESSION = "0199a3b2-7c41-7e10-9a2b-3c4d5e6f7a8b"
+    private const val EVAL_SESSION = "0199a3c4-1d2e-7f30-8a4b-5c6d7e8f9a0b"
+
+    fun devbox(appStatus: String = "working"): JsonObject = snapshot(
+        Ws(
+            "w1", "herdr-android", "/home/demo/src/herdr-android",
+            listOf(
+                Pane(APP_AGENT, agent = Agent("claude", appStatus, APP_SESSION, "Show when each machine last answered")),
+                Pane(APP_SHELL, label = "shell"),
+            ),
+            repo = "herdr-android",
+        ),
+        Ws("w2", "api-server", "/home/demo/src/api-server", listOf(Pane(API_AGENT, agent = Agent("claude", "blocked", API_SESSION, "Speed up /jobs on large tables"))), repo = "api-server"),
+        Ws("w3", "website", "/home/demo/src/website", listOf(Pane(SITE_AGENT, agent = Agent("codex", "done", SITE_SESSION, "Rewrite the install page"))), repo = "website"),
+    )
+
+    class Agent(val kind: String, val status: String, val session: String, val title: String)
+    class Pane(val id: String, val label: String? = null, val agent: Agent? = null)
+    class Ws(val id: String, val label: String, val cwd: String, val panes: List<Pane>, val repo: String? = null)
+
+    /** A herdr `session.snapshot`: one tab per workspace, its panes side by side. */
+    fun snapshot(vararg workspaces: Ws): JsonObject {
+        val all = workspaces.toList()
+        fun status(list: List<Pane>) = list.mapNotNull { it.agent?.status }.maxByOrNull { listOf("idle", "done", "working", "blocked").indexOf(it) } ?: "unknown"
+        return obj(
+            "version" to "0.9.0",
+            "protocol" to 4,
+            "workspaces" to all.mapIndexed { i, ws ->
+                obj(
+                    "workspace_id" to ws.id, "number" to i + 1, "label" to ws.label, "focused" to (i == 0),
+                    "pane_count" to ws.panes.size, "tab_count" to 1, "active_tab_id" to "${ws.id}:t1", "agent_status" to status(ws.panes),
+                    "worktree" to ws.repo?.let { obj("repo_key" to it, "repo_name" to it, "repo_root" to ws.cwd, "checkout_path" to ws.cwd) },
+                )
+            },
+            "tabs" to all.map { ws ->
+                obj(
+                    "tab_id" to "${ws.id}:t1", "workspace_id" to ws.id, "number" to 1, "label" to "main", "focused" to true,
+                    "pane_count" to ws.panes.size, "agent_status" to status(ws.panes),
+                )
+            },
+            "panes" to all.flatMap { ws ->
+                ws.panes.mapIndexed { i, p ->
+                    obj(
+                        "pane_id" to p.id, "terminal_id" to "t-${p.id}", "workspace_id" to ws.id, "tab_id" to "${ws.id}:t1",
+                        "focused" to (i == 0), "cwd" to ws.cwd, "label" to p.label, "agent" to p.agent?.kind,
+                        "display_agent" to p.agent?.kind, "agent_status" to (p.agent?.status ?: "unknown"),
+                        "terminal_title_stripped" to (p.agent?.title ?: "bash"),
+                    )
+                }
+            },
+            "layouts" to all.map { ws ->
+                val w = 200 / ws.panes.size
+                obj(
+                    "workspace_id" to ws.id, "tab_id" to "${ws.id}:t1", "area" to rect(0, 0, 200, 50), "focused_pane_id" to ws.panes.first().id,
+                    "panes" to ws.panes.mapIndexed { i, p -> obj("pane_id" to p.id, "focused" to (i == 0), "rect" to rect(i * w, 0, w, 50)) },
+                    "splits" to if (ws.panes.size > 1) listOf(obj("id" to "s1", "direction" to "right", "ratio" to 0.5, "rect" to rect(0, 0, 200, 50))) else emptyList<Any>(),
+                )
+            },
+            "agents" to all.flatMap { ws ->
+                ws.panes.mapNotNull { p ->
+                    val a = p.agent ?: return@mapNotNull null
+                    obj(
+                        "terminal_id" to "t-${p.id}", "name" to a.kind, "agent" to a.kind, "display_agent" to a.kind, "title" to a.title,
+                        "agent_status" to a.status, "workspace_id" to ws.id, "tab_id" to "${ws.id}:t1", "pane_id" to p.id,
+                        "state_change_seq" to 1, "cwd" to ws.cwd,
+                        "agent_session" to obj("agent" to a.kind, "kind" to "id", "value" to a.session, "source" to "herdr:${a.kind}"),
+                    )
+                }
+            },
+        )
+    }
+
+    private fun rect(x: Int, y: Int, w: Int, h: Int) = obj("x" to x, "y" to y, "width" to w, "height" to h)
+
+    /** The shell beside the herdr-android agent, as `demo-session` leaves it. */
+    private val SHELL = run {
+        val p = "\u001b[1;32mdemo@devbox\u001b[0m:\u001b[1;34m~/src/herdr-android\u001b[0m$ "
+        val y = "\u001b[33m"; val g = "\u001b[32m"; val c = "\u001b[36m"; val r = "\u001b[31m"; val b = "\u001b[1m"; val o = "\u001b[0m"
+        """
+        |${p}git log --oneline --graph -7
+        |* ${y}ae3c0e4$o ($c${b}HEAD -> $o${g}${b}main$o) Better chat composer
+        |* ${y}cda5a86$o Adopt the herdr web UI look
+        |* ${y}acfc414$o Visual design pass
+        |* ${y}355be7c$o Replace native popups with a designed UI
+        |* ${y}f0abe66$o Better Markdown for the native board
+        |* ${y}2c4e1b9$o Coordinator chat: attach files
+        |* ${y}9a07d3e$o Board: approve from the task screen
+        |${p}git status -sb
+        |## ${g}main$o...${r}origin/main$o
+        | ${r}M$o app/src/main/kotlin/com/makefunstuff/herdr/ui/machines/MachinesScreen.kt
+        |${p}./gradlew -p core test
+        |> Task :compileKotlin UP-TO-DATE
+        |> Task :test
+        |
+        |BoardTest > coordinatorChatMerges ${g}PASSED$o
+        |ChatTest > claudeTranscriptReadsTools ${g}PASSED$o
+        |ChatTest > blockedPromptParsesMenu ${g}PASSED$o
+        |PainterTest > drawsWideCharacters ${g}PASSED$o
+        |
+        |$b${g}BUILD SUCCESSFUL$o in 21s
+        |4 actionable tasks: 1 executed, 3 up-to-date
+        |$p
+        """.trimMargin()
+    }
+}

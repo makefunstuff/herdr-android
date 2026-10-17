@@ -1,0 +1,14 @@
+[32m●[0m [1mWrite[0m(migrations/0042_jobs_created_at.sql)
+  ⎿  Wrote 1 line
+
+────────────────────────────────────────────────────────
+ Bash command
+   npm run db:migrate
+   Apply the new migration
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. Yes, and don't ask again for npm run commands
+   3. No, and tell Claude what to do differently
+
+ Esc to cancel · Tab to amend

@@ -14,6 +14,29 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # The screen previews (tools/ui-preview): every scene in dark and light, for the reviewer to look at.
+  screens:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Render screens
+        run: ./gradlew -p tools/ui-preview render
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: herdr-screens-${{ github.run_number }}
+          path: tools/ui-preview/build/shots/
+          if-no-files-found: ignore
+
   build:
     runs-on: ubuntu-latest
     env:
