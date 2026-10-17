@@ -3,6 +3,9 @@
 // gpu-box and ci-runner are reached through it; mac-mini refuses the app's key.
 package preview
 
+import com.makefunstuff.herdr.brief.BriefState
+import com.makefunstuff.herdr.core.brief.Baseline
+import com.makefunstuff.herdr.core.brief.BriefSchedule
 import com.makefunstuff.herdr.core.push.Alert
 import com.makefunstuff.herdr.core.push.Alerts
 import com.makefunstuff.herdr.core.push.QuietHours
@@ -11,6 +14,8 @@ import com.makefunstuff.herdr.push.PushState
 import com.makefunstuff.herdr.core.ssh.ConnectError
 import com.makefunstuff.herdr.core.ssh.Machine
 import kotlinx.serialization.json.JsonObject
+import java.time.LocalDateTime
+import java.time.ZoneOffset
 
 object Demo {
     const val PUBLIC_KEY = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHd2Zm9sZGVkLXByZXZpZXcta2V5LWZvci1oZXJkcg herdr-android@Pixel-7"
@@ -25,6 +30,66 @@ object Demo {
     const val APP_SHELL = "w1:p2"
     const val API_AGENT = "w2:p1"
     const val SITE_AGENT = "w3:p1"
+
+    /** The brief's "now": Saturday 17 October 2026, 07:42 (UTC), the morning after. */
+    val NOW: Long = LocalDateTime.of(2026, 10, 17, 7, 42).toInstant(ZoneOffset.UTC).toEpochMilli()
+
+    /** 23:10 the night before: when the app was last on screen. */
+    val SEEN: Long = LocalDateTime.of(2026, 10, 16, 23, 10).toInstant(ZoneOffset.UTC).toEpochMilli()
+
+    /** A time of that night or morning, on the demo machines' clock (seconds): 12:00 and later is the 16th. */
+    private fun at(hour: Int, minute: Int): Long =
+        LocalDateTime.of(2026, 10, if (hour >= 12) 16 else 17, hour, minute).toEpochSecond(ZoneOffset.UTC)
+
+    /**
+     * The brief's part: you last looked at 23:10, a brief comes at 07:30 and 17:30 on weekdays (read
+     * aloud in the car), and the app had seen ci-runner's agents then (it keeps no journal).
+     */
+    fun brief() = BriefState(
+        schedule = BriefSchedule(on = true, times = listOf(7 * 60 + 30, 17 * 60 + 30), days = (1..5).toSet()),
+        seenAt = SEEN,
+        baselines = mapOf(CI to Baseline(tasks = null, agents = emptyMap(), agentsAt = SEEN)),
+    )
+
+    /** herdr-push's journal on a machine, as `herdr-push journal` answers: kept since a week ago, up to now. */
+    private fun journal(vararg entries: JsonObject) = obj(
+        "ok" to true, "version" to "4", "now" to NOW / 1000, "from" to NOW / 1000 - 7 * 24 * 3600, "upto" to NOW / 1000 - 3,
+        "running" to true, "entries" to entries.toList(),
+    )
+
+    private fun taskEntry(hour: Int, minute: Int, key: String, was: String, vararg task: Pair<String, Any?>) =
+        obj("at" to at(hour, minute), "type" to "task", "key" to key, "task" to obj(*task), "was" to was)
+
+    private fun agentEntry(hour: Int, minute: Int, pane: String, kind: String, status: String, title: String, where: String) = obj(
+        "at" to at(hour, minute), "type" to "agent", "where" to where, "workspace" to where.substringBefore(" › "),
+        "agent" to obj(
+            "pane_id" to pane, "workspace_id" to pane.substringBefore(':'), "tab_id" to "${pane.substringBefore(':')}:t1",
+            "agent" to kind, "name" to kind, "display_agent" to kind, "title" to title, "agent_status" to status, "state_change_seq" to 2,
+        ),
+    )
+
+    /** What devbox's tasks did that night: two merged, a research report, a review that failed, two that wait for you, one that started. */
+    fun devboxJournal() = journal(
+        taskEntry(0, 52, "AND-8", "needs", "id" to "herdr-android/8", "title" to "Swipe triage: seen, pin, snooze, mute", "state" to "done", "stage" to "done",
+            "pr" to "https://github.com/demo/herdr-android/pull/8", "msg" to "Merged", "archivedAt" to null),
+        taskEntry(1, 20, "AND-2", "needs", "id" to "herdr-android/2", "title" to "Replace agent terminals with native chat views", "state" to "done",
+            "stage" to "done", "pr" to "https://github.com/demo/herdr-android/pull/3", "msg" to "Merged"),
+        agentEntry(2, 10, SITE_AGENT, "codex", "done", "Rewrite the install page", "website › main"),
+        taskEntry(2, 14, "WEB-4", "working", "id" to "website/4", "title" to "Rewrite the install page", "state" to "blocked", "stage" to "approval",
+            "kind" to "permission", "msg" to "Review found 2 problems", "review" to obj("pass" to false)),
+        taskEntry(4, 30, "EVAL-1", "working", "id" to "llm-eval/1", "title" to "Compare long-context benchmarks", "state" to "done", "stage" to "done",
+            "research" to true, "msg" to "The report is ready"),
+        taskEntry(5, 40, "API-3", "working", "id" to "api-server/3", "title" to "Speed up /jobs on large tables", "state" to "blocked", "stage" to "working",
+            "kind" to "question", "msg" to "Asks whether the migration may lock the jobs table for a few seconds"),
+        taskEntry(6, 30, "AND-6", "queued", "id" to "herdr-android/6", "title" to "Add app screenshots to the README", "state" to "working", "stage" to "working"),
+        taskEntry(6, 58, "AND-9", "working", "id" to "herdr-android/9", "title" to "Show when each machine last answered", "state" to "blocked",
+            "stage" to "approval", "kind" to "permission", "msg" to "Review passed. Ready to merge.", "review" to obj("pass" to true)),
+    )
+
+    /** gpu-box has no board: one of your agents finished there in the night. */
+    fun gpuJournal() = journal(
+        agentEntry(3, 40, "w3:p1", "codex", "done", "Profile the data loader", "notebooks › main"),
+    )
 
     fun resource(path: String): String =
         Demo::class.java.classLoader.getResourceAsStream("demo/$path")?.readBytes()?.toString(Charsets.UTF_8)
@@ -91,6 +156,7 @@ object Demo {
             ),
             board = FakeBoard(),
             workspaceTokens = mapOf("w1" to mapOf("branch" to "work/9-last-answered", "pr" to "#9")),
+            journal = devboxJournal(),
         ),
         GPU to FakeMachine(
             GPU,
@@ -100,6 +166,7 @@ object Demo {
             ),
             screens = mapOf("w1:p1" to resource("screen-codex-eval.txt")),
             transcripts = mapOf(EVAL_SESSION to resource("codex-eval.jsonl")),
+            journal = gpuJournal(),
         ),
         CI to FakeMachine(
             CI,

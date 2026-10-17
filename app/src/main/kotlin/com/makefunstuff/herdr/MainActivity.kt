@@ -26,12 +26,13 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * A tapped notification: its agent's chat, its task on the board, or its machine's health. The tile,
+     * A tapped notification: its agent's chat, its task on the board, its machine's health, or the brief. The tile,
      * a widget or a share: [Ask]. A floating chat's "Open in the app" or its shortcut: that chat. False
      * when it opens nothing.
      */
     private fun open(intent: Intent?): Boolean {
         intent?.getStringExtra(OPEN_ASK)?.takeIf { it in ASKS }?.let { Links.open(Routes.ask(it)); return true }
+        if (intent?.getBooleanExtra(OPEN_BRIEF, false) == true) { Links.open(Routes.BRIEF); return true }
         val machine = intent?.getStringExtra(OPEN_MACHINE)?.takeIf { it.isNotEmpty() } ?: return false
         val pane = intent.getStringExtra(OPEN_PANE).orEmpty()
         val task = intent.getStringExtra(OPEN_TASK).orEmpty()
@@ -52,6 +53,7 @@ class MainActivity : ComponentActivity() {
         const val OPEN_HEALTH = "open_health"
         const val OPEN_COORDINATOR = "open_coordinator"
         const val OPEN_ASK = "open_ask"
+        const val OPEN_BRIEF = "open_brief"
         private val ASKS = setOf(Ask.COORDINATOR, Ask.BOARD, Ask.SHARE)
 
         /** Opens the app on [to] (an [Ask]), in its own task, from the tile, a widget or a share. */

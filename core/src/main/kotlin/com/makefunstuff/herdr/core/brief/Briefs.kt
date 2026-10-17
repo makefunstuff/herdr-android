@@ -129,7 +129,10 @@ object Briefs {
 
         // Agents: whose they are, and what to call them.
         val ownerTasks = tasks + taskEntries.map { it.task }
-        fun owned(a: AgentInfo, workspace: String) = ownerTasks.any { LiveItems.belongs(a.name.orEmpty(), workspace, it.id, it.name) }
+        // The board names them after the task and titles them with it; an agent on the same work as a task is the task too.
+        fun owned(a: AgentInfo, workspace: String) = ownerTasks.any {
+            LiveItems.belongs(a.name.orEmpty(), workspace, it.id, it.name) || (a.title != null && a.title == it.title)
+        }
         fun coordinator(a: AgentInfo) = LiveItems.isCoordinator(a.name.orEmpty())
         fun workspaceOf(a: AgentInfo) = snapshot?.workspace(a.workspaceId)?.label.orEmpty()
         fun agentItem(kind: BriefItem.Kind, a: AgentInfo, status: String, detail: String, at: Pair<Boolean, Long>) = BriefItem(

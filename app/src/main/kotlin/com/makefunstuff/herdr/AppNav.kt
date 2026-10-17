@@ -51,6 +51,8 @@ import com.makefunstuff.herdr.ui.admin.AdminScreen
 import com.makefunstuff.herdr.ui.agents.AgentScreen
 import com.makefunstuff.herdr.ui.agents.AgentsScreen
 import com.makefunstuff.herdr.ui.board.BoardScreen
+import com.makefunstuff.herdr.ui.brief.BriefScreen
+import com.makefunstuff.herdr.ui.brief.BriefSettingsScreen
 import com.makefunstuff.herdr.ui.common.EmptyState
 import com.makefunstuff.herdr.ui.common.LocalContainer
 import com.makefunstuff.herdr.ui.coordinator.CoordinatorScreen
@@ -102,6 +104,9 @@ object Routes {
     const val MACHINES = "machines"
     const val SETTINGS = "settings"
     const val QUIET = "settings/quiet"
+    /** What happened while you were away; and when it comes as a notification. */
+    const val BRIEF = "brief"
+    const val BRIEF_SETTINGS = "settings/brief"
     const val MACHINE = "machine/{id}"
     const val EDIT = "edit?id={id}"
     const val AGENT = "agent/{mid}/{pane}"
@@ -232,6 +237,8 @@ internal fun NavGraphBuilder.screens(nav: NavHostController, agents: @Composable
     composable(Routes.MACHINES) { MachinesScreen(nav) }
     composable(Routes.SETTINGS) { SettingsScreen(nav) }
     composable(Routes.QUIET) { QuietHoursScreen(nav) }
+    composable(Routes.BRIEF) { BriefScreen(nav) }
+    composable(Routes.BRIEF_SETTINGS) { BriefSettingsScreen(nav) }
     composable(Routes.MACHINE) { MachineScreen(nav, it.arguments?.getString("id").orEmpty()) }
     composable(Routes.EDIT) { EditMachineScreen(nav, it.arguments?.getString("id")) }
     composable(Routes.AGENT) {

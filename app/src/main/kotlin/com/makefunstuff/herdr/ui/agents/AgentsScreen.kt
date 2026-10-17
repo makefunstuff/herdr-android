@@ -104,6 +104,7 @@ fun AgentsScreen(
         containerColor = Herdr.colors.ground,
         topBar = {
             HerdrTopBar("Agents") {
+                BarIcon(HerdrIcons.Newspaper, "Brief: what happened while you were away", { panes.open(nav, Routes.BRIEF) })
                 BarIcon(
                     HerdrIcons.Bell, "Notifications",
                     {

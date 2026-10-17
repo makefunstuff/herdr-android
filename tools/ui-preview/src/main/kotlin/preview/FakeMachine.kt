@@ -63,6 +63,8 @@ class FakeMachine(
     var refuse: ConnectError? = null,
     /** What the health probe reads there (RAM, disks, processes, worktrees). */
     var health: FakeHealth = FakeHealth(),
+    /** herdr-push's journal there (`herdr-push journal`, for the brief); null where herdr-push isn't installed. */
+    var journal: JsonObject? = null,
 ) {
     val fingerprint = "SHA256:" + Base64.getEncoder().withoutPadding().encodeToString(id.toByteArray()).padEnd(43, 'A')
     private val overrides = HashMap<String, (JsonObject) -> JsonElement>()
@@ -79,6 +81,8 @@ class FakeMachine(
             "pgrep" in command -> ok("server\t/home/demo/.local/bin/herdr\therdr $version\n")
             w.containsAll(listOf("session", "list", "--json")) ->
                 ok("""{"sessions":[{"name":"default","default":true,"running":true,"socket_path":"/home/demo/.config/herdr/herdr.sock"}]}""")
+            // herdr-push: only its journal is asked for in the previews; without one it isn't installed.
+            "herdr-push" in command && "journal" in w -> journal?.let { ok(it.toString() + "\n") } ?: CommandResult(126, "", "")
             "command -v herdr-projects" in command -> board?.let { ok(BOARD_PATH + "\n") } ?: CommandResult(127, "", "")
             BOARD_PATH in command -> board?.run(command) ?: CommandResult(127, "", "herdr-projects: not found")
             w.containsAll(listOf("machine", "list", "--json")) -> ok("""{"machines":[]}""")

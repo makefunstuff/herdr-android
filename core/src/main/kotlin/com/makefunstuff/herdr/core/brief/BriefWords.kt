@@ -127,8 +127,6 @@ object BriefWords {
      */
     fun spoken(b: Brief, zone: ZoneId): List<BriefLine> {
         val reached = b.reached
-        val several = reached.size > 1
-        fun on(i: BriefItem) = if (several) " On ${i.machineLabel}." else ""
         val out = mutableListOf<BriefLine>()
         val where = names(reached.map { it.label }).let { if (it.isEmpty()) "" else ", on $it" }
         out += BriefLine("${greeting(b.at, zone)} Here is what happened since ${time(b.since, b.at, zone)}$where.")
@@ -140,7 +138,9 @@ object BriefWords {
         fun section(header: String, items: List<BriefItem>, say: (BriefItem) -> String) {
             if (items.isEmpty()) return
             out += BriefLine(header)
-            items.take(SPOKEN).forEach { out += BriefLine(sentence(say(it)) + on(it), it.ref) }
+            // Which machine, where the section has more than one.
+            val several = items.map { it.machineId }.distinct().size > 1
+            items.take(SPOKEN).forEach { out += BriefLine(sentence(say(it)) + if (several) " On ${it.machineLabel}." else "", it.ref) }
             if (items.size > SPOKEN) out += BriefLine("And ${items.size - SPOKEN} more.")
         }
 

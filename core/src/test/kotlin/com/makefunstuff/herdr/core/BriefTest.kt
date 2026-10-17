@@ -143,11 +143,11 @@ class BriefTest {
             listOf(
                 "Good morning. Here is what happened since 23:10 yesterday, on devbox and gpu-box.",
                 "One task went wrong:",
-                "Rewrite the install page: review failed. On devbox.",
+                "Rewrite the install page: review failed.",
                 "One thing waits for you:",
-                "claude asks about Speed up /jobs: May it lock jobs? On devbox.",
+                "claude asks about Speed up /jobs: May it lock jobs?",
                 "7 tasks merged:",
-                "Task 1. On gpu-box.", "Task 2. On gpu-box.", "Task 3. On gpu-box.", "Task 4. On gpu-box.", "Task 5. On gpu-box.",
+                "Task 1.", "Task 2.", "Task 3.", "Task 4.", "Task 5.",
                 "And 2 more.",
                 "Still at work: 1 task.",
                 "mac-mini couldn't be reached.",
@@ -164,6 +164,20 @@ class BriefTest {
         assertEquals("Failed: Rewrite the install page (review failed)", note[0])
         assertEquals("Asks: claude · Speed up /jobs", note[1])
         assertEquals("and 4 more", note.last())
+    }
+
+    @Test
+    fun saysWhichMachineWhereASectionSpansSeveral() {
+        fun waits(machine: String, title: String) = BriefItem(BriefItem.Kind.Waiting, machine, machine, title, "T", "ready to approve", taskId = "$machine/1")
+        val b = Brief(
+            at = now, since = since,
+            machines = listOf(BriefMachine("devbox", "devbox", BriefMachine.Coverage.Journal), BriefMachine("gpu", "gpu", BriefMachine.Coverage.Journal)),
+            waiting = listOf(waits("devbox", "One"), waits("gpu", "Two")),
+        )
+        assertEquals(
+            listOf("2 things wait for you:", "One: ready to approve. On devbox.", "Two: ready to approve. On gpu."),
+            BriefWords.spoken(b, zone).map { it.text }.drop(1).take(3),
+        )
     }
 
     @Test
