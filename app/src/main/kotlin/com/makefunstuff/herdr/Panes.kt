@@ -44,6 +44,9 @@ class Panes(
     /** Opens [machineId]'s board, on [task] if given: on the right, or on a phone as its own screen. */
     fun openBoard(nav: NavController, machineId: String, task: String? = null) {
         if (!wide) return nav.navigate(Routes.board(machineId, task))
+        // A board still open in the middle (it was opened while the window was narrow) hides the right pane:
+        // close it, so the board asked for shows where boards go on a wide window, and its task opens there now.
+        if (nav.currentDestination?.route == Routes.BOARD) nav.popBackStack()
         chosen.machine = machineId
         chosen.task = task
     }

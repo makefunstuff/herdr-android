@@ -2,6 +2,7 @@
 // A scene starts from Demo's machines; `route` opens a screen, `actions` taps on what it shows.
 package preview
 
+import com.makefunstuff.herdr.Links
 import com.makefunstuff.herdr.Routes
 import com.makefunstuff.herdr.core.push.PhoneQuiet
 import com.makefunstuff.herdr.core.push.QuietHours
@@ -70,6 +71,13 @@ fun scenes(): List<Scene> = listOf(
     Scene("wide", widthDp = 1280, heightDp = 800, actions = { tapText("Speed up /jobs") }),
     Scene("wide-terminal", route = Routes.terminal(DEVBOX, APP_SHELL), widthDp = 840, heightDp = 940),
     Scene("wide-task", widthDp = 1280, heightDp = 800, actions = { tapText("Coordinator"); tapText("Review passed. Ready to merge.") }),
+    // A board opened as its own screen on a phone, the window then made wide: a notification's link to one of its
+    // tasks moves the board to the right, with that task open.
+    Scene(
+        "wide-link-task", route = Routes.board(DEVBOX), widthDp = 1280, heightDp = 800,
+        // On the UI thread, as a tapped notification reaches the app.
+        actions = { runOnUiThread { Links.open(Routes.board(DEVBOX, "herdr-android/9")) }; settle() },
+    ),
     // Machines in the middle: the nav bar is under the list.
     Scene("wide-machines", widthDp = 1280, heightDp = 800, actions = { tapLabel("Machines") }),
     // Rotating across the line keeps what is open as it was: a chat with its key row shown, turned from a phone

@@ -49,6 +49,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.NavController
+import androidx.navigation.compose.currentBackStackEntryAsState
 import com.makefunstuff.herdr.BoardChoice
 import com.makefunstuff.herdr.LocalPanes
 import com.makefunstuff.herdr.Routes
@@ -315,9 +316,12 @@ fun BoardScreen(nav: NavController, machineId: String, openTask: String? = null,
     }
 
     val open = tasks.firstOrNull { it.id == openId }
+    // On the right of a wide window, Back closes what the middle shows first (its own Back), and the open task after it.
+    val middle by nav.currentBackStackEntryAsState()
+    val middleCloses = pane != null && middle?.destination?.route != Routes.AGENTS
     if (openId != null && open != null) {
         TaskDetailScreen(session, open, onBack = { openId = null }, busy = busy, onAction = { a -> choose(open, a) }, onPick = { letter -> perform(open, BoardAction.Pick, letter = letter) },
-            onMore = { actionsFor = open })
+            onMore = { actionsFor = open }, backEnabled = !middleCloses)
     }
     actionsFor?.let { t ->
         ActionsSheet(t, onDismiss = { actionsFor = null }, onAction = { a -> actionsFor = null; choose(t, a) }, onEdit = { actionsFor = null; pending = Pending.Edit(t) },

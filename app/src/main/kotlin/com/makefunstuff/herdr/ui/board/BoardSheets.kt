@@ -211,8 +211,10 @@ fun TaskDetailScreen(
     onAction: (BoardAction) -> Unit,
     onPick: (String) -> Unit,
     onMore: () -> Unit,
+    /** False while Back has something else to close first (the middle of a wide window, beside this board). */
+    backEnabled: Boolean = true,
 ) {
-    BackHandler(onBack = onBack)
+    BackHandler(enabled = backEnabled, onBack = onBack)
     val owner = LocalLifecycleOwner.current
     var details by remember { mutableStateOf<TaskDetails?>(null) }
     var problem by remember { mutableStateOf<String?>(null) }
