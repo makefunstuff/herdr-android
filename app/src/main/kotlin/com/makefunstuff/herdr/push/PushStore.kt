@@ -2,6 +2,7 @@ package com.makefunstuff.herdr.push
 
 import android.content.Context
 import com.makefunstuff.herdr.core.push.PushSeal
+import com.makefunstuff.herdr.core.push.QuietHours
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -28,6 +29,8 @@ data class PushState(
     val checkMinutes: Int = 15,
     /** Live Updates for running board tasks and agents (herdr-push then also sends what runs). */
     val live: Boolean = true,
+    /** When notifications that can wait are held, to come as one summary later. */
+    val quiet: QuietHours = QuietHours(),
     val machines: Map<String, MachinePush> = emptyMap(),
 ) {
     fun machine(id: String): MachinePush = machines[id] ?: MachinePush()

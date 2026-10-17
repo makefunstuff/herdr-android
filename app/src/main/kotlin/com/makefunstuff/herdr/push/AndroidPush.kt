@@ -3,15 +3,18 @@ package com.makefunstuff.herdr.push
 import android.Manifest
 import android.app.BroadcastOptions
 import android.app.NotificationManager
+import android.app.UiModeManager
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import com.makefunstuff.herdr.HerdrApp
+import com.makefunstuff.herdr.core.push.PhoneQuiet
 import java.util.UUID
 
 /**
@@ -139,4 +142,16 @@ class AndroidPhone(private val context: Context, private val store: PushStore) :
     }
 
     override fun planChecks() = Wakes.plan(context)
+
+    override fun quietMode(): PhoneQuiet? {
+        if (context.getSystemService(UiModeManager::class.java)?.currentModeType == Configuration.UI_MODE_TYPE_CAR) return PhoneQuiet.Driving
+        // Bedtime and Driving, as Android's modes, turn on Do Not Disturb in their own way: anything but "all".
+        return when (context.getSystemService(NotificationManager::class.java).currentInterruptionFilter) {
+            NotificationManager.INTERRUPTION_FILTER_PRIORITY, NotificationManager.INTERRUPTION_FILTER_ALARMS,
+            NotificationManager.INTERRUPTION_FILTER_NONE -> PhoneQuiet.DoNotDisturb
+            else -> null
+        }
+    }
+
+    override fun planQuiet(at: Long?) = QuietWakes.plan(context, at)
 }

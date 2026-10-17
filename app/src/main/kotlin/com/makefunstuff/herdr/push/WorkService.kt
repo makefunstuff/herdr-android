@@ -136,3 +136,35 @@ class WakeReceiver : BroadcastReceiver() {
         }
     }
 }
+
+/**
+ * The alarm that looks whether quiet hours ended, so what was held shows: at the end of the schedule,
+ * and every quarter of an hour while the phone is in Do Not Disturb or car mode (a closed app isn't
+ * told when those end). It only posts a notification, so it needs no service.
+ */
+object QuietWakes {
+    const val QUIET = "com.makefunstuff.herdr.QUIET"
+
+    private fun intent(context: Context) = PendingIntent.getBroadcast(
+        context, 1, Intent(context, QuietReceiver::class.java).setAction(QUIET),
+        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+    )
+
+    fun plan(context: Context, at: Long?) {
+        val alarms = context.getSystemService(AlarmManager::class.java)
+        val pi = intent(context)
+        if (at == null) return alarms.cancel(pi)
+        if (Build.VERSION.SDK_INT < 31 || alarms.canScheduleExactAlarms()) {
+            alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi)
+        } else {
+            alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi)
+        }
+    }
+}
+
+/** That alarm, and what moves it: a restart or update (which drop alarms), and the clock or time zone changing. */
+class QuietReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        (context.applicationContext as HerdrApp).container.quietWork.replan()
+    }
+}

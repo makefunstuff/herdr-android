@@ -24,7 +24,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavHostController
 import com.makefunstuff.herdr.BuildConfig
+import com.makefunstuff.herdr.Routes
 import com.makefunstuff.herdr.data.IdentityStore
 import com.makefunstuff.herdr.ui.common.LocalContainer
 import com.makefunstuff.herdr.ui.common.copyToClipboard
@@ -45,7 +47,7 @@ import com.makefunstuff.herdr.ui.theme.Space
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen() {
+fun SettingsScreen(nav: NavHostController) {
     val container = LocalContainer.current
     val context = LocalContext.current
     val keyState by container.identity.state.collectAsStateWithLifecycle()
@@ -98,7 +100,7 @@ fun SettingsScreen() {
                     }
                 }
             }
-            QuietCard(padded = true) { NotificationsCard() }
+            QuietCard(padded = true) { NotificationsCard(onQuietHours = { nav.navigate(Routes.QUIET) }) }
             QuietCard(padded = true) {
                 Column(verticalArrangement = Arrangement.spacedBy(Space.xs)) {
                     Text("About", style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })

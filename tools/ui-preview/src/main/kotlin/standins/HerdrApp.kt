@@ -11,6 +11,7 @@ import com.makefunstuff.herdr.push.Inbox
 import com.makefunstuff.herdr.push.LiveWork
 import com.makefunstuff.herdr.push.PushHosts
 import com.makefunstuff.herdr.push.PushStore
+import com.makefunstuff.herdr.push.QuietWork
 import preview.PreviewAlerts
 import preview.PreviewLive
 import preview.PreviewPhone
@@ -29,12 +30,15 @@ class AppContainer(app: Context) {
     val inbox = Inbox(java.io.File(app.filesDir, "alerts.json"), PreviewAlerts)
     val phone = PreviewPhone
     val pushHosts = PushHosts(scope, hosts, machines, push, phone)
-    val liveWork = LiveWork(scope, hosts, machines, push, PreviewLive)
-    val alertWork = AlertWork(hosts, machines, push, inbox, liveWork)
+    val quietWork = QuietWork(scope, push.state, phone, inbox, foreground = { hosts.isForeground })
+    val liveWork = LiveWork(scope, hosts, machines, push, PreviewLive, quietWork)
+    val alertWork = AlertWork(hosts, machines, push, inbox, liveWork, quietWork)
 
     init {
         // The app is in front for the whole scene.
         hosts.setForeground(true)
+        // What quiet hours mean now, before the first frame.
+        quietWork.check()
     }
 
     /** Ends the scene: every machine session and the container's coroutines. */

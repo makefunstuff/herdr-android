@@ -49,6 +49,16 @@
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
+        <!-- Quiet hours: the alarm that looks whether they ended, set again after a restart, an update,
+             or a change of the clock or time zone. -->
+        <receiver android:name=".push.QuietReceiver" android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+            </intent-filter>
+        </receiver>
         <!-- A Live Update's Stop for a task, which asks first, and Keep going. -->
         <receiver android:name=".push.LiveReceiver" android:exported="false" />
         <!-- Pushes from the machines through a push app (UnifiedPush). Only its token is taken, and only

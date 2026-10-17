@@ -43,6 +43,7 @@ import com.makefunstuff.herdr.ui.machines.EditMachineScreen
 import com.makefunstuff.herdr.ui.machines.MachineScreen
 import com.makefunstuff.herdr.ui.machines.MachinesScreen
 import com.makefunstuff.herdr.ui.settings.KeySetupDialog
+import com.makefunstuff.herdr.ui.settings.QuietHoursScreen
 import com.makefunstuff.herdr.ui.settings.SettingsScreen
 import com.makefunstuff.herdr.ui.terminal.TerminalScreen
 import com.makefunstuff.herdr.ui.theme.Herdr
@@ -79,6 +80,7 @@ object Routes {
     const val AGENTS = "agents"
     const val MACHINES = "machines"
     const val SETTINGS = "settings"
+    const val QUIET = "settings/quiet"
     const val MACHINE = "machine/{id}"
     const val EDIT = "edit?id={id}"
     const val AGENT = "agent/{mid}/{pane}"
@@ -146,7 +148,8 @@ private fun AppNav(nav: NavHostController) {
         ) {
             composable(Routes.AGENTS) { AgentsScreen(nav) }
             composable(Routes.MACHINES) { MachinesScreen(nav) }
-            composable(Routes.SETTINGS) { SettingsScreen() }
+            composable(Routes.SETTINGS) { SettingsScreen(nav) }
+            composable(Routes.QUIET) { QuietHoursScreen(nav) }
             composable(Routes.MACHINE) { MachineScreen(nav, it.arguments?.getString("id").orEmpty()) }
             composable(Routes.EDIT) { EditMachineScreen(nav, it.arguments?.getString("id")) }
             composable(Routes.AGENT) {

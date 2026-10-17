@@ -3,6 +3,8 @@
 package preview
 
 import com.makefunstuff.herdr.Routes
+import com.makefunstuff.herdr.core.push.PhoneQuiet
+import com.makefunstuff.herdr.core.push.QuietHours
 import com.makefunstuff.herdr.data.IdentityStore
 import preview.Demo.API_AGENT
 import preview.Demo.APP_AGENT
@@ -54,6 +56,17 @@ fun scenes(): List<Scene> = listOf(
     Scene("settings-notifications", route = Routes.SETTINGS, heightDp = 1460, setup = { push = Demo.push() }),
     // Live Updates turned off for the app in Android's settings: they show as ordinary notifications.
     Scene("settings-live-off", route = Routes.SETTINGS, heightDp = 1460, setup = { push = Demo.push(); liveAllowed = false }),
+    // Quiet hours: off; then on, the phone in Do Not Disturb with two finished agents held, and picking a time.
+    Scene("quiet-hours-off", route = Routes.QUIET, setup = { push = Demo.push() }),
+    Scene(
+        "quiet-hours", route = Routes.QUIET, heightDp = 1100,
+        setup = { push = Demo.push().copy(quiet = Demo.quiet()); quietMode = PhoneQuiet.DoNotDisturb; held = Demo.held() },
+    ),
+    Scene(
+        "quiet-hours-time", route = Routes.QUIET,
+        setup = { push = Demo.push().copy(quiet = Demo.quiet()); quietMode = PhoneQuiet.DoNotDisturb },
+        actions = { tapText("From") },
+    ),
     Scene(
         "settings-no-push-app", route = Routes.SETTINGS, heightDp = 1200,
         setup = { push = Demo.push().copy(endpoint = null, distributor = null); pushApps = emptyList(); notificationsAllowed = false },

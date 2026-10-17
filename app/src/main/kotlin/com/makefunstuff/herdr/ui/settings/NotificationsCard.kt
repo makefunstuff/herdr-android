@@ -3,6 +3,7 @@ package com.makefunstuff.herdr.ui.settings
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -54,10 +55,10 @@ private val CHECKS = listOf(0 to "Never", 15 to "15 min", 60 to "1 hour")
 
 /**
  * Notifications while the app is closed: the switch, the push app that carries them, each machine's
- * herdr-push, and how often the app looks at the machines itself.
+ * herdr-push, Live Updates, the way to quiet hours, and how often the app looks at the machines itself.
  */
 @Composable
-fun NotificationsCard() {
+fun NotificationsCard(onQuietHours: () -> Unit) {
     val container = LocalContainer.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -141,6 +142,8 @@ fun NotificationsCard() {
             SecondaryButton("Turn on Live Updates") { phone.openLiveSettings() }
         }
 
+        QuietHoursRow(st.quiet.label, onQuietHours)
+
         Text("The app also looks", style = MaterialTheme.typography.titleSmall)
         SegmentedPills(
             CHECKS.map { it.second },
@@ -156,6 +159,27 @@ fun NotificationsCard() {
             style = MaterialTheme.typography.bodySmall,
             color = c.muted,
         )
+    }
+}
+
+/** The way to quiet hours, with how they are set. */
+@Composable
+private fun QuietHoursRow(label: String, onClick: () -> Unit) {
+    val c = Herdr.colors
+    Column {
+        RowDivider(inset = 0.dp)
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = 56.dp).clickable(onClick = onClick).padding(vertical = Space.s),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text("Quiet hours", style = MaterialTheme.typography.titleMedium, color = c.strong)
+                Text(label, style = MaterialTheme.typography.bodySmall, color = c.muted)
+            }
+            Spacer(Modifier.width(Space.s))
+            Icon(HerdrIcons.ChevronRight, null, tint = c.muted, modifier = Modifier.size(18.dp))
+        }
+        RowDivider(inset = 0.dp)
     }
 }
 
