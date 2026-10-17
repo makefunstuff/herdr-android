@@ -11,6 +11,8 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
+import com.makefunstuff.herdr.bubble.AndroidBubbles
+import com.makefunstuff.herdr.bubble.Bubbles
 import com.makefunstuff.herdr.data.DraftStore
 import com.makefunstuff.herdr.data.HealthStore
 import com.makefunstuff.herdr.data.HostManager
@@ -96,6 +98,7 @@ class AppContainer(app: Application) {
     val liveWork = LiveWork(scope, hosts, machines, push, AndroidLive(app), quietWork)
     val tally = TallyStore(java.io.File(app.filesDir, "tally.json"), machines)
     val alertWork = AlertWork(hosts, machines, push, inbox, liveWork, quietWork, tally)
+    val bubbles: Bubbles = AndroidBubbles(app)
 
     init {
         // Read the key up front so the public key is ready to show. A missing key is never made

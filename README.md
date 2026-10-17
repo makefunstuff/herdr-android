@@ -133,6 +133,12 @@ The Coordinator is a tap away from outside the app too:
 
 The counts are what the app knows: what it sees while open (and each board's list, read every 5 minutes while the app is in front), its own looks while closed, and the machines' pushes (see Notifications above). An agent that needs you and the board task it works for count once, as do a task and its own agents at work, and another machine's task counts on that machine. What works and nothing confirmed for 75 minutes stops counting.
 
+## Floating chats
+
+One agent's chat or the Coordinator chat can float over other apps as an Android bubble (Android 11 and newer), to steer it while reading something else. **Float over other apps** is in an agent chat's **⋯** menu and in the Coordinator's top bar; an agent's notification has **Float chat** too, when it has room for a third button (a finished agent, one that asks something without a yes or no), and so has the Live Update of an agent at work (the Coordinator's own agent floats the Coordinator chat). The bubble is the chat itself, with its draft, attachments and terminal; **Open in the app** (in its menu, or the Coordinator's top bar) opens it full size. Each chat gets its own bubble, and Android keeps them as conversations: dragging one away closes it, and the launcher's long press on the app lists them.
+
+Android lets an app's chats bubble only once you allow it. The first time, the app says so and opens Herdr's bubble settings: choose **All conversations can bubble**, and the chat floats as you come back. With **Selected conversations**, the chat shows as a notification instead, whose bubble button floats it (and marks it as one that may).
+
 ## Big screens
 
 On a window 840 dp wide or wider (a tablet, an open foldable, a large window or desktop windowing), the app shows three panes side by side, like Puggie: the agents list (with Agents, Machines and Settings under it), then what you opened from it (an agent's chat, a terminal, the Coordinator, a machine, Settings), then the work board. What is open in the middle is marked in the list, and opening another agent replaces it instead of piling up; Back closes it, and then a task open on the board. A board opened from a notification, the widget or a Board card shows on the right, with its task open (a board still open in the middle, from before the window grew, moves there); with several machines that have a board, their Board cards choose which. A narrower window keeps the phone layout. Rotating or resizing across the line keeps what is open as it was: the chat, its draft and scroll, the board's search, filters and open task (kept while a narrow window hides the board, and back when it is wide again).
@@ -146,7 +152,7 @@ UI changes are checked, and shown in review, with screen previews instead of an 
 ./gradlew -p tools/ui-preview render -Ponly=board,chat   # some of them
 ```
 
-It needs JDK 17, no Android SDK, and takes about 3 minutes for all 43 scenes (agents, machines, a machine, a machine's health and cleanup, agent chats, the Coordinator, the board and a task, the terminal, settings with its notifications, the dialogs and sheets, and the three panes of a wide window, also across a rotation). CI renders them too and uploads them as the `herdr-screens-<run>` artifact. See [`tools/ui-preview/README.md`](tools/ui-preview/README.md) for how it works and how to add a scene, and [`AGENTS.md`](AGENTS.md) for how changes are reviewed.
+It needs JDK 17, no Android SDK, and takes about 3 minutes for all 48 scenes (agents, machines, a machine, a machine's health and cleanup, agent chats, the Coordinator, floating chats, the board and a task, the terminal, settings with its notifications, the dialogs and sheets, and the three panes of a wide window, also across a rotation). CI renders them too and uploads them as the `herdr-screens-<run>` artifact. See [`tools/ui-preview/README.md`](tools/ui-preview/README.md) for how it works and how to add a scene, and [`AGENTS.md`](AGENTS.md) for how changes are reviewed.
 
 ## Layout
 

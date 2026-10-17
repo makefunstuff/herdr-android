@@ -40,6 +40,24 @@
             </intent-filter>
         </activity>
 
+        <!-- A chat floating over other apps: an Android bubble's window (resizable and embedded, one
+             document per chat), and Float on a notification, which floats the agent's chat and closes. -->
+        <activity
+            android:name=".bubble.BubbleActivity"
+            android:exported="false"
+            android:allowEmbedded="true"
+            android:documentLaunchMode="always"
+            android:resizeableActivity="true"
+            android:windowSoftInputMode="adjustResize"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|density|uiMode" />
+        <activity
+            android:name=".bubble.FloatActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.Herdr.Invisible" />
+
         <!-- Asking the Coordinator from anywhere: the share sheet and "Send to Coordinator" next to Copy
              land here, which hands what was shared to MainActivity in the app's own task. -->
         <activity

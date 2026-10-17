@@ -130,6 +130,7 @@ class AlertsTest {
     fun blockedWithoutAScreenOnlyReplies() {
         val a = show(Alerts.of("m1", "devbox", PushEvent.Agent(agent("blocked", name = null), "")))
         assertEquals("claude needs you", a.title)
+        assertEquals("claude", a.agentName, "its chat's name, for its bubble")
         assertEquals("Waiting for your answer", a.text)
         assertEquals(listOf(AlertAction.Type.ReplyAgent), a.actions.map { it.type })
     }
@@ -138,6 +139,7 @@ class AlertsTest {
     fun finishedAndBackToWork() {
         val a = show(Alerts.of("m1", "devbox", PushEvent.Agent(agent("done", seq = 9), "api › agents")))
         assertEquals("api finished", a.title)
+        assertEquals("api", a.agentName)
         assertEquals("Speed up /jobs", a.text)
         assertEquals(Alert.Kind.Finished, a.kind)
         assertEquals("done#9", a.sig)

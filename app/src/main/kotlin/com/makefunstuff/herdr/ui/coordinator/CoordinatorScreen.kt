@@ -44,6 +44,10 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.makefunstuff.herdr.Routes
+import com.makefunstuff.herdr.bubble.BubbleChat
+import com.makefunstuff.herdr.bubble.LocalBubble
+import com.makefunstuff.herdr.ui.common.rememberFloat
+import com.makefunstuff.herdr.ui.design.BarIcon
 import com.makefunstuff.herdr.core.board.ChatLine
 import com.makefunstuff.herdr.core.board.CoordinatorChat
 import com.makefunstuff.herdr.core.board.CoordinatorView
@@ -223,6 +227,11 @@ fun CoordinatorScreen(nav: NavController, machineId: String) {
         }
     }
 
+    // Floating over other apps as a bubble, from here; in that bubble, back to the app.
+    val bubbleChat = remember(machineId) { BubbleChat.Coordinator(machineId) }
+    val float = rememberFloat(bubbleChat, "Coordinator", state.machine.label)
+    val inBubble = LocalBubble.current != null
+
     val typing = typingInShortWindow()
     Scaffold(
         containerColor = Herdr.colors.ground,
@@ -230,9 +239,11 @@ fun CoordinatorScreen(nav: NavController, machineId: String) {
             if (!typing) HerdrTopBar(
                 "Coordinator",
                 subtitle = "${state.machine.label} · " + (v?.let { stateWords(it) } ?: if (state.online) "work board" else state.status.label()),
-                onBack = { nav.popBackStack() },
+                onBack = if (inBubble) null else ({ nav.popBackStack() }),
             ) {
                 if (coordinatorPane != null) QuietButton(onClick = { nav.navigate(Routes.terminal(machineId, coordinatorPane)) }) { Text("Terminal") }
+                if (float != null) BarIcon(HerdrIcons.PictureInPicture2, "Float over other apps", float)
+                if (inBubble) BarIcon(HerdrIcons.Maximize2, "Open in the app", { container.bubbles.openApp(bubbleChat) })
             }
         },
     ) { padding ->

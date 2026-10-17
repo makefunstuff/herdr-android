@@ -89,6 +89,10 @@ class LiveItemsTest {
         assertEquals("Coordinator", coordinator.title)
         assertEquals("Working", coordinator.text)
         assertEquals("Coordinator", LiveItems.agent("m1", "devbox", agent(name = "sw-coordinator-2", title = null), "")!!.title)
+        // Its chat to float is the Coordinator's, not its agent's.
+        assertTrue(coordinator.coordinator)
+        assertTrue(!worker.coordinator)
+        assertTrue(!LiveItems.isCoordinator("sw-coordinatorx"))
         // Its title is its workspace's label too: said once.
         val reviewer = assertNotNull(
             LiveItems.agent(

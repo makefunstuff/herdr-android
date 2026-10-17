@@ -37,6 +37,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.makefunstuff.herdr.Routes
+import com.makefunstuff.herdr.bubble.BubbleChat
+import com.makefunstuff.herdr.bubble.LocalBubble
+import com.makefunstuff.herdr.ui.common.rememberFloat
 import com.makefunstuff.herdr.core.api.AgentStatus
 import com.makefunstuff.herdr.core.chat.AgentChat
 import com.makefunstuff.herdr.core.chat.AgentInput
@@ -90,6 +93,12 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
 
     // What the agent is working on: herdr's title for it, or the title the agent gives its terminal.
     val activity = agent?.let { it.title?.takeIf { t -> t.isNotBlank() } ?: it.terminalTitle?.takeIf { t -> t.isNotBlank() } }
+
+    val name = agent?.let { it.name?.takeIf { n -> n.isNotBlank() } ?: it.displayName } ?: pane?.displayName ?: paneId
+    // Floating over other apps as a bubble, from here; in that bubble, back to the app.
+    val bubbleChat = remember(machineId, paneId) { BubbleChat.Agent(machineId, paneId) }
+    val float = rememberFloat(bubbleChat, name, host.machine.label)
+    val inBubble = LocalBubble.current != null
 
     // The chat is open: its notification has done its job.
     LaunchedEffect(machineId, paneId) { container.inbox.dismiss(Alerts.agentTag(machineId, paneId)) }
@@ -166,13 +175,13 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
         containerColor = Herdr.colors.ground,
         topBar = {
             if (!typing) HerdrTopBar(
-                agent?.let { it.name?.takeIf { n -> n.isNotBlank() } ?: it.displayName } ?: pane?.displayName ?: paneId,
+                name,
                 subtitle = listOfNotNull(
                     agent?.agent?.takeIf { it != agent.name },
                     host.machine.label,
                     snapshot?.let { s -> pane?.let { s.location(it.workspaceId, it.tabId) } },
                 ).joinToString(" · "),
-                onBack = { nav.popBackStack() },
+                onBack = if (inBubble) null else ({ nav.popBackStack() }),
             ) {
                 QuietButton(onClick = { nav.navigate(Routes.terminal(machineId, paneId)) }) { Text("Terminal") }
                 BarIcon(HerdrIcons.Ellipsis, "More", { menu = true })
@@ -255,6 +264,8 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
             onToggleKeys = { menu = false; showKeys = !showKeys },
             showKeys = showKeys,
             onKey = { menu = false; keys(it) },
+            onFloat = float?.let { f -> { menu = false; f() } },
+            onOpenApp = if (inBubble) ({ menu = false; container.bubbles.openApp(bubbleChat) }) else null,
         )
     }
 }

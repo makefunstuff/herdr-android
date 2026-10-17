@@ -17,6 +17,7 @@ import androidx.core.app.NotificationManagerCompat
 import com.makefunstuff.herdr.HerdrApp
 import com.makefunstuff.herdr.MainActivity
 import com.makefunstuff.herdr.R
+import com.makefunstuff.herdr.bubble.BubbleChat
 import com.makefunstuff.herdr.core.push.LiveItem
 import com.makefunstuff.herdr.core.push.LiveItems
 
@@ -74,7 +75,14 @@ class AndroidLive(private val context: Context) : LiveSink {
         // Without words for the chip, the time it has run: since this part of the run began.
         if (item.since > 0) b.setWhen(item.since).setShowWhen(true).setUsesChronometer(true) else b.setShowWhen(false)
         when (look) {
-            LiveLook.Normal -> b.addAction(0, "Stop", if (item.stopAsks) receiverIntent(item, LiveReceiver.ASK) else stopIntent(item))
+            LiveLook.Normal -> {
+                b.addAction(0, "Stop", if (item.stopAsks) receiverIntent(item, LiveReceiver.ASK) else stopIntent(item))
+                // A working agent's chat (the Coordinator's own, for its agent) floats over other apps, to steer it while reading something else.
+                if (item.kind == LiveItem.Kind.Agent && item.paneId.isNotEmpty() && Build.VERSION.SDK_INT >= 30) {
+                    val chat = if (item.coordinator) BubbleChat.Coordinator(item.machineId) else BubbleChat.Agent(item.machineId, item.paneId)
+                    b.addAction(0, "Float chat", AndroidAlerts.floatIntent(context, chat, item.title, item.tag))
+                }
+            }
             LiveLook.Ask -> {
                 b.addAction(0, "Stop it", stopIntent(item))
                 b.addAction(0, "Keep going", receiverIntent(item, LiveReceiver.KEEP))

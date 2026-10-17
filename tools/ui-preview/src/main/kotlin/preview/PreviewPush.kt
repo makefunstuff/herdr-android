@@ -1,5 +1,8 @@
 package preview
 
+import com.makefunstuff.herdr.bubble.BubbleChat
+import com.makefunstuff.herdr.bubble.Bubbles
+import com.makefunstuff.herdr.bubble.Floated
 import com.makefunstuff.herdr.core.push.Alert
 import com.makefunstuff.herdr.core.push.LiveItem
 import com.makefunstuff.herdr.core.push.PhoneQuiet
@@ -44,4 +47,15 @@ object PreviewLive : LiveSink {
     override fun show(item: LiveItem, look: LiveLook, note: String?) {}
     override fun cancel(tag: String) {}
     override fun active(): List<String> = emptyList()
+}
+
+/** Bubbles in the previews: a phone that has them, allowed unless a scene says otherwise; nothing floats. */
+object PreviewBubbles : Bubbles {
+    var allowed = true
+    override val supported = true
+    override fun allowed(chat: BubbleChat) = allowed
+    override fun float(chat: BubbleChat, title: String, machine: String) = if (allowed) Floated.Yes else Floated.BubblesOff
+    override fun openSettings() {}
+    override fun openNotificationSettings() {}
+    override fun openApp(chat: BubbleChat) {}
 }

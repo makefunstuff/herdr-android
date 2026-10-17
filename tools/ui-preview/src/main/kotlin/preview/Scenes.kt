@@ -4,6 +4,7 @@ package preview
 
 import com.makefunstuff.herdr.Links
 import com.makefunstuff.herdr.Routes
+import com.makefunstuff.herdr.bubble.BubbleChat
 import com.makefunstuff.herdr.core.push.PhoneQuiet
 import com.makefunstuff.herdr.core.push.QuietHours
 import com.makefunstuff.herdr.data.IdentityStore
@@ -71,6 +72,18 @@ fun scenes(): List<Scene> = listOf(
     Scene("task-review-failed", route = Routes.board(DEVBOX), actions = { tapText("Rewrite the install page") }),
     Scene("task-actions", route = Routes.board(DEVBOX), actions = { longPressText("Rewrite the install page") }),
     Scene("board-add", route = Routes.board(DEVBOX), actions = { tapLabel("Add a task") }),
+
+    // A chat floating over other apps as a bubble: offered in the agent's menu and the Coordinator's bar, Android's
+    // bubbles not yet allowed for the app, and the bubble's own window (an agent's chat, the Coordinator), which
+    // has no back arrow and opens the chat in the app instead.
+    Scene("chat-float", route = Routes.agent(DEVBOX, APP_AGENT), actions = { tapLabel("More") }),
+    Scene(
+        "float-off", route = Routes.coordinator(DEVBOX), setup = { bubblesAllowed = false },
+        actions = { tapLabel("Float over other apps") },
+    ),
+    Scene("bubble", bubble = BubbleChat.Agent(DEVBOX, APP_AGENT), widthDp = 392, heightDp = 640),
+    Scene("bubble-menu", bubble = BubbleChat.Agent(DEVBOX, APP_AGENT), widthDp = 392, heightDp = 640, actions = { tapLabel("More") }),
+    Scene("bubble-coordinator", bubble = BubbleChat.Coordinator(DEVBOX), widthDp = 392, heightDp = 640),
 
     // A pane as a live terminal.
     Scene("terminal", route = Routes.terminal(DEVBOX, APP_SHELL)),

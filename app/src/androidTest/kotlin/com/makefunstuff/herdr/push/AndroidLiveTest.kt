@@ -68,5 +68,7 @@ class AndroidLiveTest {
         val a = live.build(agent)
         check(a)
         if (Build.VERSION.SDK_INT >= 36) assertTrue("going, no end known", a.extras.getBoolean(Notification.EXTRA_PROGRESS_INDETERMINATE))
+        // An agent at work can also float its chat over other apps, where Android has bubbles.
+        assertEquals(if (Build.VERSION.SDK_INT >= 30) listOf("Stop", "Float chat") else listOf("Stop"), a.actions.map { it.title.toString() })
     }
 }

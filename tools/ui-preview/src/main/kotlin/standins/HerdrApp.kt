@@ -15,7 +15,9 @@ import com.makefunstuff.herdr.push.PushHosts
 import com.makefunstuff.herdr.push.PushStore
 import com.makefunstuff.herdr.push.QuietWork
 import com.makefunstuff.herdr.push.TallyStore
+import com.makefunstuff.herdr.bubble.Bubbles
 import preview.PreviewAlerts
+import preview.PreviewBubbles
 import preview.PreviewLive
 import preview.PreviewPhone
 import kotlinx.coroutines.CoroutineScope
@@ -39,6 +41,7 @@ class AppContainer(app: Context) {
     val liveWork = LiveWork(scope, hosts, machines, push, PreviewLive, quietWork)
     val tally = TallyStore(java.io.File(app.filesDir, "tally.json"), machines)
     val alertWork = AlertWork(hosts, machines, push, inbox, liveWork, quietWork, tally)
+    val bubbles: Bubbles = PreviewBubbles
 
     init {
         // The app is in front for the whole scene.

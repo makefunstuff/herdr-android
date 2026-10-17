@@ -41,6 +41,9 @@ data class LiveItem(
 ) {
     enum class Kind { Task, Agent }
 
+    /** The board's Coordinator at work (its agent is `sw-coordinator`, or `sw-coordinator-2` when that name was taken). */
+    val coordinator: Boolean get() = kind == Kind.Agent && LiveItems.isCoordinator(agentName)
+
     /** Stop asks first for a task (the board's `stop` ends its agent's run); an agent's Stop is Esc, as in its chat. */
     val stopAsks: Boolean get() = kind == Kind.Task
 }
@@ -134,13 +137,15 @@ object LiveItems {
      * [a] as a Live Update while it works, else null. [workspace]: its workspace's label (the part of
      * [where] before its tab, when not given).
      */
+    /** The name the board gives its Coordinator's agent: `sw-coordinator`, or `sw-coordinator-2` when that name was taken. */
+    fun isCoordinator(agentName: String): Boolean = agentName == "sw-coordinator" || agentName.startsWith("sw-coordinator-")
+
     fun agent(machineId: String, machineLabel: String, a: AgentInfo, where: String, since: Long = 0, workspace: String = ""): LiveItem? {
         if (a.agentStatus != AgentStatus.Working) return null
         val raw = a.name?.takeIf { it.isNotBlank() }
         val title = a.title?.takeIf { it.isNotBlank() }
         val name = when {
-            // `sw-coordinator`, or `sw-coordinator-2` when that name was taken.
-            raw != null && (raw == "sw-coordinator" || raw.startsWith("sw-coordinator-")) -> "Coordinator"
+            raw != null && isCoordinator(raw) -> "Coordinator"
             // A board task's agent: its name is made up, its title says which task.
             raw != null && raw.startsWith("sw-") && title != null -> title
             else -> raw ?: a.displayName
