@@ -30,6 +30,12 @@ sealed interface PushEvent {
 
     /** The machine runs low on RAM or a disk, or (with nothing in [HealthReport.low]) has room again. */
     data class Health(val report: HealthReport) : PushEvent
+
+    /**
+     * An AI quick command ended there: run [id] of [name], in [state] (`done`, `failed`, `limit`),
+     * with the start of its answer ([text]) or why it failed ([error]).
+     */
+    data class Quick(val id: String, val name: String, val state: String, val text: String = "", val error: String = "", val cwd: String = "") : PushEvent
 }
 
 /** A working agent; [since] is when it started working (the machine's clock, seconds; 0 unknown). [workspace]: its workspace's label. */
@@ -90,6 +96,9 @@ object PushMessages {
             },
         )
         "health" -> PushEvent.Health(health(e))
+        "quick" -> e.str("id").takeIf { it.isNotEmpty() }?.let {
+            PushEvent.Quick(it, e.str("name").ifEmpty { it }, e.str("state"), e.str("text"), e.str("error"), e.str("cwd"))
+        }
         else -> null
     }
 
