@@ -37,15 +37,19 @@ import kotlin.test.fail
 class HealthTest {
     private val linux = File("/proc/meminfo").canRead()
 
-    private fun sh(command: String, home: File? = null, dir: File? = null): CommandResult {
+    private fun sh(command: String, home: File? = null, dir: File? = null, path: File? = null): CommandResult {
         val pb = ProcessBuilder("sh", "-c", command)
         if (home != null) pb.environment()["HOME"] = home.path
+        if (path != null) pb.environment()["PATH"] = path.path + File.pathSeparator + pb.environment()["PATH"]
         if (dir != null) pb.directory(dir)
+        // stderr to a file: a command that says a lot there (gawk --lint) must not block on a full pipe.
+        val errFile = File.createTempFile("health-sh", ".err").apply { deleteOnExit() }
+        pb.redirectError(errFile)
         val p = pb.start()
         p.outputStream.close()
         val out = p.inputStream.readBytes().toString(Charsets.UTF_8)
-        val err = p.errorStream.readBytes().toString(Charsets.UTF_8)
         assertTrue(p.waitFor(60, TimeUnit.SECONDS))
+        val err = errFile.readText().also { errFile.delete() }
         return CommandResult(p.exitValue(), out, err)
     }
 
@@ -72,6 +76,40 @@ class HealthTest {
         // The account's own processes carry where they run.
         val own = s.procs.filter { s.own(it) }
         if (own.isNotEmpty()) assertTrue(own.any { it.cwd.startsWith("/") }, "cwd of own processes")
+    }
+
+    /**
+     * The probe's awk never reads an array element or variable it didn't set: gawk 5.2.1 (GitHub's
+     * Ubuntu 24.04 runner, Debian 12) corrupts its empty string when a program does, and crashes
+     * ("fatal: floating point exception"), which left the screen without its processes. gawk's lint
+     * names every such read, whatever gawk this machine has.
+     */
+    @Test
+    fun probeReadsNothingItDidNotSet() {
+        assumeTrue(linux, "the full probe is for Linux")
+        assumeTrue(sh("command -v gawk").exitStatus == 0, "gawk isn't installed")
+        val bin = Files.createTempDirectory("lint").toFile()
+        try {
+            File(bin, "awk").apply { writeText("#!/bin/sh\nexec gawk --lint \"\$@\"\n"); setExecutable(true) }
+            val r = sh(HealthCommands.probe(listOf("demo/work-7-")), path = bin)
+            val reads = r.stderr.lines().filter { "uninitialized" in it || "fatal" in it }
+            assertEquals(0, r.exitStatus, r.stderr.take(2000))
+            assertTrue(reads.isEmpty(), reads.distinct().take(10).joinToString("\n"))
+            assertTrue(HealthReader.sample(r.stdout).procs.isNotEmpty())
+        } finally {
+            bin.deleteRecursively()
+        }
+    }
+
+    /** A look that dies partway is an error, never a machine with nothing running. */
+    @Test
+    fun aProbeThatFailsPartwayIsAnError() = runBlocking {
+        val partial = "@@herdr-health 1\n@os Linux\n@cores 4\n@meminfo\nMemTotal: 1000 kB\nMemAvailable: 500 kB\n@cpu 12.0\n"
+        val crashed = HealthClient { _, _ -> CommandResult(2, partial, "awk: cmd. line:34: (FILENAME=- FNR=535) fatal: floating point exception\n") }
+        val e = assertFailsWith<java.io.IOException> { crashed.sample() }
+        assertEquals("Reading the machine's health failed: awk: cmd. line:34: (FILENAME=- FNR=535) fatal: floating point exception", e.message)
+        assertEquals("Reading the machine's health took too long", assertFailsWith<java.io.IOException> { HealthClient { _, _ -> CommandResult(null, partial, "") }.quick() }.message)
+        assertNotNull(HealthClient { _, _ -> CommandResult(0, partial, "") }.sample().memory)
     }
 
     @Test

@@ -43,9 +43,21 @@ class HealthClient(private val run: suspend (command: String, timeoutSeconds: Lo
         }
     }
 
+    /**
+     * The output of a look that ran to its end. One that failed partway (awk crashed, it timed out)
+     * is an error, not a machine with nothing running: its readings would be missing, not empty.
+     */
     private fun check(r: CommandResult): String {
-        if (HealthCommands.MARK !in r.stdout) {
-            throw IOException(r.stderr.trim().lines().lastOrNull { it.isNotBlank() } ?: "The machine gave no health readings")
+        val why = r.stderr.trim().lines().lastOrNull { it.isNotBlank() }
+        if (HealthCommands.MARK !in r.stdout) throw IOException(why ?: "The machine gave no health readings")
+        if (r.exitStatus != 0) {
+            throw IOException(
+                when {
+                    r.exitStatus == null -> "Reading the machine's health took too long"
+                    why != null -> "Reading the machine's health failed: $why"
+                    else -> "Reading the machine's health failed (exit ${r.exitStatus})"
+                },
+            )
         }
         return r.stdout
     }

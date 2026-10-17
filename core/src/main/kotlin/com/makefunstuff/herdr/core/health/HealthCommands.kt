@@ -63,7 +63,7 @@ object HealthCommands {
      * process worth showing: `P pid ppid uid rssKb cpu ageSeconds comm cwd pwd pane workspace args`.
      */
     private val JOIN = """
-        BEGIN { FS = "\t"; nk = split(keep, K, "\t") }
+        BEGIN { FS = "\t"; nk = split(keep, K, "\t"); tot1 = tot2 = idle1 = idle2 = 0 }
         /^C1 / { n = split(${'$'}0, x, " "); for (i = 3; i <= n && i <= 10; i++) tot1 += x[i]; idle1 = x[6] + x[7]; next }
         /^C2 / { n = split(${'$'}0, x, " "); for (i = 3; i <= n && i <= 10; i++) tot2 += x[i]; idle2 = x[6] + x[7]; next }
         /^A\t/ { a[${'$'}2] = ${'$'}3; next }
@@ -88,15 +88,23 @@ object HealthCommands {
         END {
           dt = tot2 - tot1
           if (dt > 0) printf "@cpu %.1f\n", 100 * (dt - (idle2 - idle1)) / dt
+          # Only elements that exist are read (`p in x` first): gawk 5.2.1 (Ubuntu 24.04, Debian 12)
+          # corrupts its empty string when missing ones are, and then crashes.
           for (p in pids) {
-            cpu = (dt > 0 && (p in a) && (p in t)) ? (t[p] - a[p]) * 100 * cores / dt : 0
+            cpu = 0
+            if (dt > 0 && (p in a) && (p in t)) cpu = (t[p] - a[p]) * 100 * cores / dt
             if (cpu < 0) cpu = 0
-            c = comm[p]; if (c == "") { c = args[p]; sub(/ .*/, "", c); sub(/.*\//, "", c) }
-            fin = 0; for (i = 1; i <= nk; i++) if (K[i] != "" && (inside(cwd[p], K[i]) || inside(pwd[p], K[i]))) fin = 1
-            wt = index(cwd[p], "/.herdr/worktrees/") || index(pwd[p], "/.herdr/worktrees/")
+            c = (p in comm) ? comm[p] : ""
+            if (c == "") { c = args[p]; sub(/ .*/, "", c); sub(/.*\//, "", c) }
+            d = (p in cwd) ? cwd[p] : ""
+            w = (p in pwd) ? pwd[p] : ""
+            pn = (p in pane) ? pane[p] : ""
+            sp = (p in ws) ? ws[p] : ""
+            fin = 0; for (i = 1; i <= nk; i++) if (K[i] != "" && (inside(d, K[i]) || inside(w, K[i]))) fin = 1
+            wt = index(d, "/.herdr/worktrees/") || index(w, "/.herdr/worktrees/")
             special = args[p] ~ /GradleDaemon|KotlinCompileDaemon|qemu-system|emulator/
             if (rss[p] >= 65536 || cpu >= 2 || fin || (uid[p] == me && (special || (wt && rss[p] >= 20480))))
-              printf "P\t%s\t%s\t%s\t%s\t%.1f\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", p, ppid[p], uid[p], rss[p], cpu, age[p], c, cwd[p], pwd[p], pane[p], ws[p], args[p]
+              printf "P\t%s\t%s\t%s\t%s\t%.1f\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", p, ppid[p], uid[p], rss[p], cpu, age[p], c, d, w, pn, sp, args[p]
           }
         }
     """.trimIndent()
@@ -134,6 +142,7 @@ object HealthCommands {
           if [ -n "$(git -C "$1" status --porcelain 2>/dev/null | head -n 1)" ]; then x=1; else x=0; fi
           printf 'W\t%s\t%s\t%s\n' "$1" "${'$'}s" "${'$'}x"
         done
+        exit 0
     """.trimIndent()
 
     /**
