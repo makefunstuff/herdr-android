@@ -20,12 +20,13 @@ class MainActivity : ComponentActivity() {
         open(intent)
     }
 
-    /** A tapped notification: its agent's chat, or its task on the board. */
+    /** A tapped notification: its agent's chat, its task on the board, or its machine's health. */
     private fun open(intent: Intent?) {
         val machine = intent?.getStringExtra(OPEN_MACHINE)?.takeIf { it.isNotEmpty() } ?: return
         val pane = intent.getStringExtra(OPEN_PANE).orEmpty()
         val task = intent.getStringExtra(OPEN_TASK).orEmpty()
         when {
+            intent.getBooleanExtra(OPEN_HEALTH, false) -> Links.open(Routes.health(machine))
             pane.isNotEmpty() -> Links.open(Routes.agent(machine, pane))
             task.isNotEmpty() -> Links.open(Routes.board(machine, task))
             else -> Links.open(Routes.SETTINGS)
@@ -36,5 +37,6 @@ class MainActivity : ComponentActivity() {
         const val OPEN_MACHINE = "open_machine"
         const val OPEN_PANE = "open_pane"
         const val OPEN_TASK = "open_task"
+        const val OPEN_HEALTH = "open_health"
     }
 }

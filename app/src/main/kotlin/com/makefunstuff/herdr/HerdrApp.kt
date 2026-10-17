@@ -12,6 +12,7 @@ import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import com.makefunstuff.herdr.data.DraftStore
+import com.makefunstuff.herdr.data.HealthStore
 import com.makefunstuff.herdr.data.HostManager
 import com.makefunstuff.herdr.data.IdentityStore
 import com.makefunstuff.herdr.data.MachineStore
@@ -72,6 +73,7 @@ class AppContainer(app: Application) {
     val identity = IdentityStore(app, scope)
     val hosts = HostManager(scope, machines, identity)
     val drafts = DraftStore(app)
+    val health = HealthStore()
     val push = PushStore(app)
     val inbox = Inbox(java.io.File(app.filesDir, "alerts.json"), AndroidAlerts(app))
     val phone = AndroidPhone(app, push)

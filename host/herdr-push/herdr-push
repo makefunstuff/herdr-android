@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# version: 2
+# version: 3
 """herdr-push: tells your phone when a herdr agent or a work board task needs you.
 
 It runs on the machine with herdr, watches its agents (`herdr api snapshot`) and, where the board
@@ -10,7 +10,9 @@ subscribed (Herdr for Android sets this up over SSH) when:
   - a board task starts waiting for you (ready to approve, review failed, plan ready, pick one,
     asks you, stopped, went wrong), and when it no longer does;
   - for a phone that asked for Live Updates: which agents and board tasks are running, with their
-    stage and progress, as that changes (a few times a minute at most).
+    stage and progress, as that changes (a few times a minute at most);
+  - the machine runs low on RAM (under 10% available) or on a disk, naming what uses the most, and
+    when it has room again. It also keeps the last hour of RAM and CPU readings for the app's chart.
 
 A push goes to the phone's UnifiedPush address (a push app such as ntfy gives it), sealed with a key
 only that phone and this machine know: the push server reads nothing, and the phone takes no push
@@ -35,6 +37,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import shutil
 import signal
 import socket
@@ -46,7 +49,7 @@ import urllib.parse
 import urllib.request
 import zlib
 
-VERSION = "2"
+VERSION = "3"
 NAME = "herdr-push"
 
 HOME = os.path.expanduser("~")
@@ -75,6 +78,22 @@ LIVE_MINOR = float(os.environ.get("HERDR_PUSH_LIVE_MINOR", "90"))
 LIVE_KEEP = float(os.environ.get("HERDR_PUSH_LIVE_KEEP", "1800"))
 LIVE_MAX = 10  # agents, and tasks, in one push
 QUEUED_STAGES = ("queued", "after")
+
+# Health: every HEALTH_EVERY seconds (0: never) a look at RAM, CPU and the disks. The rules are the
+# app's (core/…/health/HealthRules.kt): RAM is low under 10% available and fine again from 15%; a
+# disk is low under a tenth free (at most 20 GB) and fine again from one and a half times that.
+HEALTH_EVERY = float(os.environ.get("HERDR_PUSH_HEALTH_EVERY", "30"))
+HEALTH = os.path.join(STATE_DIR, "health.json")
+HEALTH_KEEP = 3600  # seconds of history
+RAM_LOW, RAM_OK = 10.0, 15.0
+DISK_CAP_KB = 20 * 1024 * 1024
+MEMINFO = os.environ.get("HERDR_PUSH_MEMINFO", "/proc/meminfo")
+DF = os.environ.get("HERDR_PUSH_DF")  # a file with `df -kPT`'s output, read instead (tests)
+SKIP_FS = {"tmpfs", "devtmpfs", "squashfs", "overlay", "efivarfs", "proc", "sysfs", "cgroup", "cgroup2", "devfs", "autofs",
+           "ramfs", "nsfs", "fusectl", "debugfs", "tracefs", "securityfs", "pstore", "bpf", "configfs", "mqueue", "hugetlbfs",
+           "binfmt_misc", "nullfs", "fdescfs", "rpc_pipefs", "fuse.portal", "fuse.gvfsd-fuse", "iso9660", "udf"}
+SKIP_MOUNTS = ("/boot", "/dev", "/proc", "/sys", "/run", "/snap", "/var/lib/docker", "/var/snap", "/System/Volumes/",
+               "/private/var/vm", "/Volumes/Recovery")
 
 
 def log(*parts):
@@ -421,6 +440,164 @@ def live_event(st, agents, tasks, now, first):
     return event
 
 
+# ---- health (RAM, CPU, disks) --------------------------------------------------------------------
+
+def read_memory():
+    """{"total", "available", "swap_total", "swap_free"} in KiB, from /proc/meminfo; None elsewhere."""
+    try:
+        with open(MEMINFO) as f:
+            m = {}
+            for line in f:
+                k, _, v = line.partition(":")
+                parts = v.split()
+                if parts and parts[0].isdigit():
+                    m[k.strip()] = int(parts[0])
+    except OSError:
+        return None
+    if "MemTotal" not in m:
+        return None
+    avail = m.get("MemAvailable", m.get("MemFree", 0) + m.get("Buffers", 0) + m.get("Cached", 0))
+    return {"total": m["MemTotal"], "available": min(avail, m["MemTotal"]),
+            "swap_total": m.get("SwapTotal", 0), "swap_free": m.get("SwapFree", 0)}
+
+
+def read_cpu():
+    """(total, idle) CPU ticks so far, from /proc/stat; None elsewhere."""
+    try:
+        with open("/proc/stat") as f:
+            x = [int(v) for v in f.readline().split()[1:9]]
+    except (OSError, ValueError):
+        return None
+    return (sum(x), x[3] + (x[4] if len(x) > 4 else 0)) if len(x) >= 4 else None
+
+
+def read_disks():
+    """The real filesystems from `df -kPT` (or `-kP`), as the app picks them: [{"mount", "total", "used", "avail"}]."""
+    out = ""
+    if DF:
+        with open(DF) as f:
+            out = f.read()
+    for args in ([] if DF else [["df", "-kPT"], ["df", "-kP"]]):
+        try:
+            r = subprocess.run(args, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=15)
+        except Exception:  # noqa: BLE001
+            continue
+        if r.returncode == 0 or r.stdout:
+            out = r.stdout.decode(errors="replace")
+            break
+    lines = out.splitlines()
+    if not lines:
+        return []
+    typed = "Type" in lines[0]
+    pat = re.compile(r"^(.+?)\s+(\S+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)%\s+(/.*)$" if typed else
+                     r"^(.+?)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)%\s+(/.*)$")
+    found = []
+    for line in lines[1:]:
+        m = pat.match(line)
+        if not m:
+            continue
+        g = m.groups()
+        dev, fstype = g[0].strip(), (g[1] if typed else "")
+        total, used, avail, mount = (int(g[2]), int(g[3]), int(g[4]), g[6]) if typed else (int(g[1]), int(g[2]), int(g[3]), g[5])
+        if total <= 0 or fstype in SKIP_FS or (not typed and not dev.startswith("/")):
+            continue
+        if any(mount == s or mount.startswith(s.rstrip("/") + "/") for s in SKIP_MOUNTS):
+            continue
+        found.append({"mount": mount, "device": dev, "total": total, "used": used, "avail": avail})
+    found.sort(key=lambda d: len(d["mount"]))
+    out, seen = [], set()
+    for d in found:
+        keys = {d["device"] if d["device"].startswith("/") else None, "%d/%d" % (d["total"], d["avail"])} - {None}
+        if keys & seen:
+            continue
+        seen |= keys
+        out.append(d)
+    return out
+
+
+def proc_name(args):
+    """What to call a process in a warning, as the app does for the ones worth calling out."""
+    exe = args.split(" ", 1)[0].rsplit("/", 1)[-1]
+    if exe.startswith("qemu-system") or exe.startswith("emulator"):
+        avd = re.search(r"(?:^|\s)-avd\s+(\S+)", args)
+        if avd or "/emulator/" in args or "android" in args.lower():
+            return "Android emulator" + (" · " + avd.group(1) if avd else "")
+        return "QEMU VM"
+    if "GradleDaemon" in args:
+        return "Gradle daemon"
+    if "KotlinCompileDaemon" in args:
+        return "Kotlin daemon"
+    return exe
+
+
+def top_memory(n=3):
+    """The [n] processes using the most memory: [name, KiB], biggest first."""
+    try:
+        r = subprocess.run(["ps", "-axo", "rss=,args="], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                           stderr=subprocess.DEVNULL, timeout=15)
+    except Exception:  # noqa: BLE001
+        return []
+    rows = []
+    for line in r.stdout.decode(errors="replace").splitlines():
+        parts = line.strip().split(None, 1)
+        if len(parts) == 2 and parts[0].isdigit():
+            rows.append((int(parts[0]), parts[1]))
+    rows.sort(reverse=True)
+    return [[proc_name(a), kb] for kb, a in rows[:n]]
+
+
+def disk_limit(d):
+    return min((d["used"] + d["avail"]) // 10, DISK_CAP_KB)
+
+
+def health_low(mem, disks):
+    """What is low: "ram" and "disk:<mount>" (disks bigger than 1 GB)."""
+    low = []
+    if mem and mem["total"] > 0 and mem["available"] * 100.0 / mem["total"] < RAM_LOW:
+        low.append("ram")
+    low += ["disk:" + d["mount"] for d in disks if d["used"] + d["avail"] > 1024 * 1024 and d["avail"] < disk_limit(d)]
+    return low
+
+
+def health_fine(mem, disks):
+    ram = not mem or mem["total"] == 0 or mem["available"] * 100.0 / mem["total"] >= RAM_OK
+    return ram and all(d["avail"] >= disk_limit(d) * 3 // 2 for d in disks if d["used"] + d["avail"] > 1024 * 1024)
+
+
+def health_look(st, now):
+    """Every HEALTH_EVERY seconds: notes a point of the hour's history, and returns the health event to send, or None."""
+    if HEALTH_EVERY <= 0 or now - float(st.get("at") or 0) < HEALTH_EVERY:
+        return None
+    st["at"] = now
+    mem = read_memory()
+    cpu = read_cpu()
+    disks = read_disks()
+    busy = None
+    if cpu and st.get("cpu"):
+        dt = cpu[0] - st["cpu"][0]
+        if dt > 0:
+            busy = round(100.0 * (dt - (cpu[1] - st["cpu"][1])) / dt, 1)
+    st["cpu"] = list(cpu) if cpu else None
+    if mem:
+        points = [p for p in read_json(HEALTH, {}).get("points", []) if isinstance(p, list) and now - p[0] <= HEALTH_KEEP]
+        used = round(100.0 - mem["available"] * 100.0 / mem["total"], 1) if mem["total"] else 0
+        swap = round((mem["swap_total"] - mem["swap_free"]) * 100.0 / mem["swap_total"], 1) if mem["swap_total"] else 0
+        points.append([int(now), used, swap, busy])
+        write_json(HEALTH, {"v": 1, "points": points})
+    low = health_low(mem, disks)
+    before = st.get("low") or []
+    if low:
+        if sorted(low) == sorted(before):
+            return None
+        st["low"] = low
+        return {"type": "health", "low": low, "memory": mem,
+                "disks": [d for d in disks if "disk:" + d["mount"] in low], "top": top_memory()}
+    if before and health_fine(mem, disks):
+        st["low"] = []
+        return {"type": "health", "low": []}
+    return None
+
+
 # ---- sending -------------------------------------------------------------------------------------
 
 def messages(events):
@@ -461,6 +638,8 @@ def shows(event):
         return needs_you(event["task"])
     if event.get("type") == "live":
         return False
+    if event.get("type") == "health":
+        return bool(event.get("low"))
     return True
 
 
@@ -561,6 +740,14 @@ def tick(state, n, dry_run=False, now=None):
             if dry_run or not mine:
                 continue
             send(sub, mine, record)
+    if subs:
+        ev = health_look(state.setdefault("health", {}), now)
+        if ev is not None:
+            sent["@health"] = [ev]
+            for sub in subs:
+                record = state.setdefault("phones", {}).setdefault(sub["id"], {})
+                if not dry_run and not gone(record, sub):
+                    send(sub, [ev], record)
     return sent
 
 

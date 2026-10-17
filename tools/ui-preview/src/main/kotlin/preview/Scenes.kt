@@ -30,6 +30,18 @@ fun scenes(): List<Scene> = listOf(
     Scene("machine-new", route = Routes.machine(DEVBOX), actions = { tapText("New") }),
     Scene("add-machine", route = Routes.edit()),
 
+    // A machine's health: meters, the last hour, the leftovers of a finished task, the biggest processes.
+    // Taller, to show the whole screen (scrolling never settles in the desktop harness).
+    Scene("health", route = Routes.health(DEVBOX), heightDp = 2000),
+    // Low on memory: the warning names what uses the most.
+    Scene("health-low", route = Routes.health(DEVBOX), setup = { host(DEVBOX).health.availKb = 3_600_000 }),
+    Scene("health-leftover", route = Routes.health(DEVBOX), actions = { tapText("AND-2 · Replace agent terminals with native chat views") }),
+    Scene("health-stop", route = Routes.health(DEVBOX), actions = { tapText("Stop all leftovers") }),
+    Scene("health-process", route = Routes.health(DEVBOX), actions = {
+        tapText("AND-2 · Replace agent terminals with native chat views")
+        tapText("Android emulator · Pixel_8")
+    }),
+
     // An agent's chat: its transcript, a blocked agent's question, a Codex transcript.
     Scene("chat", route = Routes.agent(DEVBOX, APP_AGENT)),
     Scene("chat-blocked", route = Routes.agent(DEVBOX, API_AGENT)),

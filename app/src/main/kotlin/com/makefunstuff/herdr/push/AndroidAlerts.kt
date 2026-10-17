@@ -106,13 +106,14 @@ class AndroidAlerts(private val context: Context) : AlertSink {
         runCatching { nm.notify(tag, ID, b.build()) }
     }
 
-    /** A tap: the agent's chat, or the task on the board. */
+    /** A tap: the agent's chat, the task on the board, or the machine's health. */
     private fun openIntent(alert: Alert): PendingIntent {
         val intent = Intent(context, MainActivity::class.java)
             .setData(Uri.parse("herdr://alert/${Uri.encode(alert.tag)}"))
             .putExtra(MainActivity.OPEN_MACHINE, alert.machineId)
             .putExtra(MainActivity.OPEN_PANE, alert.paneId)
             .putExtra(MainActivity.OPEN_TASK, alert.taskId)
+            .putExtra(MainActivity.OPEN_HEALTH, alert.health)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         return PendingIntent.getActivity(context, alert.tag.hashCode(), intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
     }

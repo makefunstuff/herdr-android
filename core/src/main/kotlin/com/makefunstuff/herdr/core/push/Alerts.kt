@@ -5,6 +5,9 @@ import com.makefunstuff.herdr.core.board.BoardAction
 import com.makefunstuff.herdr.core.board.BoardStatus
 import com.makefunstuff.herdr.core.board.BoardTask
 import com.makefunstuff.herdr.core.chat.BlockedPrompt
+import com.makefunstuff.herdr.core.health.Disk
+import com.makefunstuff.herdr.core.health.HealthReport
+import com.makefunstuff.herdr.core.health.Sizes
 import kotlinx.serialization.Serializable
 
 /**
@@ -30,6 +33,8 @@ data class Alert(
     /** The task's short key (`AND-7`), or its id where it has none. */
     val taskName: String = "",
     val actions: List<AlertAction> = emptyList(),
+    /** A tap opens the machine's health screen (a machine low on RAM or disk). */
+    val health: Boolean = false,
 ) {
     enum class Kind { NeedsYou, Finished, Test }
 }
@@ -80,6 +85,7 @@ object Alerts {
     fun agentTag(machineId: String, paneId: String) = "agent:$machineId:$paneId"
     fun taskTag(machineId: String, taskId: String) = "task:$machineId:$taskId"
     fun testTag(machineId: String) = "test:$machineId"
+    fun healthTag(machineId: String) = "health:$machineId"
 
     /** The notifications [events] call for; what runs ([PushEvent.Live]) is a Live Update instead (LiveItems). */
     fun all(machineId: String, machineLabel: String, events: List<PushEvent>, host: String = ""): List<AlertChange> =
@@ -89,6 +95,7 @@ object Alerts {
         is PushEvent.Live -> throw IllegalArgumentException("What runs is a Live Update, not an alert")
         is PushEvent.Agent -> agent(machineId, machineLabel, event)
         is PushEvent.Task -> task(machineId, machineLabel, event.task)
+        is PushEvent.Health -> health(machineId, machineLabel, event.report)
         PushEvent.Test -> AlertChange.Show(
             Alert(
                 tag = testTag(machineId),
@@ -191,6 +198,49 @@ object Alerts {
         )
     }
 
+    /**
+     * A machine low on RAM or disk: what is low, and what uses the most memory. It needs you (a full
+     * machine stops agents), so it comes through quiet hours; it comes down once there is room again.
+     */
+    fun health(machineId: String, machineLabel: String, r: HealthReport): AlertChange {
+        val tag = healthTag(machineId)
+        if (r.low.isEmpty()) return AlertChange.Clear(tag)
+        val words = HealthWords.words(machineLabel, r)
+        return AlertChange.Show(
+            Alert(
+                tag = tag,
+                sig = "low:" + r.low.sorted().joinToString(","),
+                kind = Alert.Kind.NeedsYou,
+                machineId = machineId,
+                title = words.first,
+                text = words.second,
+                detail = words.third,
+                health = true,
+            ),
+        )
+    }
+
     /** What the Coordinator is sent for a reply to a task's notification. */
     fun aboutTask(taskName: String, title: String, text: String): String = "About $taskName (\"$title\"): $text"
+}
+
+/** How a machine running low is put in words, for the notification and the health screen's warning. */
+object HealthWords {
+    /** Title, one line, and the longer text. */
+    fun words(machineLabel: String, r: HealthReport): Triple<String, String, String> {
+        val disks = r.disks.ifEmpty { r.low.filter { it.startsWith("disk:") }.map { Disk(it.removePrefix("disk:"), "", "", 0, 0, 0) } }
+        val title = when {
+            r.ram && disks.isNotEmpty() -> "$machineLabel is low on memory and disk"
+            r.ram -> "$machineLabel is low on memory"
+            else -> "$machineLabel is low on disk space"
+        }
+        val parts = buildList {
+            if (r.ram) add(r.memory?.let { "${Sizes.percent(it.availablePercent)} of ${Sizes.kb(it.totalKb)} RAM free" } ?: "RAM almost full")
+            disks.forEach { d -> add(if (d.totalKb > 0) "${Sizes.kb(d.availKb)} free on ${d.mount}" else "${d.mount} almost full") }
+        }
+        val top = r.top.take(3).joinToString(", ") { "${it.first} (${Sizes.kb(it.second)})" }
+        val line = parts.joinToString(" · ")
+        val detail = listOfNotNull(line, top.ifEmpty { null }?.let { "Most memory: $it" }).joinToString("\n")
+        return Triple(title, if (top.isNotEmpty() && r.ram) "$line · most: ${r.top.first().first}" else line, detail)
+    }
 }
