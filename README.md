@@ -122,6 +122,17 @@ Next to the Coordinator chat, a machine with herdr-projects gets a **Board** scr
 
 On a machine with [herdr-projects](https://github.com/eliasstravik/herdr-projects) (its launcher at `~/.herdr-projects/data/bin/herdr-projects`, or `herdr-projects` on the PATH), the app shows a **Coordinator** chat above that machine's agents. It reaches the board the way another machine's board does, over the same SSH connection: `herdr-projects remote list` for the conversation and where the Coordinator stands, and `herdr-projects remote dispatch` for a message, which joins the same queue as the words typed in the board's own box. So the phone and the desktop show one conversation. **Start agents**, the switch beside Send, is the board's Tab: what the Coordinator adds from that message gets an agent at once. What you type stays in the box per chat, also when you leave the app, until it is sent. **+** attaches files from the phone, in both chats: each is copied to that machine (`~/.cache/herdr-android/uploads/`) and named in the message as `@path`, which the agents read.
 
+## Asking from anywhere
+
+The Coordinator is a tap away from outside the app too:
+
+- **Share to it.** Share a link, some text, an error or a screenshot to **Herdr Coordinator** from any app's share sheet. It lands in the Coordinator chat's message box: the words at the end of what you had typed, each file copied to that machine and named as `@path`, as **+** does. You read it, add to it, and send it, so the Coordinator can make a task of it. With several machines the app asks which one first (the one used last on top); a machine without the work board can't be picked. A share waiting for a machine, and files waiting for a machine that isn't connected, are kept through the app being closed: the app asks again when it next opens, and the chat says which file waits and attaches it once the machine connects.
+- **Send selected text.** **Send to Coordinator** sits next to Copy in the menu of selected text, and does the same with just the text.
+- **The Quick Settings tile.** **Coordinator** opens the chat at once: the Coordinator used last, or the only machine that can have one; otherwise it asks. Under its name it says what needs you ("2 need you · 3 working").
+- **Two home-screen widgets.** **Ask the Coordinator** opens the chat as the tile does. **Herdr** shows the counts across your machines, such as "2 need you · 3 working", and when they were last known; a tap opens the board with the most tasks waiting for you (or the agents, when it is an agent that asks).
+
+The counts are what the app knows: what it sees while open (and each board's list, read every 5 minutes while the app is in front), its own looks while closed, and the machines' pushes (see Notifications above). An agent that needs you and the board task it works for count once, as do a task and its own agents at work, and another machine's task counts on that machine. What works and nothing confirmed for 75 minutes stops counting.
+
 ## Screen previews
 
 UI changes are checked, and shown in review, with screen previews instead of an emulator: the app's real Compose screens rendered on the desktop JVM against a fake herdr machine with fixed demo data, in dark and light.
@@ -131,7 +142,7 @@ UI changes are checked, and shown in review, with screen previews instead of an 
 ./gradlew -p tools/ui-preview render -Ponly=board,chat   # some of them
 ```
 
-It needs JDK 17, no Android SDK, and takes about 2 minutes for all 31 scenes (agents, machines, a machine, a machine's health and cleanup, agent chats, the Coordinator, the board and a task, the terminal, settings with its notifications, and the dialogs and sheets). CI renders them too and uploads them as the `herdr-screens-<run>` artifact. See [`tools/ui-preview/README.md`](tools/ui-preview/README.md) for how it works and how to add a scene, and [`AGENTS.md`](AGENTS.md) for how changes are reviewed.
+It needs JDK 17, no Android SDK, and takes about 2 minutes for all 35 scenes (agents, machines, a machine, a machine's health and cleanup, agent chats, the Coordinator, the board and a task, the terminal, settings with its notifications, and the dialogs and sheets). CI renders them too and uploads them as the `herdr-screens-<run>` artifact. See [`tools/ui-preview/README.md`](tools/ui-preview/README.md) for how it works and how to add a scene, and [`AGENTS.md`](AGENTS.md) for how changes are reviewed.
 
 ## Layout
 

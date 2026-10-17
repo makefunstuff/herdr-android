@@ -82,6 +82,8 @@ class SceneData {
     var quietMode: PhoneQuiet? = null
     /** Notifications held during quiet hours, as saved before the app opens (Inbox). */
     var held: List<Alert> = emptyList()
+    /** Shared to the app from elsewhere (the share sheet), waiting for a machine. */
+    var shared: com.makefunstuff.herdr.core.share.Shared? = null
     fun host(id: String): FakeMachine = hosts.getValue(id)
 }
 
@@ -131,6 +133,7 @@ fun render(scene: Scene, dark: Boolean, file: File) {
     FakeMachines.machines = data.hosts
     Toasts.dismiss()
     val container = AppContainer(context)
+    data.shared?.let { container.shares.share(it) }
     try {
         // Every machine has answered (or refused) before the first frame, so a shot never catches "Connecting".
         val deadline = System.currentTimeMillis() + 15_000

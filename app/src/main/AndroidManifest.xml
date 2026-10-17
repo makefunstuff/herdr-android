@@ -40,6 +40,63 @@
             </intent-filter>
         </activity>
 
+        <!-- Asking the Coordinator from anywhere: the share sheet and "Send to Coordinator" next to Copy
+             land here, which hands what was shared to MainActivity in the app's own task. -->
+        <activity
+            android:name=".share.ShareActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:label="@string/share_to_coordinator"
+            android:icon="@mipmap/ic_launcher"
+            android:theme="@style/Theme.Herdr.Invisible">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+            <intent-filter android:label="@string/send_to_coordinator">
+                <action android:name="android.intent.action.PROCESS_TEXT" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity>
+        <!-- The Quick Settings tile that opens the Coordinator chat. -->
+        <service
+            android:name=".share.CoordinatorTile"
+            android:exported="true"
+            android:icon="@drawable/ic_coordinator"
+            android:label="@string/tile_coordinator"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+        <!-- The home-screen widgets: one that opens the Coordinator chat, one with the counts across machines. -->
+        <receiver
+            android:name=".share.AskWidget"
+            android:exported="false"
+            android:label="@string/widget_ask">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_ask_info" />
+        </receiver>
+        <receiver
+            android:name=".share.StatusWidget"
+            android:exported="false"
+            android:label="@string/app_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_status_info" />
+        </receiver>
+
         <!-- A notification's button, and the app's own look at its machines while it is closed. -->
         <service android:name=".push.WorkService" android:exported="false" android:foregroundServiceType="dataSync" />
         <!-- The alarm for that look, set again when the phone restarts or the app updates. -->

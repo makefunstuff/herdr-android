@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The status widget: how many need you (red when any) and how many work (blue when any), across the
+  machines, and when that was last known. Each count has a coloured and a dim text and shows one, so
+  the colours come from the resources and follow the phone's light or dark theme.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_background"
+    android:gravity="center_vertical"
+    android:orientation="vertical"
+    android:paddingHorizontal="16dp"
+    android:paddingVertical="8dp">
+
+    <LinearLayout
+        android:id="@+id/widget_counts"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:baselineAligned="true"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/widget_need"
+            style="@style/HerdrWidgetCount"
+            android:textColor="@color/widget_blocked" />
+
+        <TextView
+            android:id="@+id/widget_need_none"
+            style="@style/HerdrWidgetCount"
+            android:text="0"
+            android:textColor="@color/widget_muted"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/widget_need_words"
+            style="@style/HerdrWidgetCountWords"
+            android:text="need you" />
+
+        <TextView
+            android:id="@+id/widget_work"
+            style="@style/HerdrWidgetCount"
+            android:layout_marginStart="16dp"
+            android:textColor="@color/widget_working" />
+
+        <TextView
+            android:id="@+id/widget_work_none"
+            style="@style/HerdrWidgetCount"
+            android:layout_marginStart="16dp"
+            android:text="0"
+            android:textColor="@color/widget_muted"
+            android:visibility="gone" />
+
+        <TextView
+            style="@style/HerdrWidgetCountWords"
+            android:text="working" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/widget_detail"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:text="@string/app_name"
+        android:textColor="@color/widget_muted"
+        android:textSize="12sp" />
+</LinearLayout>

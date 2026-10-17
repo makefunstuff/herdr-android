@@ -32,6 +32,7 @@ class AlertWork(
     private val inbox: Inbox,
     private val live: LiveWork,
     private val quiet: QuietWork,
+    private val tally: TallyStore,
 ) {
     /** A push from a push app: opened with the machine's key and shown. False when it isn't one of ours. */
     fun received(text: String, now: Long = System.currentTimeMillis()): Boolean {
@@ -42,6 +43,7 @@ class AlertWork(
         if (!PushMessages.fresh(msg.at, last, now / 1000)) return true
         if (msg.at > last) store.machine(machineId) { it.copy(lastAt = msg.at) }
         val changes = Alerts.all(machineId, label, msg.events, msg.host)
+        tally.pushed(machineId, msg.events)
         msg.events.filterIsInstance<com.makefunstuff.herdr.core.push.PushEvent.Live>().forEach { live.received(machineId, label, it, msg.at, now) }
         if (msg.events.any { it is com.makefunstuff.herdr.core.push.PushEvent.Test }) {
             store.machine(machineId) { it.copy(testedAt = now, problem = null) }
@@ -131,6 +133,8 @@ class AlertWork(
         val snapshot = api.snapshot()
         val tasks = board?.let { PushLook.tasks(it) }
         val events = PushLook.events(api, snapshot, tasks)
+        tally.agents(machineId, snapshot)
+        tasks?.let { tally.tasks(machineId, it) }
         inbox.apply(Alerts.all(machineId, s.machine.label, events), quiet = hosts.isForeground, hold = quiet.check())
         live.looked(machineId, s.machine.label, snapshot, tasks)
         // Low on RAM or disk, for a machine without herdr-push (where it runs, the push said so already: shown once).
