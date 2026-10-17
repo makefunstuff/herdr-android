@@ -1,5 +1,6 @@
 package com.makefunstuff.herdr.ui.common
 
+import com.makefunstuff.herdr.ui.theme.Mono
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
@@ -52,6 +53,7 @@ import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.em
 import com.makefunstuff.herdr.core.chat.Markdown
 
 /**
@@ -68,23 +70,26 @@ fun MarkdownText(
 ) {
     val blocks = remember(source) { Markdown.parse(source) }
     val colors = MaterialTheme.colorScheme
-    val codeBackground = Herdr.colors.field
+    // Inline code is a chip a step off the text's ground, which may itself be a card: `--bg-hover`.
+    val codeBackground = Herdr.colors.hover
     val link = Herdr.colors.accent
+    val strong = Herdr.colors.strong
     SelectionContainer {
         Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
             for (block in blocks) {
                 when (block) {
+                    // The web UI's chat headings: h1 18, h2 16, the rest at the reading size, all strong.
                     is Markdown.Block.Heading -> Text(
-                        block.text.annotated(codeBackground, link),
+                        block.text.annotated(codeBackground, link, strong),
                         style = when (block.level) {
-                            1 -> MaterialTheme.typography.titleLarge
-                            2 -> MaterialTheme.typography.titleMedium
-                            else -> MaterialTheme.typography.titleSmall
+                            1 -> MaterialTheme.typography.headlineSmall
+                            2 -> MaterialTheme.typography.titleLarge
+                            else -> style.copy(fontWeight = FontWeight.SemiBold)
                         },
-                        color = color,
+                        color = strong,
                         modifier = Modifier.padding(top = 4.dp).semantics { heading() },
                     )
-                    is Markdown.Block.Paragraph -> Text(block.text.annotated(codeBackground, link), style = style, color = color)
+                    is Markdown.Block.Paragraph -> Text(block.text.annotated(codeBackground, link, strong), style = style, color = color)
                     is Markdown.Block.ListItem -> Row(Modifier.padding(start = (block.depth * 16).dp), verticalAlignment = Alignment.Top) {
                         if (block.checked != null) {
                             Text(
@@ -98,12 +103,12 @@ fun MarkdownText(
                                 modifier = Modifier.width(if (block.marker == "•") 14.dp else 26.dp),
                             )
                         }
-                        Text(block.text.annotated(codeBackground, link), style = style, color = color, modifier = Modifier.weight(1f))
+                        Text(block.text.annotated(codeBackground, link, strong), style = style, color = color, modifier = Modifier.weight(1f))
                     }
                     is Markdown.Block.Quote -> Row(Modifier.height(IntrinsicSize.Min)) {
-                        Box(Modifier.width(3.dp).fillMaxHeight().background(Herdr.colors.fieldFocused, RoundedCornerShape(2.dp)))
+                        Box(Modifier.width(3.dp).fillMaxHeight().background(Herdr.colors.lineStrong))
                         Text(
-                            block.text.annotated(codeBackground, link),
+                            block.text.annotated(codeBackground, link, strong),
                             style = style,
                             color = colors.onSurfaceVariant,
                             modifier = Modifier.padding(start = 10.dp),
@@ -118,16 +123,17 @@ fun MarkdownText(
     }
 }
 
-/** Monospace text in a sideways-scrolling box, for code; [copyable] adds a copy button. */
+/** Code (`.markdown-code`): JetBrains Mono on `--bg-panel` in a hairline box, `--radius-lg`, scrolling sideways; [copyable] adds a copy button. */
 @Composable
 fun CodeBlock(text: String, modifier: Modifier = Modifier, maxLines: Int = Int.MAX_VALUE, copyable: Boolean = false) {
     val context = LocalContext.current
-    Box(modifier.fillMaxWidth().background(Herdr.colors.field, RoundedCornerShape(Radius.m))) {
+    val shape = RoundedCornerShape(Radius.l)
+    Box(modifier.fillMaxWidth().clip(shape).background(Herdr.colors.panel).border(1.dp, Herdr.colors.line, shape)) {
         Text(
             text,
-            fontFamily = FontFamily.Monospace,
+            fontFamily = Mono,
             fontSize = 12.sp,
-            lineHeight = 17.sp,
+            lineHeight = 19.sp,
             maxLines = maxLines,
             color = MaterialTheme.colorScheme.onSurface,
             softWrap = false,
@@ -141,7 +147,7 @@ fun CodeBlock(text: String, modifier: Modifier = Modifier, maxLines: Int = Int.M
                 Modifier.align(Alignment.TopEnd).size(48.dp).clickable(onClickLabel = "Copy code") { context.copyToClipboard("code", text) }
                     .semantics { contentDescription = "Copy" },
                 contentAlignment = Alignment.Center,
-            ) { Icon(HerdrIcons.ContentCopy, null, tint = Herdr.colors.muted, modifier = Modifier.size(18.dp)) }
+            ) { Icon(HerdrIcons.Copy, null, tint = Herdr.colors.muted, modifier = Modifier.size(18.dp)) }
         }
     }
 }
@@ -150,20 +156,21 @@ fun CodeBlock(text: String, modifier: Modifier = Modifier, maxLines: Int = Int.M
 @Composable
 private fun TableBlock(rows: List<List<String>>) {
     val columns = rows.maxOfOrNull { it.size } ?: return
-    val line = Herdr.colors.fieldFocused
+    val line = Herdr.colors.line
     Column(
         Modifier.horizontalScroll(rememberScrollState())
             .border(1.dp, line, RoundedCornerShape(Radius.m)).clip(RoundedCornerShape(Radius.m)),
     ) {
         rows.forEachIndexed { r, row ->
             if (r > 0) HorizontalDivider(color = line)
-            Row(Modifier.height(IntrinsicSize.Min).then(if (r == 0) Modifier.background(Herdr.colors.field) else Modifier)) {
+            Row(Modifier.height(IntrinsicSize.Min).then(if (r == 0) Modifier.background(Herdr.colors.card) else Modifier)) {
                 for (c in 0 until columns) {
                     if (c > 0) Box(Modifier.width(1.dp).fillMaxHeight().background(line))
                     Text(
                         row.getOrNull(c).orEmpty(),
                         style = MaterialTheme.typography.bodySmall,
                         fontWeight = if (r == 0) FontWeight.SemiBold else null,
+                        color = if (r == 0) Herdr.colors.strong else Color.Unspecified,
                         modifier = Modifier.widthIn(min = 56.dp, max = 220.dp).padding(horizontal = 10.dp, vertical = 6.dp),
                     )
                 }
@@ -172,14 +179,15 @@ private fun TableBlock(rows: List<List<String>>) {
     }
 }
 
-private fun List<Markdown.Span>.annotated(codeBackground: Color, linkColor: Color): AnnotatedString = buildAnnotatedString {
+private fun List<Markdown.Span>.annotated(codeBackground: Color, linkColor: Color, strong: Color): AnnotatedString = buildAnnotatedString {
     for (span in this@annotated) {
         val style = SpanStyle(
             fontWeight = if (span.bold) FontWeight.SemiBold else null,
+            color = if (span.bold || span.code) strong else Color.Unspecified,
             fontStyle = if (span.italic) FontStyle.Italic else null,
-            fontFamily = if (span.code) FontFamily.Monospace else null,
+            fontFamily = if (span.code) Mono else null,
             background = if (span.code) codeBackground else Color.Unspecified,
-            fontSize = if (span.code) 13.sp else androidx.compose.ui.unit.TextUnit.Unspecified,
+            fontSize = if (span.code) 0.87.em else androidx.compose.ui.unit.TextUnit.Unspecified,
             textDecoration = if (span.strike) TextDecoration.LineThrough else null,
         )
         val url = span.link?.takeIf { it.startsWith("http://") || it.startsWith("https://") }

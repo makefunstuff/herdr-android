@@ -93,7 +93,7 @@ fun NewSheet(session: HostSession, snap: SessionSnapshot, onDismiss: () -> Unit)
                     HerdrField(
                         value = name,
                         onValueChange = { name = it.filter { c -> c.isLetterOrDigit() || c == '-' || c == '_' } },
-                        label = { Text("Name") },
+                        label = "Name",
                         placeholder = { Text("reviewer") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
@@ -113,10 +113,10 @@ fun NewSheet(session: HostSession, snap: SessionSnapshot, onDismiss: () -> Unit)
                     ) { Text(if (busy) "Starting…" else "Start $kind") }
                 }
                 1 -> {
-                    HerdrField(label, { label = it }, label = { Text("Name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    HerdrField(label, { label = it }, label = "Name", singleLine = true, modifier = Modifier.fillMaxWidth())
                     HerdrField(
                         cwd, { cwd = it },
-                        label = { Text("Folder (absolute path, optional)") },
+                        label = "Folder (absolute path, optional)",
                         placeholder = { Text("/home/you/src/project") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
@@ -128,7 +128,7 @@ fun NewSheet(session: HostSession, snap: SessionSnapshot, onDismiss: () -> Unit)
                     ) { Text("Create workspace") }
                 }
                 2 -> {
-                    HerdrField(label, { label = it }, label = { Text("Tab name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    HerdrField(label, { label = it }, label = "Tab name", singleLine = true, modifier = Modifier.fillMaxWidth())
                     PrimaryButton(
                         onClick = { act { session.awaitApi().createTab(workspaceId!!, label.ifBlank { null }) } },
                         enabled = !busy && workspaceId != null,

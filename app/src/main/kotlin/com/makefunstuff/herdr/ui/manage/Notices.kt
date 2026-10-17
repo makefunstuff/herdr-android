@@ -64,7 +64,7 @@ fun NoticesSheet(
         }
         if (rows.isEmpty()) {
             StateBlock(
-                HerdrIcons.Notifications, "All quiet",
+                HerdrIcons.Bell, "All quiet",
                 "When an agent finishes or asks for you, herdr's notification shows up here.",
                 Modifier.padding(bottom = Space.xl),
             )
@@ -90,8 +90,8 @@ private fun NoticeItem(row: NoticeRow, showMachine: Boolean, onOpen: () -> Unit)
         title = notice.title,
         detail = meta.joinToString(" · ").ifBlank { null },
         icon = when (notice.kind) {
-            Notice.Kind.Done -> HerdrIcons.CheckCircle
-            Notice.Kind.NeedsYou -> HerdrIcons.Warning
+            Notice.Kind.Done -> HerdrIcons.CircleCheck
+            Notice.Kind.NeedsYou -> HerdrIcons.TriangleAlert
         },
         iconTint = status.color(),
         onClick = onOpen,

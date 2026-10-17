@@ -1,198 +1,225 @@
 # Design
 
-How Herdr for Android looks and why. herdr-android keeps its own identity: its navigation (Agents,
-Machines, Settings), its screens and flows, its layouts (agent and machine cards, the work board's
-cards with a status stripe, workspace cards with Terminal buttons, floating "Add" buttons, the
-tabbed admin screen) and its own components. This pass changed how those look, not what they are.
+How Herdr for Android looks and why. herdr-android keeps its own structure: its navigation
+(Agents, Machines, Settings), its screens and flows, its layouts (agent and machine cards, the
+work board's cards with a status stripe, workspace cards with Terminal buttons, floating "Add"
+buttons, the tabbed admin screen) and its own components. Its **visual language** is the
+[herdr web UI](https://github.com/devswha/herdr-web-ui)'s (MIT, by devswha): the same palette,
+type, icons, shapes and surface rules, carried over to Compose so the phone app looks like it
+belongs with it.
 
 Everything below lives in code in two places, and screens use nothing else:
 
-- `ui/theme/Theme.kt`: colours (`Herdr.colors`, the Material scheme), type, spacing (`Space`), corners (`Radius`).
-- `ui/design/`: the components (`Components.kt`, `Chat.kt`, `NavBar.kt`) and the icon set (`HerdrIcons.kt`).
+- `ui/theme/Theme.kt`: colours (`Herdr.colors`, the Material scheme), type (`Pretendard`, `Mono`,
+  `CodeStyle`), spacing (`Space`), corners (`Radius`), the terminal's colours.
+- `ui/design/`: the components (`Components.kt`, `Chat.kt`, `NavBar.kt`), the icon set
+  (`HerdrIcons.kt`) and the agents' marks (`AgentMarks.kt`).
 
 A screen that needs a number, a colour or a shape that isn't there adds it here first.
 
-## Puggie as a quality bar, not a model
+## Credit
 
-Puggie (its Android and iPad apps) was the reference for the *level* of polish only. What was
-taken from it, as general principles:
+The design tokens (every colour, the type scale, spacing, radii and sizes), the surface rules and
+the component patterns below come from the herdr web UI's design system (its `DESIGN.md` and the
+`:root` block of `src/styles.css`), © devswha, under the MIT licence. The agents' brand marks are
+taken from its `AgentMark.tsx` and `agentSvgMarks.ts` (several by way of lobe-icons, MIT; the
+marks are their owners'). Icons are [Lucide](https://lucide.dev) (ISC). The faces are Pretendard
+and JetBrains Mono (SIL OFL 1.1). The notices are in [`THIRD_PARTY_NOTICES.md`](../THIRD_PARTY_NOTICES.md).
 
-- **Restraint**: few colours, and colour only where it means something.
-- **Surfaces instead of lines**: grouping by a raised surface, not by outlines and dividers.
-- **A spacing rhythm**: one grid, generous rows, consistent margins.
-- **A short type scale** with clear weight differences between titles and secondary text.
-- **Quiet, short motion**, and finished empty, loading and error states.
+## Identity: a warm terminal
 
-What herdr-android does *not* take from Puggie, and how its look differs:
+An amber-phosphor console on lamp-lit graphite (dark, the default when the phone is dark) or on
+ledger paper (light), with chat-app clarity.
 
-| | Puggie | herdr-android |
-| --- | --- | --- |
-| Ground | Pure black / pure white | herdr's green-tinted neutrals (`#0F1412` dark, `#F4F7F5` light) |
-| Primary action | White pill on black (black on white) | herdr's mint pill (`#7DD3B6` / `#1E6B58`) |
-| Accent | Amber, for "needs you" | Mint for actions and selection; "needs you" is the board's red |
-| Cards | Grey cards on the ground | Cards one step lighter in dark, white cards on a soft ground in light |
-| Lists | Avatar rows (pets), tab pills | Status-dot cards per agent and machine, the board's stripe cards |
-| Adding things | A round "+" in the title bar | herdr-android's floating pill ("Add machine", "New") |
-| Chat | Plain replies, composer card with buttons inside | Mint bubbles for you, card bubbles for the Coordinator, the agent's replies as text; a field with its Send button beside it |
-| Navigation | Bots / Routines / Setup | Agents / Machines / Settings, the admin screen's tabs |
-
-No Puggie screen, layout, component, wording, pet or branding is used.
-
-## Principles
-
-1. **Surfaces, not lines.** Grouping comes from a card one step off the ground, not from outlines.
-   Borders are kept for meaning: a question an agent waits on, the selected answer.
-2. **Colour means state or action.** Text and icons use three neutral strengths. Colour appears
-   as a status (the board's tones), or as herdr's mint on what you can do (primary buttons, links,
-   selection, progress, the cursor).
-3. **One primary action per screen**: a mint pill or the floating button. Everything else is a
-   soft-filled pill or mint text.
-4. **Lists breathe.** Cards and rows are at least 48–56dp with a 16dp inset; titles and secondary
-   text never look alike.
-5. **Sentence case, plain words**, herdr's own sentences when it refuses something.
+1. **One chrome colour: amber.** It marks focus (a field being typed in), the chosen lens (the
+   current screen's nav glyph, the admin tab's underline, an armed terminal modifier), the
+   terminal cursor, links, and **your own action**: Send, the primary button, the floating "Add".
+   Nothing else is amber.
+2. **States carry the other saturated colours**, and none of them is amber: working blue, blocked
+   red, done green, idle dim. A state always has its word too.
+3. **Tonal surfaces and hairlines**, not heavy borders: a card is one step lighter than the ground
+   (`--bg-elevated`) with a 1dp `--border` hairline. Shadows only for what floats: the composer,
+   the floating "Add", dialogs, toasts.
+4. **Hover and selection are one neutral fill at two strengths**: a pressed row, the chosen chip
+   or segment, the agent's current menu choice sit on `--bg-hover`; nothing chosen turns amber.
+5. **Sections are parted by space and a dim heading**, never by a rule.
+6. **Your chat turns are neutral raised cards**; the agent's (and the Coordinator's) answers are
+   plain prose, so a long thread never becomes a wall of colour.
 
 ## Colour
 
-| Token | Dark | Light | Use |
-| --- | --- | --- | --- |
-| `ground` | `#0F1412` | `#F4F7F5` | Screens and bars |
-| `card` | `#171D1A` | `#FFFFFF` | Cards, the nav bar, sheets and dialogs |
-| `field` | `#222926` | `#E7EDE9` | Fields, chips, secondary buttons, tiles, code |
-| `fieldFocused` | `#2B3330` | `#DCE4DF` | A field being typed in, a sheet's handle, a key |
-| `line` | `#232A27` | `#E5EBE7` | The rare hairline (menu groups, the tab row, a repo's header) |
-| `text` | `#E4EAE6` | `#141A17` | Titles and body |
-| `muted` | `#A7B1AC` | `#55605A` | Secondary lines, icons, section headings |
-| `faint` | `#8D9792` | `#5F6964` | Meta: counts, times, hints (still 4.5:1 on a card) |
-| `off` | `#56605B` | `#B2BBB6` | Disabled, idle dots (not used for text that must be read) |
-| `accent` / `primary` | `#7DD3B6` | `#1E6B58` | herdr's mint: primary buttons, the FAB, links, quiet buttons, selection, progress, cursor |
-| `primaryContainer` | `#173F33` | `#CDEDE0` | Selected chips and nav item, your chat bubbles |
+The web UI's amber palette, value for value (`ContrastTest.tokensAreTheWebUiTokens` checks them).
+Each token keeps herdr-android's name in code; the web UI's is beside it.
 
-Sheets and dialogs sit on `card`, so they read as raised in both themes.
+| Token (`Herdr.colors`) | Web UI | Dark | Light | Use |
+| --- | --- | --- | --- | --- |
+| `ground` | `--bg` | `#12100E` | `#EEEAE2` | Screens, the chat canvas |
+| `panel` | `--bg-panel` | `#181613` | `#FAF8F3` | Bars, the nav bar, sheets, dialogs, the terminal, code blocks |
+| `card` | `--bg-elevated` | `#211E1A` | `#F2EEE6` | Cards, chips, secondary buttons, tracks, your chat turns |
+| `hover` | `--bg-hover` | `#2A2621` | `#E8E2D6` | Pressed and chosen rows, chips and segments; icon tiles; inline code |
+| `input` | `--bg-input` | `#1C1916` | `#FFFDF9` | Text fields |
+| `line` | `--border` | `#2D2924` | `#DCD4C6` | Hairlines: cards, fields, bars, buttons, chips |
+| `lineStrong` | `--border-strong` | `#3E3830` | `#C5BAA8` | The prompt card's edge, keycaps, a sheet's grip, a chosen chip |
+| `text` | `--text` | `#D8D0C3` | `#2A251F` | Body and row text |
+| `strong` | `--text-strong` | `#F2EBDF` | `#16120D` | Titles, a chosen segment, emphasis, field values |
+| `muted` | `--text-dim` | `#9B9183` | `#685E52` | Secondary lines, icons, section heads, meta |
+| `accent` | `--accent` | `#F0A830` | `#8C5000` | Amber that reads as text: links, the chosen lens, focus, the cursor |
+| `primary` / `onPrimary` | `--primary` / `--primary-text` | `#F0A830` / `#1B1407` | `#C57D12` / `#1B1407` | The fill of your own action, with ink text |
+| `off` | (55% opacity) | `#615A51` | `#ADA496` | Disabled controls (not text that must be read) |
+| `notice` | `--notice` | `#E8C55C` | `#7A5A00` | A warning: offline and stale, outdated, a minor finding |
+| `scrim` | `--scrim` | `rgba(8,6,4,.55)` | `rgba(40,32,22,.35)` | Under sheets and dialogs |
 
-**Status colours** are the board's tones (herdr-projects `docs/colours.md`) and herdr's sidebar
-colours, one set for both. Light mode uses deeper versions so they read as text on white.
+`accentTint` (13% / 10%), `dangerTint` (12% / 10%) and `tint(state)` (14% / 12%) are the web UI's
+named tints. In light, `accent` is the darker text-safe ochre and `primary` the brighter fill that
+carries ink, as in the web UI.
 
-| Tone | Dark | Light | Means |
-| --- | --- | --- | --- |
-| red | `#F0857A` | `#B3342A` | Needs you, blocked, failed, destructive |
-| amber | `#E2B64A` | `#8A5800` | Working, outdated, minor finding |
-| green | `#6CC993` | `#22744A` | Idle, online, ready to approve, passed |
-| blue | `#7AA2F7` | `#3260C2` | Done (agent), reviewing |
-| teal | `#4DC4B8` | `#0B7268` | Done (task) |
-| pink | `#E58FC0` | `#A0407A` | Queued |
-| grey | `#8E9692` | `#606567` | To do, stopped, unknown |
+### States
 
-A status appears as a dot (7–8dp) or a `StatusBadge` (dot + label on the colour's tint: 16% in
-dark, 12% in light). Never colour alone: a dot always has a word next to it or in its row.
-`ContrastTest` checks every pair above (text 4.5:1, marks 3:1).
+| State | Web UI | Dark | Light | Agent | Board |
+| --- | --- | --- | --- | --- | --- |
+| Working | `--status-working` | `#6CB8D6` | `#155A72` | working | working, reviewing |
+| Blocked | `--status-blocked` | `#FF7B70` | `#A82323` | needs you (blocked) | asks you, plan ready, pick one, review failed, needs a login, stopped, went wrong |
+| Done | `--status-done` | `#93C36B` | `#2F6317` | done | ready to approve, done |
+| Idle | `--status-idle` | `#9B9183` | `#685E52` | idle, other | to do, queued, archived |
+
+The board's task statuses fold onto the same four (`HerdrColors.tone`), so a task and an agent
+in the same state look the same; the board's written status always tells them apart. A machine's
+dot follows the web UI's PC dot: done = connected, working = connecting, blocked = error, idle =
+paused. Red (`red`) is also the colour of destructive actions.
+
+A state appears as a dot (6–8dp), as a `StatusBadge` (dot and word in the state's colour on its
+tint, `--radius-sm`; idle dim on `--bg-elevated` with a hairline), or as coloured words beside a
+name. Never colour alone.
 
 ## Type
 
-Roboto, six sizes (24, 20, 16, 14, 13, 12), three weights. Nothing else.
+The web UI's faces, bundled (`res/font`, Latin subsets; other scripts fall back to the phone's):
+**Pretendard** for the interface and prose, **JetBrains Mono** for code, paths, keys, task keys,
+fingerprints and the terminal. Its scale, in sp so it follows the phone's font size:
 
-| Style | Size / line | Weight | Use |
-| --- | --- | --- | --- |
-| `headlineMedium` | 24 / 32 | SemiBold | Top-level screen titles (Agents, Machines, Settings), a task's title |
-| `titleLarge` | 20 / 28 | SemiBold | Detail bar titles, sheet and dialog titles |
-| `titleMedium` | 16 / 24 | SemiBold | Row and card titles |
-| `bodyLarge` | 16 / 24 | Regular | Chat messages, menu rows, form values |
-| `titleSmall` / `labelLarge` | 14 / 20 | SemiBold | Section headings (muted), buttons, chips |
-| `bodyMedium` | 14 / 21 | Regular | Secondary lines, descriptions |
-| `bodySmall` | 13 / 18 | Regular | Bar subtitles, hints |
-| `labelMedium` | 12 / 16 | Medium | Badges, meta, counts |
+| Style | Size / line | Weight | Web UI | Use |
+| --- | --- | --- | --- | --- |
+| `headlineMedium` | 22 / 27.5, −0.02em | SemiBold | `--fs-display` | Top-level screen titles (Agents, Machines, Settings) |
+| `headlineSmall` | 18 / 23.4, −0.01em | SemiBold | `--fs-xl` | A task's title, Markdown h1 |
+| `titleLarge` | 16 / 21.6, −0.01em | SemiBold | `--fs-lg` | A detail bar's title, sheet and dialog titles, state titles, Markdown h2 |
+| `titleMedium` | 14 / 21 | Medium | `--fs-md` | Row and card titles |
+| `titleSmall` | 13 / 18 | SemiBold | `--fs-sm` | Section heads (dim), "Needs you" |
+| `bodyLarge` | 15 / 24 | Regular | `--fs-chat` on `--lh-prose` | Chat prose, your turns, menu rows, field values |
+| `bodyMedium` | 14 / 21 | Regular | `--fs-md` | Body and dialog copy |
+| `bodySmall` | 12 / 18 | Regular | `--fs-xs` | Subtitles, hints, the place under a title |
+| `labelLarge` | 13 / 18 | Medium | `--fs-sm`, `--fw-medium` | Buttons, chips, segments |
+| `labelMedium` | 12 / 16 | Medium | `--fs-xs` | Badges, pills, counts, nav labels |
+| `labelSmall` | 11 / 14, +0.06em | SemiBold | `--fs-2xs`, caps | Field labels and menu headings, in capitals |
+| `CodeStyle` | 13 / 20 | Regular | `--font-mono`, `--lh-code` | Code, the terminal (its own size, pinch to change) |
 
-Monospace only for code, paths in tool calls, keys and fingerprints.
+Bold text is semibold in `strong`, as the web UI's `strong`; inline code is 0.87em of its line.
 
-## Spacing
+## Spacing, size and shape
 
-A 4/8dp grid: `Space.xxs` 2, `xs` 4, `s` 8, `m` 12, `l` 16, `xl` 24, `xxl` 32.
+`Space`: the web UI's 4dp grid, `xs` 4, `s` 8, `m` 12, `l` 16, `xl` 20, `xxl` 24, `xxxl` 32.
+Screen margin 16, card padding 16, sheet margin 20, between cards 8, above a section head 24.
 
-- Screen side margin 16; card padding 16; sheet and dialog margin 24.
-- Between cards 8; between a section heading and its content 8; above a section heading 24 (16
-  inside lists).
-- Rows: 16 horizontal, 12 vertical; a 40dp leading tile and 12 before the text.
+`Radius`: `s` 6 (badges, keycaps, segments), `m` 8 (buttons, fields, rows, tiles), `l` 12 (cards,
+menus, code blocks, chat turns), `xl` 16 (sheets, dialogs, the prompt card), `xxl` 24 (the
+composer). Pills (chips, neutral tags, the floating "Add", Send) are fully round.
 
-## Shape and elevation
-
-`Radius.s` 8 (badges, code), `m` 12 (fields, tiles, option rows), `l` 20 (cards), `xl` 28
-(sheets, dialogs). Buttons, chips, the composer and toasts are pills.
-
-Flat: no shadows, no tonal elevation. Depth comes from the grey steps; the scrim (black 55%)
-lifts sheets and dialogs; only the toast has a shadow, because it floats over anything.
+Sizes from the web UI's coarse-pointer rules, grown to Android's 48dp: bars 56dp (`--header-h`
+52px), every target ≥48dp, rows 48–56dp (`--row-h`), icons 20dp (`--icon-size` 18px, one step up
+for a phone), agent marks 22dp (`--mark-size`), dots 7dp (`--dot-size`), hairlines 1dp.
 
 ## Icons
 
-Material Symbols Rounded, outlined, weight 400 (`HerdrIcons`, drawn from the SVG paths so the APK
-stays small). 24dp in bars and the nav bar, 20–22dp in rows and menus, 18dp inside buttons.
-Icons in rows are `muted`; a destructive row's icon is red. Arrows mirror in right-to-left.
+**Lucide** (`HerdrIcons`), the set the web UI uses: generated from lucide-react's icon nodes into
+`ImageVector`s at Lucide's own geometry (24-unit grid, 2-unit round strokes, no fill), named as
+Lucide names them (`Trash2`, `SquareTerminal`, `MessagesSquare`…). 20dp in bars, rows, menus and
+the nav bar; 18dp in notices, chevrons and checks; 16dp inside chips. Icons are `muted` in rows and
+`text` in bars; a destructive row's icon is red; the chosen nav glyph is amber. Arrows and chevrons
+mirror in right-to-left. `IconsTest` keeps every icon a Lucide stroke icon.
 
-The nav bar keeps herdr-android's icons: Agents (home), Machines (list), Settings (gear).
+**Agent marks** (`AgentMark`): where the web UI draws a coding agent's brand mark, in the leading
+cell of agent rows, so does the app: the Agents list's cards and a workspace's pane rows. claude,
+codex, pi, opencode, omp, cursor, amp, copilot, droid, gemini and grok have their marks (codex,
+cursor, pi, copilot and grok in the text colour, the rest in their brand colours); any other agent
+gets its initial in a quiet disc; a shell pane gets Lucide's terminal glyph.
+
+## Surfaces
+
+| Surface | Fill | Edge | Shadow |
+| --- | --- | --- | --- |
+| Screen | `ground` | | |
+| Top bar, nav bar, bottom action bar | `panel` | hairline on the content side | |
+| Card (`QuietCard`) | `card` | `line` hairline, `Radius.l` | |
+| Sheet (`HerdrSheet`, `HerdrMenu`, `ManageSheet`, `BoardPanel`) | `panel` | `Radius.xl` top corners | scrim |
+| Dialog (`HerdrDialog`) | `panel` | `line` hairline, `Radius.xl` | `--shadow-pop` |
+| Composer | `card` | `line`, amber while typing; `Radius.xxl` | `--shadow-card` |
+| Floating "Add" | `primary` | | `--shadow-card` |
+| Toast | black (the web UI's in-app alert, both themes) | pill | yes |
+| Code block | `panel` | `line`, `Radius.l` | |
+| Terminal | `panel` (`--term-bg`) | | |
 
 ## Components
 
 | Component | Anatomy |
 | --- | --- |
-| `HerdrTopBar` | On the ground. Top level: 24sp title + actions. Detail: back arrow, 20sp title, muted 13sp subtitle, actions (icons, or a mint text action such as "Terminal"). Never changes colour on scroll. |
-| `BarIcon` | 48dp round target, 24dp icon, optional red count badge. |
-| `HerdrFab` | The screen's "add": a floating mint pill with icon and label ("Add machine", "New", "Add"), or round with only + (the board). Lists leave 96dp at the bottom for it. |
-| `HerdrNavBar` | On the card surface, the selected icon on a mint pill, 12sp labels, red count badge. |
-| `QuietCard` | `card`, 20dp corners, no border. Agent, machine, workspace, task and board-entry cards; groups of rows. |
-| Agent / machine cards | A status dot, the title (16 SemiBold), a status pill or badge on the right; quieter lines indented to the title; count pills; the blocked agent's question in red monospace. |
-| Task cards | The board's status stripe (wider when it needs you), key + `StatusBadge` + agent, title, what it is doing, progress bar, the PR in mint. |
-| Workspace cards | Dot + name + tab pill + actions; the tab name or tab chips; the layout thumbnail; one row per pane (dot, name · state) with a secondary "Terminal" pill. |
-| `ListRow` | Optional leading (a dot or a tile), title (16 SemiBold), one muted line, optional extra line, trailing content or chevron. ≥56dp, the whole row is the target. |
-| `ActionRow`, `MenuRow` | Sheet rows. Management sheets lead with a 36dp tinted icon tile (herdr-android's own), menus with a 22dp icon; 16sp label, optional muted line, chevron for sub-screens, ≥56dp. Destructive rows are red. |
-| `SectionHeading`, `MenuSection` | 14sp SemiBold muted, over a group. |
-| `PrimaryButton` | Mint pill, 48dp, 14sp SemiBold. |
-| `SecondaryButton` | `field` pill (Terminal, Retry, Copy, Reload config). |
-| `QuietButton` | Mint text; in a dialog's confirm slot it becomes the mint pill (red if destructive). |
-| `DangerButton` | Red pill: only to confirm something that can't be undone. |
-| `HerdrChip` | Filter or choice: `field` pill, `primaryContainer` when selected, 36dp drawn in a 48dp target. |
-| `SegmentedPills` | The New sheet's and the update channel's segmented choice, as one track; wraps into chips at large font sizes. |
-| `HerdrField` / `HerdrTextField` | Filled, no outline: `field`, 12dp corners, the label inside, hint or error under it, mint cursor. |
-| `SwitchRow`, radio rows | The whole row toggles; switches and radios in mint. |
-| `StatusBadge` / `StatusLabel` / `Pill` | Dot + label on the colour's tint / dot + muted label / a small neutral or tinted tag. |
-| `InfoLine` | Label left (muted), value right. |
-| `MonoBlock`, `CodeBlock` | Monospace on `field`, 12dp corners; code scrolls sideways and has a copy icon. |
-| `ChatComposer` | A rounded field on the card surface, and beside it the round mint Send button (or "Stop" while the agent works); the Coordinator's "Send and start agents" under it. |
-| Chat | Your messages in mint bubbles on the right; an agent's replies as text with tool calls folded into a card; the Coordinator's replies in card bubbles on the left; a waiting question is a red-tinted card with a red edge, its choices outlined rows (the current one in red). |
-| Admin | Plugins / Integrations / Server / Machines as a scrollable tab row with a mint indicator. |
+| `HerdrTopBar` | `panel`, hairline under it. Top level: 22sp strong title + actions. Detail: back arrow, 16sp strong title, the place under it in 12sp dim, actions (icons, or a text action such as "Terminal"). |
+| `BarIcon` | `.icon-button`: 48dp target, 20dp glyph in `text`, pressed on `hover` with `Radius.m`; optional red count. |
+| `HerdrFab` | The screen's "add": an amber pill (`primary`, ink text), icon and label, or round with only +. Lists leave 96dp for it. |
+| `HerdrNavBar` | `panel` with a hairline above; the chosen screen's glyph amber on a `hover` pill, its label strong; the others dim. |
+| `QuietCard` | `card` + hairline, `Radius.l`, no shadow. Agent, machine, workspace, task and board-entry cards; groups of rows. |
+| Agent cards | The agent's mark, what it works on (14sp medium, strong), under it the agent and where (12sp dim), its `StatusBadge` at the right; a blocked agent's question in red mono. |
+| Task cards | The board's status stripe (wider when it needs you), the key in mono, `StatusBadge`, agent; title; what it is doing; progress; the PR as an amber link. |
+| Workspace cards | Dot + name + tab pill + `⋯`; tab chips; layout thumbnail; one row per pane: the agent's mark (or the terminal glyph), name · state in its colour, a secondary "Terminal" button. |
+| `ListRow` | Optional leading cell, title (14sp medium), one dim 12sp line, trailing content or a chevron. ≥56dp. |
+| `ActionRow`, `MenuRow` | `.row-sheet-item`: a dim 20dp icon, the 15sp label, an optional dim line, chevron for sub-screens; ≥48–52dp; pressed or chosen on `hover` (chosen with an amber check). Destructive rows are red. |
+| `SectionHeading` | 13sp semibold dim, 24dp above. `MenuSection` and `FieldLabel`: 11sp semibold dim capitals. |
+| `PrimaryButton` | `.btn-primary`: `primary` fill, ink text, `Radius.m`, 48dp, 13sp medium. |
+| `SecondaryButton` | `.btn`: `card` fill, hairline, strong text. |
+| `QuietButton` | `.btn-ghost`: no fill, `text` (or `accent` for a link). In a dialog's confirm slot it becomes the primary button (the danger one if red). |
+| `DangerButton` | `.btn-danger`: `dangerTint` fill, red hairline, `dangerText`. |
+| `HerdrChip` | Neutral pill: `card` + hairline; chosen: `hover` + strong hairline + strong text. 34dp drawn in a 48dp target. |
+| `SegmentedPills` | `.segmented`: one `card` track with a hairline, `Radius.m`; the chosen segment on `hover` in strong text, the rest dim. Wraps into chips at large font sizes. |
+| `HerdrField` / `HerdrTextField` | `.field`: the label over it in dim capitals, the box on `input` with a hairline that turns amber while focused, `Radius.m`, strong 15sp text, the hint or error under it. |
+| `SwitchRow` | Strong label, dim line, a switch with the amber track when on. |
+| `StatusBadge` / `StatusLabel` / `Pill` | State word on its tint / dot + dim word / `.pill`: dim text in a hairline pill. |
+| `MonoBlock`, `CodeBlock` | JetBrains Mono in a hairline box (`ground` or `panel`), code scrolls sideways and has a copy icon. |
+| `ChatComposer` | herdr-android's layout (field, and beside it Send or Stop), drawn as the web UI's input card: `card`, hairline (amber while typing), `Radius.xxl`, shadow. Send is the amber circle with an up arrow; Stop the strong circle with a square. |
+| Chat | Your turns: neutral `card` bubbles (hairline in light), `Radius.l`, on the right. Answers: plain prose. Tool calls: the web UI's work block, one quiet row each (state, verb, object in mono), a hairline under the run. |
+| Prompt card (`BlockedCard`) | `card`, `lineStrong` hairline, `Radius.xl`; "Needs you" is its one red; the question in strong prose; the command in the one mono box; the choices flat rows with a keycap, the agent's current one on `hover`. |
+| Terminal | `panel` ground, `text`, amber cursor, xterm's default ANSI colours, any text held at 4.5:1 on its background (`TerminalPalette.minimumContrast`, as the web UI's xterm `minimumContrastRatio`); keys are `.key`s: hairline, `Radius.s`, an armed modifier on `card` with an amber edge. |
+| Admin | Plugins / Integrations / Server / Machines as a scrollable tab row on `panel`, the active tab underlined in amber. |
 
 ### Sheets and dialogs
 
-- **Sheet** (`HerdrSheet`, `HerdrMenu`, `ManageSheet`): `card`, 28dp top corners, a 32×4 handle,
-  `SheetTitle` (20sp title, muted subtitle) on a 24dp margin, then rows inset 8dp so their content
-  lines up with the title. Scrolls when long, drags away.
-- **Dialog** (`HerdrDialog`): only for confirmations and short forms. 28dp corners, 24dp padding,
-  title, muted body, buttons bottom-right: mint-text Cancel, then the mint (or red) pill.
-- **Board panels** (`BoardPanel`) follow the sheet anatomy, drawn inside the screen.
+- **Sheet**: `panel`, 16dp top corners, a 36×4 grip in `lineStrong`, `SheetTitle` (16sp strong
+  title, dim line) on a 20dp margin, then rows inset 8dp. Scrolls when long, drags away.
+- **Dialog**: only for confirmations and short forms. `panel`, hairline, 16dp corners, 20dp
+  padding, title, dim body, buttons bottom-right: ghost Cancel, then the primary (or danger) one.
 
 ## States
 
-- **Empty** (`EmptyState`, `StateBlock`): a 56dp round `field` tile with a muted icon, a 16sp
-  title, one muted sentence, and the button that fixes it when there is one.
-- **Loading** (`LoadingState`, `Spinner`): a 24dp mint spinner and a muted "Reading…" line;
-  never a bare progress bar. A running action shows a 3dp mint bar with what it is.
-- **Error**: inline `ErrorMessage` (red tint tile, error icon, one sentence, Retry); full-area
-  `ErrorState` (red icon tile, title, sentence, Try again). Notices (`Notice`) use the same tile in
-  amber or grey.
-- **Offline**: an amber notice "Offline · showing the last known state" over the stale content.
+- **Empty** (`EmptyState`, `StateBlock`): a 52dp round `card` tile with a hairline and a dim icon, a
+  16sp strong title, one dim sentence, and the button that fixes it when there is one.
+- **Loading** (`LoadingState`, `Spinner`): a 24dp dim spinner on a hairline track and a dim
+  "Reading…" line. A running action shows a 3dp amber bar (your action in flight) with what it is.
+- **Error**: inline `ErrorMessage` (danger tint, red icon, one sentence, Retry); full-area
+  `ErrorState`. `Notice`s use the same shape: a state's tint, or `card` with a hairline when neutral.
+- **Offline**: a `notice` "Offline · showing the last known state" over the stale content.
 
 ## Motion
 
-Short and purposeful, nothing decorative:
-
-- Navigation: the new screen fades in (200ms) while moving 1/12 of the width; back reverses it.
-- Sheets slide up with the platform's sheet motion; dialogs fade in (150ms) and rise 1/10.
-- Toasts drop in from the top (200ms) and leave on their own (3s, errors 5s) or on a tap.
-- Sections and tool groups expand with `animateContentSize`; the nav pill cross-fades (180ms).
-- "Working" pulses a dot (700ms), nothing else moves on its own.
+Short and purposeful, as the web UI's: navigation fades and slides (200ms); sheets rise with the
+platform's sheet motion; dialogs fade in (150ms); toasts drop in from the top; sections expand with
+`animateContentSize`; the nav pill cross-fades (180ms, `--dur-base`). "Working" breathes a dot,
+nothing else moves on its own.
 
 ## Accessibility
 
-- Every target is at least 48dp (keys above the terminal keyboard are 52×48).
-- Text contrast 4.5:1 and marks 3:1 in both themes (`ContrastTest`).
-- Layouts hold at 200% font scale (`FontScaleTest`): rows wrap, segmented choices become chips,
-  bars ellipsise their subtitles.
+- Every target is at least 48dp (terminal keys 52×48).
+- Text 4.5:1 and marks 3:1 in both themes, on every surface text sits on (`ground`, `panel`,
+  `card`, `hover`, `input`) and on the state tints (`ContrastTest`). The terminal keeps any cell's
+  text at 4.5:1 whatever colours the program picks.
+- Layouts hold at 200% font scale (`FontScaleTest`, `DesignSystemTest`): rows wrap, segmented
+  choices become chips, bars ellipsise their subtitles; all type is in sp.
 - Icon-only buttons have content descriptions; rows that open something say what
-  (`onClickLabel`); headings are marked as headings; toasts are polite live regions.
+  (`onClickLabel`); headings are marked as headings; a field is named by its label; toasts are
+  polite live regions; states are words, not only colours.

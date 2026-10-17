@@ -1,6 +1,6 @@
 # <img src="docs/screenshots/icon.webp" alt="" width="48" align="center"> Herdr for Android
 
-A native Android client for [herdr](https://herdr.dev) hosts: see your agents across machines, answer the blocked ones, and open any pane as a live terminal. Kotlin and Jetpack Compose, with the app's own design system on Material 3 ([`docs/DESIGN.md`](docs/DESIGN.md)).
+A native Android client for [herdr](https://herdr.dev) hosts: see your agents across machines, answer the blocked ones, and open any pane as a live terminal. Kotlin and Jetpack Compose. It wears the [herdr web UI](https://github.com/devswha/herdr-web-ui)'s look ("a warm terminal": amber on lamp-lit graphite or ledger paper, Lucide icons, the agents' own marks), carried over from its design tokens (MIT) into the app's own design system ([`docs/DESIGN.md`](docs/DESIGN.md)).
 
 <table>
   <tr>
@@ -18,12 +18,12 @@ A native Android client for [herdr](https://herdr.dev) hosts: see your agents ac
   <tr>
     <td align="center"><img src="docs/screenshots/board.webp" alt="The work board" width="200"><br><sub><b>Board</b>: tasks in the board's colours, the ones that need you first</sub></td>
     <td align="center"><img src="docs/screenshots/task.webp" alt="A task's details" width="200"><br><sub><b>A task</b>: next step, reviews, links, one tap to approve</sub></td>
-    <td align="center"><img src="docs/screenshots/agents-dark.webp" alt="Agents in dark mode" width="200"><br><sub><b>Dark mode</b>: follows the phone</sub></td>
-    <td align="center"><img src="docs/screenshots/board-dark.webp" alt="The board in dark mode" width="200"><br><sub><b>Board, dark</b></sub></td>
+    <td align="center"><img src="docs/screenshots/agents-light.webp" alt="Agents in light mode" width="200"><br><sub><b>Light mode</b>: follows the phone</sub></td>
+    <td align="center"><img src="docs/screenshots/board-light.webp" alt="The board in light mode" width="200"><br><sub><b>Board, light</b></sub></td>
   </tr>
 </table>
 
-The screenshots come from a demo host with made-up projects (see [`docs/screenshots/demo-host`](docs/screenshots/demo-host)). The look (colours, type, spacing, components) is described in [`docs/DESIGN.md`](docs/DESIGN.md).
+The screenshots come from a demo host with made-up projects (see [`docs/screenshots/demo-host`](docs/screenshots/demo-host)). The look (colours, type, icons, spacing, components) is described in [`docs/DESIGN.md`](docs/DESIGN.md); the design tokens are the herdr web UI's (MIT, by devswha), and the fonts, icons and marks are credited in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 
 ## Getting the app
 

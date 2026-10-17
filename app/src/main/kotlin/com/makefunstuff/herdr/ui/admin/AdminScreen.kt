@@ -109,10 +109,10 @@ import java.util.Date
 import kotlinx.coroutines.delay
 
 private val TABS = listOf("Plugins", "Integrations", "Server", "Machines")
-private val OK: Color @Composable get() = Herdr.colors.green
-private val WARN: Color @Composable get() = Herdr.colors.amber
+private val OK: Color @Composable get() = Herdr.colors.done
+private val WARN: Color @Composable get() = Herdr.colors.notice
 private val BAD: Color @Composable get() = Herdr.colors.red
-private val IDLE: Color @Composable get() = Herdr.colors.grey
+private val IDLE: Color @Composable get() = Herdr.colors.idle
 
 /** herdr's admin features for one machine: plugins, integrations, the server and saved machines. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -165,22 +165,23 @@ fun AdminScreen(nav: NavController, machineId: String, initialTab: Int = 0) {
                     subtitle = listOfNotNull(state.herdrVersion?.let { "v$it" }, state.status.label()).joinToString(" · "),
                     onBack = { nav.popBackStack() },
                 ) {
-                    BarIcon(HerdrIcons.Refresh, "Refresh", { session.retry(); model.refreshAll() })
+                    BarIcon(HerdrIcons.RefreshCw, "Refresh", { session.retry(); model.refreshAll() })
                 }
                 PrimaryScrollableTabRow(
                     selectedTabIndex = tab,
                     edgePadding = Space.s,
-                    containerColor = Herdr.colors.ground,
+                    containerColor = Herdr.colors.panel,
                     contentColor = Herdr.colors.text,
                     divider = { RowDivider(inset = 0.dp) },
                     indicator = {
-                        TabRowDefaults.PrimaryIndicator(Modifier.tabIndicatorOffset(tab, matchContentSize = true), width = Dp.Unspecified, color = MaterialTheme.colorScheme.primary)
+                        // The web UI's tab strip: the active tab underlined in amber.
+                        TabRowDefaults.PrimaryIndicator(Modifier.tabIndicatorOffset(tab, matchContentSize = true), width = Dp.Unspecified, color = Herdr.colors.accent)
                     },
                 ) {
                     TABS.forEachIndexed { i, t ->
                         Tab(
                             selected = tab == i, onClick = { tab = i },
-                            selectedContentColor = Herdr.colors.text, unselectedContentColor = Herdr.colors.muted,
+                            selectedContentColor = Herdr.colors.strong, unselectedContentColor = Herdr.colors.muted,
                             text = { Text(t, maxLines = 1, style = MaterialTheme.typography.labelLarge) },
                         )
                     }
@@ -208,7 +209,7 @@ private fun PluginsTab(model: AdminModel) {
     var openPlugin by remember { mutableStateOf<String?>(null) }
     var openLog by remember { mutableStateOf<PluginLog?>(null) }
     LazyColumn(contentPadding = PaddingValues(Space.screen), verticalArrangement = Arrangement.spacedBy(Space.s)) {
-        loadState(model.plugins, "No plugins installed", "Install them on the machine with herdr plugin install.", HerdrIcons.Extension) { plugins ->
+        loadState(model.plugins, "No plugins installed", "Install them on the machine with herdr plugin install.", HerdrIcons.Puzzle) { plugins ->
             items(plugins, key = { it.pluginId }) { p ->
                 PluginCard(p, model, onOpen = { openPlugin = p.pluginId })
             }
@@ -246,8 +247,8 @@ private fun PluginCard(p: PluginInfo, model: AdminModel, onOpen: () -> Unit) {
             }
         }
         HerdrMenu(expanded = menu, onDismissRequest = { menu = false }, title = p.title) {
-            MenuRow("Actions and logs", HerdrIcons.PlayArrow, { menu = false; onOpen() })
-            MenuRow(if (p.enabled) "Disable" else "Enable", HerdrIcons.PowerSettingsNew, { menu = false; model.setEnabled(p, !p.enabled) })
+            MenuRow("Actions and logs", HerdrIcons.Play, { menu = false; onOpen() })
+            MenuRow(if (p.enabled) "Disable" else "Enable", HerdrIcons.Power, { menu = false; model.setEnabled(p, !p.enabled) })
         }
     }
 }
@@ -273,7 +274,7 @@ private fun PluginSheet(p: PluginInfo, model: AdminModel, onLog: (PluginLog) -> 
                 }
             }
             p.description?.let { item { Text(it, style = MaterialTheme.typography.bodyMedium) } }
-            p.warnings.forEach { w -> item { com.makefunstuff.herdr.ui.design.Notice(w, color = WARN, icon = HerdrIcons.Warning) } }
+            p.warnings.forEach { w -> item { com.makefunstuff.herdr.ui.design.Notice(w, color = WARN, icon = HerdrIcons.TriangleAlert) } }
             item { SectionTitle("Actions") }
             if (actions.isEmpty()) {
                 item { Hint(if (p.enabled) "This plugin has no actions." else "Enable the plugin to run its actions.") }
@@ -301,7 +302,7 @@ private fun ActionRow(a: PluginAction, model: AdminModel, enabled: Boolean) {
             )
         }
         if (busy) Spinner()
-        else RoundAction(HerdrIcons.PlayArrow, "Run ${a.title}", enabled = enabled) { model.invoke(a) }
+        else RoundAction(HerdrIcons.Play, "Run ${a.title}", enabled = enabled) { model.invoke(a) }
     }
 }
 
@@ -363,7 +364,7 @@ private fun IntegrationsTab(model: AdminModel) {
         item {
             Hint("Integrations install herdr's hooks into an agent so herdr can tell when it's working, blocked or done.")
         }
-        loadState(model.integrations, "No integrations", "herdr reported none on this machine.", HerdrIcons.Hub) { list ->
+        loadState(model.integrations, "No integrations", "herdr reported none on this machine.", HerdrIcons.Plug) { list ->
             val sorted = list.sortedWith(compareByDescending<IntegrationInfo> { it.installed }.thenByDescending { it.available })
             val (here, missing) = sorted.partition { it.installed || it.available }
             if (here.isNotEmpty()) item(key = "here") {
@@ -411,10 +412,10 @@ private fun IntegrationRow(i: IntegrationInfo, model: AdminModel, onRemove: () -
                     Box(
                         Modifier.size(48.dp).clip(CircleShape).clickable(role = Role.Button) { menu = true }.semantics { contentDescription = "More" },
                         contentAlignment = Alignment.Center,
-                    ) { Icon(HerdrIcons.MoreVert, null, tint = Herdr.colors.muted) }
+                    ) { Icon(HerdrIcons.Ellipsis, null, tint = Herdr.colors.muted) }
                     HerdrMenu(expanded = menu, onDismissRequest = { menu = false }, title = i.label.ifBlank { i.target }) {
-                        MenuRow("Reinstall", HerdrIcons.RestartAlt, { menu = false; model.install(i) })
-                        MenuRow("Remove", HerdrIcons.Delete, { menu = false; onRemove() }, destructive = true)
+                        MenuRow("Reinstall", HerdrIcons.RotateCcw, { menu = false; model.install(i) })
+                        MenuRow("Remove", HerdrIcons.Trash2, { menu = false; onRemove() }, destructive = true)
                     }
                 }
             }
@@ -568,7 +569,7 @@ private fun MachinesTab(model: AdminModel, adding: Boolean, onAdding: (Boolean) 
     var confirmRemove by remember { mutableStateOf<SavedMachineEntry?>(null) }
     LazyColumn(contentPadding = PaddingValues(Space.screen), verticalArrangement = Arrangement.spacedBy(Space.s)) {
         item { Hint("Machines this herdr can open from its sidebar (herdr machine). These are herdr's own, separate from the app's machine list.") }
-        loadState(model.machines, "No saved machines", "Tap + to save one.", HerdrIcons.Lan) { list ->
+        loadState(model.machines, "No saved machines", "Tap + to save one.", HerdrIcons.Network) { list ->
             item { QuietCard { list.forEach { m -> SavedMachineRow(m, model, onRemove = { confirmRemove = m }) } } }
         }
     }
@@ -599,7 +600,7 @@ private fun SavedMachineRow(m: SavedMachineEntry, model: AdminModel, onRemove: (
             onClick = { menu = true },
         )
         HerdrMenu(expanded = menu, onDismissRequest = { menu = false }, title = m.label.ifBlank { m.target }) {
-            MenuRow("Remove", HerdrIcons.Delete, { menu = false; onRemove() }, enabled = !busy, destructive = true)
+            MenuRow("Remove", HerdrIcons.Trash2, { menu = false; onRemove() }, enabled = !busy, destructive = true)
         }
     }
 }
@@ -620,9 +621,9 @@ private fun AddMachineSheet(model: AdminModel, onDismiss: () -> Unit) {
         ) {
             Text("Save a machine in herdr", style = MaterialTheme.typography.titleLarge)
             Hint("herdr connects to it from this machine to prepare it, so this machine must reach it over SSH without a password prompt.")
-            HerdrField(target, { target = it }, label = { Text("SSH target") }, placeholder = { Text("user@host or ssh alias") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            HerdrField(label, { label = it }, label = { Text("Label (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            HerdrField(sessionName, { sessionName = it }, label = { Text("Remote session (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            HerdrField(target, { target = it }, label = "SSH target", placeholder = { Text("user@host or ssh alias") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            HerdrField(label, { label = it }, label = "Label (optional)", singleLine = true, modifier = Modifier.fillMaxWidth())
+            HerdrField(sessionName, { sessionName = it }, label = "Remote session (optional)", singleLine = true, modifier = Modifier.fillMaxWidth())
             Busy(busy, "Connecting and preparing herdr there…")
             model.addError?.let { com.makefunstuff.herdr.ui.design.ErrorMessage(it) }
             PrimaryButton(

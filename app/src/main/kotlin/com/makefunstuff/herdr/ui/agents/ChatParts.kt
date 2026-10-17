@@ -1,5 +1,6 @@
 package com.makefunstuff.herdr.ui.agents
 
+import com.makefunstuff.herdr.ui.theme.Mono
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -43,6 +44,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.ui.unit.sp
+import com.makefunstuff.herdr.ui.theme.CodeStyle
+import androidx.compose.ui.draw.drawBehind
 import com.makefunstuff.herdr.core.chat.BlockedPrompt
 import com.makefunstuff.herdr.core.chat.ChatItem
 import com.makefunstuff.herdr.core.chat.ToolState
@@ -107,10 +113,12 @@ private fun UserBubble(item: ChatItem.User, pending: Boolean) {
     var expanded by rememberSaveable(item.id) { mutableStateOf(false) }
     val long = item.text.length > 600 || item.text.count { it == '\n' } > 12
     Row(Modifier.fillMaxWidth().padding(start = 48.dp), horizontalArrangement = Arrangement.End) {
+        // Your turn: a neutral raised card (`.chat-turn-user`), never a wall of colour.
         Surface(
-            color = MaterialTheme.colorScheme.primaryContainer,
-            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+            color = Herdr.colors.card,
+            contentColor = Herdr.colors.text,
             shape = BubbleShape,
+            border = if (Herdr.colors.bubbleBorder.alpha > 0f) androidx.compose.foundation.BorderStroke(1.dp, Herdr.colors.bubbleBorder) else null,
             modifier = Modifier.alpha(if (pending) 0.6f else 1f).animateContentSize(),
         ) {
             Column(Modifier.padding(horizontal = Space.l, vertical = Space.m)) {
@@ -157,49 +165,51 @@ private fun NoticeLine(text: String) {
     )
 }
 
-/** A run of tool calls as one compact card; long runs show only their last few until opened. */
+/**
+ * A run of tool calls as the web UI's work block: quiet one-line rows on the prose edge (state,
+ * verb, object), no card; a hairline under the run. Long runs show only their last few until opened.
+ */
 @Composable
 private fun ToolGroup(tools: List<ChatItem.Tool>) {
     var showAll by rememberSaveable(tools.first().id) { mutableStateOf(false) }
     val hidden = if (showAll || tools.size <= 4) 0 else tools.size - 3
-    Surface(
-        color = Herdr.colors.card,
-        shape = RoundedCornerShape(Radius.l - 4.dp),
-        modifier = Modifier.fillMaxWidth().animateContentSize(),
+    val line = Herdr.colors.line
+    Column(
+        Modifier.fillMaxWidth().animateContentSize().drawBehind {
+            drawLine(line, androidx.compose.ui.geometry.Offset(0f, size.height - 0.5f), androidx.compose.ui.geometry.Offset(size.width, size.height - 0.5f), 1.dp.toPx())
+        }.padding(bottom = Space.xs),
     ) {
-        Column(Modifier.padding(vertical = Space.xs)) {
-            if (hidden > 0) {
-                Text(
-                    "$hidden earlier actions",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = Herdr.colors.muted,
-                    modifier = Modifier.fillMaxWidth().clickable { showAll = true }.padding(horizontal = Space.m, vertical = Space.m),
-                )
-            }
-            tools.drop(hidden).forEach { ToolRow(it) }
+        if (hidden > 0) {
+            Text(
+                "▸ $hidden earlier actions",
+                style = MaterialTheme.typography.labelLarge,
+                color = Herdr.colors.muted,
+                modifier = Modifier.fillMaxWidth().heightIn(min = 40.dp).clip(RoundedCornerShape(Radius.m)).clickable { showAll = true }
+                    .padding(horizontal = Space.xs, vertical = Space.s),
+            )
         }
+        tools.drop(hidden).forEach { ToolRow(it) }
     }
 }
 
 @Composable
 private fun ToolRow(tool: ChatItem.Tool) {
     var open by rememberSaveable(tool.id) { mutableStateOf(false) }
-    Column(Modifier.fillMaxWidth().clickable { open = !open }.padding(horizontal = Space.m, vertical = Space.s)) {
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(Radius.m)).clickable { open = !open }.padding(horizontal = Space.xs, vertical = 6.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             ToolStateIcon(tool.state)
             Spacer(Modifier.width(Space.s))
             Text(
                 displayName(tool.name),
-                style = MaterialTheme.typography.titleSmall,
-                color = Herdr.colors.text,
+                style = MaterialTheme.typography.labelLarge,
+                color = if (tool.state == ToolState.Failed) Herdr.colors.red else Herdr.colors.muted,
                 maxLines = 1,
             )
             Spacer(Modifier.width(Space.s))
             Text(
                 tool.summary.lineSequence().firstOrNull().orEmpty(),
-                style = MaterialTheme.typography.bodySmall,
-                fontFamily = if (looksLikeCode(tool.summary)) FontFamily.Monospace else null,
-                color = Herdr.colors.muted,
+                style = if (looksLikeCode(tool.summary)) CodeStyle.copy(fontSize = 12.sp, lineHeight = 18.sp) else MaterialTheme.typography.bodySmall,
+                color = Herdr.colors.text,
                 maxLines = if (open) 4 else 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
@@ -223,9 +233,9 @@ private fun ToolRow(tool: ChatItem.Tool) {
 private fun ToolStateIcon(state: ToolState) {
     Box(Modifier.size(16.dp), contentAlignment = Alignment.Center) {
         when (state) {
-            ToolState.Running -> CircularProgressIndicator(Modifier.size(13.dp), strokeWidth = 1.5.dp, color = Herdr.colors.amber)
-            ToolState.Done -> Icon(HerdrIcons.Check, "Done", Modifier.size(16.dp), tint = Herdr.colors.green)
-            ToolState.Failed -> Icon(HerdrIcons.Close, "Failed", Modifier.size(16.dp), tint = Herdr.colors.red)
+            ToolState.Running -> CircularProgressIndicator(Modifier.size(13.dp), strokeWidth = 1.5.dp, color = Herdr.colors.working)
+            ToolState.Done -> Icon(HerdrIcons.Check, "Done", Modifier.size(16.dp), tint = Herdr.colors.done)
+            ToolState.Failed -> Icon(HerdrIcons.X, "Failed", Modifier.size(16.dp), tint = Herdr.colors.red)
         }
     }
 }
@@ -254,7 +264,7 @@ fun WorkingLine(activity: String?) {
     val pulse = rememberInfiniteTransition(label = "working")
     val alpha by pulse.animateFloat(0.3f, 1f, infiniteRepeatable(tween(700), RepeatMode.Reverse), label = "alpha")
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 4.dp)) {
-        StatusDot(Herdr.colors.amber, Modifier.alpha(alpha), size = 8)
+        StatusDot(Herdr.colors.working, Modifier.alpha(alpha), size = 8)
         Spacer(Modifier.width(Space.s))
         Text(
             activity?.let { "Working · $it" } ?: "Working…",
@@ -266,7 +276,12 @@ fun WorkingLine(activity: String?) {
     }
 }
 
-/** The question a blocked agent is asking, with its choices as buttons. The one card with a coloured edge: it waits for you. */
+/**
+ * The question a blocked agent is asking, as the web UI's prompt card: `--bg-elevated` with a
+ * strong hairline and `--radius-xl`; its title the card's one red; the question in strong prose;
+ * the command it asks about in the one mono box; the choices flat rows with a keycap each, all of
+ * the same weight (the agent's current one on the neutral fill).
+ */
 @Composable
 fun BlockedCard(
     prompt: BlockedPrompt?,
@@ -276,13 +291,13 @@ fun BlockedCard(
     val c = Herdr.colors
     var showDetails by remember(prompt?.question) { mutableStateOf(false) }
     Surface(
-        color = c.tint(c.red).compositeOver(c.card),
-        border = BorderStroke(1.dp, c.red.copy(alpha = 0.45f)),
-        shape = RoundedCornerShape(Radius.l),
+        color = c.card,
+        border = BorderStroke(1.dp, c.lineStrong),
+        shape = RoundedCornerShape(Radius.xl),
         modifier = Modifier.fillMaxWidth().animateContentSize(),
     ) {
         Column(Modifier.padding(Space.l), verticalArrangement = Arrangement.spacedBy(Space.s)) {
-            Text("Needs you", style = MaterialTheme.typography.labelLarge, color = c.red)
+            Text("Needs you", style = MaterialTheme.typography.titleSmall, color = c.red)
             if (prompt == null) {
                 // A menu the app couldn't read: show the bottom of the screen and the usual keys.
                 val tail = screen.lines().filter { it.isNotBlank() }.takeLast(12).joinToString("\n")
@@ -298,16 +313,17 @@ fun BlockedCard(
                 }
                 return@Column
             }
-            Text(prompt.question, style = MaterialTheme.typography.titleMedium)
+            Text(prompt.question, style = MaterialTheme.typography.bodyLarge, color = c.strong)
             val details = prompt.details
             if (details.isNotEmpty()) {
                 val shown = if (showDetails) details else details.take(3)
                 SelectionContainer {
                     Text(
                         shown.joinToString("\n"),
-                        style = MaterialTheme.typography.bodySmall,
-                        fontFamily = FontFamily.Monospace,
-                        color = c.muted,
+                        style = CodeStyle.copy(fontSize = 12.sp, lineHeight = 18.sp),
+                        color = c.text,
+                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(Radius.m)).background(c.ground)
+                            .border(1.dp, c.line, RoundedCornerShape(Radius.m)).padding(horizontal = Space.m, vertical = Space.s),
                     )
                 }
                 if (details.size > 3 && !showDetails) {
@@ -319,26 +335,27 @@ fun BlockedCard(
                     )
                 }
             }
-            Column(Modifier.padding(top = Space.xs), verticalArrangement = Arrangement.spacedBy(Space.s)) {
+            Column(Modifier.padding(top = Space.xs), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 prompt.options.forEachIndexed { i, option ->
                     val selected = i == prompt.selected
                     Row(
                         Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(Radius.m))
-                            .background(c.card)
-                            .border(if (selected) 1.5.dp else 1.dp, if (selected) c.red else c.line, RoundedCornerShape(Radius.m))
+                            .background(if (selected) c.hover else Color.Transparent)
                             .clickable { onKeys(prompt.keysFor(i)) }
-                            .padding(horizontal = Space.l, vertical = Space.m),
+                            .padding(horizontal = Space.s, vertical = Space.s),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        val fg = c.text
+                        // The menu's number as a keycap (`.prompt-card-option`).
+                        Box(
+                            Modifier.defaultMinSize(minWidth = 22.dp, minHeight = 22.dp).clip(RoundedCornerShape(Radius.s))
+                                .border(1.dp, c.lineStrong, RoundedCornerShape(Radius.s)).padding(horizontal = 5.dp),
+                            contentAlignment = Alignment.Center,
+                        ) { Text(option.number?.toString() ?: "${i + 1}", style = CodeStyle.copy(fontSize = 11.sp, lineHeight = 14.sp), color = c.muted) }
+                        Spacer(Modifier.width(Space.m))
                         Column(Modifier.weight(1f)) {
-                            Text(
-                                (option.number?.let { "$it. " } ?: "") + option.label,
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = fg,
-                            )
+                            Text(option.label, style = MaterialTheme.typography.bodyLarge, color = if (selected) c.strong else c.text)
                             option.description?.let {
-                                Text(it, style = MaterialTheme.typography.bodySmall, color = if (selected) fg.copy(alpha = 0.75f) else c.muted)
+                                Text(it, style = MaterialTheme.typography.bodySmall, color = c.muted)
                             }
                         }
                     }

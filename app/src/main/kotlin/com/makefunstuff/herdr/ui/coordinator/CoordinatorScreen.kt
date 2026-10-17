@@ -190,12 +190,12 @@ fun CoordinatorScreen(nav: NavController, machineId: String) {
             when {
                 !state.online && v == null -> {
                     Box(Modifier.weight(1f)) {
-                        ChatEmpty(HerdrIcons.Dns, state.status.label(), state.status.detail() ?: "Waiting for ${state.machine.label}…")
+                        ChatEmpty(HerdrIcons.Monitor, state.status.label(), state.status.detail() ?: "Waiting for ${state.machine.label}…")
                     }
                 }
                 state.online && state.boardPath == null -> {
                     Box(Modifier.weight(1f)) {
-                        ChatEmpty(HerdrIcons.ViewKanban, "No work board here", "herdr-projects isn't installed on ${state.machine.label}.")
+                        ChatEmpty(HerdrIcons.SquareKanban, "No work board here", "herdr-projects isn't installed on ${state.machine.label}.")
                     }
                 }
                 !loaded -> Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
@@ -213,13 +213,13 @@ fun CoordinatorScreen(nav: NavController, machineId: String) {
                                 Box(Modifier.fillParentMaxSize(), contentAlignment = Alignment.Center) {
                                     if (v == null) {
                                         ChatEmpty(
-                                            HerdrIcons.Forum,
+                                            HerdrIcons.MessagesSquare,
                                             "No Coordinator here",
                                             "Nothing on ${host.ifEmpty { state.machine.label }} answers as the Coordinator, so what you send is added to the board as a task.",
                                         )
                                     } else {
                                         ChatEmpty(
-                                            HerdrIcons.Forum,
+                                            HerdrIcons.MessagesSquare,
                                             "Nothing said yet",
                                             "Tell the Coordinator what needs doing and it turns it into tasks.",
                                         )
@@ -263,7 +263,7 @@ private fun ChatEmpty(icon: ImageVector, title: String, body: String) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { StateBlock(icon, title, body) }
 }
 
-/** Yours on the right in mint, the Coordinator's on the left on the card surface. */
+/** Yours on the right on a neutral raised card; the Coordinator's answer as plain prose on the left, as the web UI's chat. */
 @Composable
 private fun Bubble(line: ChatLine) {
     val mine = line.you
@@ -272,12 +272,17 @@ private fun Bubble(line: ChatLine) {
     Row(Modifier.fillMaxWidth().padding(start = if (mine) 48.dp else 0.dp, end = if (mine) 0.dp else 32.dp), horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start) {
         Column(horizontalAlignment = if (mine) Alignment.End else Alignment.Start) {
             Surface(
-                color = if (mine) scheme.primaryContainer else c.card,
-                contentColor = if (mine) scheme.onPrimaryContainer else c.text,
+                color = if (mine) c.card else Color.Transparent,
+                contentColor = c.text,
                 shape = if (mine) BubbleShape else ReplyBubbleShape,
+                border = if (mine && c.bubbleBorder.alpha > 0f) androidx.compose.foundation.BorderStroke(1.dp, c.bubbleBorder) else null,
                 modifier = Modifier.alpha(if (line.pending) 0.72f else 1f),
             ) {
-                MarkdownText(line.text, Modifier.padding(horizontal = Space.l, vertical = Space.m), style = MaterialTheme.typography.bodyLarge)
+                MarkdownText(
+                    line.text,
+                    Modifier.padding(horizontal = if (mine) Space.l else Space.xs, vertical = if (mine) Space.m else Space.xs),
+                    style = MaterialTheme.typography.bodyLarge,
+                )
             }
             if (line.pending) {
                 Row(
@@ -306,7 +311,7 @@ private fun Foot(v: CoordinatorView?, tooOld: Boolean, problem: String?, onTermi
         if (v?.state == "blocked") {
             Notice(
                 "The Coordinator shows a dialog on its screen that waits for your answer. It is in herdr's \"Coordinator\" tab.",
-                c.amber,
+                c.notice,
                 action = onTerminal?.let { "Open its terminal" to it },
             )
         }
@@ -314,7 +319,7 @@ private fun Foot(v: CoordinatorView?, tooOld: Boolean, problem: String?, onTermi
             Notice("Its program keeps no conversation the board can read, so only its latest message shows here.", null)
         }
         if (!v?.error.isNullOrEmpty()) Notice("The Coordinator could not be started: ${v?.error}", c.red)
-        if (tooOld) Notice("This machine's herdr-projects is too old to send its Coordinator. Update it there (herdr-projects update).", c.amber)
+        if (tooOld) Notice("This machine's herdr-projects is too old to send its Coordinator. Update it there (herdr-projects update).", c.notice)
         if (problem != null) Notice(problem, c.red)
     }
 }
@@ -324,7 +329,7 @@ private fun Working() {
     val t = rememberInfiniteTransition(label = "working")
     val a by t.animateFloat(0.3f, 1f, infiniteRepeatable(tween(700), RepeatMode.Reverse), label = "dots")
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = Space.xs)) {
-        StatusDot(Herdr.colors.amber, Modifier.alpha(a), size = 8)
+        StatusDot(Herdr.colors.working, Modifier.alpha(a), size = 8)
         Spacer(Modifier.width(Space.s))
         Text("Coordinator is working…", style = MaterialTheme.typography.bodySmall, color = Herdr.colors.muted)
     }
@@ -334,7 +339,7 @@ private fun Working() {
 @Composable
 private fun Notice(text: String, tint: Color?, action: Pair<String, () -> Unit>? = null) {
     Column {
-        com.makefunstuff.herdr.ui.design.Notice(text, color = tint, icon = if (tint == Herdr.colors.red) HerdrIcons.Error else HerdrIcons.Info)
+        com.makefunstuff.herdr.ui.design.Notice(text, color = tint, icon = if (tint == Herdr.colors.red) HerdrIcons.CircleAlert else HerdrIcons.Info)
         if (action != null) QuietButton(onClick = action.second, color = Herdr.colors.accent) { Text(action.first) }
     }
 }
@@ -358,7 +363,7 @@ private fun Composer(
             {
                 // The board's Tab: what the Coordinator adds from this message gets an agent at once.
                 SecondaryButton(onClick = onSendAndStart, enabled = enabled, modifier = Modifier.fillMaxWidth()) {
-                    Icon(HerdrIcons.Bolt, null, Modifier.size(18.dp))
+                    Icon(HerdrIcons.Zap, null, Modifier.size(18.dp))
                     Text("Send and start agents")
                 }
             }

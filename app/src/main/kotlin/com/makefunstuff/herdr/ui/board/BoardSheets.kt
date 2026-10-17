@@ -3,6 +3,7 @@ package com.makefunstuff.herdr.ui.board
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -119,7 +120,7 @@ fun BoardPanel(
 ) {
     BackHandler(onBack = onDismiss)
     Box(
-        Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.55f))
+        Modifier.fillMaxSize().background(Herdr.colors.scrim)
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClickLabel = "Close", onClick = onDismiss),
         contentAlignment = Alignment.BottomCenter,
     ) {
@@ -131,11 +132,11 @@ fun BoardPanel(
         ) {
             Column(Modifier.navigationBarsPadding()) {
                 Box(
-                    Modifier.align(Alignment.CenterHorizontally).padding(top = Space.m, bottom = Space.s).width(32.dp).height(4.dp)
-                        .clip(HerdrShapes.Pill).background(Herdr.colors.fieldFocused),
+                    Modifier.align(Alignment.CenterHorizontally).padding(top = Space.m, bottom = Space.s).width(36.dp).height(4.dp)
+                        .clip(HerdrShapes.Pill).background(Herdr.colors.lineStrong),
                 )
                 Text(
-                    title, style = MaterialTheme.typography.titleLarge, color = accent ?: Herdr.colors.text,
+                    title, style = MaterialTheme.typography.titleLarge, color = accent ?: Herdr.colors.strong,
                     maxLines = 2, overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(start = Space.xl, end = Space.xl, top = Space.xs, bottom = Space.m).semantics { heading() },
                 )
@@ -159,30 +160,30 @@ private fun PanelCancel(onDismiss: () -> Unit) = QuietButton(onClick = onDismiss
 @Composable
 fun ActionsSheet(t: BoardTask, onDismiss: () -> Unit, onAction: (BoardAction) -> Unit, onEdit: () -> Unit, onOpen: (() -> Unit)?) {
     HerdrMenu(expanded = true, onDismissRequest = onDismiss, title = t.name + " · " + t.title) {
-        if (onOpen != null) MenuRow("Open details", HerdrIcons.Description, onOpen)
+        if (onOpen != null) MenuRow("Open details", HerdrIcons.FileText, onOpen)
         BoardActions.forTask(t).forEach { a ->
             MenuRow(a.label.removeSuffix("…"), a.icon(), { onAction(a) }, destructive = a.destructive)
         }
-        MenuRow("Edit title or description", HerdrIcons.Edit, onEdit)
+        MenuRow("Edit title or description", HerdrIcons.Pencil, onEdit)
     }
 }
 
 /** Each action's icon, so the sheet's rows line up and read at a glance. */
 private fun BoardAction.icon(): ImageVector = when (this) {
-    BoardAction.Delegate -> HerdrIcons.PlayArrow
-    BoardAction.Tell, BoardAction.SendPlanBack -> HerdrIcons.ChatBubble
-    BoardAction.Stop -> HerdrIcons.StopCircle
-    BoardAction.Retry -> HerdrIcons.RestartAlt
+    BoardAction.Delegate -> HerdrIcons.Play
+    BoardAction.Tell, BoardAction.SendPlanBack -> HerdrIcons.MessageSquare
+    BoardAction.Stop -> HerdrIcons.CircleStop
+    BoardAction.Retry -> HerdrIcons.RotateCcw
     BoardAction.Fix -> HerdrIcons.Send
-    BoardAction.Review -> HerdrIcons.Rule
-    BoardAction.Finish -> HerdrIcons.TaskAlt
-    BoardAction.Approve, BoardAction.ApprovePlan -> HerdrIcons.CheckCircle
-    BoardAction.ApproveAnyway -> HerdrIcons.Warning
-    BoardAction.Pick -> HerdrIcons.Checklist
+    BoardAction.Review -> HerdrIcons.ListChecks
+    BoardAction.Finish -> HerdrIcons.CircleCheckBig
+    BoardAction.Approve, BoardAction.ApprovePlan -> HerdrIcons.CircleCheck
+    BoardAction.ApproveAnyway -> HerdrIcons.TriangleAlert
+    BoardAction.Pick -> HerdrIcons.ListTodo
     BoardAction.Archive -> HerdrIcons.Archive
-    BoardAction.Restore -> HerdrIcons.Unarchive
-    BoardAction.Clear -> HerdrIcons.Delete
-    BoardAction.Pin -> HerdrIcons.PushPin
+    BoardAction.Restore -> HerdrIcons.ArchiveRestore
+    BoardAction.Clear -> HerdrIcons.Trash2
+    BoardAction.Pin -> HerdrIcons.Pin
 }
 
 /** What a person should do about a task in this status, in a sentence. */
@@ -254,7 +255,7 @@ fun TaskDetailContent(
         containerColor = c.ground,
         topBar = {
             HerdrTopBar(t.name, onBack = onBack, backLabel = "Back to the board") {
-                BarIcon(HerdrIcons.MoreVert, "More actions", onMore)
+                BarIcon(HerdrIcons.Ellipsis, "More actions", onMore)
             }
         },
         bottomBar = {
@@ -265,7 +266,7 @@ fun TaskDetailContent(
                 busy?.let {
                     LinearProgressIndicator(
                         Modifier.fillMaxWidth().height(3.dp).clip(HerdrShapes.Pill).semantics { contentDescription = "Running: $it" },
-                        color = c.accent, trackColor = c.field,
+                        color = c.accent, trackColor = c.line,
                     )
                     Text("$it…", style = MaterialTheme.typography.labelMedium, color = c.muted)
                 }
@@ -363,7 +364,7 @@ private fun LinkRow(label: String, value: String, onClick: () -> Unit) {
                 Text(label, style = MaterialTheme.typography.labelLarge, color = Herdr.colors.accent)
                 Text(value, style = MaterialTheme.typography.bodySmall, color = Herdr.colors.muted, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
-            Icon(HerdrIcons.OpenInNew, null, tint = Herdr.colors.faint, modifier = Modifier.size(20.dp))
+            Icon(HerdrIcons.ExternalLink, null, tint = Herdr.colors.faint, modifier = Modifier.size(20.dp))
         }
     }
 }
@@ -376,7 +377,7 @@ private fun Card(title: String, color: Color, content: @Composable () -> Unit) {
     QuietCard(padded = true) {
         Column(verticalArrangement = Arrangement.spacedBy(Space.xs)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(HerdrIcons.Error, null, tint = color, modifier = Modifier.size(20.dp))
+                Icon(HerdrIcons.CircleAlert, null, tint = color, modifier = Modifier.size(20.dp))
                 Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = Space.s))
             }
             content()
@@ -396,7 +397,7 @@ private fun Section(title: String, startOpen: Boolean = true, collapseLong: Bool
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-            Icon(if (open) HerdrIcons.ExpandLess else HerdrIcons.ExpandMore, if (open) "Collapse" else "Expand", tint = Herdr.colors.muted)
+            Icon(if (open) HerdrIcons.ChevronUp else HerdrIcons.ChevronDown, if (open) "Collapse" else "Expand", tint = Herdr.colors.muted)
         }
         if (open) content()
     }
@@ -405,8 +406,8 @@ private fun Section(title: String, startOpen: Boolean = true, collapseLong: Bool
 @Composable
 private fun severityColor(s: String) = when (s) {
     "critical", "blocker", "major" -> Herdr.colors.red
-    "minor" -> Herdr.colors.amber
-    else -> Herdr.colors.grey
+    "minor" -> Herdr.colors.notice
+    else -> Herdr.colors.idle
 }
 
 private val severityOrder = listOf("critical", "blocker", "major", "minor", "trivial")
@@ -430,13 +431,13 @@ private fun ReviewView(r: Review, startOpen: Boolean = true) {
                 Modifier.fillMaxWidth().heightIn(min = 40.dp).clickable(onClickLabel = if (open) "Collapse review" else "Expand review") { open = !open },
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(if (passed) HerdrIcons.CheckCircle else HerdrIcons.Error, null, tint = if (passed) c.green else c.red, modifier = Modifier.size(20.dp))
+                Icon(if (passed) HerdrIcons.CircleCheck else HerdrIcons.CircleAlert, null, tint = if (passed) c.done else c.red, modifier = Modifier.size(20.dp))
                 Text(
                     "Round ${r.round} · $verdict" + (if (findings.isNotEmpty()) " · ${findings.size} finding${if (findings.size == 1) "" else "s"}" else "") +
                         if (r.by.isNotEmpty()) " · ${r.by.substringAfterLast('/')}" else "",
                     style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f).padding(start = Space.s),
                 )
-                Icon(if (open) HerdrIcons.ExpandLess else HerdrIcons.ExpandMore, null, tint = c.muted)
+                Icon(if (open) HerdrIcons.ChevronUp else HerdrIcons.ChevronDown, null, tint = c.muted)
             }
             if (!open && findings.isNotEmpty()) FlowRow(horizontalArrangement = Arrangement.spacedBy(Space.xs)) {
                 findings.groupBy { it.severity.ifEmpty { "finding" } }.forEach { (sev, l) -> Pill("${l.size} $sev", color = severityColor(sev)) }
@@ -455,7 +456,7 @@ private fun ReviewView(r: Review, startOpen: Boolean = true) {
 internal fun FindingView(f: Finding) {
     val c = Herdr.colors
     Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(Radius.m)).background(c.field).padding(Space.m),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(Radius.l)).background(c.card).border(1.dp, c.line, RoundedCornerShape(Radius.l)).padding(Space.m),
         verticalArrangement = Arrangement.spacedBy(Space.xs),
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(Space.s), verticalAlignment = Alignment.CenterVertically) {
@@ -565,8 +566,8 @@ fun BoardDialogs(
                     }) { Text(if (busy) "Saving…" else "Save") }
                 },
             ) {
-                HerdrField(title, { title = it }, label = { Text("Title") }, modifier = Modifier.fillMaxWidth())
-                HerdrField(desc, { desc = it }, label = { Text("Description (Markdown)") }, enabled = loaded, minLines = 4, modifier = Modifier.fillMaxWidth())
+                HerdrField(title, { title = it }, label = "Title", modifier = Modifier.fillMaxWidth())
+                HerdrField(desc, { desc = it }, label = "Description (Markdown)", enabled = loaded, minLines = 4, modifier = Modifier.fillMaxWidth())
             }
         }
         Pending.Add -> {
@@ -591,10 +592,10 @@ fun BoardDialogs(
                     }) { Text(if (busy) "Adding…" else if (start) "Add and start" else "Add") }
                 },
             ) {
-                HerdrField(title, { title = it }, label = { Text("Title") }, modifier = Modifier.fillMaxWidth())
-                HerdrField(repo, { repo = it }, label = { Text("Repo (name or path)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                HerdrField(title, { title = it }, label = "Title", modifier = Modifier.fillMaxWidth())
+                HerdrField(repo, { repo = it }, label = "Repo (name or path)", singleLine = true, modifier = Modifier.fillMaxWidth())
                 if (repos.isNotEmpty()) FlowRowChips(repos, repo) { repo = it }
-                HerdrField(desc, { desc = it }, label = { Text("Description (Markdown)") }, minLines = 3, modifier = Modifier.fillMaxWidth())
+                HerdrField(desc, { desc = it }, label = "Description (Markdown)", minLines = 3, modifier = Modifier.fillMaxWidth())
                 SwitchRow("Research only", "A report instead of code changes", research) { research = it }
                 SwitchRow("Start an agent now", null, start) { start = it }
             }

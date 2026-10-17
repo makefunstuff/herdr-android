@@ -1,5 +1,6 @@
 package com.makefunstuff.herdr.ui.agents
 
+import com.makefunstuff.herdr.ui.theme.Mono
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
@@ -41,6 +42,9 @@ import androidx.compose.ui.unit.dp
 import com.makefunstuff.herdr.ui.common.EmptyState
 import com.makefunstuff.herdr.ui.common.LocalContainer
 import com.makefunstuff.herdr.ui.design.BarIcon
+import com.makefunstuff.herdr.ui.design.AgentMark
+import com.makefunstuff.herdr.ui.design.StatusBadge
+import com.makefunstuff.herdr.ui.theme.CodeStyle
 import com.makefunstuff.herdr.ui.design.HerdrChip
 import com.makefunstuff.herdr.ui.design.HerdrIcons
 import com.makefunstuff.herdr.ui.design.HerdrTopBar
@@ -78,7 +82,7 @@ fun AgentsScreen(nav: NavController) {
         topBar = {
             HerdrTopBar("Agents") {
                 BarIcon(
-                    HerdrIcons.Notifications, "Notifications",
+                    HerdrIcons.Bell, "Notifications",
                     {
                         hosts.forEach { container.hosts.session(it.machine.id)?.markNoticesRead() }
                         showNotices = true
@@ -92,7 +96,7 @@ fun AgentsScreen(nav: NavController) {
             hosts.isEmpty() -> EmptyState(
                 "No machines yet",
                 "Add a machine that runs herdr. Its agents show up here, with the ones waiting on you first.",
-                icon = HerdrIcons.SmartToy,
+                icon = HerdrIcons.Bot,
             ) { PrimaryButton("Add machine") { nav.navigate(Routes.edit()) } }
 
             agents.isEmpty() && boards.isEmpty() -> EmptyState(
@@ -102,7 +106,7 @@ fun AgentsScreen(nav: NavController) {
                 } else {
                     "Check the Machines tab for connection details."
                 },
-                icon = if (hosts.any { it.online }) HerdrIcons.SmartToy else HerdrIcons.Dns,
+                icon = if (hosts.any { it.online }) HerdrIcons.Bot else HerdrIcons.Monitor,
             )
 
             else -> {
@@ -135,7 +139,7 @@ fun AgentsScreen(nav: NavController) {
                     }
                     if (shown.isEmpty()) {
                         item(key = "none") {
-                            StateBlock(HerdrIcons.SmartToy, "No agents here", "Nothing is running on this machine right now.", Modifier.padding(top = Space.xl))
+                            StateBlock(HerdrIcons.Bot, "No agents here", "Nothing is running on this machine right now.", Modifier.padding(top = Space.xl))
                         }
                     }
                     for (status in ORDER) {
@@ -195,37 +199,41 @@ private fun AgentCard(row: AgentRow, showMachine: Boolean, onOpen: () -> Unit, o
         Modifier.padding(horizontal = Space.screen, vertical = Space.xs),
         padded = true, onClick = onOpen, onLongClick = onMenu, onClickLabel = "Open chat",
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            StatusDot(status.color())
+        // The web UI's agent row: the agent's brand mark in the leading cell, the title, how it is at the right.
+        Row(verticalAlignment = Alignment.Top) {
+            AgentMark(agent.agent ?: agent.displayName, Modifier.padding(top = 1.dp))
             Spacer(Modifier.width(Space.m))
-            Text(
-                agent.displayName + (agent.subtitle?.let { " · $it" } ?: ""),
-                style = MaterialTheme.typography.titleMedium,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
-            )
-            if (status != AgentStatus.Blocked && status != AgentStatus.Unknown) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    agent.subtitle ?: agent.displayName,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = c.strong,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    (if (agent.subtitle != null) "${agent.displayName} · " else "") +
+                        (if (showMachine) "${row.machine.label} › " else "") + row.location,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = c.muted,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = Space.xxs),
+                )
+            }
+            if (status != AgentStatus.Unknown) {
                 Spacer(Modifier.width(Space.s))
-                Pill(agent.statusLabel)
+                StatusBadge(if (status == AgentStatus.Blocked) "needs you" else agent.statusLabel, status.color())
             }
         }
-        Text(
-            (if (showMachine) "${row.machine.label} › " else "") + row.location,
-            style = MaterialTheme.typography.bodyMedium,
-            color = c.muted,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(start = 20.dp, top = Space.xxs),
-        )
         if (status == AgentStatus.Blocked && preview != null) {
             Text(
                 preview,
-                style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                style = CodeStyle.copy(fontSize = MaterialTheme.typography.bodySmall.fontSize, lineHeight = MaterialTheme.typography.bodySmall.lineHeight),
                 color = c.red,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(start = 20.dp, top = Space.xs),
+                modifier = Modifier.padding(start = 34.dp, top = Space.s),
             )
         }
     }

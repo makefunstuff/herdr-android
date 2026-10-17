@@ -200,11 +200,11 @@ fun LayoutScreen(nav: NavController, machineId: String, paneId: String) {
         containerColor = Herdr.colors.ground,
         topBar = {
             HerdrTopBar("Layout", subtitle = snapshot.location(workspace, tab) ?: tab, onBack = { nav.popBackStack() }) {
-                BarIcon(HerdrIcons.MoreVert, "More", { menu = true })
+                BarIcon(HerdrIcons.Ellipsis, "More", { menu = true })
                 HerdrMenu(expanded = menu, onDismissRequest = { menu = false }, title = "Layout", subtitle = snapshot.location(workspace, tab) ?: tab) {
-                    MenuRow("Save this layout…", HerdrIcons.Add, { menu = false; saveOpen = true }, enabled = tree != null)
-                    MenuRow("Saved layouts", HerdrIcons.Dashboard, { menu = false; savedOpen = true })
-                    MenuRow("Copy layout as JSON", HerdrIcons.ContentCopy, {
+                    MenuRow("Save this layout…", HerdrIcons.Plus, { menu = false; saveOpen = true }, enabled = tree != null)
+                    MenuRow("Saved layouts", HerdrIcons.LayoutDashboard, { menu = false; savedOpen = true })
+                    MenuRow("Copy layout as JSON", HerdrIcons.Copy, {
                         menu = false
                         tree?.let { context.copyToClipboard("layout", LayoutTemplates.encode(it.template()), "Layout copied") }
                     }, enabled = tree != null)
@@ -219,7 +219,7 @@ fun LayoutScreen(nav: NavController, machineId: String, paneId: String) {
                                 .onFailure { context.toast("That isn't a layout: ${it.message}") }
                         }
                     })
-                    MenuRow("Refresh", HerdrIcons.Refresh, { menu = false; reload++ })
+                    MenuRow("Refresh", HerdrIcons.RefreshCw, { menu = false; reload++ })
                 }
             }
         },
@@ -287,7 +287,7 @@ fun LayoutScreen(nav: NavController, machineId: String, paneId: String) {
                         saved.forEach { s -> SavedLayoutRow(s.name, onNewTab = { apply(s.root, replace = false, label = s.name) }, onReplace = { applying = s; replaceOpen = true }, onDelete = { saved = store.remove(s.name) }) }
                     }
                     QuietButton(onClick = { saveOpen = true }, enabled = tree != null, modifier = Modifier.padding(Space.s)) {
-                        Icon(HerdrIcons.Add, null, Modifier.size(18.dp))
+                        Icon(HerdrIcons.Plus, null, Modifier.size(18.dp))
                         Text("Save this layout")
                     }
                 }
@@ -305,7 +305,7 @@ fun LayoutScreen(nav: NavController, machineId: String, paneId: String) {
                     HerdrField(
                         value = name,
                         onValueChange = { name = it },
-                        label = { Text("Name") },
+                        label = "Name",
                         placeholder = { Text("dev + logs") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
@@ -336,7 +336,7 @@ fun LayoutScreen(nav: NavController, machineId: String, paneId: String) {
             SheetTitle("Saved layouts")
             Column(Modifier.fillMaxWidth().padding(horizontal = Space.s).padding(bottom = Space.l).navigationBarsPadding()) {
                 if (saved.isEmpty()) {
-                    StateBlock(HerdrIcons.Dashboard, "Nothing saved yet", "Use Save this layout to keep the current tab's arrangement.")
+                    StateBlock(HerdrIcons.LayoutDashboard, "Nothing saved yet", "Use Save this layout to keep the current tab's arrangement.")
                 }
                 saved.forEach { s ->
                     SavedLayoutRow(
@@ -405,7 +405,7 @@ private fun SavedLayoutRow(name: String, onNewTab: () -> Unit, onReplace: () -> 
         Text(name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
         QuietButton(onClick = onNewTab) { Text("New tab") }
         QuietButton(onClick = onReplace) { Text("Replace…") }
-        if (onDelete != null) BarIcon(HerdrIcons.Delete, "Delete $name", onDelete)
+        if (onDelete != null) BarIcon(HerdrIcons.Trash2, "Delete $name", onDelete)
     }
 }
 
