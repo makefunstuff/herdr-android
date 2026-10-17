@@ -1,0 +1,19 @@
+{
+  "task": {
+    "id": "API-5",
+    "title": "Rate-limit the export endpoint per tenant",
+    "stage": "reviewing",
+    "msg": "Reviewer is running the load test",
+    "description": ""
+  },
+  "failure": null,
+  "reviews": [],
+  "agent": "claude",
+  "handovers": [],
+  "research": false,
+  "plan": "",
+  "pr": "https://github.com/demo/api-server/pull/5",
+  "branch": "",
+  "worktree": "",
+  "limits": {}
+}

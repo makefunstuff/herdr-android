@@ -1,0 +1,12 @@
+[1m>_ OpenAI Codex[0m  [2m~/llm-eval[0m
+
+Run the long-context eval on the new checkpoint and
+compare it with last week's.
+
+Starting the 128k suite on both GPUs.
+[33m$ python eval.py --suite long-context --ckpt ckpt-0612[0m
+  suite long-context  ████████████░░░░░░░░  61%  (734/1200)
+
+• Working [2m(2m 14s • esc to interrupt)[0m
+
+[2m› Ask Codex to do anything[0m

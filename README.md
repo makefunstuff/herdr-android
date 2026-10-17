@@ -86,7 +86,19 @@ Next to the Coordinator chat, a machine with herdr-projects gets a **Board** scr
 
 On a machine with [herdr-projects](https://github.com/eliasstravik/herdr-projects) (its launcher at `~/.herdr-projects/data/bin/herdr-projects`, or `herdr-projects` on the PATH), the app shows a **Coordinator** chat above that machine's agents. It reaches the board the way another machine's board does, over the same SSH connection: `herdr-projects remote list` for the conversation and where the Coordinator stands, and `herdr-projects remote dispatch` for a message, which joins the same queue as the words typed in the board's own box. So the phone and the desktop show one conversation. **Start agents**, the switch beside Send, is the board's Tab: what the Coordinator adds from that message gets an agent at once. What you type stays in the box per chat, also when you leave the app, until it is sent. **+** attaches files from the phone, in both chats: each is copied to that machine (`~/.cache/herdr-android/uploads/`) and named in the message as `@path`, which the agents read.
 
+## Screen previews
+
+UI changes are checked, and shown in review, with screen previews instead of an emulator: the app's real Compose screens rendered on the desktop JVM against a fake herdr machine with fixed demo data, in dark and light.
+
+```sh
+./gradlew -p tools/ui-preview render                     # every scene → tools/ui-preview/build/shots/*.png
+./gradlew -p tools/ui-preview render -Ponly=board,chat   # some of them
+```
+
+It needs JDK 17, no Android SDK, and takes about 2 minutes for all 20 scenes (agents, machines, a machine, agent chats, the Coordinator, the board and a task, the terminal, settings, and the dialogs and sheets). CI renders them too and uploads them as the `herdr-screens-<run>` artifact. See [`tools/ui-preview/README.md`](tools/ui-preview/README.md) for how it works and how to add a scene, and [`AGENTS.md`](AGENTS.md) for how changes are reviewed.
+
 ## Layout
 
 - `core/`: pure Kotlin/JVM: SSH, herdr API, host sessions, terminal emulator. `./gradlew -p core test`.
 - `app/`: the Android app. `ui/theme` and `ui/design` hold its look and shared components ([`docs/DESIGN.md`](docs/DESIGN.md)).
+- `tools/ui-preview/`: the screen previews. `./gradlew -p tools/ui-preview render`.

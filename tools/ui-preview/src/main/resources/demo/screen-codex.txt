@@ -1,0 +1,14 @@
+[1m>_ OpenAI Codex[0m  [2m~/src/website[0m
+
+[1muser[0m
+Rewrite the install page so it starts with the one-line
+installer, and check every link on it.
+
+[32m✓[0m rg -n 'install' content/docs/install.md
+[32m✓[0m Edited content/docs/install.md
+[32m✓[0m npm run check-links  [2m38 links, 0 broken[0m
+
+[1mcodex[0m
+Done. The page now opens with the installer one-liner.
+
+[2m› Ask Codex to do anything[0m
