@@ -16,6 +16,7 @@ import androidx.compose.ui.unit.dp
  */
 object HerdrIcons {
     val Activity: ImageVector by lazy { lucide("Activity", "M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2") }
+    val ALargeSmall: ImageVector by lazy { lucide("ALargeSmall", "m15 16 2.536-7.328a1.02 1.02 1 0 1 1.928 0L22 16", "M15.697 14h5.606", "m2 16 4.039-9.69a.5.5 0 0 1 .923 0L11 16", "M3.304 13h6.392") }
     val Archive: ImageVector by lazy { lucide("Archive", "M3 3h18a1 1 0 0 1 1 1v3a1 1 0 0 1 -1 1h-18a1 1 0 0 1 -1 -1v-3a1 1 0 0 1 1 -1Z", "M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8", "M10 12h4") }
     val ArchiveRestore: ImageVector by lazy { lucide("ArchiveRestore", "M3 3h18a1 1 0 0 1 1 1v3a1 1 0 0 1 -1 1h-18a1 1 0 0 1 -1 -1v-3a1 1 0 0 1 1 -1Z", "M4 8v11a2 2 0 0 0 2 2h2", "M20 8v11a2 2 0 0 1-2 2h-2", "m9 15 3-3 3 3", "M12 12v9") }
     val ArrowDown: ImageVector by lazy { lucide("ArrowDown", "M12 5v14", "m19 12-7 7-7-7") }
@@ -50,14 +51,21 @@ object HerdrIcons {
     val Ellipsis: ImageVector by lazy { lucide("Ellipsis", "M11 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0", "M18 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0", "M4 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0") }
     val ExternalLink: ImageVector by lazy { lucide("ExternalLink", "M15 3h6v6", "M10 14 21 3", "M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6") }
     val Eye: ImageVector by lazy { lucide("Eye", "M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0", "M9 12a3 3 0 1 0 6 0a3 3 0 1 0 -6 0") }
+    val File: ImageVector by lazy { lucide("File", "M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z", "M14 2v5a1 1 0 0 0 1 1h5") }
+    val FileCode: ImageVector by lazy { lucide("FileCode", "M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z", "M14 2v5a1 1 0 0 0 1 1h5", "M10 12.5 8 15l2 2.5", "m14 12.5 2 2.5-2 2.5") }
+    val FileDiff: ImageVector by lazy { lucide("FileDiff", "M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z", "M9 10h6", "M12 13V7", "M9 17h6") }
     val FileText: ImageVector by lazy { lucide("FileText", "M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z", "M14 2v5a1 1 0 0 0 1 1h5", "M10 9H8", "M16 13H8", "M16 17H8") }
     val Focus: ImageVector by lazy { lucide("Focus", "M9 12a3 3 0 1 0 6 0a3 3 0 1 0 -6 0", "M3 7V5a2 2 0 0 1 2-2h2", "M17 3h2a2 2 0 0 1 2 2v2", "M21 17v2a2 2 0 0 1-2 2h-2", "M7 21H5a2 2 0 0 1-2-2v-2") }
     val Folder: ImageVector by lazy { lucide("Folder", "M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z") }
     val FolderGit2: ImageVector by lazy { lucide("FolderGit2", "M18 19a5 5 0 0 1-5-5v8", "M9 20H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H20a2 2 0 0 1 2 2v5", "M11 12a2 2 0 1 0 4 0a2 2 0 1 0 -4 0", "M18 19a2 2 0 1 0 4 0a2 2 0 1 0 -4 0") }
+    val FolderOpen: ImageVector by lazy { lucide("FolderOpen", "m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2") }
     val Gauge: ImageVector by lazy { lucide("Gauge", "m12 14 4-4", "M3.34 19a10 10 0 1 1 17.32 0") }
     val GitBranch: ImageVector by lazy { lucide("GitBranch", "M15 6a9 9 0 0 0-9 9V3", "M15 6a3 3 0 1 0 6 0a3 3 0 1 0 -6 0", "M3 18a3 3 0 1 0 6 0a3 3 0 1 0 -6 0") }
+    val GitCommitHorizontal: ImageVector by lazy { lucide("GitCommitHorizontal", "M9 12a3 3 0 1 0 6 0a3 3 0 1 0 -6 0", "M3 12L9 12", "M15 12L21 12") }
+    val GitCompare: ImageVector by lazy { lucide("GitCompare", "M15 18a3 3 0 1 0 6 0a3 3 0 1 0 -6 0", "M3 6a3 3 0 1 0 6 0a3 3 0 1 0 -6 0", "M13 6h3a2 2 0 0 1 2 2v7", "M11 18H8a2 2 0 0 1-2-2V9") }
     val GitMerge: ImageVector by lazy { lucide("GitMerge", "M15 18a3 3 0 1 0 6 0a3 3 0 1 0 -6 0", "M3 6a3 3 0 1 0 6 0a3 3 0 1 0 -6 0", "M6 21V9a9 9 0 0 0 9 9") }
     val HardDrive: ImageVector by lazy { lucide("HardDrive", "M10 16h.01", "M2.212 11.577a2 2 0 0 0-.212.896V18a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-5.527a2 2 0 0 0-.212-.896L18.55 5.11A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z", "M21.946 12.013H2.054", "M6 16h.01") }
+    val Hash: ImageVector by lazy { lucide("Hash", "M4 9L20 9", "M4 15L20 15", "M10 3L8 21", "M16 3L14 21") }
     val History: ImageVector by lazy { lucide("History", "M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8", "M3 3v5h5", "M12 7v5l4 2") }
     val House: ImageVector by lazy { lucide("House", "M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8", "M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z") }
     val Inbox: ImageVector by lazy { lucide("Inbox", "M22 12L16 12L14 15L10 15L8 12L2 12", "M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z") }
@@ -73,6 +81,7 @@ object HerdrIcons {
     val Maximize2: ImageVector by lazy { lucide("Maximize2", "M15 3h6v6", "m21 3-7 7", "m3 21 7-7", "M9 21H3v-6") }
     val MemoryStick: ImageVector by lazy { lucide("MemoryStick", "M12 12v-2", "M12 18v-2", "M16 12v-2", "M16 18v-2", "M2 11h1.5", "M20 18v-2", "M20.5 11H22", "M4 18v-2", "M8 12v-2", "M8 18v-2", "M4 6h16a2 2 0 0 1 2 2v6a2 2 0 0 1 -2 2h-16a2 2 0 0 1 -2 -2v-6a2 2 0 0 1 2 -2Z") }
     val MessageSquare: ImageVector by lazy { lucide("MessageSquare", "M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z") }
+    val MessageSquarePlus: ImageVector by lazy { lucide("MessageSquarePlus", "M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z", "M12 8v6", "M9 11h6") }
     val MessagesSquare: ImageVector by lazy { lucide("MessagesSquare", "M16 10a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 14.286V4a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z", "M20 9a2 2 0 0 1 2 2v10.286a.71.71 0 0 1-1.212.502l-2.202-2.202A2 2 0 0 0 17.172 19H10a2 2 0 0 1-2-2v-1") }
     val Minimize2: ImageVector by lazy { lucide("Minimize2", "m14 10 7-7", "M20 10h-6V4", "m3 21 7-7", "M4 14h6v6") }
     val Monitor: ImageVector by lazy { lucide("Monitor", "M4 3h16a2 2 0 0 1 2 2v10a2 2 0 0 1 -2 2h-16a2 2 0 0 1 -2 -2v-10a2 2 0 0 1 2 -2Z", "M8 21L16 21", "M12 17L12 21") }
@@ -101,6 +110,7 @@ object HerdrIcons {
     val Sunrise: ImageVector by lazy { lucide("Sunrise", "M12 2v8", "m4.93 10.93 1.41 1.41", "M2 18h2", "M20 18h2", "m19.07 10.93-1.41 1.41", "M22 22H2", "m8 6 4-4 4 4", "M16 18a4 4 0 0 0-8 0") }
     val Terminal: ImageVector by lazy { lucide("Terminal", "M12 19h8", "m4 17 6-6-6-6") }
     val TextSelect: ImageVector by lazy { lucide("TextSelect", "M14 21h1", "M14 3h1", "M19 3a2 2 0 0 1 2 2", "M21 14v1", "M21 19a2 2 0 0 1-2 2", "M21 9v1", "M3 14v1", "M3 9v1", "M5 21a2 2 0 0 1-2-2", "M5 3a2 2 0 0 0-2 2", "M7 12h10", "M7 16h6", "M7 8h8", "M9 21h1", "M9 3h1") }
+    val TextWrap: ImageVector by lazy { lucide("TextWrap", "m16 16-3 3 3 3", "M3 12h14.5a1 1 0 0 1 0 7H13", "M3 19h6", "M3 5h18") }
     val Trash2: ImageVector by lazy { lucide("Trash2", "M10 11v6", "M14 11v6", "M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6", "M3 6h18", "M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2") }
     val TriangleAlert: ImageVector by lazy { lucide("TriangleAlert", "m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3", "M12 9v4", "M12 17h.01") }
     val Upload: ImageVector by lazy { lucide("Upload", "M12 3v12", "m17 8-5-5-5 5", "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4") }

@@ -1,0 +1,16 @@
+3a39aa54a81829b09d5a9fc056779e1c57f71bb23a39aa5demo1791560400a255c873a6a15b650146dc001dfcb2b7832e2849Adopt the herdr web UI look
+
+
+diff --git a/docs/DESIGN.md b/docs/DESIGN.md
+new file mode 100644
+index 0000000..7b82ed2
+--- /dev/null
++++ b/docs/DESIGN.md
+@@ -0,0 +1,7 @@
++# Design
++
++The herdr web UI's look: amber on lamp-lit graphite, or on ledger paper.
++
++- **One chrome colour: amber.** Focus, the chosen lens, your own action.
++- **States carry the other colours**: working blue, blocked red, done green, idle dim.
++- **Tonal surfaces and hairlines**, not heavy borders.

@@ -36,6 +36,8 @@ class AppContainer(app: Context) {
     val identity = IdentityStore(app, scope)
     val hosts = HostManager(scope, machines, identity)
     val drafts = DraftStore(app)
+    // At the demo's fixed time, so "2 h ago" reads the same every run.
+    val code = com.makefunstuff.herdr.data.CodeStore(java.io.File(app.filesDir, "code.json"), now = { Demo.NOW })
     val health = HealthStore()
     val shares = Shares(java.io.File(app.filesDir, "shares.json"), java.io.File(app.filesDir, "shared"))
     val push = PushStore(app)

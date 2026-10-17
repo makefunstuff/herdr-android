@@ -40,6 +40,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.text.style.TextOverflow
+import com.makefunstuff.herdr.ui.design.BarIcon
 import com.makefunstuff.herdr.ui.design.HerdrTopBar
 import com.makefunstuff.herdr.ui.design.PrimaryButton
 import com.makefunstuff.herdr.ui.design.QuietCard
@@ -56,7 +57,11 @@ fun MachinesScreen(nav: NavController) {
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         containerColor = Herdr.colors.ground,
-        topBar = { HerdrTopBar("Machines") },
+        topBar = {
+            HerdrTopBar("Machines") {
+                if (hosts.isNotEmpty()) BarIcon(HerdrIcons.Code, "Code on the machines", { nav.navigate(Routes.CODE) })
+            }
+        },
         floatingActionButton = {
             if (hosts.isNotEmpty()) HerdrFab("Add machine") { nav.navigate(Routes.edit()) }
         },

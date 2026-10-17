@@ -53,6 +53,16 @@ import com.makefunstuff.herdr.ui.agents.AgentsScreen
 import com.makefunstuff.herdr.ui.board.BoardScreen
 import com.makefunstuff.herdr.ui.brief.BriefScreen
 import com.makefunstuff.herdr.ui.brief.BriefSettingsScreen
+import com.makefunstuff.herdr.ui.code.CheckoutScreen
+import com.makefunstuff.herdr.ui.code.CheckoutTab
+import com.makefunstuff.herdr.ui.code.CodeMachinesScreen
+import com.makefunstuff.herdr.ui.code.CodeReposScreen
+import com.makefunstuff.herdr.ui.code.CodeSpot
+import com.makefunstuff.herdr.ui.code.CommitScreen
+import com.makefunstuff.herdr.ui.code.DiffScreen
+import com.makefunstuff.herdr.ui.code.FileScreen
+import com.makefunstuff.herdr.ui.code.NotesScreen
+import com.makefunstuff.herdr.ui.code.SearchScreen
 import com.makefunstuff.herdr.ui.common.EmptyState
 import com.makefunstuff.herdr.ui.common.LocalContainer
 import com.makefunstuff.herdr.ui.coordinator.CoordinatorScreen
@@ -119,6 +129,15 @@ object Routes {
     const val HEALTH = "health/{mid}"
     /** From outside the app (the tile, the widgets, a share): see [com.makefunstuff.herdr.ui.share.Ask]. */
     const val ASK = "ask/{to}"
+    /** The code on the machines: which machine, then its repositories and checkouts; then one checkout and what is in it. */
+    const val CODE = "code"
+    const val CODE_REPOS = "code/{mid}"
+    const val CODE_AT = "code/{mid}/at?${CodeSpot.ARGS}&tab={tab}"
+    const val CODE_FILE = "code/{mid}/file?${CodeSpot.ARGS}&path={path}&line={line}"
+    const val CODE_SEARCH = "code/{mid}/search?${CodeSpot.ARGS}&q={q}"
+    const val CODE_DIFF = "code/{mid}/diff?${CodeSpot.ARGS}&src={src}&file={file}"
+    const val CODE_COMMIT = "code/{mid}/commit?${CodeSpot.ARGS}&sha={sha}"
+    const val CODE_NOTES = "code/{mid}/notes?${CodeSpot.ARGS}"
 
     fun machine(id: String) = "machine/$id"
     fun edit(id: String? = null) = if (id == null) "edit" else "edit?id=$id"
@@ -130,6 +149,15 @@ object Routes {
     fun board(mid: String, task: String? = null) = if (task == null) "board/$mid" else "board/$mid?task=${Uri.encode(task)}"
     fun admin(mid: String, tab: Int = 0) = "admin/$mid?tab=$tab"
     fun health(mid: String) = "health/$mid"
+    fun codeRepos(mid: String) = "code/$mid"
+    fun codeAt(spot: CodeSpot, tab: CheckoutTab? = null) = "code/${spot.machine}/at?${spot.query()}" + (tab?.let { "&tab=${it.name}" } ?: "")
+    fun codeFile(spot: CodeSpot, path: String, line: Int? = null) =
+        "code/${spot.machine}/file?${spot.query()}&path=${Uri.encode(path)}" + (line?.let { "&line=$it" } ?: "")
+    fun codeSearch(spot: CodeSpot, query: String? = null) = "code/${spot.machine}/search?${spot.query()}" + (query?.let { "&q=${Uri.encode(it)}" } ?: "")
+    fun codeDiff(spot: CodeSpot, src: String, file: String) =
+        "code/${spot.machine}/diff?${spot.query()}&src=${Uri.encode(src)}&file=${Uri.encode(file)}"
+    fun codeCommit(spot: CodeSpot, sha: String) = "code/${spot.machine}/commit?${spot.query()}&sha=$sha"
+    fun codeNotes(spot: CodeSpot) = "code/${spot.machine}/notes?${spot.query()}"
     fun worktrees(mid: String, workspaceId: String? = null) =
         if (workspaceId == null) "worktrees/$mid" else "worktrees/$mid?ws=${Uri.encode(workspaceId)}"
 
@@ -255,6 +283,21 @@ internal fun NavGraphBuilder.screens(nav: NavHostController, agents: @Composable
         BoardScreen(nav, it.arguments?.getString("mid").orEmpty(), it.arguments?.getString("task")?.let(Uri::decode))
     }
     composable(Routes.ASK) { AskScreen(nav, it.arguments?.getString("to").orEmpty()) }
+    composable(Routes.CODE) { CodeMachinesScreen(nav) }
+    composable(Routes.CODE_REPOS) { CodeReposScreen(nav, it.arguments?.getString("mid").orEmpty()) }
+    composable(Routes.CODE_AT) {
+        val tab = CheckoutTab.entries.firstOrNull { t -> t.name == it.arguments?.getString("tab") } ?: CheckoutTab.Files
+        CheckoutScreen(nav, it.codeSpot(), tab)
+    }
+    composable(Routes.CODE_FILE) {
+        FileScreen(nav, it.codeSpot(), it.arguments?.getString("path")?.let(Uri::decode).orEmpty(), it.arguments?.getString("line")?.toIntOrNull())
+    }
+    composable(Routes.CODE_SEARCH) { SearchScreen(nav, it.codeSpot(), it.arguments?.getString("q")?.let(Uri::decode).orEmpty()) }
+    composable(Routes.CODE_DIFF) {
+        DiffScreen(nav, it.codeSpot(), it.arguments?.getString("src")?.let(Uri::decode).orEmpty(), it.arguments?.getString("file")?.let(Uri::decode).orEmpty())
+    }
+    composable(Routes.CODE_COMMIT) { CommitScreen(nav, it.codeSpot(), it.arguments?.getString("sha").orEmpty()) }
+    composable(Routes.CODE_NOTES) { NotesScreen(nav, it.codeSpot()) }
     composable(Routes.COORDINATOR) { CoordinatorScreen(nav, it.arguments?.getString("mid").orEmpty()) }
     composable(Routes.TERMINAL) {
         TerminalScreen(nav, it.arguments?.getString("mid").orEmpty(), Uri.decode(it.arguments?.getString("pane").orEmpty()))
@@ -263,6 +306,10 @@ internal fun NavGraphBuilder.screens(nav: NavHostController, agents: @Composable
         LayoutScreen(nav, it.arguments?.getString("mid").orEmpty(), Uri.decode(it.arguments?.getString("pane").orEmpty()))
     }
 }
+
+/** The code browser's place, from a code route's arguments. */
+private fun androidx.navigation.NavBackStackEntry.codeSpot(): CodeSpot =
+    CodeSpot.of(arguments?.getString("mid").orEmpty()) { arguments?.getString(it) }
 
 /** The three top-level screens: under the whole screen on a phone, under the agents list on a wide window. */
 @Composable

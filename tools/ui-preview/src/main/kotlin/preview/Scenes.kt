@@ -7,7 +7,11 @@ import com.makefunstuff.herdr.Routes
 import com.makefunstuff.herdr.bubble.BubbleChat
 import com.makefunstuff.herdr.core.push.PhoneQuiet
 import com.makefunstuff.herdr.core.push.QuietHours
+import com.makefunstuff.herdr.data.CodeView
 import com.makefunstuff.herdr.data.IdentityStore
+import com.makefunstuff.herdr.ui.code.CheckoutTab
+import com.makefunstuff.herdr.ui.code.CodeSpot
+import com.makefunstuff.herdr.ui.code.DiffSource
 import com.makefunstuff.herdr.ui.share.Ask
 import preview.Demo.API_AGENT
 import preview.Demo.APP_AGENT
@@ -15,6 +19,10 @@ import preview.Demo.APP_SHELL
 import preview.Demo.DEVBOX
 import preview.Demo.GPU
 import preview.Demo.SITE_AGENT
+
+/** Task AND-9's worktree on devbox, opened from the task (its agent works in devbox's herdr-android workspace). */
+private val TASK_CODE = CodeSpot(DEVBOX, FakeCode.TASK, task = "herdr-android/9", taskName = "AND-9", pane = APP_AGENT)
+private const val CARD = "app/src/main/kotlin/demo/herdr/ui/machines/MachineCard.kt"
 
 fun scenes(): List<Scene> = listOf(
     // Agents: every agent on every machine, the blocked one first.
@@ -107,6 +115,33 @@ fun scenes(): List<Scene> = listOf(
     ),
     Scene("brief-settings", route = Routes.BRIEF_SETTINGS, heightDp = 1100, setup = { brief = Demo.brief() }),
     Scene("brief-add-time", route = Routes.BRIEF_SETTINGS, setup = { brief = Demo.brief() }, actions = { tapText("Add a time") }),
+
+    // The code on the machines: which machine, a machine's repositories and checkouts (the agents at work in each);
+    // task AND-9's worktree: its files, Go to file, a file, two lines chosen and a comment on them, the view's
+    // settings, wrapped at a larger size, a Markdown file as it reads; its changes against main and one file's diff;
+    // its history and a commit; a search across it; the comments kept to send together.
+    Scene("code-machines", route = Routes.CODE),
+    Scene("code-repos", route = Routes.codeRepos(DEVBOX)),
+    Scene("code-files", route = Routes.codeAt(TASK_CODE)),
+    Scene("code-goto", route = Routes.codeAt(TASK_CODE), actions = { type("mcard") }),
+    Scene("code-file", route = Routes.codeFile(TASK_CODE, CARD)),
+    Scene("code-lines", route = Routes.codeFile(TASK_CODE, CARD, line = 33), actions = { tapLabel("line 37"); tapLabel("line 38") }),
+    Scene(
+        "code-comment", route = Routes.codeFile(TASK_CODE, CARD, line = 33),
+        actions = {
+            tapLabel("line 37"); tapLabel("line 38"); tapText("Comment")
+            type("Show this in the notice colour when it is older than an hour, so a stale card stands out.")
+        },
+    ),
+    Scene("code-view", route = Routes.codeFile(TASK_CODE, CARD), actions = { tapLabel("Text size and wrapping") }),
+    Scene("code-wrapped", route = Routes.codeFile(TASK_CODE, CARD), setup = { codeView = CodeView(wrap = true, textSize = 15) }),
+    Scene("code-markdown", route = Routes.codeFile(TASK_CODE, "README.md")),
+    Scene("code-changes", route = Routes.codeAt(TASK_CODE, CheckoutTab.Changes)),
+    Scene("code-diff", route = Routes.codeDiff(TASK_CODE, DiffSource.base("main"), CARD)),
+    Scene("code-history", route = Routes.codeAt(TASK_CODE, CheckoutTab.History)),
+    Scene("code-commit", route = Routes.codeCommit(TASK_CODE, FakeCode.commit(1))),
+    Scene("code-search", route = Routes.codeSearch(TASK_CODE, "answered")),
+    Scene("code-notes", route = Routes.codeNotes(TASK_CODE), heightDp = 1000, setup = { notes = Demo.notes() }),
 
     // A pane as a live terminal.
     Scene("terminal", route = Routes.terminal(DEVBOX, APP_SHELL)),

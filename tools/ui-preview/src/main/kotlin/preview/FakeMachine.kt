@@ -65,6 +65,8 @@ class FakeMachine(
     var health: FakeHealth = FakeHealth(),
     /** herdr-push's journal there (`herdr-push journal`, for the brief); null where herdr-push isn't installed. */
     var journal: JsonObject? = null,
+    /** Its repositories, for the code browser; null answers no code command. */
+    var code: FakeCode? = null,
 ) {
     val fingerprint = "SHA256:" + Base64.getEncoder().withoutPadding().encodeToString(id.toByteArray()).padEnd(43, 'A')
     private val overrides = HashMap<String, (JsonObject) -> JsonElement>()
@@ -75,6 +77,7 @@ class FakeMachine(
     // ---- shell commands -------------------------------------------------------------------------
 
     fun run(command: String): CommandResult {
+        code?.run(command)?.let { return it }
         health.run(command)?.let { return it }
         val w = Shell.words(command)
         return when {

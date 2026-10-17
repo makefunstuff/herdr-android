@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.sp
 import com.makefunstuff.herdr.R
 import com.makefunstuff.herdr.core.api.AgentStatus
 import com.makefunstuff.herdr.core.board.BoardTone
+import com.makefunstuff.herdr.core.code.Role
 import com.makefunstuff.herdr.core.terminal.TerminalPalette
 
 /*
@@ -112,6 +113,29 @@ class HerdrColors(
      */
     val chart1: Color get() = if (dark) Color(0xFF3987E5) else Color(0xFF2A78D6)
     val chart2: Color get() = Color(0xFFD95926)
+
+    /**
+     * Code's colours, the web UI's `--syntax-*` (components/HighlightedCode.css): comments dim,
+     * functions amber, inserted and deleted the done and blocked states, and six of their own.
+     */
+    fun syntax(role: Role): Color = when (role) {
+        Role.Keyword -> if (dark) Color(0xFFE8875F) else Color(0xFFA33A17)
+        Role.Str -> if (dark) Color(0xFFA8C17C) else Color(0xFF4B6B18)
+        Role.Number -> if (dark) Color(0xFFD6A0C9) else Color(0xFF8A3F7A)
+        Role.Type -> if (dark) Color(0xFF6CB8D6) else Color(0xFF155A72)
+        Role.Variable -> if (dark) Color(0xFFE0C08F) else Color(0xFF7A5418)
+        Role.Meta -> if (dark) Color(0xFFB49DD6) else Color(0xFF5D4791)
+        Role.Comment -> muted
+        Role.Function -> accent
+        Role.Inserted -> done
+        Role.Deleted -> red
+    }
+
+    /** A diff's added or removed line: the state's tint, a little lighter, so even a dim comment reads on it. */
+    fun lineTint(c: Color): Color = c.copy(alpha = 0.10f)
+
+    /** `--line-number`: the code viewer's line numbers, quieter than the code beside them. */
+    val lineNumber: Color get() = muted
 }
 
 internal val DarkHerdr = HerdrColors(

@@ -1,0 +1,32 @@
+@@from 88ca27c074edf0842e3571b479477725615f36f8
+diff --git a/core/src/main/kotlin/demo/herdr/core/host/LastAnswered.kt b/core/src/main/kotlin/demo/herdr/core/host/LastAnswered.kt
+index c96b196..7c8343e 100644
+--- a/core/src/main/kotlin/demo/herdr/core/host/LastAnswered.kt
++++ b/core/src/main/kotlin/demo/herdr/core/host/LastAnswered.kt
+@@ -6,6 +6,7 @@ object LastAnswered {
+         if (at == null) return "never answered"
+         val seconds = (now - at) / 1000
+         return when {
++            seconds < 60 -> "just now"
+             seconds < 3600 -> "${seconds / 60} min ago"
+             seconds < 86_400 -> "${seconds / 3600} h ago"
+             else -> "${seconds / 86_400} days ago"
+diff --git a/core/src/test/kotlin/demo/herdr/core/LastAnsweredTest.kt b/core/src/test/kotlin/demo/herdr/core/LastAnsweredTest.kt
+new file mode 100644
+index 0000000..12b9e61
+--- /dev/null
++++ b/core/src/test/kotlin/demo/herdr/core/LastAnsweredTest.kt
+@@ -0,0 +1,13 @@
++package demo.herdr.core
++
++import demo.herdr.core.host.LastAnswered
++import kotlin.test.Test
++import kotlin.test.assertEquals
++
++class LastAnsweredTest {
++    @Test fun saysJustNowUnderAMinute() {
++        assertEquals("just now", LastAnswered.words(0, 30_000))
++        assertEquals("2 min ago", LastAnswered.words(0, 120_000))
++        assertEquals("never answered", LastAnswered.words(null, 0))
++    }
++}

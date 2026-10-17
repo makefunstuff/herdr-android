@@ -1,0 +1,9 @@
+@@ahead 88ca27c074edf0842e3571b479477725615f36f8
+@@ahead c0d1408aa4914f07382afa5edbd6fefd7123db7c
+@@herdr-code log
+88ca27c074edf0842e3571b479477725615f36f888ca27cdemo1792218660HEAD -> work/9-last-answeredShow it on the machine cards
+c0d1408aa4914f07382afa5edbd6fefd7123db7cc0d1408demo1792194480Keep when each machine last answered
+580881fff5ff6c924bfa1d895aaf0cad5b23ace7580881fdemo1792171200mainBetter chat composer
+75da250ac51c46ea0ed4513cc40e8ae6d891133075da250demo1791975900Say when a machine is not connected
+3a39aa54a81829b09d5a9fc056779e1c57f71bb23a39aa5demo1791560400Adopt the herdr web UI look
+a255c873a6a15b650146dc001dfcb2b7832e2849a255c87demo1790935920Start the app: machines and their agents

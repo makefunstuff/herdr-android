@@ -1,0 +1,54 @@
+c0d1408aa4914f07382afa5edbd6fefd7123db7cc0d1408demo1792194480580881fff5ff6c924bfa1d895aaf0cad5b23ace7Keep when each machine last answered
+
+HostSession notes the time of every answer; reconnecting keeps it.
+
+
+diff --git a/core/src/main/kotlin/demo/herdr/core/host/HostSession.kt b/core/src/main/kotlin/demo/herdr/core/host/HostSession.kt
+index 40fa02b..54b8197 100644
+--- a/core/src/main/kotlin/demo/herdr/core/host/HostSession.kt
++++ b/core/src/main/kotlin/demo/herdr/core/host/HostSession.kt
+@@ -10,19 +10,21 @@ data class HostState(
+     val machine: Machine,
+     val online: Boolean = false,
+     val agents: Int = 0,
++    /** When herdr last answered there, in milliseconds; kept while it reconnects. */
++    val answeredAt: Long? = null,
+ )
+ 
+ /** Keeps one machine connected and its state fresh. */
+-class HostSession(machine: Machine) {
++class HostSession(machine: Machine, private val clock: () -> Long = System::currentTimeMillis) {
+     private val _state = MutableStateFlow(HostState(machine))
+     val state: StateFlow<HostState> = _state
+ 
+     /** herdr answered: the machine is online, with [agents] agents. */
+     fun answered(agents: Int) {
+-        _state.update { it.copy(online = true, agents = agents) }
++        _state.update { it.copy(online = true, agents = agents, answeredAt = clock()) }
+     }
+ 
+-    /** The connection broke; it is tried again. */
++    /** The connection broke; it is tried again. The last answer's time stays. */
+     fun lost() {
+         _state.update { it.copy(online = false) }
+     }
+diff --git a/core/src/main/kotlin/demo/herdr/core/host/LastAnswered.kt b/core/src/main/kotlin/demo/herdr/core/host/LastAnswered.kt
+new file mode 100644
+index 0000000..c96b196
+--- /dev/null
++++ b/core/src/main/kotlin/demo/herdr/core/host/LastAnswered.kt
+@@ -0,0 +1,14 @@
++package demo.herdr.core.host
++
++/** When a machine last answered, in words: "2 min ago". */
++object LastAnswered {
++    fun words(at: Long?, now: Long): String {
++        if (at == null) return "never answered"
++        val seconds = (now - at) / 1000
++        return when {
++            seconds < 3600 -> "${seconds / 60} min ago"
++            seconds < 86_400 -> "${seconds / 3600} h ago"
++            else -> "${seconds / 86_400} days ago"
++        }
++    }
++}

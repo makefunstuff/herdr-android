@@ -53,6 +53,8 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import com.makefunstuff.herdr.BoardChoice
 import com.makefunstuff.herdr.LocalPanes
 import com.makefunstuff.herdr.Routes
+import com.makefunstuff.herdr.ui.code.CheckoutTab
+import com.makefunstuff.herdr.ui.code.CodeSpot
 import com.makefunstuff.herdr.core.board.BoardAction
 import com.makefunstuff.herdr.core.board.BoardFilter
 import com.makefunstuff.herdr.core.board.BoardStatus
@@ -321,7 +323,8 @@ fun BoardScreen(nav: NavController, machineId: String, openTask: String? = null,
     val middleCloses = pane != null && middle?.destination?.route != Routes.AGENTS
     if (openId != null && open != null) {
         TaskDetailScreen(session, open, onBack = { openId = null }, busy = busy, onAction = { a -> choose(open, a) }, onPick = { letter -> perform(open, BoardAction.Pick, letter = letter) },
-            onMore = { actionsFor = open }, backEnabled = !middleCloses)
+            onMore = { actionsFor = open }, backEnabled = !middleCloses,
+            onCode = { d -> nav.navigate(Routes.codeAt(CodeSpot(machineId, d.worktree, task = open.id, taskName = open.name), CheckoutTab.Changes)) })
     }
     actionsFor?.let { t ->
         ActionsSheet(t, onDismiss = { actionsFor = null }, onAction = { a -> actionsFor = null; choose(t, a) }, onEdit = { actionsFor = null; pending = Pending.Edit(t) },
