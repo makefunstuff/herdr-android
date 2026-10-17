@@ -48,6 +48,8 @@ data class MachinePush(
     val note: String? = null,
     /** When a test notification from it last arrived. */
     val testedAt: Long = 0,
+    /** The newest push taken from it (its own clock, seconds): an older one is a replay or a straggler. */
+    val lastAt: Long = 0,
 ) {
     val keyBytes: ByteArray? get() = key.takeIf { it.isNotEmpty() }?.let { runCatching { Base64.getDecoder().decode(it) }.getOrNull() }
 }

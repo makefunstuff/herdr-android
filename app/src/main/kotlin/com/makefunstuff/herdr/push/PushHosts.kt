@@ -105,7 +105,8 @@ class PushHosts(
         client.run("subscribe", input = sub)
         val started = client.run("install")
         val note = (started["msg"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.takeIf { it != "running" }
-        store.machine(id) { it.copy(sentTo = endpoint, version = HerdrPush.version, problem = null, note = note) }
+        // A fresh subscription starts the order of its pushes afresh (in case the machine's clock went back).
+        store.machine(id) { it.copy(sentTo = endpoint, version = HerdrPush.version, problem = null, note = note, lastAt = 0) }
     }
 
     private suspend fun takeOff(session: HostSession) {

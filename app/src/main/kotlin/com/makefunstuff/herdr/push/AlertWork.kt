@@ -34,6 +34,10 @@ class AlertWork(
         // A push held back for days (phone off, push app asleep) is old news; the next look catches up.
         if (msg.at > 0 && now / 1000 - msg.at > 2 * 24 * 3600) return true
         val label = machines.get(machineId)?.label ?: return false
+        // Older than one already taken: a push sent again by someone who saw it, or one overtaken by a newer state.
+        val last = store.state.value.machine(machineId).lastAt
+        if (msg.at in 1 until last) return true
+        if (msg.at > last) store.machine(machineId) { it.copy(lastAt = msg.at) }
         val changes = msg.events.map { Alerts.of(machineId, label, it, msg.host) }
         if (msg.events.any { it is com.makefunstuff.herdr.core.push.PushEvent.Test }) {
             store.machine(machineId) { it.copy(testedAt = now, problem = null) }

@@ -131,7 +131,8 @@ fun NotificationsCard() {
         Text("The app also looks", style = MaterialTheme.typography.titleSmall)
         SegmentedPills(
             CHECKS.map { it.second },
-            CHECKS.indexOfFirst { it.first == st.checkMinutes }.coerceAtLeast(0),
+            // The nearest choice, also for a value saved by hand.
+            CHECKS.indices.minBy { kotlin.math.abs(CHECKS[it].first - st.checkMinutes) + if ((CHECKS[it].first == 0) != (st.checkMinutes <= 0)) 10_000 else 0 },
             onSelect = { i ->
                 container.push.change { it.copy(checkMinutes = CHECKS[i].first) }
                 phone.planChecks()

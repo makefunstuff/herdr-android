@@ -69,7 +69,7 @@ hp1.<base64url(nonce ‖ ciphertext ‖ tag)>
 
 Two keys come from the shared one, `enc = HMAC-SHA256(key, "herdr-push enc")` and `mac = HMAC-SHA256(key, "herdr-push mac")`. The keystream is `HMAC-SHA256(enc, nonce ‖ counter)` for a 32-bit big-endian counter from 0, XORed with the zlib-compressed JSON, and `tag = HMAC-SHA256(mac, "hp1" ‖ nonce ‖ ciphertext)`: HMAC-SHA256 as a pseudorandom function in counter mode, then encrypt-then-MAC, because that is what Python's standard library has. The app (`core/…/push/PushSeal.kt`) checks the tag before anything else and ignores a push no machine's key opens, or one older than two days.
 
-So the push server sees only that a machine sent the phone a few hundred bytes, and when. Someone who learns the phone's push address can't make it show anything. The notification buttons don't go back through the push: they connect to the machine over SSH like the app does. **Approve** and **Deny** read the agent's screen again first and press nothing if the question changed.
+So the push server sees only that a machine sent the phone a few hundred bytes, and when. Someone who learns the phone's push address can't make it show anything, and a push sent again later is dropped (the app keeps the newest push time per machine). The notification buttons don't go back through the push: they connect to the machine over SSH like the app does. **Approve** and **Deny** read the agent's screen again first and press nothing if the question changed.
 
 Inside, the message is:
 
