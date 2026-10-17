@@ -33,6 +33,8 @@ data class Alert(
     /** The task's short key (`AND-7`), or its id where it has none. */
     val taskName: String = "",
     val actions: List<AlertAction> = emptyList(),
+    /** An agent's name, as its chat shows it: what its chat is called when it floats as a bubble. */
+    val agentName: String = "",
     /** A tap opens the machine's health screen (a machine low on RAM or disk). */
     val health: Boolean = false,
 ) {
@@ -127,6 +129,7 @@ object Alerts {
                         text = question,
                         detail = (listOf(question) + prompt?.details.orEmpty().take(4) + where).joinToString("\n"),
                         paneId = a.paneId,
+                        agentName = name,
                         actions = choices(prompt) + AlertAction(AlertAction.Type.ReplyAgent, "Reply", hint = "Answer $name"),
                     ),
                 )
@@ -143,6 +146,7 @@ object Alerts {
                         text = did,
                         detail = "$did\n$where",
                         paneId = a.paneId,
+                        agentName = name,
                         actions = listOf(AlertAction(AlertAction.Type.ReplyAgent, "Reply", hint = "Next prompt for $name")),
                     ),
                 )

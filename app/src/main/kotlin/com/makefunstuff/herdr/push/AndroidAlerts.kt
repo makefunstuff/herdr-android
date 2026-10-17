@@ -15,7 +15,10 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.RemoteInput
 import com.makefunstuff.herdr.MainActivity
 import com.makefunstuff.herdr.R
+import com.makefunstuff.herdr.bubble.BubbleChat
+import com.makefunstuff.herdr.bubble.FloatActivity
 import com.makefunstuff.herdr.core.push.Alert
+import com.makefunstuff.herdr.core.push.LiveItems
 import com.makefunstuff.herdr.core.push.QuietSummary
 import kotlinx.serialization.json.Json
 
@@ -53,6 +56,13 @@ class AndroidAlerts(private val context: Context) : AlertSink {
                     .setAllowGeneratedReplies(false)
             }
             b.addAction(action.build())
+        }
+        // An agent's chat (the Coordinator's, for its agent) floats over other apps as a bubble, where a button
+        // is still free (Android shows three).
+        if (alert.paneId.isNotEmpty() && alert.actions.size < 3 && Build.VERSION.SDK_INT >= 30) {
+            val coordinator = LiveItems.isCoordinator(alert.agentName)
+            val chat = if (coordinator) BubbleChat.Coordinator(alert.machineId) else BubbleChat.Agent(alert.machineId, alert.paneId)
+            b.addAction(0, "Float chat", floatIntent(context, chat, if (coordinator) "Coordinator" else alert.agentName, alert.tag))
         }
         post(alert.tag, b)
     }
@@ -131,6 +141,14 @@ class AndroidAlerts(private val context: Context) : AlertSink {
     }
 
     companion object {
+        /** Float on an agent's notification (this one, or its Live Update [tag]): opens [chat] as a bubble, named [name]. */
+        fun floatIntent(context: Context, chat: BubbleChat, name: String, tag: String): PendingIntent =
+            PendingIntent.getActivity(
+                context, tag.hashCode() * 31 + 7,
+                FloatActivity.intent(context, chat, name),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+            )
+
         const val NEEDS_YOU = "needs-you"
         const val FINISHED = "finished"
         const val WORKING = "working"

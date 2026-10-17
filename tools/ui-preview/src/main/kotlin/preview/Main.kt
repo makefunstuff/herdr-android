@@ -44,6 +44,8 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
 import com.makefunstuff.herdr.AppContainer
 import com.makefunstuff.herdr.HerdrRoot
+import com.makefunstuff.herdr.bubble.BubbleChat
+import com.makefunstuff.herdr.bubble.BubbleRoot
 import com.makefunstuff.herdr.core.host.HostStatus
 import com.makefunstuff.herdr.core.ssh.Machine
 import com.makefunstuff.herdr.data.IdentityStore
@@ -69,6 +71,8 @@ class Scene(
     val setup: SceneData.() -> Unit = {},
     /** Taps and types on the running app. */
     val actions: ComposeUiTest.(SceneContext) -> Unit = {},
+    /** Shows this chat as its floating bubble's window does (BubbleRoot) instead of the whole app. */
+    val bubble: BubbleChat? = null,
     /** After the [actions], the window becomes this size (dp, width to height), as a rotation or a resize makes it; the shot is that size. */
     val resize: Pair<Int, Int>? = null,
 )
@@ -90,6 +94,8 @@ class SceneData {
     var quietMode: PhoneQuiet? = null
     /** Notifications held during quiet hours, as saved before the app opens (Inbox). */
     var held: List<Alert> = emptyList()
+    /** Whether Android lets the app's chats float as bubbles. */
+    var bubblesAllowed: Boolean = true
     /** Shared to the app from elsewhere (the share sheet), waiting for a machine. */
     var shared: com.makefunstuff.herdr.core.share.Shared? = null
     fun host(id: String): FakeMachine = hosts.getValue(id)
@@ -136,6 +142,7 @@ fun render(scene: Scene, dark: Boolean, file: File) {
     PreviewPhone.allowed = data.notificationsAllowed
     PreviewPhone.liveAllowed = data.liveAllowed
     PreviewPhone.quietMode = data.quietMode
+    PreviewBubbles.allowed = data.bubblesAllowed
     if (data.held.isNotEmpty()) context.filesDir.resolve("held.json").writeText(Json.encodeToString(ListSerializer(Alert.serializer()), data.held))
     IdentityStore.initial = scene.key
     FakeMachines.machines = data.hosts
@@ -167,7 +174,10 @@ fun render(scene: Scene, dark: Boolean, file: File) {
                     LocalUriHandler provides object : UriHandler { override fun openUri(uri: String) {} },
                 ) {
                     nav = rememberNavController()
-                    Box(Modifier.size(size.value)) { HerdrRoot(container, dark = dark, nav = nav) }
+                    Box(Modifier.size(size.value)) {
+                        val chat = scene.bubble
+                        if (chat != null) BubbleRoot(container, chat, dark = dark, nav = nav) else HerdrRoot(container, dark = dark, nav = nav)
+                    }
                 }
             }
             settle()

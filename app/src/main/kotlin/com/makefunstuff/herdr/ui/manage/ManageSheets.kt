@@ -520,6 +520,10 @@ fun AgentActionsSheet(
     onToggleKeys: (() -> Unit)? = null,
     showKeys: Boolean = false,
     onKey: ((List<String>) -> Unit)? = null,
+    /** Floats the chat over other apps as a bubble. */
+    onFloat: (() -> Unit)? = null,
+    /** In the chat's bubble: opens it in the app. */
+    onOpenApp: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -539,6 +543,8 @@ fun AgentActionsSheet(
             ManageRow("Details", icon = HerdrIcons.FileText, chevron = true) { details = true }
         }
         if (onTerminal != null) ManageRow("Open terminal", icon = HerdrIcons.SquareTerminal, chevron = true) { onTerminal() }
+        if (onFloat != null) ManageRow("Float over other apps", icon = HerdrIcons.PictureInPicture2) { onFloat() }
+        if (onOpenApp != null) ManageRow("Open in the app", icon = HerdrIcons.Maximize2) { onOpenApp() }
         if (onToggleKeys != null) {
             ManageRow(if (showKeys) "Hide keys" else "Show keys", icon = HerdrIcons.Keyboard) { onToggleKeys() }
         }

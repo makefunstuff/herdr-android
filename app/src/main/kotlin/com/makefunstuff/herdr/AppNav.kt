@@ -39,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -208,35 +209,9 @@ private fun AppNav(nav: NavHostController) {
                         popEnterTransition = { fadeIn(tween(200)) },
                         popExitTransition = { fadeOut(tween(150)) + slideOutHorizontally(tween(200)) { it / 12 } },
                     ) {
-                        composable(Routes.AGENTS) {
+                        screens(nav) {
                             // On a wide window the list is on the left already; the middle waits for what it opens.
                             if (LocalPanes.current.wide) NothingOpen() else AgentsScreen(nav, agentsFilter, agentsList)
-                        }
-                        composable(Routes.MACHINES) { MachinesScreen(nav) }
-                        composable(Routes.SETTINGS) { SettingsScreen(nav) }
-                        composable(Routes.QUIET) { QuietHoursScreen(nav) }
-                        composable(Routes.MACHINE) { MachineScreen(nav, it.arguments?.getString("id").orEmpty()) }
-                        composable(Routes.EDIT) { EditMachineScreen(nav, it.arguments?.getString("id")) }
-                        composable(Routes.AGENT) {
-                            AgentScreen(nav, it.arguments?.getString("mid").orEmpty(), Uri.decode(it.arguments?.getString("pane").orEmpty()))
-                        }
-                        composable(Routes.ADMIN) {
-                            AdminScreen(nav, it.arguments?.getString("mid").orEmpty(), it.arguments?.getString("tab")?.toIntOrNull() ?: 0)
-                        }
-                        composable(Routes.WORKTREES) {
-                            WorktreesScreen(nav, it.arguments?.getString("mid").orEmpty(), it.arguments?.getString("ws")?.let(Uri::decode))
-                        }
-                        composable(Routes.HEALTH) { HealthScreen(nav, it.arguments?.getString("mid").orEmpty()) }
-                        composable(Routes.BOARD) {
-                            BoardScreen(nav, it.arguments?.getString("mid").orEmpty(), it.arguments?.getString("task")?.let(Uri::decode))
-                        }
-                        composable(Routes.ASK) { AskScreen(nav, it.arguments?.getString("to").orEmpty()) }
-                        composable(Routes.COORDINATOR) { CoordinatorScreen(nav, it.arguments?.getString("mid").orEmpty()) }
-                        composable(Routes.TERMINAL) {
-                            TerminalScreen(nav, it.arguments?.getString("mid").orEmpty(), Uri.decode(it.arguments?.getString("pane").orEmpty()))
-                        }
-                        composable(Routes.LAYOUT) {
-                            LayoutScreen(nav, it.arguments?.getString("mid").orEmpty(), Uri.decode(it.arguments?.getString("pane").orEmpty()))
                         }
                     }
                     if (board != null) {
@@ -248,6 +223,37 @@ private fun AppNav(nav: NavHostController) {
                 }
             }
         }
+    }
+}
+
+/** Every screen of the app, by its [Routes] entry; [agents] is the Agents tab, which the layout around it places. */
+internal fun NavGraphBuilder.screens(nav: NavHostController, agents: @Composable () -> Unit) {
+    composable(Routes.AGENTS) { agents() }
+    composable(Routes.MACHINES) { MachinesScreen(nav) }
+    composable(Routes.SETTINGS) { SettingsScreen(nav) }
+    composable(Routes.QUIET) { QuietHoursScreen(nav) }
+    composable(Routes.MACHINE) { MachineScreen(nav, it.arguments?.getString("id").orEmpty()) }
+    composable(Routes.EDIT) { EditMachineScreen(nav, it.arguments?.getString("id")) }
+    composable(Routes.AGENT) {
+        AgentScreen(nav, it.arguments?.getString("mid").orEmpty(), Uri.decode(it.arguments?.getString("pane").orEmpty()))
+    }
+    composable(Routes.ADMIN) {
+        AdminScreen(nav, it.arguments?.getString("mid").orEmpty(), it.arguments?.getString("tab")?.toIntOrNull() ?: 0)
+    }
+    composable(Routes.WORKTREES) {
+        WorktreesScreen(nav, it.arguments?.getString("mid").orEmpty(), it.arguments?.getString("ws")?.let(Uri::decode))
+    }
+    composable(Routes.HEALTH) { HealthScreen(nav, it.arguments?.getString("mid").orEmpty()) }
+    composable(Routes.BOARD) {
+        BoardScreen(nav, it.arguments?.getString("mid").orEmpty(), it.arguments?.getString("task")?.let(Uri::decode))
+    }
+    composable(Routes.ASK) { AskScreen(nav, it.arguments?.getString("to").orEmpty()) }
+    composable(Routes.COORDINATOR) { CoordinatorScreen(nav, it.arguments?.getString("mid").orEmpty()) }
+    composable(Routes.TERMINAL) {
+        TerminalScreen(nav, it.arguments?.getString("mid").orEmpty(), Uri.decode(it.arguments?.getString("pane").orEmpty()))
+    }
+    composable(Routes.LAYOUT) {
+        LayoutScreen(nav, it.arguments?.getString("mid").orEmpty(), Uri.decode(it.arguments?.getString("pane").orEmpty()))
     }
 }
 
