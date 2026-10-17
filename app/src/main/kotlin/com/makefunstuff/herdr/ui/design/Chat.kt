@@ -99,9 +99,10 @@ val ReplyBubbleShape = RoundedCornerShape(12.dp)
  * `--shadow-card`, no Material underline or inner outline. Inside it the message box is a row of
  * its own at the card's full width, growing from one line to [maxLines] (and never past 40% of the
  * room it has, so a keyboard and a large font still leave the transcript in sight) and then
- * scrolling inside. Under it ONE row of controls: [leading] on the left (attach, a mic: none
- * today, since herdr takes no files), then on the right the [status] text, [trailing] (the
- * Coordinator's "Start agents") and the one round Send/Stop button.
+ * scrolling inside. Under it ONE row of controls: [leading] on the left (both chats put the
+ * attach button there, [ComposerIconButton] with Lucide `Plus`), then on the right the [status]
+ * text, [trailing] (the Coordinator's "Start agents") and the one round Send/Stop button.
+ * [holdSend] keeps Send off without touching the text (a file still being copied).
  *
  * Send is the amber circle with an up arrow, faded and off while the draft is empty; Stop (while
  * the agent works, nothing is typed and the screen can [stop] it) is the same circle in strong text
@@ -124,6 +125,7 @@ fun ChatComposer(
     sending: Boolean = false,
     stop: (() -> Unit)? = null,
     status: String? = null,
+    holdSend: Boolean = false,
     sendLabel: String = "Send",
     maxLines: Int = 8,
     floating: Boolean = false,
@@ -137,7 +139,7 @@ fun ChatComposer(
     val focused by focus.collectIsFocusedAsState()
     val focusRequester = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
-    val canSend = enabled && !sending && draft.isNotBlank()
+    val canSend = enabled && !sending && !holdSend && draft.isNotBlank()
     val showStop = stop != null && draft.isBlank() && !sending
     val card = RoundedCornerShape(Radius.xxl)
     val fade = Space.xxl
@@ -152,7 +154,13 @@ fun ChatComposer(
     // The text with its cursor and selection; the draft itself is the screen's (saved per chat).
     // Opened with a draft, the cursor stands at its end.
     var field by remember { mutableStateOf(TextFieldValue(draft, TextRange(draft.length))) }
-    val value = if (field.text == draft) field else field.copy(text = draft)
+    // A draft changed from outside (an attached file's mention put in front, a sent message taken
+    // out): the cursor keeps its place in the words you typed, or goes to the end.
+    val value = if (field.text == draft) field else {
+        val grew = draft.length - field.text.length
+        val cursor = if (grew > 0 && draft.endsWith(field.text)) field.selection.end + grew else draft.length
+        TextFieldValue(draft, TextRange(cursor.coerceIn(0, draft.length)))
+    }
     SideEffect { if (value != field) field = value }
 
     BoxWithConstraints(modifier.fillMaxWidth(), contentAlignment = Alignment.BottomCenter) {
@@ -288,6 +296,24 @@ private fun ComposerAction(kind: ComposerActionKind, description: String, enable
                 )
             }
         }
+    }
+}
+
+/**
+ * An icon button in the composer's row of controls (`.composer-controls .icon-button`): a 20dp
+ * glyph in `--text-dim` in a 48dp round target, `--bg-hover` while pressed; `off` when disabled.
+ * The attach button (Lucide `Plus`, "Attach files").
+ */
+@Composable
+fun ComposerIconButton(icon: ImageVector, description: String, enabled: Boolean = true, onClick: () -> Unit) {
+    val c = Herdr.colors
+    Box(
+        Modifier.size(48.dp).clip(CircleShape)
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .semantics { contentDescription = description },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, null, tint = if (enabled) c.muted else c.off, modifier = Modifier.size(20.dp))
     }
 }
 

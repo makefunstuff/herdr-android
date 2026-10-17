@@ -175,6 +175,20 @@ class HostSession(
         return connection ?: throw IOException(statusMessage())
     }
 
+    /**
+     * Copies a file from the phone to this machine (see [Attachments]) and returns its path there,
+     * for the message to name it.
+     */
+    suspend fun upload(fileName: String, input: java.io.InputStream, stamp: String = Attachments.stamp()): String {
+        val conn = awaitConnection()
+        val result = conn.runWithInput(Attachments.uploadCommand(Attachments.safeName(fileName), stamp), input)
+        val path = result.stdout.trim()
+        if (result.exitStatus != 0 || path.isEmpty()) {
+            throw IOException(result.stderr.trim().ifEmpty { "Couldn't copy $fileName to ${machine.label}" })
+        }
+        return path
+    }
+
     /** The work board on this machine, when it has one. */
     suspend fun awaitBoard(timeoutMs: Long = 20_000): BoardClient {
         val conn = awaitConnection(timeoutMs)

@@ -62,6 +62,9 @@ import com.makefunstuff.herdr.ui.design.ChatComposer
 import com.makefunstuff.herdr.ui.design.ChatSurface
 import com.makefunstuff.herdr.ui.design.typingInShortWindow
 import com.makefunstuff.herdr.ui.design.ComposerToggle
+import com.makefunstuff.herdr.ui.design.ComposerIconButton
+import com.makefunstuff.herdr.ui.common.rememberAttacher
+import com.makefunstuff.herdr.core.host.Attachments
 import com.makefunstuff.herdr.ui.common.rememberDraft
 import com.makefunstuff.herdr.data.DraftStore
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -109,6 +112,8 @@ fun CoordinatorScreen(nav: NavController, machineId: String) {
     var draft by rememberDraft(DraftStore.coordinator(machineId))
     /** The board's Tab for the next message: what the Coordinator adds from it gets an agent at once. */
     var startAgents by rememberSaveable { mutableStateOf(false) }
+    // A file for the Coordinator: copied to the board's machine, then named at the start of the draft.
+    val attach = rememberAttacher(session) { path -> draft = Attachments.withMention(draft, path) }
     val readNow = remember { Channel<Unit>(Channel.CONFLATED) }
     val list = rememberLazyListState()
 
@@ -212,10 +217,13 @@ fun CoordinatorScreen(nav: NavController, machineId: String) {
                         onStartAgents = { startAgents = it },
                         status = when {
                             sending -> "Sending…"
+                            attach.uploading -> "Uploading file…"
                             !state.online -> "Not connected"
                             else -> null
                         },
                         onSend = ::send,
+                        onAttach = attach.pick,
+                        uploading = attach.uploading,
                     )
                 },
             ) { bottom ->
@@ -376,8 +384,8 @@ private fun Notice(text: String, tint: Color?, action: Pair<String, () -> Unit>?
 }
 
 /**
- * The Coordinator's composer: the shared [ChatComposer], with the board's Tab as a "Start agents"
- * switch beside Send. Off, Send hands the message to the Coordinator; on (amber), Send also gives
+ * The Coordinator's composer: the shared [ChatComposer], with the attach button ([onAttach]) on
+ * the left and the board's Tab as a "Start agents" switch beside Send. Off, Send hands the message to the Coordinator; on (amber), Send also gives
  * an agent to every task the Coordinator adds from it, and Send says so to a screen reader. It
  * turns itself off again once that message is sent.
  */
@@ -392,6 +400,8 @@ internal fun CoordinatorComposer(
     onSend: (startAgents: Boolean) -> Unit,
     sending: Boolean = false,
     status: String? = null,
+    onAttach: (() -> Unit)? = null,
+    uploading: Boolean = false,
 ) {
     ChatComposer(
         draft = draft,
@@ -402,7 +412,11 @@ internal fun CoordinatorComposer(
         sending = sending,
         status = status,
         sendLabel = if (startAgents) "Send and start agents" else "Send",
+        holdSend = uploading,
         floating = true,
+        leading = onAttach?.let { pick ->
+            { ComposerIconButton(HerdrIcons.Plus, "Attach files", enabled = enabled && !uploading, onClick = pick) }
+        },
         trailing = {
             ComposerToggle("Start agents", HerdrIcons.Zap, startAgents, onStartAgents, enabled = enabled && !sending)
         },

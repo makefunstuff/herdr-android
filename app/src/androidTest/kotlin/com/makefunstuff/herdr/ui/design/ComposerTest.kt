@@ -87,6 +87,48 @@ class ComposerTest {
         rule.onNodeWithContentDescription("Send").atLeast48()
     }
 
+    @Test fun attachIsOnTheLeftOfBothChats() {
+        var picks = 0
+        var uploading by mutableStateOf(false)
+        rule.setContent {
+            HerdrTheme {
+                CoordinatorComposer(
+                    "look at this", {}, true, "Tell the Coordinator…", false, {}, {},
+                    onAttach = { picks++ }, uploading = uploading,
+                )
+            }
+        }
+        rule.onNodeWithContentDescription("Attach files").atLeast48()
+        rule.onNodeWithContentDescription("Attach files").assertIsEnabled().performClick()
+        assertEquals(1, picks)
+        // While a file is copied, Send waits and the text stays.
+        uploading = true
+        rule.onNodeWithContentDescription("Send").assertIsNotEnabled()
+        rule.onNodeWithContentDescription("Attach files").assertIsNotEnabled()
+        rule.onNodeWithText("look at this").assertIsDisplayed()
+    }
+
+    @Test fun agentComposerTakesTheAttachButton() {
+        var picks = 0
+        rule.setContent {
+            HerdrTheme {
+                ChatComposer("", {}, "Message claude…", onSend = {}, leading = { ComposerIconButton(HerdrIcons.Plus, "Attach files") { picks++ } })
+            }
+        }
+        rule.onNodeWithContentDescription("Attach files").performClick()
+        assertEquals(1, picks)
+    }
+
+    @Test fun typingGoesAfterAnAttachedFilesMention() {
+        var draft by mutableStateOf("")
+        rule.setContent { HerdrTheme { ChatComposer(draft, { draft = it }, "Message claude…", onSend = {}) } }
+        field.performTextInput("")
+        draft = com.makefunstuff.herdr.core.host.Attachments.withMention(draft, "/h/a.png")
+        rule.waitForIdle()
+        field.performTextInput("what is this?")
+        assertEquals("@/h/a.png what is this?", draft)
+    }
+
     @Test fun sendingKeepsTheTextAndSendsOnce() {
         var sent = 0
         rule.setContent {

@@ -47,6 +47,9 @@ import com.makefunstuff.herdr.ui.common.toast
 import com.makefunstuff.herdr.ui.design.BarIcon
 import com.makefunstuff.herdr.ui.design.ChatComposer
 import com.makefunstuff.herdr.ui.design.ChatSurface
+import com.makefunstuff.herdr.ui.design.ComposerIconButton
+import com.makefunstuff.herdr.ui.common.rememberAttacher
+import com.makefunstuff.herdr.core.host.Attachments
 import com.makefunstuff.herdr.ui.common.rememberDraft
 import com.makefunstuff.herdr.data.DraftStore
 import com.makefunstuff.herdr.ui.design.HerdrIcons
@@ -100,6 +103,8 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
     var showKeys by rememberSaveable { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
+    // A file for the agent: copied to its machine, then named at the start of the draft.
+    val attach = rememberAttacher(session) { path -> draft = Attachments.withMention(draft, path) }
 
     fun keys(k: List<String>) {
         scope.launch {
@@ -208,10 +213,15 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
                         },
                         onSend = ::send,
                         sending = sending,
+                        holdSend = attach.uploading,
                         status = when {
                             sending -> "Sending…"
+                            attach.uploading -> "Uploading file…"
                             !host.online -> "Not connected"
                             else -> null
+                        },
+                        leading = {
+                            ComposerIconButton(HerdrIcons.Plus, "Attach files", enabled = host.online && !attach.uploading, onClick = attach.pick)
                         },
                         stop = if (status == AgentStatus.Working) ({ keys(listOf("esc")) }) else null,
                         floating = true,
