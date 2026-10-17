@@ -131,6 +131,9 @@ class HerdrColors(
         Role.Deleted -> red
     }
 
+    /** A diff's added or removed line: the state's tint, a little lighter, so even a dim comment reads on it. */
+    fun lineTint(c: Color): Color = c.copy(alpha = 0.10f)
+
     /** `--line-number`: the code viewer's line numbers, quieter than the code beside them. */
     val lineNumber: Color get() = muted
 }

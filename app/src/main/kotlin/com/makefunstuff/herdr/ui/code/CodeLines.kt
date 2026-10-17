@@ -147,8 +147,8 @@ private fun Line(
 ) {
     val tint = when {
         marked -> c.accentTint.compositeOver(c.panel)
-        row.kind == CodeRow.Kind.Added -> c.tint(c.done).compositeOver(c.panel)
-        row.kind == CodeRow.Kind.Removed -> c.tint(c.red).compositeOver(c.panel)
+        row.kind == CodeRow.Kind.Added -> c.lineTint(c.done).compositeOver(c.panel)
+        row.kind == CodeRow.Kind.Removed -> c.lineTint(c.red).compositeOver(c.panel)
         row.kind == CodeRow.Kind.Hunk -> c.hover
         else -> Color.Transparent
     }

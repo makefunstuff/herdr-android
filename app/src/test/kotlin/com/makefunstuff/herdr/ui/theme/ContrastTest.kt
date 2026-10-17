@@ -48,7 +48,7 @@ class ContrastTest {
         }
         // Code: every syntax colour on the viewer's ground, on a marked line and on a diff's added and removed lines.
         val code = listOf("panel" to h.panel, "marked line" to h.accentTint.compositeOver(h.panel),
-            "added line" to h.tint(h.done).compositeOver(h.panel), "removed line" to h.tint(h.red).compositeOver(h.panel))
+            "added line" to h.lineTint(h.done).compositeOver(h.panel), "removed line" to h.lineTint(h.red).compositeOver(h.panel))
         for ((g, bg) in code) Role.entries.forEach { need("syntax ${it.name} on $g", h.syntax(it), bg) }
         // Your own action: ink on the amber fill.
         need("onPrimary on primary", h.onPrimary, h.primary)
