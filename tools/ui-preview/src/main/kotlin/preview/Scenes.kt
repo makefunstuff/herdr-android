@@ -13,6 +13,7 @@ import preview.Demo.API_AGENT
 import preview.Demo.APP_AGENT
 import preview.Demo.APP_SHELL
 import preview.Demo.DEVBOX
+import preview.Demo.GPU
 import preview.Demo.SITE_AGENT
 
 fun scenes(): List<Scene> = listOf(
@@ -84,6 +85,28 @@ fun scenes(): List<Scene> = listOf(
     Scene("bubble", bubble = BubbleChat.Agent(DEVBOX, APP_AGENT), widthDp = 392, heightDp = 640),
     Scene("bubble-menu", bubble = BubbleChat.Agent(DEVBOX, APP_AGENT), widthDp = 392, heightDp = 640, actions = { tapLabel("More") }),
     Scene("bubble-coordinator", bubble = BubbleChat.Coordinator(DEVBOX), widthDp = 392, heightDp = 640),
+
+    // The brief: what happened overnight across the machines (devbox's and gpu-box's herdr-push journals; ci-runner
+    // compared with what the app showed at 23:10; mac-mini refuses the key), taller to show all of it. Then read
+    // aloud, on its fourth sentence (the review that failed, marked in the list), and what devbox shows without a
+    // journal. When it comes: two times on weekdays, read aloud in the car; adding a time.
+    Scene("brief", route = Routes.BRIEF, heightDp = 2100, setup = { brief = Demo.brief() }, actions = { settle() }),
+    Scene(
+        "brief-reading", route = Routes.BRIEF, setup = { brief = Demo.brief() },
+        actions = { ctx ->
+            settle()
+            tapText("Read aloud")
+            repeat(2) { ctx.container.briefWork.voice.next() }
+            settle()
+        },
+    ),
+    Scene(
+        "brief-no-journal", route = Routes.BRIEF, heightDp = 1500,
+        setup = { brief = Demo.brief(); host(DEVBOX).journal = null; host(GPU).journal = null },
+        actions = { settle() },
+    ),
+    Scene("brief-settings", route = Routes.BRIEF_SETTINGS, heightDp = 1100, setup = { brief = Demo.brief() }),
+    Scene("brief-add-time", route = Routes.BRIEF_SETTINGS, setup = { brief = Demo.brief() }, actions = { tapText("Add a time") }),
 
     // A pane as a live terminal.
     Scene("terminal", route = Routes.terminal(DEVBOX, APP_SHELL)),

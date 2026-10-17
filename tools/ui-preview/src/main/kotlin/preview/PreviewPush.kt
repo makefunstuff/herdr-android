@@ -1,6 +1,15 @@
 package preview
 
+import com.makefunstuff.herdr.brief.BriefSink
+import com.makefunstuff.herdr.brief.BriefVoice
+import com.makefunstuff.herdr.brief.Reading
 import com.makefunstuff.herdr.bubble.BubbleChat
+import com.makefunstuff.herdr.core.brief.Brief
+import com.makefunstuff.herdr.core.brief.BriefLine
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import com.makefunstuff.herdr.bubble.Bubbles
 import com.makefunstuff.herdr.bubble.Floated
 import com.makefunstuff.herdr.core.push.Alert
@@ -58,4 +67,21 @@ object PreviewBubbles : Bubbles {
     override fun openSettings() {}
     override fun openNotificationSettings() {}
     override fun openApp(chat: BubbleChat) {}
+}
+
+/** The brief's notification and alarm in the previews: nothing posted, no alarm, not in a car. */
+object PreviewBrief : BriefSink {
+    override fun show(brief: Brief, quiet: Boolean) {}
+    override fun cancel() {}
+    override fun plan(at: Long?) {}
+    override fun inCar() = false
+}
+
+/** Reading aloud in the previews: what would be read and where it is, without a sound. */
+class PreviewVoice : BriefVoice {
+    private val _reading = MutableStateFlow<Reading?>(null)
+    override val reading: StateFlow<Reading?> = _reading.asStateFlow()
+    override fun read(lines: List<BriefLine>, briefAt: Long) { _reading.value = Reading(lines, 0, briefAt) }
+    override fun next() = _reading.update { it?.copy(index = it.index + 1) }
+    override fun stop() { _reading.value = null }
 }

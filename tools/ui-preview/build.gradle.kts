@@ -56,6 +56,8 @@ val androidOnly = listOf(
     "com/makefunstuff/herdr/share/Widgets.kt",
     "com/makefunstuff/herdr/bubble/AndroidBubbles.kt",
     "com/makefunstuff/herdr/bubble/BubbleActivity.kt",
+    "com/makefunstuff/herdr/brief/AndroidBrief.kt",
+    "com/makefunstuff/herdr/brief/AndroidVoice.kt",
 )
 
 sourceSets.main {

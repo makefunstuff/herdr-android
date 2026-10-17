@@ -96,6 +96,8 @@ class SceneData {
     var held: List<Alert> = emptyList()
     /** Whether Android lets the app's chats float as bubbles. */
     var bubblesAllowed: Boolean = true
+    /** The brief's part as saved before the app opens (BriefStore): its schedule, when you last looked, what you saw. */
+    var brief: com.makefunstuff.herdr.brief.BriefState? = null
     /** Shared to the app from elsewhere (the share sheet), waiting for a machine. */
     var shared: com.makefunstuff.herdr.core.share.Shared? = null
     fun host(id: String): FakeMachine = hosts.getValue(id)
@@ -138,6 +140,7 @@ fun render(scene: Scene, dark: Boolean, file: File) {
     context.filesDir.resolve("machines.json").writeText(Json.encodeToString(ListSerializer(Machine.serializer()), data.machines))
     data.drafts.forEach { (k, v) -> context.getSharedPreferences("drafts", 0).edit().putString(k, v).apply() }
     data.push?.let { context.filesDir.resolve("push.json").writeText(Json.encodeToString(PushState.serializer(), it)) }
+    data.brief?.let { context.filesDir.resolve("brief.json").writeText(Json.encodeToString(com.makefunstuff.herdr.brief.BriefState.serializer(), it)) }
     PreviewPhone.apps = data.pushApps
     PreviewPhone.allowed = data.notificationsAllowed
     PreviewPhone.liveAllowed = data.liveAllowed

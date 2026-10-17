@@ -4,6 +4,10 @@ import com.makefunstuff.herdr.core.api.AgentInfo
 import com.makefunstuff.herdr.core.board.BoardAction
 import com.makefunstuff.herdr.core.board.BoardTasks
 import com.makefunstuff.herdr.core.chat.BlockedPrompt
+import com.makefunstuff.herdr.core.brief.Briefs
+import com.makefunstuff.herdr.core.brief.JournalEntry
+import com.makefunstuff.herdr.core.brief.Journals
+import com.makefunstuff.herdr.core.brief.MachineLook
 import com.makefunstuff.herdr.core.push.Alert
 import com.makefunstuff.herdr.core.push.AlertAction
 import com.makefunstuff.herdr.core.push.AlertChange
@@ -217,7 +221,7 @@ class HerdrPushTest {
     @Test
     fun bundledScriptIsTheOneInHost() {
         assertEquals(script.readText(), HerdrPush.script)
-        assertEquals("3", HerdrPush.version)
+        assertEquals("4", HerdrPush.version)
     }
 
     @Test
@@ -320,7 +324,7 @@ class HerdrPushTest {
             val (_, t) = assertNotNull(PushMessages.open(received[2], mapOf("m1" to key)))
             assertEquals(listOf<PushEvent>(PushEvent.Test), t.events)
             val status = HerdrPush.status(assertNotNull(HerdrPush.answer(sh(dir, env, HerdrPush.command("status")).out)), "phone1:m1")
-            assertEquals("3", status.version)
+            assertEquals("4", status.version)
             assertTrue(status.subscribed)
             assertNull(status.error)
 
@@ -328,6 +332,86 @@ class HerdrPushTest {
             assertTrue(!HerdrPush.status(HerdrPush.answer(sh(dir, env, HerdrPush.command("status")).out)!!, "phone1:m1").subscribed)
         } finally {
             server.stop(0)
+        }
+    }
+
+    /** The journal the brief reads: what tasks and agents did, after the first look learned how things stood. */
+    @Test
+    fun keepsAJournal() {
+        assumeTrue(python(), "python3 isn't installed")
+        val dir = Files.createTempDirectory("herdr-push").toFile()
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+        server.createContext("/up") { ex -> ex.requestBody.readBytes(); ex.sendResponseHeaders(200, -1); ex.close() }
+        server.start()
+        try {
+            val fake = File(dir, "fake").apply { mkdirs() }
+            val herdr = File(fake, "herdr").apply {
+                writeText("#!/bin/sh\ncase \"\$1 \$2\" in\n\"api snapshot\") cat \"\$FAKE/snapshot.json\";;\n\"pane read\") echo;;\n*) exit 3;;\nesac\n")
+                setExecutable(true)
+            }
+            val board = File(fake, "herdr-projects").apply {
+                writeText("#!/bin/sh\nif [ \"\$2\" = --json ]; then cat \"\$FAKE/tasks.json\"; else cat \"\$FAKE/plain.txt\"; fi\n")
+                setExecutable(true)
+            }
+            fun agents(status: String, seq: Int) = File(fake, "snapshot.json").writeText(
+                """{"result":{"snapshot":{"workspaces":[{"workspace_id":"w1","label":"api"}],"tabs":[{"tab_id":"t1","label":"main"}],
+                "agents":[{"pane_id":"w1:p1","workspace_id":"w1","tab_id":"t1","agent":"claude","title":"Speed up /jobs","agent_status":"$status","state_change_seq":$seq}]}}}""",
+            )
+            fun tasks(vararg json: String) {
+                File(fake, "tasks.json").writeText("[" + json.joinToString(",") + "]")
+                File(fake, "plain.txt").writeText(json.indices.joinToString("") { "AND-${7 + it}    x\n" })
+            }
+            agents("working", 1)
+            tasks("""{"id":"herdr-android/7","title":"Board view","state":"working","stage":"reviewing"}""")
+            val env = mapOf(
+                "HOME" to dir.path, "FAKE" to fake.path, "HERDR_PUSH_HOME" to File(dir, "state").path, "HERDR_PUSH_HEALTH_EVERY" to "0",
+                // Every look reads the board.
+                "HERDR_PUSH_BOARD_EVERY" to "1",
+            )
+            assertEquals(0, sh(dir, env, HerdrPush.installCommand(), HerdrPush.script).exit)
+            sh(dir, env, HerdrPush.command("subscribe"), HerdrPush.subscription("phone1:m1", "Pixel", "http://127.0.0.1:${server.address.port}/up", PushSeal.newKey(), "default", herdr.path, board.path))
+            fun journal(since: Long = 0) = assertNotNull(Journals.parse(assertNotNull(HerdrPush.answer(sh(dir, env, HerdrPush.command("journal", "--session", "default", "--since", since.toString())).out))))
+
+            // Before any look there is no journal; the first look only learns how things stand.
+            assertNull(journal().from)
+            assertEquals(0, sh(dir, env, HerdrPush.command("once")).exit)
+            val first = journal()
+            assertNotNull(first.from)
+            assertTrue(first.entries.isEmpty())
+
+            // The task merges, a new one is added, the agent finishes; then the agent finishes again.
+            tasks(
+                """{"id":"herdr-android/7","title":"Board view","state":"done","stage":"done","pr":"https://x/pull/7","review":{"pass":true,"findings":[{"id":"F1"}]}}""",
+                """{"id":"herdr-android/8","title":"Brief","state":"idle","stage":""}""",
+                """{"id":"vm-str:elastic/3","title":"Another machine's","state":"blocked","stage":"approval","kind":"permission"}""",
+            )
+            agents("done", 2)
+            assertEquals(0, sh(dir, env, HerdrPush.command("once")).exit)
+            agents("working", 3)
+            assertEquals(0, sh(dir, env, HerdrPush.command("once")).exit)
+            agents("done", 4)
+            assertEquals(0, sh(dir, env, HerdrPush.command("once")).exit)
+
+            val j = journal()
+            val taskEntries = j.entries.filterIsInstance<JournalEntry.Task>()
+            assertEquals(listOf("AND-7" to "working", "AND-8" to "new"), taskEntries.map { it.task.name to it.was })
+            assertEquals(com.makefunstuff.herdr.core.board.BoardStatus.Done, taskEntries[0].task.status)
+            // Only what the app needs of a task is kept: no review findings.
+            assertTrue("F1" !in File(dir, "state/journal.json").readText())
+            assertEquals(2, j.entries.filterIsInstance<JournalEntry.Agent>().size)
+            assertTrue(j.upto != null && j.now >= j.upto!!)
+
+            // The brief from it: merged, added, the agent finished (once, its last time).
+            val b = Briefs.build(listOf(MachineLook("m1", "devbox", tasks = taskEntries.map { it.task }, journal = j)), (j.from!! - 1) * 1000, j.now * 1000)
+            assertEquals(listOf("AND-7"), b.done.map { it.name })
+            assertEquals(1, b.added)
+            assertEquals(listOf("Speed up /jobs"), b.finished.map { it.title })
+
+            // Asked from later on: nothing.
+            assertTrue(journal(since = j.now + 60).entries.isEmpty())
+        } finally {
+            server.stop(0)
+            dir.deleteRecursively()
         }
     }
 

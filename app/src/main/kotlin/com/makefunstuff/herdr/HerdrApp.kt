@@ -11,6 +11,10 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
+import com.makefunstuff.herdr.brief.AndroidBrief
+import com.makefunstuff.herdr.brief.AndroidVoice
+import com.makefunstuff.herdr.brief.BriefStore
+import com.makefunstuff.herdr.brief.BriefWork
 import com.makefunstuff.herdr.bubble.AndroidBubbles
 import com.makefunstuff.herdr.bubble.Bubbles
 import com.makefunstuff.herdr.data.DraftStore
@@ -57,6 +61,7 @@ class HerdrApp : Application() {
             override fun onStop(owner: LifecycleOwner) {
                 // What the screens showed was seen; the next look while closed reports only what is new.
                 container.alertWork.leaving()
+                container.briefWork.leaving()
                 container.hosts.setForeground(false)
                 Wakes.plan(this@HerdrApp)
             }
@@ -99,6 +104,10 @@ class AppContainer(app: Application) {
     val tally = TallyStore(java.io.File(app.filesDir, "tally.json"), machines)
     val alertWork = AlertWork(hosts, machines, push, inbox, liveWork, quietWork, tally)
     val bubbles: Bubbles = AndroidBubbles(app)
+    val briefWork = BriefWork(
+        scope, hosts, machines, BriefStore(java.io.File(app.filesDir, "brief.json")), AndroidBrief(app), AndroidVoice(app),
+        quiet = { quietWork.check() },
+    )
 
     init {
         // Read the key up front so the public key is ready to show. A missing key is never made
@@ -107,7 +116,9 @@ class AppContainer(app: Application) {
         pushHosts.start()
         liveWork.start()
         quietWork.start()
-        tally.start(scope, hosts)
+        // The boards the app reads while on screen are what the person saw, for the brief.
+        tally.start(scope, hosts, onBoard = { id, tasks -> briefWork.looked(id, tasks, null) })
+        briefWork.start()
         // Shared files waiting for a machine taken out of the app go with it.
         scope.launch { machines.machines.collect { list -> shares.keep(list.map { it.id }.toSet()) } }
         // The push app's address may have lapsed while the app was closed: ask again, it answers with the same or a new one.

@@ -187,7 +187,7 @@ private fun Schedule(q: QuietHours, onPick: (Boolean) -> Unit, onDays: (Set<Int>
  * each one on or off by itself: chosen on `--bg-hover` in strong text.
  */
 @Composable
-private fun Days(days: Set<Int>, onDays: (Set<Int>) -> Unit) {
+internal fun Days(days: Set<Int>, onDays: (Set<Int>) -> Unit) {
     val c = Herdr.colors
     Row(
         Modifier.fillMaxWidth().clip(HerdrShapes.Field).background(c.card).hairline(HerdrShapes.Field).padding(2.dp),
@@ -210,7 +210,7 @@ private fun Days(days: Set<Int>, onDays: (Set<Int>) -> Unit) {
 
 /** A time to tap: its label, and the time in the code face. */
 @Composable
-private fun TimeBox(label: String, time: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
+internal fun TimeBox(label: String, time: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val c = Herdr.colors
     Column(
         modifier.heightIn(min = 64.dp).clip(HerdrShapes.Field).background(c.card).hairline(HerdrShapes.Field)
@@ -238,7 +238,7 @@ private fun Rule(icon: ImageVector, title: String, detail: String) {
 /** A time to the quarter of an hour: the hour, then the minutes. Each tap counts at once. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun TimeSheet(title: String, minutes: Int, onPick: (Int) -> Unit, onDismiss: () -> Unit) {
+internal fun TimeSheet(title: String, minutes: Int, onPick: (Int) -> Unit, onDismiss: () -> Unit) {
     var m by remember { mutableStateOf(minutes) }
     fun pick(next: Int) {
         m = next

@@ -9,6 +9,8 @@ When that is over (answered on the desktop, the agent back at work, the task mov
 
 It also looks at the machine itself every 30 seconds (`HERDR_PUSH_HEALTH_EVERY`, 0 for never): when RAM runs low (under 10% available) or a disk does (less than a tenth free, at most 20 GB), it tells the phone once, naming the three processes using the most memory, and again when there is room (15%, one and a half times the disk's mark). The readings of the last hour go to `health.json` for the app's chart.
 
+It also keeps a **journal** of the last week for the app's brief: each time a board task is done, starts waiting for you, goes wrong, starts work or is added, and each time an agent finishes or asks something, with the time and the task or agent as it was then (`journal.json`, at most 600 entries per herdr session; `HERDR_PUSH_JOURNAL_DAYS` changes the 8 days). The first look only learns how things stand, as for the pushes. The app reads it with `herdr-push journal --session <name> --since <seconds>`, which answers `{"ok": true, "now", "from", "upto", "entries": [...]}`: `from` is when the journal began (null before any look), `upto` its last look, so the app can tell a journal that stopped keeping track.
+
 For a phone with **Live Updates** on, it also sends what runs: the working agents and the running board tasks (stage, progress, minutes left, the review round and the most reviews there are), which the phone shows as Live Updates with a Stop button. That push goes out at once when something starts, stops or moves on a stage, with progress and the "doing now" line at most every 90 seconds (`HERDR_PUSH_LIVE_MINOR`), and again every 30 minutes while anything runs (`HERDR_PUSH_LIVE_KEEP`), so the phone knows the machine still watches. A phone without Live Updates gets none of these.
 
 The phone shows each one as a notification with buttons: **Approve** and **Deny** for an agent's yes-or-no question, **Reply** (to the agent, to the task's agent, or to the Coordinator about the task), **Approve and merge**, **Approve plan**, **Continue** or **Retry**. A tap opens the agent's chat or the task on the board. The buttons work over the app's own SSH connection, never through the push.
@@ -33,7 +35,7 @@ The app also **looks at its machines itself** while it is closed (every 15 minut
 | --- | --- |
 | `~/.local/share/herdr-push/herdr-push` | the watcher (the app replaces it when the app carries a newer version) |
 | `~/.config/herdr-push/subscribers.json` | the subscriptions, one per phone and machine in the app (two machines in the app on this host, say two herdr sessions, are two): each one's push address, key and herdr session (mode 600) |
-| `~/.local/state/herdr-push/` | `state.json` (what it saw last, so a restart doesn't repeat itself), `health.json` (the last hour of RAM, swap and CPU readings), `herdr-push.log`, `run.lock` |
+| `~/.local/state/herdr-push/` | `state.json` (what it saw last, so a restart doesn't repeat itself), `journal.json` (the last week of what tasks and agents did, for the brief), `health.json` (the last hour of RAM, swap and CPU readings), `herdr-push.log`, `run.lock` |
 | `~/.config/systemd/user/herdr-push.service` | Linux with systemd: a user service, `Restart=always` |
 | `~/Library/LaunchAgents/dev.herdr.push.plist` | macOS: a launchd agent |
 | an `@reboot` line in your crontab | elsewhere, when there is `crontab` |
@@ -47,6 +49,7 @@ P=~/.local/share/herdr-push/herdr-push
 python3 $P status          # running?, start-up entry, phones, last error
 python3 $P once --dry-run  # one look: what it would send now (the first look only learns how things stand)
 python3 $P test            # a test notification to every phone
+python3 $P journal         # what it kept for the brief (--since <unix seconds>)
 python3 $P ensure          # start it if it isn't running
 python3 $P install         # start it now and with the machine
 python3 $P uninstall       # stop it and remove the start-up entry (--purge: and the phones and its state)

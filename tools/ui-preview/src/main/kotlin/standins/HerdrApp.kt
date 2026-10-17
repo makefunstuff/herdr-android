@@ -16,7 +16,12 @@ import com.makefunstuff.herdr.push.PushStore
 import com.makefunstuff.herdr.push.QuietWork
 import com.makefunstuff.herdr.push.TallyStore
 import com.makefunstuff.herdr.bubble.Bubbles
+import com.makefunstuff.herdr.brief.BriefStore
+import com.makefunstuff.herdr.brief.BriefWork
+import preview.Demo
 import preview.PreviewAlerts
+import preview.PreviewBrief
+import preview.PreviewVoice
 import preview.PreviewBubbles
 import preview.PreviewLive
 import preview.PreviewPhone
@@ -42,12 +47,18 @@ class AppContainer(app: Context) {
     val tally = TallyStore(java.io.File(app.filesDir, "tally.json"), machines)
     val alertWork = AlertWork(hosts, machines, push, inbox, liveWork, quietWork, tally)
     val bubbles: Bubbles = PreviewBubbles
+    // The brief at the demo's fixed time, on UTC, so it reads the same every run.
+    val briefWork = BriefWork(
+        scope, hosts, machines, BriefStore(java.io.File(app.filesDir, "brief.json")), PreviewBrief, PreviewVoice(),
+        zone = { java.time.ZoneOffset.UTC }, clock = { Demo.NOW },
+    )
 
     init {
         // The app is in front for the whole scene.
         hosts.setForeground(true)
         // What quiet hours mean now, before the first frame.
         quietWork.check()
+        briefWork.start()
     }
 
     /** Ends the scene: every machine session and the container's coroutines. */

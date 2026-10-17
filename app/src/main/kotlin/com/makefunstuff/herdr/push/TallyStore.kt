@@ -61,9 +61,10 @@ class TallyStore(private val file: File, private val machines: MachineStore, pri
 
     /**
      * While the app is on screen: what it sees of each machine's agents, and each board's tasks read
-     * now and then (every [BOARD_MS]), so the widget is right after the app was used.
+     * now and then (every [BOARD_MS]), so the widget is right after the app was used. [onBoard] hears
+     * each board read.
      */
-    fun start(scope: CoroutineScope, hosts: HostManager) {
+    fun start(scope: CoroutineScope, hosts: HostManager, onBoard: (String, List<BoardTask>) -> Unit = { _, _ -> }) {
         scope.launch {
             hosts.hosts.collect { states ->
                 if (!hosts.isForeground) return@collect
@@ -88,7 +89,9 @@ class TallyStore(private val file: File, private val machines: MachineStore, pri
                         launch {
                             try {
                                 val session = hosts.session(id) ?: return@launch
-                                tasks(id, withTimeout(30_000) { session.awaitBoard().tasks() })
+                                val list = withTimeout(30_000) { session.awaitBoard().tasks() }
+                                tasks(id, list)
+                                onBoard(id, list)
                             } catch (e: CancellationException) {
                                 if (e !is kotlinx.coroutines.TimeoutCancellationException) throw e
                             } catch (_: Throwable) {

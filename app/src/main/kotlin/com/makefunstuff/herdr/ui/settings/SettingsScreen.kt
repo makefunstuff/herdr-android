@@ -101,6 +101,7 @@ fun SettingsScreen(nav: NavHostController) {
                 }
             }
             QuietCard(padded = true) { NotificationsCard(onQuietHours = { nav.navigate(Routes.QUIET) }) }
+            QuietCard(padded = true) { BriefCard(onOpen = { nav.navigate(Routes.BRIEF) }, onSchedule = { nav.navigate(Routes.BRIEF_SETTINGS) }) }
             QuietCard(padded = true) {
                 Column(verticalArrangement = Arrangement.spacedBy(Space.xs)) {
                     Text("About", style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
