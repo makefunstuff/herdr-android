@@ -1,6 +1,5 @@
 package com.makefunstuff.herdr.ui.agents
 
-import com.makefunstuff.herdr.ui.design.readableText
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,32 +12,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledIconButton
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SmallFloatingActionButton
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -52,9 +32,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.makefunstuff.herdr.Routes
@@ -64,9 +42,20 @@ import com.makefunstuff.herdr.core.chat.AgentChat
 import com.makefunstuff.herdr.core.chat.ChatItem
 import com.makefunstuff.herdr.ui.common.EmptyState
 import com.makefunstuff.herdr.ui.common.LocalContainer
-import com.makefunstuff.herdr.ui.common.StatusDot
 import com.makefunstuff.herdr.ui.common.toast
+import com.makefunstuff.herdr.ui.design.BarIcon
+import com.makefunstuff.herdr.ui.design.ChatComposer
+import com.makefunstuff.herdr.ui.design.HerdrIcons
+import com.makefunstuff.herdr.ui.design.HerdrTopBar
+import com.makefunstuff.herdr.ui.design.LoadingState
+import com.makefunstuff.herdr.ui.design.RoundAction
+import com.makefunstuff.herdr.ui.design.QuietButton
+import com.makefunstuff.herdr.ui.common.StatusDot
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.width
 import com.makefunstuff.herdr.ui.manage.AgentActionsSheet
+import com.makefunstuff.herdr.ui.theme.Herdr
+import com.makefunstuff.herdr.ui.theme.Space
 import com.makefunstuff.herdr.ui.theme.color
 import com.makefunstuff.herdr.ui.theme.title
 import kotlinx.coroutines.launch
@@ -75,7 +64,6 @@ import kotlinx.coroutines.launch
  * An agent as a chat: its conversation, its state, its questions with their choices, and a box to
  * send the next prompt. The terminal is one tap away for anything the chat can't do.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
     val container = LocalContainer.current
@@ -179,36 +167,20 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
     }
 
     Scaffold(
+        containerColor = Herdr.colors.ground,
         topBar = {
-            TopAppBar(
-                navigationIcon = {
-                    IconButton(onClick = { nav.popBackStack() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
-                },
-                title = {
-                    Column {
-                        Text(
-                            agent?.let { it.name?.takeIf { n -> n.isNotBlank() } ?: it.displayName } ?: pane?.displayName ?: paneId,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Text(
-                            listOfNotNull(
-                                agent?.agent?.takeIf { it != agent.name },
-                                host.machine.label,
-                                snapshot?.let { s -> pane?.let { s.location(it.workspaceId, it.tabId) } },
-                            ).joinToString(" · "),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                },
-                actions = {
-                    TextButton(onClick = { nav.navigate(Routes.terminal(machineId, paneId)) }) { Text("Terminal") }
-                    IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "More") }
-                },
-            )
+            HerdrTopBar(
+                agent?.let { it.name?.takeIf { n -> n.isNotBlank() } ?: it.displayName } ?: pane?.displayName ?: paneId,
+                subtitle = listOfNotNull(
+                    agent?.agent?.takeIf { it != agent.name },
+                    host.machine.label,
+                    snapshot?.let { s -> pane?.let { s.location(it.workspaceId, it.tabId) } },
+                ).joinToString(" · "),
+                onBack = { nav.popBackStack() },
+            ) {
+                QuietButton(onClick = { nav.navigate(Routes.terminal(machineId, paneId)) }) { Text("Terminal") }
+                BarIcon(HerdrIcons.MoreVert, "More", { menu = true })
+            }
         },
     ) { padding ->
         // The top bar's inset comes from the scaffold; the bottom follows the keyboard or the nav bar.
@@ -217,16 +189,17 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 when {
                     agent == null && pane == null && snapshot != null ->
-                        EmptyState("This agent is gone", "Its pane closed, or the agent exited.")
+                        EmptyState("This agent is gone", "Its pane closed, or the agent exited.", icon = HerdrIcons.SmartToy)
                     rows.isEmpty() && state.source == AgentChat.Source.Loading ->
-                        EmptyState(if (host.online) "Loading the conversation…" else "Not connected", host.machine.label)
+                        if (host.online) LoadingState("Loading the conversation", Modifier.align(Alignment.Center))
+                        else EmptyState("Not connected", host.machine.label, icon = HerdrIcons.Dns)
                     rows.isEmpty() ->
-                        EmptyState("No messages yet", "Send a prompt to get started.")
+                        EmptyState("No messages yet", "Send a prompt to get started.", icon = HerdrIcons.Forum)
                     else -> LazyColumn(
                         state = listState,
                         reverseLayout = true,
-                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        contentPadding = PaddingValues(horizontal = Space.screen, vertical = Space.m),
+                        verticalArrangement = Arrangement.spacedBy(Space.m),
                         modifier = Modifier.fillMaxSize(),
                     ) {
                         // The newest entry: the question the agent is waiting on, or what it is doing.
@@ -236,15 +209,13 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
                     }
                 }
                 if (!atBottom) {
-                    SmallFloatingActionButton(
-                        onClick = { scope.launch { listState.animateScrollToItem(0) } },
-                        modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp),
-                    ) { Icon(Icons.Filled.KeyboardArrowDown, "Newest") }
+                    Box(Modifier.align(Alignment.BottomEnd).padding(Space.m)) {
+                        RoundAction(HerdrIcons.ArrowDownward, "Newest") { scope.launch { listState.animateScrollToItem(0) } }
+                    }
                 }
             }
             if (showKeys) KeyRow(onKeys = ::keys)
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            InputBar(
+            ChatComposer(
                 draft = draft,
                 onDraft = { draft = it },
                 placeholder = when {
@@ -252,9 +223,8 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
                     agent != null -> "Message ${agent.name?.takeIf { it.isNotBlank() } ?: agent.displayName}"
                     else -> "Type into the pane"
                 },
-                working = status == AgentStatus.Working,
                 onSend = ::send,
-                onStop = { keys(listOf("esc")) },
+                stop = if (status == AgentStatus.Working) ({ keys(listOf("esc")) }) else null,
             )
         }
     }
@@ -273,81 +243,49 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
     }
 }
 
+/** Under the bar: the agent's state in its colour, and what it is doing. */
 @Composable
 private fun StatusStrip(status: AgentStatus, label: String?, activity: String?, online: Boolean) {
-    Surface(color = MaterialTheme.colorScheme.surfaceContainerLow) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-        ) {
-            StatusDot(status.color())
-            Spacer(Modifier.width(10.dp))
+    val c = Herdr.colors
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().background(c.card).padding(horizontal = Space.screen, vertical = Space.s),
+    ) {
+        StatusDot(status.color())
+        Spacer(Modifier.width(Space.s))
+        Text(
+            when (status) {
+                AgentStatus.Blocked -> "Waiting for you"
+                AgentStatus.Unknown -> label?.takeIf { it != "unknown" } ?: "Status unknown"
+                else -> status.title()
+            },
+            style = MaterialTheme.typography.labelLarge,
+            color = status.color(),
+        )
+        if (activity != null && status != AgentStatus.Blocked) {
             Text(
-                when (status) {
-                    AgentStatus.Blocked -> "Waiting for you"
-                    AgentStatus.Unknown -> label?.takeIf { it != "unknown" } ?: "Status unknown"
-                    else -> status.title()
-                },
-                style = MaterialTheme.typography.labelLarge,
-                color = status.color().readableText(),
+                " · $activity",
+                style = MaterialTheme.typography.bodySmall,
+                color = c.muted,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false),
             )
-            if (activity != null && status != AgentStatus.Blocked) {
-                Text(
-                    " · $activity",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false),
-                )
-            }
-            Spacer(Modifier.weight(1f))
-            if (!online) Text("offline", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
+        Spacer(Modifier.weight(1f))
+        if (!online) Text("offline", style = MaterialTheme.typography.labelMedium, color = c.faint)
     }
 }
 
 @Composable
 private fun KeyRow(onKeys: (List<String>) -> Unit) {
     Row(
-        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 6.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = Space.m),
+        horizontalArrangement = Arrangement.spacedBy(Space.xs),
     ) {
         listOf(
             "Enter" to "enter", "Esc" to "esc", "↑" to "up", "↓" to "down", "Tab" to "tab", "⇧Tab" to "shift+tab",
             "1" to "1", "2" to "2", "3" to "3", "y" to "y", "n" to "n", "Ctrl+C" to "ctrl+c",
         ).forEach { (label, key) -> KeyButton(label) { onKeys(listOf(key)) } }
-    }
-}
-
-@Composable
-private fun InputBar(
-    draft: String,
-    onDraft: (String) -> Unit,
-    placeholder: String,
-    working: Boolean,
-    onSend: () -> Unit,
-    onStop: () -> Unit,
-) {
-    Row(
-        verticalAlignment = Alignment.Bottom,
-        modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
-    ) {
-        OutlinedTextField(
-            value = draft,
-            onValueChange = onDraft,
-            placeholder = { Text(placeholder, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-            modifier = Modifier.weight(1f),
-            maxLines = 6,
-            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
-            shape = RoundedCornerShape(24.dp),
-        )
-        if (working && draft.isBlank()) {
-            FilledTonalButton(onClick = onStop, modifier = Modifier.padding(start = 8.dp, bottom = 4.dp)) { Text("Stop") }
-        } else {
-            FilledIconButton(onClick = onSend, enabled = draft.isNotBlank(), modifier = Modifier.padding(start = 8.dp, bottom = 4.dp)) {
-                Icon(Icons.AutoMirrored.Filled.Send, "Send")
-            }
-        }
     }
 }

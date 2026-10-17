@@ -7,17 +7,12 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.Badge
-import androidx.compose.material3.BadgedBox
-import androidx.compose.material3.Icon
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
@@ -48,6 +43,10 @@ import com.makefunstuff.herdr.ui.machines.MachinesScreen
 import com.makefunstuff.herdr.ui.settings.KeySetupDialog
 import com.makefunstuff.herdr.ui.settings.SettingsScreen
 import com.makefunstuff.herdr.ui.terminal.TerminalScreen
+import com.makefunstuff.herdr.ui.design.HerdrIcons
+import com.makefunstuff.herdr.ui.design.HerdrNavBar
+import com.makefunstuff.herdr.ui.design.NavItem
+import com.makefunstuff.herdr.ui.theme.Herdr
 import com.makefunstuff.herdr.ui.theme.HerdrTheme
 import com.makefunstuff.herdr.ui.worktrees.WorktreesScreen
 
@@ -116,36 +115,27 @@ private fun AppNav() {
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        containerColor = Herdr.colors.ground,
         bottomBar = {
             if (topLevel) {
-                NavigationBar {
-                    NavigationBarItem(
-                        selected = route == Routes.AGENTS,
-                        onClick = { nav.goTop(Routes.AGENTS) },
-                        icon = {
-                            BadgedBox(badge = { if (blocked > 0) Badge { Text("$blocked") } }) {
-                                Icon(Icons.Filled.Home, contentDescription = null)
-                            }
-                        },
-                        label = { Text("Agents") },
-                    )
-                    NavigationBarItem(
-                        selected = route == Routes.MACHINES,
-                        onClick = { nav.goTop(Routes.MACHINES) },
-                        icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null) },
-                        label = { Text("Machines") },
-                    )
-                    NavigationBarItem(
-                        selected = route == Routes.SETTINGS,
-                        onClick = { nav.goTop(Routes.SETTINGS) },
-                        icon = { Icon(Icons.Filled.Settings, contentDescription = null) },
-                        label = { Text("Settings") },
-                    )
+                HerdrNavBar {
+                    NavItem("Agents", HerdrIcons.Home, route == Routes.AGENTS, badge = blocked) { nav.goTop(Routes.AGENTS) }
+                    NavItem("Machines", HerdrIcons.List, route == Routes.MACHINES) { nav.goTop(Routes.MACHINES) }
+                    NavItem("Settings", HerdrIcons.Settings, route == Routes.SETTINGS) { nav.goTop(Routes.SETTINGS) }
                 }
             }
         },
     ) { padding ->
-        NavHost(nav, startDestination = Routes.AGENTS, modifier = Modifier.padding(bottom = if (topLevel) padding.calculateBottomPadding() else 0.dp)) {
+        NavHost(
+            nav,
+            startDestination = Routes.AGENTS,
+            modifier = Modifier.padding(bottom = if (topLevel) padding.calculateBottomPadding() else 0.dp),
+            // Short and quiet: a detail slides in a little from the side, tabs cross-fade.
+            enterTransition = { fadeIn(tween(200)) + slideInHorizontally(tween(220)) { it / 12 } },
+            exitTransition = { fadeOut(tween(150)) },
+            popEnterTransition = { fadeIn(tween(200)) },
+            popExitTransition = { fadeOut(tween(150)) + slideOutHorizontally(tween(200)) { it / 12 } },
+        ) {
             composable(Routes.AGENTS) { AgentsScreen(nav) }
             composable(Routes.MACHINES) { MachinesScreen(nav) }
             composable(Routes.SETTINGS) { SettingsScreen() }

@@ -1,8 +1,14 @@
 package com.makefunstuff.herdr.ui.common
 
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Icon
+import androidx.compose.ui.draw.clip
+import com.makefunstuff.herdr.ui.design.HerdrIcons
+import com.makefunstuff.herdr.ui.theme.Herdr
+import com.makefunstuff.herdr.ui.theme.Radius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.TextButton
@@ -62,8 +68,8 @@ fun MarkdownText(
 ) {
     val blocks = remember(source) { Markdown.parse(source) }
     val colors = MaterialTheme.colorScheme
-    val codeBackground = colors.surfaceContainerHighest
-    val link = colors.primary
+    val codeBackground = Herdr.colors.field
+    val link = Herdr.colors.accent
     SelectionContainer {
         Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
             for (block in blocks) {
@@ -83,7 +89,7 @@ fun MarkdownText(
                         if (block.checked != null) {
                             Text(
                                 if (block.checked == true) "☑" else "☐", style = style,
-                                color = if (block.checked == true) colors.primary else colors.onSurfaceVariant,
+                                color = if (block.checked == true) Herdr.colors.accent else colors.onSurfaceVariant,
                                 modifier = Modifier.padding(end = 6.dp).semantics { contentDescription = if (block.checked == true) "Done" else "Not done" },
                             )
                         } else {
@@ -95,7 +101,7 @@ fun MarkdownText(
                         Text(block.text.annotated(codeBackground, link), style = style, color = color, modifier = Modifier.weight(1f))
                     }
                     is Markdown.Block.Quote -> Row(Modifier.height(IntrinsicSize.Min)) {
-                        Box(Modifier.width(3.dp).fillMaxHeight().background(colors.outlineVariant, RoundedCornerShape(2.dp)))
+                        Box(Modifier.width(3.dp).fillMaxHeight().background(Herdr.colors.fieldFocused, RoundedCornerShape(2.dp)))
                         Text(
                             block.text.annotated(codeBackground, link),
                             style = style,
@@ -105,7 +111,7 @@ fun MarkdownText(
                     }
                     is Markdown.Block.Code -> CodeBlock(block.text, copyable = true)
                     is Markdown.Block.Table -> TableBlock(block.rows)
-                    Markdown.Block.Rule -> HorizontalDivider(color = colors.outlineVariant, modifier = Modifier.padding(vertical = 4.dp))
+                    Markdown.Block.Rule -> HorizontalDivider(color = Herdr.colors.line, modifier = Modifier.padding(vertical = 4.dp))
                 }
             }
         }
@@ -116,26 +122,27 @@ fun MarkdownText(
 @Composable
 fun CodeBlock(text: String, modifier: Modifier = Modifier, maxLines: Int = Int.MAX_VALUE, copyable: Boolean = false) {
     val context = LocalContext.current
-    Column(modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHighest, RoundedCornerShape(8.dp))) {
-        if (copyable) {
-            TextButton(
-                onClick = { context.copyToClipboard("code", text) },
-                modifier = Modifier.align(Alignment.End).heightIn(min = 48.dp),
-            ) { Text("Copy", style = MaterialTheme.typography.labelMedium) }
-        }
+    Box(modifier.fillMaxWidth().background(Herdr.colors.field, RoundedCornerShape(Radius.m))) {
         Text(
             text,
             fontFamily = FontFamily.Monospace,
             fontSize = 12.sp,
-            lineHeight = 16.sp,
+            lineHeight = 17.sp,
             maxLines = maxLines,
             color = MaterialTheme.colorScheme.onSurface,
             softWrap = false,
             modifier = Modifier
                 .fillMaxWidth()
                 .horizontalScroll(rememberScrollState())
-                .padding(start = 10.dp, end = 10.dp, top = if (copyable) 0.dp else 8.dp, bottom = 8.dp),
+                .padding(start = 12.dp, end = if (copyable) 48.dp else 12.dp, top = 10.dp, bottom = 10.dp),
         )
+        if (copyable) {
+            Box(
+                Modifier.align(Alignment.TopEnd).size(48.dp).clickable(onClickLabel = "Copy code") { context.copyToClipboard("code", text) }
+                    .semantics { contentDescription = "Copy" },
+                contentAlignment = Alignment.Center,
+            ) { Icon(HerdrIcons.ContentCopy, null, tint = Herdr.colors.muted, modifier = Modifier.size(18.dp)) }
+        }
     }
 }
 
@@ -143,21 +150,21 @@ fun CodeBlock(text: String, modifier: Modifier = Modifier, maxLines: Int = Int.M
 @Composable
 private fun TableBlock(rows: List<List<String>>) {
     val columns = rows.maxOfOrNull { it.size } ?: return
-    val line = MaterialTheme.colorScheme.outlineVariant
+    val line = Herdr.colors.fieldFocused
     Column(
         Modifier.horizontalScroll(rememberScrollState())
-            .border(1.dp, line, RoundedCornerShape(6.dp)),
+            .border(1.dp, line, RoundedCornerShape(Radius.m)).clip(RoundedCornerShape(Radius.m)),
     ) {
         rows.forEachIndexed { r, row ->
             if (r > 0) HorizontalDivider(color = line)
-            Row(Modifier.height(IntrinsicSize.Min)) {
+            Row(Modifier.height(IntrinsicSize.Min).then(if (r == 0) Modifier.background(Herdr.colors.field) else Modifier)) {
                 for (c in 0 until columns) {
                     if (c > 0) Box(Modifier.width(1.dp).fillMaxHeight().background(line))
                     Text(
                         row.getOrNull(c).orEmpty(),
                         style = MaterialTheme.typography.bodySmall,
                         fontWeight = if (r == 0) FontWeight.SemiBold else null,
-                        modifier = Modifier.widthIn(min = 56.dp, max = 220.dp).padding(horizontal = 8.dp, vertical = 5.dp),
+                        modifier = Modifier.widthIn(min = 56.dp, max = 220.dp).padding(horizontal = 10.dp, vertical = 6.dp),
                     )
                 }
             }
