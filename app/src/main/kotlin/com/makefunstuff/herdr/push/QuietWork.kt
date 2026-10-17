@@ -38,7 +38,10 @@ class QuietWork(
         }
     }
 
-    /** Whether it is quiet at [now]. When it isn't, what was held shows. Also sets the alarm for the next look. */
+    /**
+     * Whether it is quiet at [now]. When it isn't, what was held shows; with notifications while closed
+     * turned off, it is dropped instead. Also sets the alarm for the next look.
+     */
     @Synchronized
     fun check(now: Long = System.currentTimeMillis()): Boolean {
         val st = settings.value
@@ -47,7 +50,11 @@ class QuietWork(
         val mode = if (st.on && hours.followPhone) phone.quietMode() else null
         val why = if (st.on) hours.reason(local, mode) else null
         _reason.value = why
-        if (why == null) inbox.release(quiet = foreground())
+        when {
+            // Turned off: nothing shows from now on, also not what was held.
+            !st.on -> inbox.dropHeld()
+            why == null -> inbox.release(quiet = foreground())
+        }
         plan(if (st.on) nextLook(hours.nextChange(local), mode != null, now) else null)
         return why != null
     }

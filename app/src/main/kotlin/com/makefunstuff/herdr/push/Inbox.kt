@@ -146,12 +146,30 @@ class Inbox(private val file: File, private val sink: AlertSink) {
     /** Notes what the person already saw in the app, so a later look doesn't announce it. */
     @Synchronized
     fun markSeen(changes: List<AlertChange>, now: Long = System.currentTimeMillis()) {
-        for (c in changes) if (c is AlertChange.Show && c.alert.sig.isNotEmpty()) seen[c.tag] = Seen(c.alert.sig, now)
+        var heldDirty = false
+        for (c in changes) if (c is AlertChange.Show && c.alert.sig.isNotEmpty()) {
+            seen[c.tag] = Seen(c.alert.sig, now)
+            // Held during quiet hours, and the app showed that agent since (as it is now): nothing to tell when they end.
+            if (held.remove(c.tag) != null) heldDirty = true
+        }
         save(now)
+        if (heldDirty) saveHeld()
     }
 
-    /** Takes a notification down when its agent or task is opened in the app; it stays seen. */
-    fun dismiss(tag: String) = sink.cancel(tag)
+    /** Takes a notification down when its agent or task is opened in the app; it stays seen, and is no longer held. */
+    @Synchronized
+    fun dismiss(tag: String) {
+        if (held.remove(tag) != null) saveHeld()
+        sink.cancel(tag)
+    }
+
+    /** Forgets what was held without showing it: notifications while the app is closed were turned off. */
+    @Synchronized
+    fun dropHeld() {
+        if (held.isEmpty()) return
+        held.clear()
+        saveHeld()
+    }
 
     fun show(alert: Alert, quiet: Boolean, note: String?) = sink.show(alert, quiet, note)
     fun working(alert: Alert, words: String) = sink.working(alert, words)

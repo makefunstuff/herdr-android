@@ -99,4 +99,25 @@ class QuietWorkTest {
         assertFalse(quiet.check(at(1, 23)))
         assertTrue(phone.alarms.all { it == null })
     }
+
+    @Test fun turnedOffDropsWhatWasHeld() {
+        inbox.apply(listOf(finished("p1"), finished("p2")), quiet = false, hold = quiet.check(at(1, 23)))
+        settings.value = settings.value.copy(on = false)
+        assertFalse(quiet.check(at(1, 23, 5)))
+        assertEquals(emptyList<String>(), sink.log)
+        assertEquals(0, inbox.heldCount.value)
+        // On again in the morning: nothing from last night.
+        settings.value = settings.value.copy(on = true)
+        quiet.check(at(2, 7, 30))
+        assertEquals(emptyList<String>(), sink.log)
+    }
+
+    @Test fun seenInTheAppIsNotToldAgain() {
+        inbox.apply(listOf(finished("p1"), finished("p2"), finished("p3")), quiet = false, hold = quiet.check(at(1, 23)))
+        // p1's chat opened; p2 on screen as the app left it; p3 not seen.
+        inbox.dismiss("agent:m1:p1")
+        inbox.markSeen(listOf(finished("p2")))
+        assertFalse(quiet.check(at(2, 7)))
+        assertEquals(listOf("show agent:m1:p3"), sink.log)
+    }
 }
