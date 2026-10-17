@@ -61,6 +61,8 @@ class FakeMachine(
     var version: String = "0.9.0",
     /** Set to make connecting fail, e.g. [ConnectError.Auth]. */
     var refuse: ConnectError? = null,
+    /** What the health probe reads there (RAM, disks, processes, worktrees). */
+    var health: FakeHealth = FakeHealth(),
 ) {
     val fingerprint = "SHA256:" + Base64.getEncoder().withoutPadding().encodeToString(id.toByteArray()).padEnd(43, 'A')
     private val overrides = HashMap<String, (JsonObject) -> JsonElement>()
@@ -71,6 +73,7 @@ class FakeMachine(
     // ---- shell commands -------------------------------------------------------------------------
 
     fun run(command: String): CommandResult {
+        health.run(command)?.let { return it }
         val w = Shell.words(command)
         return when {
             "pgrep" in command -> ok("server\t/home/demo/.local/bin/herdr\therdr $version\n")

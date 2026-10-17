@@ -105,6 +105,13 @@ class HerdrColors(
 
     /** `--danger-tint`: the destructive button's fill. */
     val dangerTint: Color get() = red.copy(alpha = if (dark) 0.12f else 0.10f)
+
+    /**
+     * A chart's two series (a machine's RAM and CPU): blue and orange, checked for colour-blind
+     * separation and 3:1 on `card` in both themes. Not states, and not amber.
+     */
+    val chart1: Color get() = if (dark) Color(0xFF3987E5) else Color(0xFF2A78D6)
+    val chart2: Color get() = Color(0xFFD95926)
 }
 
 internal val DarkHerdr = HerdrColors(

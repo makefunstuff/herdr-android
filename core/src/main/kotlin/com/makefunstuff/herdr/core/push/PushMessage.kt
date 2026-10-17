@@ -4,6 +4,9 @@ import com.makefunstuff.herdr.core.api.AgentInfo
 import com.makefunstuff.herdr.core.api.HerdrJson
 import com.makefunstuff.herdr.core.board.BoardTask
 import com.makefunstuff.herdr.core.board.BoardTasks
+import com.makefunstuff.herdr.core.health.Disk
+import com.makefunstuff.herdr.core.health.HealthReport
+import com.makefunstuff.herdr.core.health.Memory
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -24,6 +27,9 @@ sealed interface PushEvent {
      * the board, every running task. A list that is null wasn't looked at; the one before still holds.
      */
     data class Live(val agents: List<LiveAgent>?, val tasks: List<LiveTask>?) : PushEvent
+
+    /** The machine runs low on RAM or a disk, or (with nothing in [HealthReport.low]) has room again. */
+    data class Health(val report: HealthReport) : PushEvent
 }
 
 /** A working agent; [since] is when it started working (the machine's clock, seconds; 0 unknown). [workspace]: its workspace's label. */
@@ -83,7 +89,26 @@ object PushMessages {
                     ?.let { LiveTask(it, o.long("reviews").takeIf { r -> r > 0 }?.toInt(), o.long("since")) }
             },
         )
+        "health" -> PushEvent.Health(health(e))
         else -> null
+    }
+
+    /** `{"low": ["ram", "disk:/"], "memory": {"total", "available", …}, "disks": [{"mount", "total", "used", "avail"}], "top": [[name, kb]]}`. */
+    private fun health(e: JsonObject): HealthReport {
+        val m = e["memory"] as? JsonObject
+        return HealthReport(
+            low = (e["low"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.content },
+            memory = m?.let { Memory(it.long("total"), it.long("available"), it.long("swap_total"), it.long("swap_free")) }?.takeIf { it.totalKb > 0 },
+            disks = (e["disks"] as? JsonArray).orEmpty().mapNotNull { d ->
+                val o = d as? JsonObject ?: return@mapNotNull null
+                Disk(o.str("mount"), o.str("device"), "", o.long("total"), o.long("used"), o.long("avail"))
+            },
+            top = (e["top"] as? JsonArray).orEmpty().mapNotNull { t ->
+                val a = t as? JsonArray ?: return@mapNotNull null
+                val name = (a.getOrNull(0) as? JsonPrimitive)?.content ?: return@mapNotNull null
+                name to ((a.getOrNull(1) as? JsonPrimitive)?.longOrNull ?: 0)
+            },
+        )
     }
 
     private fun JsonObject.long(key: String): Long = (this[key] as? JsonPrimitive)?.takeIf { !it.isString }?.longOrNull ?: 0

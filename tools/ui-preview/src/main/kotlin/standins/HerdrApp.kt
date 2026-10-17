@@ -3,6 +3,7 @@ package com.makefunstuff.herdr
 
 import android.content.Context
 import com.makefunstuff.herdr.data.DraftStore
+import com.makefunstuff.herdr.data.HealthStore
 import com.makefunstuff.herdr.data.HostManager
 import com.makefunstuff.herdr.data.IdentityStore
 import com.makefunstuff.herdr.data.MachineStore
@@ -28,6 +29,7 @@ class AppContainer(app: Context) {
     val identity = IdentityStore(app, scope)
     val hosts = HostManager(scope, machines, identity)
     val drafts = DraftStore(app)
+    val health = HealthStore()
     val shares = Shares(java.io.File(app.filesDir, "shares.json"), java.io.File(app.filesDir, "shared"))
     val push = PushStore(app)
     val inbox = Inbox(java.io.File(app.filesDir, "alerts.json"), PreviewAlerts)

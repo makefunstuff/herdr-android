@@ -25,13 +25,17 @@ class MainActivity : ComponentActivity() {
         open(intent)
     }
 
-    /** A tapped notification: its agent's chat, or its task on the board. The tile, a widget or a share: [Ask]. False when it opens nothing. */
+    /**
+     * A tapped notification: its agent's chat, its task on the board, or its machine's health. The tile,
+     * a widget or a share: [Ask]. False when it opens nothing.
+     */
     private fun open(intent: Intent?): Boolean {
         intent?.getStringExtra(OPEN_ASK)?.takeIf { it in ASKS }?.let { Links.open(Routes.ask(it)); return true }
         val machine = intent?.getStringExtra(OPEN_MACHINE)?.takeIf { it.isNotEmpty() } ?: return false
         val pane = intent.getStringExtra(OPEN_PANE).orEmpty()
         val task = intent.getStringExtra(OPEN_TASK).orEmpty()
         when {
+            intent.getBooleanExtra(OPEN_HEALTH, false) -> Links.open(Routes.health(machine))
             pane.isNotEmpty() -> Links.open(Routes.agent(machine, pane))
             task.isNotEmpty() -> Links.open(Routes.board(machine, task))
             else -> Links.open(Routes.SETTINGS)
@@ -43,6 +47,7 @@ class MainActivity : ComponentActivity() {
         const val OPEN_MACHINE = "open_machine"
         const val OPEN_PANE = "open_pane"
         const val OPEN_TASK = "open_task"
+        const val OPEN_HEALTH = "open_health"
         const val OPEN_ASK = "open_ask"
         private val ASKS = setOf(Ask.COORDINATOR, Ask.BOARD, Ask.SHARE)
 

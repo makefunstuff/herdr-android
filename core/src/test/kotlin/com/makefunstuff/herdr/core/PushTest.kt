@@ -215,7 +215,7 @@ class HerdrPushTest {
     @Test
     fun bundledScriptIsTheOneInHost() {
         assertEquals(script.readText(), HerdrPush.script)
-        assertEquals("2", HerdrPush.version)
+        assertEquals("3", HerdrPush.version)
     }
 
     @Test
@@ -273,7 +273,7 @@ class HerdrPushTest {
             File(fake, "screen.txt").writeText(screen("claude-permission.txt"))
 
             // $HOME is the temp folder, so the app's own commands (install, then herdr-push by path) run as on a machine.
-            val env = mapOf("HOME" to dir.path, "FAKE" to fake.path, "HERDR_PUSH_HOME" to File(dir, "state").path)
+            val env = mapOf("HOME" to dir.path, "FAKE" to fake.path, "HERDR_PUSH_HOME" to File(dir, "state").path, "HERDR_PUSH_HEALTH_EVERY" to "0")
             assertEquals(0, sh(dir, env, HerdrPush.installCommand(), HerdrPush.script).exit)
             assertTrue(File(dir, ".local/share/herdr-push/herdr-push").canExecute())
 
@@ -318,7 +318,7 @@ class HerdrPushTest {
             val (_, t) = assertNotNull(PushMessages.open(received[2], mapOf("m1" to key)))
             assertEquals(listOf<PushEvent>(PushEvent.Test), t.events)
             val status = HerdrPush.status(assertNotNull(HerdrPush.answer(sh(dir, env, HerdrPush.command("status")).out)), "phone1:m1")
-            assertEquals("2", status.version)
+            assertEquals("3", status.version)
             assertTrue(status.subscribed)
             assertNull(status.error)
 
@@ -364,7 +364,7 @@ class HerdrPushTest {
             )
             snapshot("default", "working")
             snapshot("work", "working")
-            val env = mapOf("HOME" to dir.path, "FAKE" to fake.path, "HERDR_PUSH_HOME" to File(dir, "state").path)
+            val env = mapOf("HOME" to dir.path, "FAKE" to fake.path, "HERDR_PUSH_HOME" to File(dir, "state").path, "HERDR_PUSH_HEALTH_EVERY" to "0")
             assertEquals(0, sh(dir, env, HerdrPush.installCommand(), HerdrPush.script).exit)
             val url = "http://127.0.0.1:${server.address.port}/up"
             val keyA = PushSeal.newKey()
@@ -439,7 +439,7 @@ class HerdrPushTest {
             agents("working")
             task(""""state":"working","stage":"working","msg":"Writing the list","progress":40""")
 
-            val env = mapOf("HOME" to dir.path, "FAKE" to fake.path, "HERDR_PUSH_HOME" to File(dir, "state").path)
+            val env = mapOf("HOME" to dir.path, "FAKE" to fake.path, "HERDR_PUSH_HOME" to File(dir, "state").path, "HERDR_PUSH_HEALTH_EVERY" to "0")
             assertEquals(0, sh(dir, env, HerdrPush.installCommand(), HerdrPush.script).exit)
             val base = "http://127.0.0.1:${server.address.port}"
             val key = PushSeal.newKey()

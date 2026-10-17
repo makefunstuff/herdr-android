@@ -78,6 +78,18 @@ Everything that exists in a session is editable from the app, not just readable.
 
 The screens follow herdr's `events.subscribe` stream, so a change made anywhere — desktop or phone — appears here. Notifications are the exception: herdr has no list of them, so the app derives them from agents finishing or blocking and shows them behind the bell in the top bar; the menu can also show a notification on the desktop running herdr.
 
+## Machine health and cleanup
+
+A machine's screen has a **Health** card (RAM, CPU and its fullest disk, red when it runs low), and **⋯ → Health and cleanup** opens the whole picture, read over the same SSH connection every 5 seconds while the screen is in front:
+
+- **RAM, swap, CPU and every disk** (free space per mount), and a chart of RAM and CPU over the **last hour**. The hour comes from herdr-push, which notes a reading every 30 seconds on the machine; without it the chart fills while the screen is open.
+- **The biggest processes** by memory or CPU, each with what it is and whose: Android emulators (with their AVD), QEMU VMs, Gradle and Kotlin daemons, dev servers (vite, next, uvicorn, …), node, the coding agents, herdr; and the board task whose worktree it runs in or was started from (`AND-22 · done`), or the herdr pane and agent it runs under. A tap shows its details and **Stop process** (after a confirmation: SIGTERM, then SIGKILL after 5 seconds, and only while that pid is still the same program).
+- **Leftovers of finished tasks**: processes still running for a task that is done or archived, and its worktree still on disk, marked safe to clean. **Stop all leftovers** stops them in one go; each task's sheet stops its own and **Remove worktree** removes the checkout with git (asking again, and saying so, when it has uncommitted changes; through herdr when a workspace is open on it). What other work shares is never a leftover: adb's server, this machine's herdr server, and a Gradle daemon while it builds.
+- **Stop Gradle daemons**: every Gradle and Kotlin daemon of yours; the next build starts one again.
+- **A warning** when RAM or a disk runs low: under 10% of RAM available, or a disk with less than a tenth free (at most 20 GB, so a big disk isn't "low" with 50 GB left). It names what uses the most memory, on the screen and as a notification through herdr-push (and the app's own looks while closed), which comes down once there is room again (15% of RAM, one and a half times the disk's mark). It needs you, so it comes through quiet hours; a tap opens the machine's health.
+
+The full readings and process labels are Linux's (`/proc`); on macOS the screen shows memory, load, disks and the processes from `ps`, without whose they are.
+
 ## Notifications while the app is closed
 
 **Settings → Notifications → While the app is closed** makes your machines tell the phone when an agent needs you or finishes, or a work board task waits for you (ready to approve, review failed, plan ready, pick one, asks you, stopped at a limit, went wrong), like Puggie does. Each notification has its buttons: **Approve** or **Deny** a blocked agent's question, **Reply** to that agent (or to the task's agent, or to the Coordinator about the task), **Approve and merge**, **Approve plan**, **Continue**. A tap opens the agent's chat or the task. The buttons connect to the machine over SSH while the app stays closed; Approve and Deny read the agent's screen again first and press nothing if the question changed.
@@ -130,7 +142,7 @@ UI changes are checked, and shown in review, with screen previews instead of an 
 ./gradlew -p tools/ui-preview render -Ponly=board,chat   # some of them
 ```
 
-It needs JDK 17, no Android SDK, and takes about 2 minutes for all 23 scenes (agents, machines, a machine, agent chats, the Coordinator, the board and a task, the terminal, settings with its notifications, and the dialogs and sheets). CI renders them too and uploads them as the `herdr-screens-<run>` artifact. See [`tools/ui-preview/README.md`](tools/ui-preview/README.md) for how it works and how to add a scene, and [`AGENTS.md`](AGENTS.md) for how changes are reviewed.
+It needs JDK 17, no Android SDK, and takes about 2 minutes for all 35 scenes (agents, machines, a machine, a machine's health and cleanup, agent chats, the Coordinator, the board and a task, the terminal, settings with its notifications, and the dialogs and sheets). CI renders them too and uploads them as the `herdr-screens-<run>` artifact. See [`tools/ui-preview/README.md`](tools/ui-preview/README.md) for how it works and how to add a scene, and [`AGENTS.md`](AGENTS.md) for how changes are reviewed.
 
 ## Layout
 
