@@ -98,15 +98,30 @@ class HealthTest {
             // The probe reads other processes' folders as any other program of the account would. Some
             // sandboxes hide those from a process that isn't their parent; there is nothing to find then.
             assumeTrue(seen().firstOrNull() == wt.canonicalPath, "this system doesn't let a shell read another process's folder: ${seen()}")
+            // What each tool shows for this process here, in a failure's message: CI shows nothing else.
+            val why by lazy {
+                val probe = sh(HealthCommands.probe(listOf("demo/work-7-")))
+                listOf(
+                    "pid $pid, worktree ${wt.canonicalPath}",
+                    "readlink+comm: ${seen()}",
+                    "find: " + sh("find /proc -mindepth 2 -maxdepth 2 -name cwd -user \"$(id -u)\" -printf 'D\\t%h\\t%l\\n' 2>&1 | grep -w $pid; ls -ln /proc/$pid/cwd 2>&1").stdout.trim(),
+                    "ps: " + sh("ps -o pid=,ppid=,uid=,rss=,etimes=,args= -p $pid 2>&1").stdout.trim(),
+                    "env: " + sh("tr '\\000' '\\n' < /proc/$pid/environ 2>&1 | grep -E '^(PWD|HERDR)' ").stdout.trim(),
+                    "tools: " + sh("id; readlink -f \"$(command -v awk)\"; find --version | head -n 1; ps --version 2>&1 | head -n 1; uname -r").stdout.trim().replace("\n", " | "),
+                    "probe exit ${probe.exitStatus}, stderr: ${probe.stderr.take(500)}",
+                    "probe: " + probe.stdout.lines().filter { "\t$pid\t" in it || it.startsWith("@") && !it.startsWith("@df") }.take(20),
+                ).joinToString("\n")
+            }
+            fun expect(ok: Boolean, what: () -> String) { if (!ok) fail(what() + "\n" + why) }
             val s = client.sample(listOf("demo/work-7-"))
             val mine = s.procs.firstOrNull { it.pid.toLong() == pid }
-                ?: fail("the sleep in the finished worktree isn't listed; the probe printed for it: " +
-                    sh(HealthCommands.probe(listOf("demo/work-7-"))).stdout.lines().filter { "\t$pid\t" in it || it.startsWith("@") }.take(20))
-            assertEquals("sleep", mine.comm)
-            assertEquals(wt.canonicalPath, mine.cwd)
-            assertEquals("sleep 300", mine.args)
+            expect(mine != null) { "the sleep in the finished worktree isn't listed" }
+            expect(mine!!.comm == "sleep") { "comm: ${mine.comm}" }
+            expect(mine.cwd == wt.canonicalPath) { "cwd: ${mine.cwd}" }
+            expect(mine.args == "sleep 300") { "args: ${mine.args}" }
             // Without the worktree in [keep] a small process stays home.
-            assertNull(client.sample().procs.firstOrNull { it.pid.toLong() == pid })
+            val without = client.sample().procs.firstOrNull { it.pid.toLong() == pid }
+            expect(without == null) { "listed without its worktree in keep: $without" }
         } finally {
             p.destroyForcibly()
             home.deleteRecursively()

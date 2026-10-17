@@ -55,6 +55,16 @@ jobs:
       - name: Core tests
         run: ./gradlew -p core test
 
+      # What failed, with every message and the tests' own output, when the log isn't enough.
+      - name: Core test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: core-test-reports-${{ github.run_number }}
+          path: |
+            core/build/reports/tests/test/
+            core/build/test-results/test/
+
       # The fixed signing key, so every APK installs over the last one and keeps the app's data.
       # Missing secrets (forks, pull requests from forks) fall back to the debug key.
       - name: Signing key
