@@ -227,7 +227,7 @@ fun lineSpan(rows: List<CodeRow>, range: IntRange): Triple<Int, Int, Boolean> {
     val new = chosen.mapNotNull { it.numbers.last() }
     if (new.isNotEmpty()) return Triple(new.min(), new.max(), false)
     val old = chosen.mapNotNull { it.numbers.first() }
-    return Triple(old.minOrNull() ?: 0, old.maxOrNull() ?: 0, rows.firstOrNull()?.numbers?.size == 2)
+    return Triple(old.minOrNull() ?: 0, old.maxOrNull() ?: 0, chosen.firstOrNull()?.numbers?.size == 2)
 }
 
 /** The chosen rows' code, as a comment quotes it. */

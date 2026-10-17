@@ -48,7 +48,7 @@ class CodeStore(private val file: File, /** The clock, in milliseconds ("3 h ago
     fun add(note: ReviewNote) = change { it.copy(notes = it.notes.filter { n -> n.id != note.id } + note.copy(at = if (note.at == 0L) now() else note.at)) }
 
     @Synchronized
-    fun update(note: ReviewNote) = change { s -> s.copy(notes = s.notes.map { if (it.id == note.id) note else it }) }
+    fun update(note: ReviewNote) = change { s -> s.copy(notes = s.notes.map { if (it.id == note.id) note.copy(at = it.at) else it }) }
 
     @Synchronized
     fun remove(ids: Collection<String>) = change { s -> s.copy(notes = s.notes.filter { it.id !in ids }) }
