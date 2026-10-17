@@ -198,6 +198,8 @@ fun WorkspaceActionsSheet(
     meta: Map<String, String>,
     /** Opens the code of the workspace's folder. */
     onCode: (() -> Unit)? = null,
+    /** Opens the quick commands of the workspace's folder. */
+    onQuick: (() -> Unit)? = null,
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -218,6 +220,7 @@ fun WorkspaceActionsSheet(
             }
         }
         if (onCode != null) ManageRow("Browse the code", icon = HerdrIcons.Code, chevron = true) { onDismiss(); onCode() }
+        if (onQuick != null) ManageRow("Quick commands", detail = "Its project's scripts and AI commands", icon = HerdrIcons.Zap, chevron = true) { onDismiss(); onQuick() }
         ManageRow("Rename", icon = HerdrIcons.Pencil, chevron = true) { rename = true }
         ManageRow(
             "Metadata",
@@ -529,6 +532,8 @@ fun AgentActionsSheet(
     onOpenApp: (() -> Unit)? = null,
     /** Opens the code of the agent's folder: its worktree, its changes. */
     onCode: (() -> Unit)? = null,
+    /** Opens the quick commands of the agent's folder. */
+    onQuick: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -549,6 +554,7 @@ fun AgentActionsSheet(
         }
         if (onTerminal != null) ManageRow("Open terminal", icon = HerdrIcons.SquareTerminal, chevron = true) { onTerminal() }
         if (onCode != null) ManageRow("Browse the code", detail = "Its files and changes, to read and comment on", icon = HerdrIcons.Code, chevron = true) { onCode() }
+        if (onQuick != null) ManageRow("Quick commands", detail = "Run a script or an AI command where it works", icon = HerdrIcons.Zap, chevron = true) { onQuick() }
         if (onFloat != null) ManageRow("Float over other apps", icon = HerdrIcons.PictureInPicture2) { onFloat() }
         if (onOpenApp != null) ManageRow("Open in the app", icon = HerdrIcons.Maximize2) { onOpenApp() }
         if (onToggleKeys != null) {

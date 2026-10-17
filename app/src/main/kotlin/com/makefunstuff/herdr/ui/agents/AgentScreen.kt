@@ -38,6 +38,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.makefunstuff.herdr.Routes
 import com.makefunstuff.herdr.ui.code.CodeSpot
+import com.makefunstuff.herdr.ui.quick.QuickPlace
+import com.makefunstuff.herdr.ui.quick.QuickSheets
 import com.makefunstuff.herdr.bubble.BubbleChat
 import com.makefunstuff.herdr.bubble.LocalBubble
 import com.makefunstuff.herdr.ui.common.rememberFloat
@@ -116,6 +118,7 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
     var sending by remember { mutableStateOf(false) }
     var showKeys by rememberSaveable { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
+    var quick by remember { mutableStateOf<QuickPlace?>(null) }
     val listState = rememberLazyListState()
     // A file for the agent: copied to its machine, then named at the start of the draft.
     val attach = rememberAttacher(session) { path -> draft = Attachments.withMention(draft, path) }
@@ -270,8 +273,17 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
             onCode = (agent?.cwd ?: pane?.foregroundCwd ?: pane?.cwd)?.ifBlank { null }?.takeIf { !inBubble }?.let { dir ->
                 { menu = false; nav.navigate(Routes.codeAt(CodeSpot(machineId, dir, pane = paneId))) }
             },
+            onQuick = if (inBubble) null else ({
+                menu = false
+                val name = agent?.let { it.name?.takeIf { n -> n.isNotBlank() } ?: it.displayName }
+                quick = QuickPlace(
+                    machineId, (agent?.cwd ?: pane?.foregroundCwd ?: pane?.cwd).orEmpty(), label = name ?: pane?.displayName.orEmpty(),
+                    workspaceId = agent?.workspaceId ?: pane?.workspaceId, pane = paneId, agentName = name,
+                )
+            }),
         )
     }
+    quick?.let { place -> QuickSheets(nav, place, onDismiss = { quick = null }) }
 }
 
 /** Under the bar: the agent's state in its colour, and what it is doing. */

@@ -55,6 +55,8 @@ import com.makefunstuff.herdr.LocalPanes
 import com.makefunstuff.herdr.Routes
 import com.makefunstuff.herdr.ui.code.CheckoutTab
 import com.makefunstuff.herdr.ui.code.CodeSpot
+import com.makefunstuff.herdr.ui.quick.QuickPlace
+import com.makefunstuff.herdr.ui.quick.QuickSheets
 import com.makefunstuff.herdr.core.board.BoardAction
 import com.makefunstuff.herdr.core.board.BoardFilter
 import com.makefunstuff.herdr.core.board.BoardStatus
@@ -148,6 +150,7 @@ fun BoardScreen(nav: NavController, machineId: String, openTask: String? = null,
     // An open task's notification has done its job.
     LaunchedEffect(openId) { openId?.let { container.inbox.dismiss(Alerts.taskTag(machineId, it)) } }
     var actionsFor by remember { mutableStateOf<BoardTask?>(null) }
+    var quick by remember { mutableStateOf<QuickPlace?>(null) }
     var pending by remember { mutableStateOf<Pending?>(null) }
     var busy by remember { mutableStateOf<String?>(null) }
     var refusal by remember { mutableStateOf<String?>(null) }
@@ -324,8 +327,10 @@ fun BoardScreen(nav: NavController, machineId: String, openTask: String? = null,
     if (openId != null && open != null) {
         TaskDetailScreen(session, open, onBack = { openId = null }, busy = busy, onAction = { a -> choose(open, a) }, onPick = { letter -> perform(open, BoardAction.Pick, letter = letter) },
             onMore = { actionsFor = open }, backEnabled = !middleCloses,
-            onCode = { d -> nav.navigate(Routes.codeAt(CodeSpot(machineId, d.worktree, task = open.id, taskName = open.name), CheckoutTab.Changes)) })
+            onCode = { d -> nav.navigate(Routes.codeAt(CodeSpot(machineId, d.worktree, task = open.id, taskName = open.name), CheckoutTab.Changes)) },
+            onQuick = { d -> quick = QuickPlace(machineId, d.worktree, label = open.name, task = open.id, taskName = open.name) })
     }
+    quick?.let { place -> QuickSheets(nav, place, onDismiss = { quick = null }) }
     actionsFor?.let { t ->
         ActionsSheet(t, onDismiss = { actionsFor = null }, onAction = { a -> actionsFor = null; choose(t, a) }, onEdit = { actionsFor = null; pending = Pending.Edit(t) },
             onOpen = if (openId == t.id) null else ({ actionsFor = null; openId = t.id }))

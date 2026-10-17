@@ -95,6 +95,7 @@ class AppContainer(app: Application) {
     val drafts = DraftStore(app)
     val code = com.makefunstuff.herdr.data.CodeStore(java.io.File(app.filesDir, "code.json"))
     val health = HealthStore()
+    val quick = com.makefunstuff.herdr.data.QuickStore(java.io.File(app.filesDir, "quick.json"))
     val shares = Shares(java.io.File(app.filesDir, "shares.json"), java.io.File(app.cacheDir, "shared"))
     val push = PushStore(app)
     val inbox = Inbox(java.io.File(app.filesDir, "alerts.json"), AndroidAlerts(app))
@@ -103,7 +104,7 @@ class AppContainer(app: Application) {
     val quietWork = QuietWork(scope, push.state, phone, inbox, foreground = { hosts.isForeground })
     val liveWork = LiveWork(scope, hosts, machines, push, AndroidLive(app), quietWork)
     val tally = TallyStore(java.io.File(app.filesDir, "tally.json"), machines)
-    val alertWork = AlertWork(hosts, machines, push, inbox, liveWork, quietWork, tally)
+    val alertWork = AlertWork(hosts, machines, push, inbox, liveWork, quietWork, tally, quick)
     val bubbles: Bubbles = AndroidBubbles(app)
     val briefWork = BriefWork(
         scope, hosts, machines, BriefStore(java.io.File(app.filesDir, "brief.json")), AndroidBrief(app), AndroidVoice(app),

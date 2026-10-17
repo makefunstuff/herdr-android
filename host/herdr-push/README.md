@@ -9,6 +9,8 @@ When that is over (answered on the desktop, the agent back at work, the task mov
 
 It also looks at the machine itself every 30 seconds (`HERDR_PUSH_HEALTH_EVERY`, 0 for never): when RAM runs low (under 10% available) or a disk does (less than a tenth free, at most 20 GB), it tells the phone once, naming the three processes using the most memory, and again when there is room (15%, one and a half times the disk's mark). The readings of the last hour go to `health.json` for the app's chart.
 
+It also tells the phone when an **AI quick command** the app started there ends (done, failed, or at its time or token limit; not one stopped by hand), with the start of its answer: it looks at the runs in `~/.local/state/herdr-android/quick/` (`HERDR_PUSH_QUICK` for another folder; see [herdr-quick](../herdr-quick/README.md)), once each, and only at runs that ended in the last hour. A tap opens the run in the app.
+
 It also keeps a **journal** of the last week for the app's brief: each time a board task is done, starts waiting for you, goes wrong, starts work or is added, and each time an agent finishes or asks something, with the time and the task or agent as it was then (`journal.json`, at most 600 entries per herdr session; `HERDR_PUSH_JOURNAL_DAYS` changes the 8 days). The first look only learns how things stand, as for the pushes. The app reads it with `herdr-push journal --session <name> --since <seconds>`, which answers `{"ok": true, "now", "from", "upto", "entries": [...]}`: `from` is when the journal began (null before any look), `upto` its last look, so the app can tell a journal that stopped keeping track.
 
 For a phone with **Live Updates** on, it also sends what runs: the working agents and the running board tasks (stage, progress, minutes left, the review round and the most reviews there are), which the phone shows as Live Updates with a Stop button. That push goes out at once when something starts, stops or moves on a stage, with progress and the "doing now" line at most every 90 seconds (`HERDR_PUSH_LIVE_MINOR`), and again every 30 minutes while anything runs (`HERDR_PUSH_LIVE_KEEP`), so the phone knows the machine still watches. A phone without Live Updates gets none of these.
@@ -89,6 +91,7 @@ Inside, the message is:
   {"type": "health", "low": ["ram", "disk:/"], "memory": {"total": 65536000, "available": 3276800, "swap_total": 0, "swap_free": 0},
    "disks": [{"mount": "/", "device": "/dev/nvme0n1p2", "total": 500000000, "used": 495000000, "avail": 5000000}],
    "top": [["Android emulator · Pixel_8", 5872000], ["Gradle daemon", 3250000]]},
+  {"type": "quick", "id": "q1792222540000-0a1f", "name": "Find TODOs", "state": "done", "text": "…the start of its answer…", "error": "", "cwd": "/home/demo/src/app"},
   {"type": "live", "agents": [{"agent": {"pane_id": "w1:p3", "agent_status": "working", "…": "…"}, "where": "api › agents", "workspace": "api", "since": 1759999000}],
    "tasks": [{"key": "AND-7", "task": {"id": "herdr-android/7", "stage": "reviewing", "reviewRound": 2, "…": "…"}, "reviews": 4, "since": 1759999900}]}
 ]}
