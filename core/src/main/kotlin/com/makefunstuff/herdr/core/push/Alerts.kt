@@ -81,7 +81,12 @@ object Alerts {
     fun taskTag(machineId: String, taskId: String) = "task:$machineId:$taskId"
     fun testTag(machineId: String) = "test:$machineId"
 
+    /** The notifications [events] call for; what runs ([PushEvent.Live]) is a Live Update instead (LiveItems). */
+    fun all(machineId: String, machineLabel: String, events: List<PushEvent>, host: String = ""): List<AlertChange> =
+        events.filter { it !is PushEvent.Live }.map { of(machineId, machineLabel, it, host) }
+
     fun of(machineId: String, machineLabel: String, event: PushEvent, host: String = ""): AlertChange = when (event) {
+        is PushEvent.Live -> throw IllegalArgumentException("What runs is a Live Update, not an alert")
         is PushEvent.Agent -> agent(machineId, machineLabel, event)
         is PushEvent.Task -> task(machineId, machineLabel, event.task)
         PushEvent.Test -> AlertChange.Show(
