@@ -1,0 +1,233 @@
+a255c873a6a15b650146dc001dfcb2b7832e2849a255c87demo1790935920Start the app: machines and their agents
+
+
+diff --git a/.gitignore b/.gitignore
+new file mode 100644
+index 0000000..56e8774
+--- /dev/null
++++ b/.gitignore
+@@ -0,0 +1,3 @@
++build/
++.gradle/
++local.properties
+diff --git a/README.md b/README.md
+new file mode 100644
+index 0000000..e55fcb7
+--- /dev/null
++++ b/README.md
+@@ -0,0 +1,19 @@
++# Herdr for Android
++
++A native Android client for [herdr](https://herdr.dev) hosts: see your agents across machines,
++answer the blocked ones, and open any pane as a live terminal.
++
++Kotlin and Jetpack Compose.
++
++## Building
++
++```sh
++./gradlew :app:assembleDebug
++./gradlew -p core test
++```
++
++## Layout
++
++- `app/`: the screens, in Compose
++- `core/`: SSH, herdr's API and the work board, without Android
++- `docs/`: the design
+diff --git a/app/build.gradle.kts b/app/build.gradle.kts
+new file mode 100644
+index 0000000..e580f3e
+--- /dev/null
++++ b/app/build.gradle.kts
+@@ -0,0 +1,17 @@
++plugins {
++    id("com.android.application")
++    id("org.jetbrains.kotlin.android")
++}
++
++android {
++    namespace = "demo.herdr"
++    compileSdk = 35
++    defaultConfig {
++        applicationId = "demo.herdr"
++        minSdk = 26
++    }
++}
++
++dependencies {
++    implementation(project(":core"))
++}
+diff --git a/app/src/main/kotlin/demo/herdr/data/HostManager.kt b/app/src/main/kotlin/demo/herdr/data/HostManager.kt
+new file mode 100644
+index 0000000..7ded48c
+--- /dev/null
++++ b/app/src/main/kotlin/demo/herdr/data/HostManager.kt
+@@ -0,0 +1,13 @@
++package demo.herdr.data
++
++import demo.herdr.core.host.HostSession
++import demo.herdr.core.ssh.Machine
++
++/** One session per saved machine. */
++class HostManager(machines: List<Machine>) {
++    private val sessions = machines.associate { it.id to HostSession(it) }
++
++    fun session(id: String): HostSession? = sessions[id]
++
++    val all: Collection<HostSession> get() = sessions.values
++}
+diff --git a/app/src/main/kotlin/demo/herdr/ui/machines/MachineCard.kt b/app/src/main/kotlin/demo/herdr/ui/machines/MachineCard.kt
+new file mode 100644
+index 0000000..98d4207
+--- /dev/null
++++ b/app/src/main/kotlin/demo/herdr/ui/machines/MachineCard.kt
+@@ -0,0 +1,39 @@
++package demo.herdr.ui.machines
++
++import androidx.compose.foundation.layout.Column
++import androidx.compose.foundation.layout.Row
++import androidx.compose.material3.Card
++import androidx.compose.material3.MaterialTheme
++import androidx.compose.material3.Text
++import androidx.compose.runtime.Composable
++import androidx.compose.ui.Modifier
++import demo.herdr.core.host.HostState
++
++/**
++ * A machine on the Machines screen: its name, where it is, and whether it
++ * answers. A tap opens its workspaces.
++ */
++@Composable
++fun MachineCard(state: HostState, onOpen: () -> Unit, modifier: Modifier = Modifier) {
++    val m = state.machine
++    Card(onClick = onOpen, modifier = modifier) {
++        Column {
++            Row {
++                Text(m.label, style = MaterialTheme.typography.titleMedium)
++                StatusText(state)
++            }
++            Text(m.target, style = MaterialTheme.typography.bodySmall)
++            if (m.via != null) Text("through ${m.via}", style = MaterialTheme.typography.bodySmall)
++        }
++    }
++}
++
++@Composable
++private fun StatusText(state: HostState) {
++    val words = when {
++        state.online && state.agents == 0 -> "Online"
++        state.online -> "Online · ${state.agents} agents"
++        else -> "Status unknown"
++    }
++    Text(words, style = MaterialTheme.typography.labelMedium)
++}
+diff --git a/app/src/main/kotlin/demo/herdr/ui/machines/MachinesScreen.kt b/app/src/main/kotlin/demo/herdr/ui/machines/MachinesScreen.kt
+new file mode 100644
+index 0000000..52c2872
+--- /dev/null
++++ b/app/src/main/kotlin/demo/herdr/ui/machines/MachinesScreen.kt
+@@ -0,0 +1,16 @@
++package demo.herdr.ui.machines
++
++import androidx.compose.foundation.lazy.LazyColumn
++import androidx.compose.foundation.lazy.items
++import androidx.compose.runtime.Composable
++import demo.herdr.data.HostManager
++
++/** Every machine, as a card. */
++@Composable
++fun MachinesScreen(hosts: HostManager, onOpen: (String) -> Unit) {
++    LazyColumn {
++        items(hosts.all.toList(), key = { it.state.value.machine.id }) { session ->
++            MachineCard(session.state.value, onOpen = { onOpen(session.state.value.machine.id) })
++        }
++    }
++}
+diff --git a/build.gradle.kts b/build.gradle.kts
+new file mode 100644
+index 0000000..d756f3c
+--- /dev/null
++++ b/build.gradle.kts
+@@ -0,0 +1,4 @@
++plugins {
++    id("com.android.application") version "8.7.3" apply false
++    kotlin("jvm") version "2.1.0" apply false
++}
+diff --git a/core/build.gradle.kts b/core/build.gradle.kts
+new file mode 100644
+index 0000000..d7d1134
+--- /dev/null
++++ b/core/build.gradle.kts
+@@ -0,0 +1,8 @@
++plugins {
++    kotlin("jvm")
++}
++
++dependencies {
++    implementation("com.hierynomus:sshj:0.39.0")
++    testImplementation(kotlin("test"))
++}
+diff --git a/core/src/main/kotlin/demo/herdr/core/host/HostSession.kt b/core/src/main/kotlin/demo/herdr/core/host/HostSession.kt
+new file mode 100644
+index 0000000..40fa02b
+--- /dev/null
++++ b/core/src/main/kotlin/demo/herdr/core/host/HostSession.kt
+@@ -0,0 +1,29 @@
++package demo.herdr.core.host
++
++import demo.herdr.core.ssh.Machine
++import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.flow.StateFlow
++import kotlinx.coroutines.flow.update
++
++/** What the app knows about a machine. */
++data class HostState(
++    val machine: Machine,
++    val online: Boolean = false,
++    val agents: Int = 0,
++)
++
++/** Keeps one machine connected and its state fresh. */
++class HostSession(machine: Machine) {
++    private val _state = MutableStateFlow(HostState(machine))
++    val state: StateFlow<HostState> = _state
++
++    /** herdr answered: the machine is online, with [agents] agents. */
++    fun answered(agents: Int) {
++        _state.update { it.copy(online = true, agents = agents) }
++    }
++
++    /** The connection broke; it is tried again. */
++    fun lost() {
++        _state.update { it.copy(online = false) }
++    }
++}
+diff --git a/core/src/main/kotlin/demo/herdr/core/ssh/Machine.kt b/core/src/main/kotlin/demo/herdr/core/ssh/Machine.kt
+new file mode 100644
+index 0000000..8a2ed06
+--- /dev/null
++++ b/core/src/main/kotlin/demo/herdr/core/ssh/Machine.kt
+@@ -0,0 +1,14 @@
++package demo.herdr.core.ssh
++
++/** A herdr machine: an SSH target and one herdr session on it. */
++data class Machine(
++    val id: String,
++    val label: String,
++    val host: String,
++    val port: Int = 22,
++    val user: String,
++    /** Another machine to reach this one through. */
++    val via: String? = null,
++) {
++    val target: String get() = if (port == 22) "$user@$host" else "$user@$host:$port"
++}
+diff --git a/settings.gradle.kts b/settings.gradle.kts
+new file mode 100644
+index 0000000..9e2cf69
+--- /dev/null
++++ b/settings.gradle.kts
+@@ -0,0 +1,2 @@
++rootProject.name = "herdr-android"
++include(":app", ":core")

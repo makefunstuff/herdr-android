@@ -1,0 +1,47 @@
+88ca27c074edf0842e3571b479477725615f36f888ca27cdemo1792218660c0d1408aa4914f07382afa5edbd6fefd7123db7cShow it on the machine cards
+
+
+diff --git a/app/src/main/kotlin/demo/herdr/ui/machines/MachineCard.kt b/app/src/main/kotlin/demo/herdr/ui/machines/MachineCard.kt
+index e779856..fef72f8 100644
+--- a/app/src/main/kotlin/demo/herdr/ui/machines/MachineCard.kt
++++ b/app/src/main/kotlin/demo/herdr/ui/machines/MachineCard.kt
+@@ -8,19 +8,20 @@ import androidx.compose.material3.Text
+ import androidx.compose.runtime.Composable
+ import androidx.compose.ui.Modifier
+ import demo.herdr.core.host.HostState
++import demo.herdr.core.host.LastAnswered
+ 
+ /**
+- * A machine on the Machines screen: its name, where it is, and whether it
+- * answers. A tap opens its workspaces.
++ * A machine on the Machines screen: its name, where it is, and when it last
++ * answered. A tap opens its workspaces.
+  */
+ @Composable
+-fun MachineCard(state: HostState, onOpen: () -> Unit, modifier: Modifier = Modifier) {
++fun MachineCard(state: HostState, onOpen: () -> Unit, modifier: Modifier = Modifier, now: Long = System.currentTimeMillis()) {
+     val m = state.machine
+     Card(onClick = onOpen, modifier = modifier) {
+         Column {
+             Row {
+                 Text(m.label, style = MaterialTheme.typography.titleMedium)
+-                StatusText(state)
++                StatusText(state, now)
+             }
+             Text(m.target, style = MaterialTheme.typography.bodySmall)
+             if (m.via != null) Text("through ${m.via}", style = MaterialTheme.typography.bodySmall)
+@@ -29,11 +30,12 @@ fun MachineCard(state: HostState, onOpen: () -> Unit, modifier: Modifier = Modif
+ }
+ 
+ @Composable
+-private fun StatusText(state: HostState) {
++private fun StatusText(state: HostState, now: Long) {
+     val words = when {
+         state.online && state.agents == 0 -> "Online"
+         state.online -> "Online · ${state.agents} agents"
+-        else -> "Not connected"
++        // Offline: the last known state, and how old it is.
++        else -> "Answered " + LastAnswered.words(state.answeredAt, now)
+     }
+     Text(words, style = MaterialTheme.typography.labelMedium)
+ }

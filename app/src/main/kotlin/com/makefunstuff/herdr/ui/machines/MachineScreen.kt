@@ -51,6 +51,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.makefunstuff.herdr.LocalPanes
 import com.makefunstuff.herdr.Routes
+import com.makefunstuff.herdr.ui.worktrees.workspaceFolder
+import com.makefunstuff.herdr.ui.code.CodeSpot
 import com.makefunstuff.herdr.core.api.AgentStatus
 import com.makefunstuff.herdr.core.api.PaneInfo
 import com.makefunstuff.herdr.core.api.SessionSnapshot
@@ -163,6 +165,7 @@ fun MachineScreen(nav: NavController, machineId: String) {
                                 .onFailure { context.toast(it.message ?: "Couldn't read machines") }
                         }
                     })
+                    MenuRow("Code", HerdrIcons.Code, { menu = false; nav.navigate(Routes.codeRepos(machineId)) })
                     MenuRow("Worktrees", HerdrIcons.FolderGit2, { menu = false; nav.navigate(Routes.worktrees(machineId)) })
                     MenuRow("Health and cleanup", HerdrIcons.Activity, { menu = false; nav.navigate(Routes.health(machineId)) })
                     MenuRow("Edit machine", HerdrIcons.Pencil, { menu = false; nav.navigate(Routes.edit(machineId)) })
@@ -247,7 +250,11 @@ fun MachineScreen(nav: NavController, machineId: String) {
 
     snap?.let { s ->
         workspaceMenu?.let { ws ->
-            WorkspaceActionsSheet(session, ws, s, state.workspaceMeta[ws.workspaceId].orEmpty()) { workspaceMenu = null }
+            val folder = ws.worktree?.checkoutPath?.ifBlank { null } ?: s.workspaceFolder(ws.workspaceId)
+            WorkspaceActionsSheet(
+                session, ws, s, state.workspaceMeta[ws.workspaceId].orEmpty(),
+                onCode = folder?.let { f -> { nav.navigate(Routes.codeAt(CodeSpot(machineId, f))) } },
+            ) { workspaceMenu = null }
         }
         tabMenu?.let { tab -> TabActionsSheet(session, tab, s) { tabMenu = null } }
         paneMenu?.let { pane -> PaneActionsSheet(session, pane, s) { paneMenu = null } }

@@ -135,6 +135,22 @@ object Demo {
         files = listOf(com.makefunstuff.herdr.core.share.SharedFile("Screenshot_20261017_0912.png", "/nonexistent/Screenshot_20261017_0912.png", 482_133)),
     )
 
+    /** Two comments on task AND-9's code, kept to send together: one on the card's text, one on its diff. */
+    fun notes() = listOf(
+        com.makefunstuff.herdr.core.code.ReviewNote(
+            id = "1", machineId = DEVBOX, root = FakeCode.TASK, branch = "work/9-last-answered",
+            path = "app/src/main/kotlin/demo/herdr/ui/machines/MachineCard.kt", start = 37, end = 38,
+            quote = "        // Offline: the last known state, and how old it is.\n        else -> \"Answered \" + LastAnswered.words(state.answeredAt, now)",
+            language = "kotlin", text = "Show this in the notice colour when it is older than an hour, so a stale card stands out.", at = NOW - 600_000,
+        ),
+        com.makefunstuff.herdr.core.code.ReviewNote(
+            id = "2", machineId = DEVBOX, root = FakeCode.TASK, branch = "work/9-last-answered",
+            path = "core/src/main/kotlin/demo/herdr/core/host/HostSession.kt", start = 22, end = 22, source = "the diff against main",
+            quote = "+        _state.update { it.copy(online = true, agents = agents, answeredAt = clock()) }", language = "diff",
+            text = "Also note the time when a snapshot arrives, not only on the first answer.", at = NOW - 300_000,
+        ),
+    )
+
     /** A file to share for real: the app copies it to the machine, then deletes it. */
     fun sharedFile(): java.io.File = kotlin.io.path.createTempFile("shared", ".png").toFile().apply { writeBytes(ByteArray(1024)) }
 
@@ -157,6 +173,7 @@ object Demo {
             board = FakeBoard(),
             workspaceTokens = mapOf("w1" to mapOf("branch" to "work/9-last-answered", "pr" to "#9")),
             journal = devboxJournal(),
+            code = FakeCode(),
         ),
         GPU to FakeMachine(
             GPU,

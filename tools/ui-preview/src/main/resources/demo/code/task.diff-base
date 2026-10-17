@@ -1,0 +1,114 @@
+@@from 580881fff5ff6c924bfa1d895aaf0cad5b23ace7
+diff --git a/app/src/main/kotlin/demo/herdr/ui/machines/MachineCard.kt b/app/src/main/kotlin/demo/herdr/ui/machines/MachineCard.kt
+index e779856..fef72f8 100644
+--- a/app/src/main/kotlin/demo/herdr/ui/machines/MachineCard.kt
++++ b/app/src/main/kotlin/demo/herdr/ui/machines/MachineCard.kt
+@@ -8,19 +8,20 @@ import androidx.compose.material3.Text
+ import androidx.compose.runtime.Composable
+ import androidx.compose.ui.Modifier
+ import demo.herdr.core.host.HostState
++import demo.herdr.core.host.LastAnswered
+ 
+ /**
+- * A machine on the Machines screen: its name, where it is, and whether it
+- * answers. A tap opens its workspaces.
++ * A machine on the Machines screen: its name, where it is, and when it last
++ * answered. A tap opens its workspaces.
+  */
+ @Composable
+-fun MachineCard(state: HostState, onOpen: () -> Unit, modifier: Modifier = Modifier) {
++fun MachineCard(state: HostState, onOpen: () -> Unit, modifier: Modifier = Modifier, now: Long = System.currentTimeMillis()) {
+     val m = state.machine
+     Card(onClick = onOpen, modifier = modifier) {
+         Column {
+             Row {
+                 Text(m.label, style = MaterialTheme.typography.titleMedium)
+-                StatusText(state)
++                StatusText(state, now)
+             }
+             Text(m.target, style = MaterialTheme.typography.bodySmall)
+             if (m.via != null) Text("through ${m.via}", style = MaterialTheme.typography.bodySmall)
+@@ -29,11 +30,12 @@ fun MachineCard(state: HostState, onOpen: () -> Unit, modifier: Modifier = Modif
+ }
+ 
+ @Composable
+-private fun StatusText(state: HostState) {
++private fun StatusText(state: HostState, now: Long) {
+     val words = when {
+         state.online && state.agents == 0 -> "Online"
+         state.online -> "Online · ${state.agents} agents"
+-        else -> "Not connected"
++        // Offline: the last known state, and how old it is.
++        else -> "Answered " + LastAnswered.words(state.answeredAt, now)
+     }
+     Text(words, style = MaterialTheme.typography.labelMedium)
+ }
+diff --git a/core/src/main/kotlin/demo/herdr/core/host/HostSession.kt b/core/src/main/kotlin/demo/herdr/core/host/HostSession.kt
+index 40fa02b..54b8197 100644
+--- a/core/src/main/kotlin/demo/herdr/core/host/HostSession.kt
++++ b/core/src/main/kotlin/demo/herdr/core/host/HostSession.kt
+@@ -10,19 +10,21 @@ data class HostState(
+     val machine: Machine,
+     val online: Boolean = false,
+     val agents: Int = 0,
++    /** When herdr last answered there, in milliseconds; kept while it reconnects. */
++    val answeredAt: Long? = null,
+ )
+ 
+ /** Keeps one machine connected and its state fresh. */
+-class HostSession(machine: Machine) {
++class HostSession(machine: Machine, private val clock: () -> Long = System::currentTimeMillis) {
+     private val _state = MutableStateFlow(HostState(machine))
+     val state: StateFlow<HostState> = _state
+ 
+     /** herdr answered: the machine is online, with [agents] agents. */
+     fun answered(agents: Int) {
+-        _state.update { it.copy(online = true, agents = agents) }
++        _state.update { it.copy(online = true, agents = agents, answeredAt = clock()) }
+     }
+ 
+-    /** The connection broke; it is tried again. */
++    /** The connection broke; it is tried again. The last answer's time stays. */
+     fun lost() {
+         _state.update { it.copy(online = false) }
+     }
+diff --git a/core/src/main/kotlin/demo/herdr/core/host/LastAnswered.kt b/core/src/main/kotlin/demo/herdr/core/host/LastAnswered.kt
+new file mode 100644
+index 0000000..7c8343e
+--- /dev/null
++++ b/core/src/main/kotlin/demo/herdr/core/host/LastAnswered.kt
+@@ -0,0 +1,15 @@
++package demo.herdr.core.host
++
++/** When a machine last answered, in words: "2 min ago". */
++object LastAnswered {
++    fun words(at: Long?, now: Long): String {
++        if (at == null) return "never answered"
++        val seconds = (now - at) / 1000
++        return when {
++            seconds < 60 -> "just now"
++            seconds < 3600 -> "${seconds / 60} min ago"
++            seconds < 86_400 -> "${seconds / 3600} h ago"
++            else -> "${seconds / 86_400} days ago"
++        }
++    }
++}
+diff --git a/core/src/test/kotlin/demo/herdr/core/LastAnsweredTest.kt b/core/src/test/kotlin/demo/herdr/core/LastAnsweredTest.kt
+new file mode 100644
+index 0000000..12b9e61
+--- /dev/null
++++ b/core/src/test/kotlin/demo/herdr/core/LastAnsweredTest.kt
+@@ -0,0 +1,13 @@
++package demo.herdr.core
++
++import demo.herdr.core.host.LastAnswered
++import kotlin.test.Test
++import kotlin.test.assertEquals
++
++class LastAnsweredTest {
++    @Test fun saysJustNowUnderAMinute() {
++        assertEquals("just now", LastAnswered.words(0, 30_000))
++        assertEquals("2 min ago", LastAnswered.words(0, 120_000))
++        assertEquals("never answered", LastAnswered.words(null, 0))
++    }
++}

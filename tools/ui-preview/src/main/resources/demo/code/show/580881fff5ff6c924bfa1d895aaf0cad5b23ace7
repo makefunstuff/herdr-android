@@ -1,0 +1,16 @@
+580881fff5ff6c924bfa1d895aaf0cad5b23ace7580881fdemo179217120075da250ac51c46ea0ed4513cc40e8ae6d8911330Better chat composer
+
+
+diff --git a/README.md b/README.md
+index e55fcb7..8ccb228 100644
+--- a/README.md
++++ b/README.md
+@@ -3,7 +3,7 @@
+ A native Android client for [herdr](https://herdr.dev) hosts: see your agents across machines,
+ answer the blocked ones, and open any pane as a live terminal.
+ 
+-Kotlin and Jetpack Compose.
++Kotlin and Jetpack Compose. Light and dark, as the phone is.
+ 
+ ## Building
+ 

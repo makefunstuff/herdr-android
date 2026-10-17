@@ -213,6 +213,8 @@ fun TaskDetailScreen(
     onMore: () -> Unit,
     /** False while Back has something else to close first (the middle of a wide window, beside this board). */
     backEnabled: Boolean = true,
+    /** Opens the code of the task's worktree, at its changes. */
+    onCode: ((TaskDetails) -> Unit)? = null,
 ) {
     BackHandler(enabled = backEnabled, onBack = onBack)
     val owner = LocalLifecycleOwner.current
@@ -233,7 +235,7 @@ fun TaskDetailScreen(
             }
         }
     }
-    TaskDetailContent(t, details, problem, busy, onBack, onAction, onPick, onMore)
+    TaskDetailContent(t, details, problem, busy, onBack, onAction, onPick, onMore, onCode)
 }
 
 /** The screen itself, from data alone: what [TaskDetailScreen] draws once it has read `details`. */
@@ -248,6 +250,7 @@ fun TaskDetailContent(
     onAction: (BoardAction) -> Unit,
     onPick: (String) -> Unit,
     onMore: () -> Unit,
+    onCode: ((TaskDetails) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val primary = BoardActions.primary(t)
@@ -342,6 +345,21 @@ fun TaskDetailContent(
                 if (d.plan.isNotEmpty()) Section("Plan", startOpen = t.status == BoardStatus.PlanReady) { MarkdownText(d.plan, style = MaterialTheme.typography.bodyMedium) }
                 if (d.reviews.isNotEmpty()) Section("Reviews · ${d.reviews.size}", startOpen = true) {
                     d.reviews.asReversed().forEachIndexed { i, r -> ReviewView(r, startOpen = i == 0) }
+                }
+                if (d.worktree.isNotEmpty() && onCode != null) Section("Code", startOpen = true) {
+                    QuietCard(onClick = { onCode(d) }, onClickLabel = "Read the task's code and changes", padded = true) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(HerdrIcons.GitCompare, null, tint = Herdr.colors.muted, modifier = Modifier.size(20.dp))
+                            Column(Modifier.weight(1f).padding(start = Space.m)) {
+                                Text("Changes and files", style = MaterialTheme.typography.labelLarge, color = Herdr.colors.accent)
+                                Text(
+                                    listOf(d.branch, d.worktree).filter { it.isNotEmpty() }.joinToString(" · "),
+                                    style = MaterialTheme.typography.bodySmall, color = Herdr.colors.muted, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                            Icon(HerdrIcons.ChevronRight, null, tint = Herdr.colors.faint, modifier = Modifier.size(20.dp))
+                        }
+                    }
                 }
                 if (d.pr.isNotEmpty() || d.reportLink.isNotEmpty()) Section("Links", startOpen = true) {
                     if (d.pr.isNotEmpty()) LinkRow("Pull request", d.pr.substringAfter("github.com/")) { context.openUrl(d.pr) }

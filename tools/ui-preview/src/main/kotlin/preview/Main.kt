@@ -100,6 +100,9 @@ class SceneData {
     var brief: com.makefunstuff.herdr.brief.BriefState? = null
     /** Shared to the app from elsewhere (the share sheet), waiting for a machine. */
     var shared: com.makefunstuff.herdr.core.share.Shared? = null
+    /** Comments on code kept for later (CodeStore), and how code is shown. */
+    var notes: List<com.makefunstuff.herdr.core.code.ReviewNote> = emptyList()
+    var codeView: com.makefunstuff.herdr.data.CodeView? = null
     fun host(id: String): FakeMachine = hosts.getValue(id)
 }
 
@@ -152,6 +155,8 @@ fun render(scene: Scene, dark: Boolean, file: File) {
     Toasts.dismiss()
     val container = AppContainer(context)
     data.shared?.let { container.shares.share(it) }
+    data.notes.forEach { container.code.add(it) }
+    data.codeView?.let { container.code.setView(it) }
     try {
         // Every machine has answered (or refused) before the first frame, so a shot never catches "Connecting".
         val deadline = System.currentTimeMillis() + 15_000

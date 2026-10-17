@@ -196,6 +196,8 @@ fun WorkspaceActionsSheet(
     ws: WorkspaceInfo,
     snap: SessionSnapshot,
     meta: Map<String, String>,
+    /** Opens the code of the workspace's folder. */
+    onCode: (() -> Unit)? = null,
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -215,6 +217,7 @@ fun WorkspaceActionsSheet(
                 manage(context, scope, session, onDismiss) { it.focusWorkspace(ws.workspaceId); null }
             }
         }
+        if (onCode != null) ManageRow("Browse the code", icon = HerdrIcons.Code, chevron = true) { onDismiss(); onCode() }
         ManageRow("Rename", icon = HerdrIcons.Pencil, chevron = true) { rename = true }
         ManageRow(
             "Metadata",
@@ -524,6 +527,8 @@ fun AgentActionsSheet(
     onFloat: (() -> Unit)? = null,
     /** In the chat's bubble: opens it in the app. */
     onOpenApp: (() -> Unit)? = null,
+    /** Opens the code of the agent's folder: its worktree, its changes. */
+    onCode: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -543,6 +548,7 @@ fun AgentActionsSheet(
             ManageRow("Details", icon = HerdrIcons.FileText, chevron = true) { details = true }
         }
         if (onTerminal != null) ManageRow("Open terminal", icon = HerdrIcons.SquareTerminal, chevron = true) { onTerminal() }
+        if (onCode != null) ManageRow("Browse the code", detail = "Its files and changes, to read and comment on", icon = HerdrIcons.Code, chevron = true) { onCode() }
         if (onFloat != null) ManageRow("Float over other apps", icon = HerdrIcons.PictureInPicture2) { onFloat() }
         if (onOpenApp != null) ManageRow("Open in the app", icon = HerdrIcons.Maximize2) { onOpenApp() }
         if (onToggleKeys != null) {

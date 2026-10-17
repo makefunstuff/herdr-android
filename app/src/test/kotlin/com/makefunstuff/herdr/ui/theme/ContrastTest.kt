@@ -6,6 +6,7 @@ import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.luminance
 import com.makefunstuff.herdr.core.api.AgentStatus
 import com.makefunstuff.herdr.core.board.BoardTone
+import com.makefunstuff.herdr.core.code.Role
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -45,6 +46,10 @@ class ContrastTest {
             // strong edge (a keycap, an unchecked switch's track) must show against its surface.
             need("idle dot mark on $g", h.idle, bg, 3.0)
         }
+        // Code: every syntax colour on the viewer's ground, on a marked line and on a diff's added and removed lines.
+        val code = listOf("panel" to h.panel, "marked line" to h.accentTint.compositeOver(h.panel),
+            "added line" to h.tint(h.done).compositeOver(h.panel), "removed line" to h.tint(h.red).compositeOver(h.panel))
+        for ((g, bg) in code) Role.entries.forEach { need("syntax ${it.name} on $g", h.syntax(it), bg) }
         // Your own action: ink on the amber fill.
         need("onPrimary on primary", h.onPrimary, h.primary)
         need("scheme onPrimary on primary", s.onPrimary, s.primary)

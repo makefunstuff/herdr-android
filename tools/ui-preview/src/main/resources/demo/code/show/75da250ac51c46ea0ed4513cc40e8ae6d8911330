@@ -1,0 +1,16 @@
+75da250ac51c46ea0ed4513cc40e8ae6d891133075da250demo17919759003a39aa54a81829b09d5a9fc056779e1c57f71bb2Say when a machine is not connected
+
+
+diff --git a/app/src/main/kotlin/demo/herdr/ui/machines/MachineCard.kt b/app/src/main/kotlin/demo/herdr/ui/machines/MachineCard.kt
+index 98d4207..e779856 100644
+--- a/app/src/main/kotlin/demo/herdr/ui/machines/MachineCard.kt
++++ b/app/src/main/kotlin/demo/herdr/ui/machines/MachineCard.kt
+@@ -33,7 +33,7 @@ private fun StatusText(state: HostState) {
+     val words = when {
+         state.online && state.agents == 0 -> "Online"
+         state.online -> "Online · ${state.agents} agents"
+-        else -> "Status unknown"
++        else -> "Not connected"
+     }
+     Text(words, style = MaterialTheme.typography.labelMedium)
+ }

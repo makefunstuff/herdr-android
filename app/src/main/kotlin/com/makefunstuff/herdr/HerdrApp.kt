@@ -93,6 +93,7 @@ class AppContainer(app: Application) {
     val identity = IdentityStore(app, scope)
     val hosts = HostManager(scope, machines, identity)
     val drafts = DraftStore(app)
+    val code = com.makefunstuff.herdr.data.CodeStore(java.io.File(app.filesDir, "code.json"))
     val health = HealthStore()
     val shares = Shares(java.io.File(app.filesDir, "shares.json"), java.io.File(app.cacheDir, "shared"))
     val push = PushStore(app)
