@@ -15,11 +15,21 @@ import androidx.compose.material3.Text
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.navigation.NavBackStackEntry
+import androidx.navigation.compose.currentBackStackEntryAsState
+import android.net.Uri
+import com.makefunstuff.herdr.LocalPanes
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
@@ -61,13 +71,26 @@ import com.makefunstuff.herdr.ui.theme.title
 
 private val ORDER = listOf(AgentStatus.Blocked, AgentStatus.Done, AgentStatus.Working, AgentStatus.Idle, AgentStatus.Unknown)
 
+/**
+ * Every agent on every machine, the blocked ones first, under each machine's board and Coordinator.
+ * On a wide window it is the left pane ([Panes]): what it opens shows beside it, chosen here.
+ * [filterState] and [listState] come from above, so they stay as the list moves between the two layouts.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AgentsScreen(nav: NavController) {
+fun AgentsScreen(
+    nav: NavController,
+    filterState: MutableState<String?> = rememberSaveable { mutableStateOf(null) },
+    listState: LazyListState = rememberLazyListState(),
+) {
     val container = LocalContainer.current
+    val panes = LocalPanes.current
     val agents by container.hosts.agents.collectAsStateWithLifecycle()
     val hosts by container.hosts.hosts.collectAsStateWithLifecycle()
-    var filter by remember { mutableStateOf<String?>(null) }
+    var filter by filterState
+    // Beside a wide window's list: what is open in the middle, to show it chosen here.
+    val entry by nav.currentBackStackEntryAsState()
+    val inMiddle = if (panes.wide) entry?.let(::opened) else null
     var menuAgent by remember { mutableStateOf<AgentRow?>(null) }
     var showNotices by remember { mutableStateOf(false) }
     val boards = hosts.filter { it.hasBoard }
@@ -114,6 +137,7 @@ fun AgentsScreen(nav: NavController) {
                 val grouped = shown.groupBy { it.agent.agentStatus }
                 val shownBoards = boards.filter { filter == null || it.machine.id == filter }
                 LazyColumn(
+                    state = listState,
                     modifier = Modifier.padding(padding),
                     contentPadding = PaddingValues(bottom = Space.xl),
                 ) {
@@ -133,8 +157,12 @@ fun AgentsScreen(nav: NavController) {
                     // The work board of each machine that has one, above its agents.
                     items(shownBoards, key = { "board/${it.machine.id}" }) { h ->
                         Column(Modifier.padding(horizontal = Space.screen, vertical = Space.xs), verticalArrangement = Arrangement.spacedBy(Space.s)) {
-                            BoardCard(h.machine.label, showMachine = hosts.size > 1) { nav.navigate(Routes.board(h.machine.id)) }
-                            CoordinatorCard(h.machine.label, showMachine = hosts.size > 1) { nav.navigate(Routes.coordinator(h.machine.id)) }
+                            BoardCard(h.machine.label, showMachine = hosts.size > 1, selected = panes.board == h.machine.id) {
+                                panes.openBoard(nav, h.machine.id)
+                            }
+                            CoordinatorCard(h.machine.label, showMachine = hosts.size > 1, selected = inMiddle == Routes.coordinator(h.machine.id)) {
+                                panes.open(nav, Routes.coordinator(h.machine.id))
+                            }
                         }
                     }
                     if (shown.isEmpty()) {
@@ -156,7 +184,8 @@ fun AgentsScreen(nav: NavController) {
                             AgentCard(
                                 row,
                                 showMachine = hosts.size > 1,
-                                onOpen = { nav.navigate(Routes.agent(row.machine.id, row.agent.paneId)) },
+                                selected = inMiddle == "${row.machine.id}/${row.agent.paneId}",
+                                onOpen = { panes.open(nav, Routes.agent(row.machine.id, row.agent.paneId)) },
                                 onMenu = { menuAgent = row },
                             )
                         }
@@ -173,7 +202,7 @@ fun AgentsScreen(nav: NavController) {
                 agent = row.agent,
                 paneLabel = row.agent.paneId,
                 onDismiss = { menuAgent = null },
-                onTerminal = { menuAgent = null; nav.navigate(Routes.terminal(row.machine.id, row.agent.paneId)) },
+                onTerminal = { menuAgent = null; panes.open(nav, Routes.terminal(row.machine.id, row.agent.paneId)) },
             )
         }
     }
@@ -181,23 +210,35 @@ fun AgentsScreen(nav: NavController) {
         NoticesSheet(
             rows = noticeRows,
             showMachine = hosts.size > 1,
-            onOpenAgent = { mid, pane -> showNotices = false; nav.navigate(Routes.agent(mid, pane)) },
+            onOpenAgent = { mid, pane -> showNotices = false; panes.open(nav, Routes.agent(mid, pane)) },
             onClear = { hosts.forEach { container.hosts.session(it.machine.id)?.clearNotices() } },
             onDismiss = { showNotices = false },
         )
     }
 }
 
+/** What the middle of a wide window shows, as the list names it: `machine/pane` for an agent's chat or terminal, else the route. */
+private fun opened(entry: NavBackStackEntry): String? {
+    val args = entry.arguments
+    return when (entry.destination.route) {
+        Routes.AGENT, Routes.TERMINAL -> "${args?.getString("mid")}/${Uri.decode(args?.getString("pane").orEmpty())}"
+        Routes.COORDINATOR -> Routes.coordinator(args?.getString("mid").orEmpty())
+        else -> null
+    }
+}
+
 /** One agent as a card: status dot, agent and what it works on, a status pill, where it runs, and for one that waits on you, its question. */
 @Composable
-private fun AgentCard(row: AgentRow, showMachine: Boolean, onOpen: () -> Unit, onMenu: () -> Unit) {
+private fun AgentCard(row: AgentRow, showMachine: Boolean, selected: Boolean, onOpen: () -> Unit, onMenu: () -> Unit) {
     val agent = row.agent
     val status = agent.agentStatus
     val preview = rememberLastLine(row)
     val c = Herdr.colors
     QuietCard(
-        Modifier.padding(horizontal = Space.screen, vertical = Space.xs),
+        Modifier.padding(horizontal = Space.screen, vertical = Space.xs).semantics { this.selected = selected },
         padded = true, onClick = onOpen, onLongClick = onMenu, onClickLabel = "Open chat",
+        // Open beside the list: the chosen row's neutral fill (DESIGN.md: selection is never amber).
+        color = if (selected) c.hover else c.card, edge = if (selected) c.lineStrong else c.line,
     ) {
         // The web UI's agent row: the agent's brand mark in the leading cell, the title, how it is at the right.
         Row(verticalAlignment = Alignment.Top) {

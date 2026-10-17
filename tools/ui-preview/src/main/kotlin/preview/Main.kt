@@ -7,7 +7,13 @@ import com.makefunstuff.herdr.push.PushState
 import com.makefunstuff.herdr.core.push.Alert
 import com.makefunstuff.herdr.core.push.PhoneQuiet
 import android.content.Context
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.toAwtImage
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -63,6 +69,8 @@ class Scene(
     val setup: SceneData.() -> Unit = {},
     /** Taps and types on the running app. */
     val actions: ComposeUiTest.(SceneContext) -> Unit = {},
+    /** After the [actions], the window becomes this size (dp, width to height), as a rotation or a resize makes it; the shot is that size. */
+    val resize: Pair<Int, Int>? = null,
 )
 
 /** What the app finds when it starts: the saved machines and what each answers. */
@@ -142,8 +150,10 @@ fun render(scene: Scene, dark: Boolean, file: File) {
             if (states.size == data.machines.size && states.all { it.status != HostStatus.Connecting && it.status != HostStatus.Stopped }) break
             Thread.sleep(20)
         }
-        val w = (scene.widthDp * SCALE).toInt()
-        val h = (scene.heightDp * SCALE).toInt()
+        // The window is as big as the scene ever gets; the app is drawn in its top left corner at the scene's size.
+        val size = mutableStateOf(DpSize(scene.widthDp.dp, scene.heightDp.dp))
+        val w = (maxOf(scene.widthDp, scene.resize?.first ?: 0) * SCALE).toInt()
+        val h = (maxOf(scene.heightDp, scene.resize?.second ?: 0) * SCALE).toInt()
         runDesktopComposeUiTest(w, h) {
             mainClock.autoAdvance = false
             lateinit var nav: NavHostController
@@ -157,7 +167,7 @@ fun render(scene: Scene, dark: Boolean, file: File) {
                     LocalUriHandler provides object : UriHandler { override fun openUri(uri: String) {} },
                 ) {
                     nav = rememberNavController()
-                    HerdrRoot(container, dark = dark, nav = nav)
+                    Box(Modifier.size(size.value)) { HerdrRoot(container, dark = dark, nav = nav) }
                 }
             }
             settle()
@@ -167,7 +177,12 @@ fun render(scene: Scene, dark: Boolean, file: File) {
             }
             scene.actions(this, SceneContext(container, nav, data))
             settle()
-            ImageIO.write(capture(), "png", file)
+            scene.resize?.let { (rw, rh) ->
+                size.value = DpSize(rw.dp, rh.dp)
+                settle()
+            }
+            val shown = size.value
+            ImageIO.write(capture().getSubimage(0, 0, (shown.width.value * SCALE).toInt(), (shown.height.value * SCALE).toInt()), "png", file)
         }
     } finally {
         container.close()
@@ -198,10 +213,16 @@ fun ComposeUiTest.settle(rounds: Int = 12) {
 private fun ComposeUiTest.node(matcher: SemanticsMatcher) = onAllNodes(matcher, useUnmergedTree = true).onFirst()
 
 /** Taps the first element showing [text] (exactly, or as its start when it is longer). */
-fun ComposeUiTest.tapText(text: String) { node(hasText(text, substring = true)).performClick(); settle() }
+fun ComposeUiTest.tapText(text: String) { tap(node(hasText(text, substring = true))) }
 
 /** Taps the first element whose content description (an icon button's label) is [label]. */
-fun ComposeUiTest.tapLabel(label: String) { node(hasContentDescription(label)).performClick(); settle() }
+fun ComposeUiTest.tapLabel(label: String) { tap(node(hasContentDescription(label))) }
+
+/** A tap, on the UI thread: one that opens another screen moves the navigation's lifecycles, which only that thread may. */
+private fun ComposeUiTest.tap(node: androidx.compose.ui.test.SemanticsNodeInteraction) {
+    runOnUiThread { node.performClick() }
+    settle()
+}
 
 fun ComposeUiTest.longPressText(text: String) { node(hasText(text, substring = true)).performTouchInput { longClick() }; settle() }
 

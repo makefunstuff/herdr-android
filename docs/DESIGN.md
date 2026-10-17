@@ -131,6 +131,12 @@ Sizes from the web UI's coarse-pointer rules, grown to Android's 48dp: bars 56dp
 52px), every target ≥48dp, rows 48–56dp (`--row-h`), icons 20dp (`--icon-size` 18px, one step up
 for a phone), agent marks 22dp (`--mark-size`), dots 7dp (`--dot-size`), hairlines 1dp.
 
+A window 840dp wide or wider (`WIDE`: a tablet, an open foldable, a large or desktop window) shows
+three panes on `ground`, parted by 1dp `line` hairlines: the agents list with the nav bar under it
+(27% of the width, 256–360dp), the screen that is open (the rest), and the work board (30%,
+280–420dp; left out when no machine has one). What the middle shows is chosen in the list on the
+`hover` fill with a `lineStrong` edge, as a chosen row is. Narrower windows show one screen at a time.
+
 ## Icons
 
 **Lucide** (`HerdrIcons`), the set the web UI uses: generated from lucide-react's icon nodes into
@@ -165,7 +171,7 @@ gets its initial in a quiet disc; a shell pane gets Lucide's terminal glyph.
 
 | Component | Anatomy |
 | --- | --- |
-| `HerdrTopBar` | `panel`, hairline under it. Top level: 22sp strong title + actions. Detail: back arrow, 16sp strong title, the place under it in 12sp dim, actions (icons, or a text action such as "Terminal"). |
+| `HerdrTopBar` | `panel`, hairline under it. Top level: 22sp strong title + actions. Detail: back arrow, 16sp strong title, the place under it in 12sp dim, actions (icons, or a text action such as "Terminal"). A pane (the board on a wide window): the detail bar without the arrow. |
 | `BarIcon` | `.icon-button`: 48dp target, 20dp glyph in `text`, pressed on `hover` with `Radius.m`; optional red count. |
 | `HerdrFab` | The screen's "add": an amber pill (`primary`, ink text), icon and label, or round with only +. Lists leave 96dp for it. |
 | `HerdrNavBar` | `panel` with a hairline above; the chosen screen's glyph amber on a `hover` pill, its label strong; the others dim. |

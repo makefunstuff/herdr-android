@@ -498,7 +498,8 @@ fun BarTitle(title: String, subtitle: String? = null) {
 /**
  * The bar over a screen, as the web UI's phone header: `--bg-panel` with a hairline under it. With
  * [onBack] it is a detail screen's bar (back arrow, 16sp strong title, the place under it dim);
- * without, a top-level screen's (22sp display title). Actions are [BarIcon]s.
+ * without, a top-level screen's (22sp display title), or with a [subtitle] a pane's (the detail
+ * bar's title and place, no arrow). Actions are [BarIcon]s.
  */
 @Composable
 fun HerdrTopBar(
@@ -523,7 +524,7 @@ fun HerdrTopBar(
         Box(Modifier.weight(1f).padding(start = if (onBack != null) Space.xs else 0.dp, end = Space.s)) {
             when {
                 titleContent != null -> titleContent()
-                onBack == null -> Text(
+                onBack == null && subtitle == null -> Text(
                     title, style = MaterialTheme.typography.headlineMedium, color = c.strong, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.semantics { heading() },
                 )

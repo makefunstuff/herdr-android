@@ -2,6 +2,7 @@
 // A scene starts from Demo's machines; `route` opens a screen, `actions` taps on what it shows.
 package preview
 
+import com.makefunstuff.herdr.Links
 import com.makefunstuff.herdr.Routes
 import com.makefunstuff.herdr.core.push.PhoneQuiet
 import com.makefunstuff.herdr.core.push.QuietHours
@@ -73,6 +74,34 @@ fun scenes(): List<Scene> = listOf(
 
     // A pane as a live terminal.
     Scene("terminal", route = Routes.terminal(DEVBOX, APP_SHELL)),
+
+    // A window 840 dp wide or more (a tablet, an open foldable, a large window): the agents list, the chat or
+    // terminal, the board, side by side. A landscape tablet before anything is opened, then with a chat open
+    // (tapped on the left, so it is chosen there); an open foldable with a terminal; the Coordinator in the
+    // middle with a task open on the right.
+    Scene("wide-empty", widthDp = 1280, heightDp = 800),
+    Scene("wide", widthDp = 1280, heightDp = 800, actions = { tapText("Speed up /jobs") }),
+    Scene("wide-terminal", route = Routes.terminal(DEVBOX, APP_SHELL), widthDp = 840, heightDp = 940),
+    Scene("wide-task", widthDp = 1280, heightDp = 800, actions = { tapText("Coordinator"); tapText("Review passed. Ready to merge.") }),
+    // A board opened as its own screen on a phone, the window then made wide: a notification's link to one of its
+    // tasks moves the board to the right, with that task open.
+    Scene(
+        "wide-link-task", route = Routes.board(DEVBOX), widthDp = 1280, heightDp = 800,
+        // On the UI thread, as a tapped notification reaches the app.
+        actions = { runOnUiThread { Links.open(Routes.board(DEVBOX, "herdr-android/9")) }; settle() },
+    ),
+    // Machines in the middle: the nav bar is under the list.
+    Scene("wide-machines", widthDp = 1280, heightDp = 800, actions = { tapLabel("Machines") }),
+    // Rotating across the line keeps what is open as it was: a chat with its key row shown, turned from a phone
+    // to a tablet's width and from the tablet back to the phone.
+    Scene(
+        "rotate-wide", route = Routes.agent(DEVBOX, APP_AGENT), resize = 1280 to 800,
+        actions = { tapLabel("More"); tapText("Show keys") },
+    ),
+    Scene(
+        "rotate-narrow", widthDp = 1280, heightDp = 800, resize = 412 to 892,
+        actions = { tapText("Speed up /jobs"); tapLabel("More"); tapText("Show keys") },
+    ),
 
     // Settings and the SSH key's dialogs.
     Scene("settings", route = Routes.SETTINGS),
