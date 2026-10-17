@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -389,7 +390,7 @@ private fun WorkspaceCard(
 @Composable
 private fun RowIcon(icon: ImageVector, description: String, onClick: () -> Unit) {
     Box(
-        Modifier.size(48.dp).padding(4.dp).clip(HerdrShapes.Field).clickable(role = Role.Button, onClick = onClick)
+        Modifier.size(48.dp).clip(RoundedCornerShape(12.dp)).clickable(role = Role.Button, onClick = onClick)
             .semantics { contentDescription = description },
         contentAlignment = Alignment.Center,
     ) { Icon(icon, null, tint = Herdr.colors.muted, modifier = Modifier.size(20.dp)) }

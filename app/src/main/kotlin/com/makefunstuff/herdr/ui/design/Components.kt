@@ -538,7 +538,7 @@ fun HerdrTopBar(
 @Composable
 fun BarIcon(icon: ImageVector, contentDescription: String, onClick: () -> Unit, badge: Int = 0, enabled: Boolean = true) {
     Box(
-        Modifier.size(48.dp).padding(2.dp).clip(HerdrShapes.Field)
+        Modifier.size(48.dp).clip(RoundedCornerShape(Radius.l))
             .clickable(enabled = enabled, onClickLabel = null, role = Role.Button, onClick = onClick)
             .semantics { this.contentDescription = contentDescription },
         contentAlignment = Alignment.Center,
