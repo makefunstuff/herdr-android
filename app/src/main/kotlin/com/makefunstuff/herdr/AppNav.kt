@@ -45,6 +45,7 @@ import com.makefunstuff.herdr.ui.machines.MachinesScreen
 import com.makefunstuff.herdr.ui.settings.KeySetupDialog
 import com.makefunstuff.herdr.ui.settings.QuietHoursScreen
 import com.makefunstuff.herdr.ui.settings.SettingsScreen
+import com.makefunstuff.herdr.ui.share.AskScreen
 import com.makefunstuff.herdr.ui.terminal.TerminalScreen
 import com.makefunstuff.herdr.ui.theme.Herdr
 import com.makefunstuff.herdr.ui.theme.HerdrTheme
@@ -65,7 +66,7 @@ fun HerdrRoot(container: AppContainer, dark: Boolean = isSystemInDarkTheme(), na
     }
 }
 
-/** Screens to open from outside the app's own navigation: a tapped notification. Each is opened once. */
+/** Screens to open from outside the app's own navigation: a tapped notification, the tile, a widget, a share. Each is opened once. */
 object Links {
     private val routes = Channel<String>(Channel.BUFFERED)
 
@@ -90,6 +91,8 @@ object Routes {
     const val BOARD = "board/{mid}?task={task}"
     const val ADMIN = "admin/{mid}?tab={tab}"
     const val WORKTREES = "worktrees/{mid}?ws={ws}"
+    /** From outside the app (the tile, the widgets, a share): see [com.makefunstuff.herdr.ui.share.Ask]. */
+    const val ASK = "ask/{to}"
 
     fun machine(id: String) = "machine/$id"
     fun edit(id: String? = null) = if (id == null) "edit" else "edit?id=$id"
@@ -97,6 +100,7 @@ object Routes {
     fun terminal(mid: String, pane: String) = "terminal/$mid/${Uri.encode(pane)}"
     fun layout(mid: String, pane: String) = "layout/$mid/${Uri.encode(pane)}"
     fun coordinator(mid: String) = "coordinator/$mid"
+    fun ask(to: String) = "ask/$to"
     fun board(mid: String, task: String? = null) = if (task == null) "board/$mid" else "board/$mid?task=${Uri.encode(task)}"
     fun admin(mid: String, tab: Int = 0) = "admin/$mid?tab=$tab"
     fun worktrees(mid: String, workspaceId: String? = null) =
@@ -164,6 +168,7 @@ private fun AppNav(nav: NavHostController) {
             composable(Routes.BOARD) {
                 BoardScreen(nav, it.arguments?.getString("mid").orEmpty(), it.arguments?.getString("task")?.let(Uri::decode))
             }
+            composable(Routes.ASK) { AskScreen(nav, it.arguments?.getString("to").orEmpty()) }
             composable(Routes.COORDINATOR) { CoordinatorScreen(nav, it.arguments?.getString("mid").orEmpty()) }
             composable(Routes.TERMINAL) {
                 TerminalScreen(nav, it.arguments?.getString("mid").orEmpty(), Uri.decode(it.arguments?.getString("pane").orEmpty()))

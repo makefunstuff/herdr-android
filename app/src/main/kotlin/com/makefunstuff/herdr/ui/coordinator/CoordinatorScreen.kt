@@ -77,6 +77,8 @@ import com.makefunstuff.herdr.ui.theme.Herdr
 import com.makefunstuff.herdr.ui.theme.Space
 import com.makefunstuff.herdr.ui.theme.color
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -114,6 +116,29 @@ fun CoordinatorScreen(nav: NavController, machineId: String) {
     var startAgents by rememberSaveable { mutableStateOf(false) }
     // A file for the Coordinator: copied to the board's machine, then named at the start of the draft.
     val attach = rememberAttacher(session) { path -> draft = Attachments.withMention(draft, path) }
+    // Files shared to the app for this Coordinator (a screenshot, a log): copied over as attached ones, once connected.
+    var copyingShared by remember { mutableStateOf(false) }
+    LaunchedEffect(machineId) { container.shares.used(machineId) }
+    LaunchedEffect(machineId, state.online) {
+        if (!state.online) return@LaunchedEffect
+        container.shares.files(machineId).collect { files ->
+            for (f in files) {
+                copyingShared = true
+                try {
+                    val path = withContext(Dispatchers.IO) { java.io.File(f.path).inputStream().use { session.upload(f.name, it) } }
+                    draft = Attachments.withMention(draft, path)
+                } catch (e: CancellationException) {
+                    copyingShared = false
+                    throw e
+                } catch (t: Throwable) {
+                    context.toast(t.message ?: "Couldn't attach ${f.name}")
+                }
+                container.shares.done(machineId, f)
+            }
+            copyingShared = false
+        }
+    }
+    val uploading = attach.uploading || copyingShared
     val readNow = remember { Channel<Unit>(Channel.CONFLATED) }
     val list = rememberLazyListState()
 
@@ -217,13 +242,13 @@ fun CoordinatorScreen(nav: NavController, machineId: String) {
                         onStartAgents = { startAgents = it },
                         status = when {
                             sending -> "Sending…"
-                            attach.uploading -> "Uploading file…"
+                            uploading -> "Uploading file…"
                             !state.online -> "Not connected"
                             else -> null
                         },
                         onSend = ::send,
                         onAttach = attach.pick,
-                        uploading = attach.uploading,
+                        uploading = uploading,
                     )
                 },
             ) { bottom ->

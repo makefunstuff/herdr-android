@@ -1,3 +1,11 @@
 <resources>
     <string name="app_name">Herdr</string>
+    <!-- In the text-selection menu, next to Copy. -->
+    <string name="send_to_coordinator">Send to Coordinator</string>
+    <!-- The share sheet's target. -->
+    <string name="share_to_coordinator">Herdr Coordinator</string>
+    <string name="tile_coordinator">Coordinator</string>
+    <string name="widget_ask">Ask the Coordinator</string>
+    <string name="widget_ask_description">Opens the work board\'s Coordinator chat</string>
+    <string name="widget_status_description">What needs you and what is working, across your machines</string>
 </resources>

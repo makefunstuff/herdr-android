@@ -64,6 +64,15 @@ object Demo {
         Alert(Alerts.agentTag(DEVBOX, SITE_AGENT), "done#7", Alert.Kind.Finished, DEVBOX, "site finished", "Rewrite the install page", paneId = SITE_AGENT),
     )
 
+    /** A failing CI run shared from the browser, with a screenshot of it. */
+    fun shared() = com.makefunstuff.herdr.core.share.Shared(
+        text = "CI is red on main: test_jobs_pagination times out\nhttps://ci.example.dev/api-server/runs/1482",
+        files = listOf(com.makefunstuff.herdr.core.share.SharedFile("Screenshot_20261017_0912.png", "/nonexistent/Screenshot_20261017_0912.png", 482_133)),
+    )
+
+    /** A file to share for real: the app copies it to the machine, then deletes it. */
+    fun sharedFile(): java.io.File = kotlin.io.path.createTempFile("shared", ".png").toFile().apply { writeBytes(ByteArray(1024)) }
+
     /** What each machine has and answers. */
     fun hosts(): Map<String, FakeMachine> = mapOf(
         DEVBOX to FakeMachine(

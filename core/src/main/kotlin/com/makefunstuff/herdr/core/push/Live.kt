@@ -172,11 +172,16 @@ object LiveItems {
      */
     fun belongs(agent: LiveItem, task: LiveItem): Boolean {
         if (agent.kind != LiveItem.Kind.Agent || task.kind != LiveItem.Kind.Task || agent.machineId != task.machineId) return false
-        val key = task.taskName.takeIf { it != task.taskId && '-' in it }
-        if (key != null && (agent.workspace == key || agent.workspace.startsWith("$key "))) return true
-        val name = agent.agentName.ifEmpty { return false }
-        val repo = task.taskId.substringBeforeLast('/').lowercase().map { if (it in 'a'..'z' || it in '0'..'9') it else '-' }.joinToString("").take(16)
-        val base = "sw-$repo-${task.taskId.substringAfterLast('/')}"
+        return belongs(agent.agentName, agent.workspace, task.taskId, task.taskName)
+    }
+
+    /** [belongs] by the parts it looks at: the agent's name and workspace, the task's id and short key (both on one machine). */
+    fun belongs(agentName: String, workspace: String, taskId: String, taskName: String): Boolean {
+        val key = taskName.takeIf { it != taskId && '-' in it }
+        if (key != null && (workspace == key || workspace.startsWith("$key "))) return true
+        val name = agentName.ifEmpty { return false }
+        val repo = taskId.substringBeforeLast('/').lowercase().map { if (it in 'a'..'z' || it in '0'..'9') it else '-' }.joinToString("").take(16)
+        val base = "sw-$repo-${taskId.substringAfterLast('/')}"
         return name == base || name.startsWith("$base-")
     }
 

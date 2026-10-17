@@ -81,6 +81,8 @@ class FakeMachine(
             w.containsAll(listOf("machine", "list", "--json")) -> ok("""{"machines":[]}""")
             "--version" in w -> ok("herdr $version\n")
             w.containsAll(listOf("channel", "show")) -> ok("stable\n")
+            // An attached file (HostSession.upload): taken, and its path there printed, under a fixed stamp.
+            "herdr-android/uploads/" in command -> ok("/home/demo/.cache/herdr-android/uploads/20261017-091204-3f2a/" + Shell.words(command.substringAfterLast("\"/")).first())
             else -> ok("")
         }
     }

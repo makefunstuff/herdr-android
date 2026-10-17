@@ -154,6 +154,8 @@ fun BoardScreen(nav: NavController, machineId: String, openTask: String? = null)
             while (true) {
                 try {
                     tasks = session.awaitBoard().tasks(BoardFilter(query = query, archived = archived))
+                    // The whole list: what the status widget counts on this machine.
+                    if (query.isBlank() && !archived) container.tally.tasks(machineId, tasks)
                     problem = null
                 } catch (e: CancellationException) {
                     throw e

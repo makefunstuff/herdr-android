@@ -1,10 +1,12 @@
 package com.makefunstuff.herdr
 
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import com.makefunstuff.herdr.ui.share.Ask
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -20,8 +22,9 @@ class MainActivity : ComponentActivity() {
         open(intent)
     }
 
-    /** A tapped notification: its agent's chat, or its task on the board. */
+    /** A tapped notification: its agent's chat, or its task on the board. The tile, a widget or a share: [Ask]. */
     private fun open(intent: Intent?) {
+        intent?.getStringExtra(OPEN_ASK)?.takeIf { it in ASKS }?.let { return Links.open(Routes.ask(it)) }
         val machine = intent?.getStringExtra(OPEN_MACHINE)?.takeIf { it.isNotEmpty() } ?: return
         val pane = intent.getStringExtra(OPEN_PANE).orEmpty()
         val task = intent.getStringExtra(OPEN_TASK).orEmpty()
@@ -36,5 +39,13 @@ class MainActivity : ComponentActivity() {
         const val OPEN_MACHINE = "open_machine"
         const val OPEN_PANE = "open_pane"
         const val OPEN_TASK = "open_task"
+        const val OPEN_ASK = "open_ask"
+        private val ASKS = setOf(Ask.COORDINATOR, Ask.BOARD, Ask.SHARE)
+
+        /** Opens the app on [to] (an [Ask]), in its own task, from the tile, a widget or a share. */
+        fun ask(context: Context, to: String): Intent = Intent(context, MainActivity::class.java)
+            .setAction("com.makefunstuff.herdr.ASK.$to")
+            .putExtra(OPEN_ASK, to)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
     }
 }

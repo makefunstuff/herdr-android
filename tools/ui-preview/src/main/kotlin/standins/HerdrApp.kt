@@ -6,12 +6,14 @@ import com.makefunstuff.herdr.data.DraftStore
 import com.makefunstuff.herdr.data.HostManager
 import com.makefunstuff.herdr.data.IdentityStore
 import com.makefunstuff.herdr.data.MachineStore
+import com.makefunstuff.herdr.data.Shares
 import com.makefunstuff.herdr.push.AlertWork
 import com.makefunstuff.herdr.push.Inbox
 import com.makefunstuff.herdr.push.LiveWork
 import com.makefunstuff.herdr.push.PushHosts
 import com.makefunstuff.herdr.push.PushStore
 import com.makefunstuff.herdr.push.QuietWork
+import com.makefunstuff.herdr.push.TallyStore
 import preview.PreviewAlerts
 import preview.PreviewLive
 import preview.PreviewPhone
@@ -26,13 +28,15 @@ class AppContainer(app: Context) {
     val identity = IdentityStore(app, scope)
     val hosts = HostManager(scope, machines, identity)
     val drafts = DraftStore(app)
+    val shares = Shares(app)
     val push = PushStore(app)
     val inbox = Inbox(java.io.File(app.filesDir, "alerts.json"), PreviewAlerts)
     val phone = PreviewPhone
     val pushHosts = PushHosts(scope, hosts, machines, push, phone)
     val quietWork = QuietWork(scope, push.state, phone, inbox, foreground = { hosts.isForeground })
     val liveWork = LiveWork(scope, hosts, machines, push, PreviewLive, quietWork)
-    val alertWork = AlertWork(hosts, machines, push, inbox, liveWork, quietWork)
+    val tally = TallyStore(java.io.File(app.filesDir, "tally.json"), machines)
+    val alertWork = AlertWork(hosts, machines, push, inbox, liveWork, quietWork, tally)
 
     init {
         // The app is in front for the whole scene.

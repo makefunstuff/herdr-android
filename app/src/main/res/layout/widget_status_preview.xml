@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The status widget as the widget picker shows it, with made-up counts.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_background"
+    android:gravity="center_vertical"
+    android:orientation="vertical"
+    android:paddingHorizontal="16dp"
+    android:paddingVertical="8dp">
+
+    <LinearLayout
+        android:id="@+id/widget_counts"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:baselineAligned="true"
+        android:orientation="horizontal">
+
+        <TextView
+            android:text="2"
+            style="@style/HerdrWidgetCount"
+            android:textColor="@color/widget_blocked" />
+
+        <TextView
+            android:id="@+id/widget_need_none"
+            style="@style/HerdrWidgetCount"
+            android:text="0"
+            android:textColor="@color/widget_muted"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/widget_need_words"
+            style="@style/HerdrWidgetCountWords"
+            android:text="need you" />
+
+        <TextView
+            android:text="3"
+            style="@style/HerdrWidgetCount"
+            android:layout_marginStart="16dp"
+            android:textColor="@color/widget_working" />
+
+        <TextView
+            android:id="@+id/widget_work_none"
+            style="@style/HerdrWidgetCount"
+            android:layout_marginStart="16dp"
+            android:text="0"
+            android:textColor="@color/widget_muted"
+            android:visibility="gone" />
+
+        <TextView
+            style="@style/HerdrWidgetCountWords"
+            android:text="working" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/widget_detail"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:text="across 3 machines"
+        android:textColor="@color/widget_muted"
+        android:textSize="12sp" />
+</LinearLayout>
