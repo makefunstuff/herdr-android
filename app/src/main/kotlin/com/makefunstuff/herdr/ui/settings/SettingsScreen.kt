@@ -75,7 +75,7 @@ fun SettingsScreen() {
                             MonoBlock(state.publicKey)
                             Row(horizontalArrangement = Arrangement.spacedBy(Space.s)) {
                                 SecondaryButton(onClick = { context.copyToClipboard("public key", state.publicKey, "Public key copied") }) {
-                                    Icon(HerdrIcons.ContentCopy, null, Modifier.size(18.dp)); Text("Copy")
+                                    Icon(HerdrIcons.Copy, null, Modifier.size(18.dp)); Text("Copy")
                                 }
                                 SecondaryButton(onClick = { dialog = KeyDialog.Export }) {
                                     Icon(HerdrIcons.Upload, null, Modifier.size(18.dp)); Text("Back up")

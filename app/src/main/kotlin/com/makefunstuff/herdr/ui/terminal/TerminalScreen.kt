@@ -1,5 +1,6 @@
 package com.makefunstuff.herdr.ui.terminal
 
+import com.makefunstuff.herdr.ui.theme.Mono
 import android.content.Context
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -45,6 +46,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.border
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
@@ -67,7 +69,6 @@ import com.makefunstuff.herdr.core.api.TextPoint
 import com.makefunstuff.herdr.core.api.urlAt
 import com.makefunstuff.herdr.core.terminal.Keys
 import com.makefunstuff.herdr.core.terminal.TerminalEmulator
-import com.makefunstuff.herdr.core.terminal.TerminalPalette
 import com.makefunstuff.herdr.core.terminal.TerminalStream
 import com.makefunstuff.herdr.ui.common.EmptyState
 import com.makefunstuff.herdr.ui.common.LocalContainer
@@ -88,6 +89,8 @@ import com.makefunstuff.herdr.ui.design.QuietButton
 import com.makefunstuff.herdr.ui.design.SheetTitle
 import com.makefunstuff.herdr.ui.design.sheetColor
 import com.makefunstuff.herdr.ui.theme.Herdr
+import com.makefunstuff.herdr.ui.theme.terminalPalette
+import androidx.compose.ui.graphics.toArgb
 import com.makefunstuff.herdr.ui.theme.Radius
 import com.makefunstuff.herdr.ui.theme.Space
 import kotlinx.coroutines.awaitCancellation
@@ -327,20 +330,20 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
                 onBack = { nav.popBackStack() },
             ) {
                 if (!finding) BarIcon(HerdrIcons.Search, "Find", { finding = true })
-                BarIcon(HerdrIcons.MoreVert, "More", { menu = true })
+                BarIcon(HerdrIcons.Ellipsis, "More", { menu = true })
                 HerdrMenu(expanded = menu, onDismissRequest = { menu = false }, title = pane?.displayName ?: paneId, subtitle = session.machine.label) {
                     MenuRow(if (finding) "Hide find" else "Find in scrollback", HerdrIcons.Search, { menu = false; finding = !finding })
-                    MenuRow("Select text", HerdrIcons.SelectAll, {
+                    MenuRow("Select text", HerdrIcons.TextSelect, {
                         menu = false
                         view?.startSelection(CellPoint(0, 0))
                         selecting = true
                         context.toast("Drag to select, then Copy")
                     })
-                    MenuRow("Copy screen", HerdrIcons.ContentCopy, { menu = false; view?.let { context.copyToClipboard("terminal", it.screenText(), "Screen copied") } })
-                    MenuRow("Resize pane…", HerdrIcons.OpenInFull, { menu = false; resizeOpen = true })
-                    MenuRow("Layout…", HerdrIcons.Dashboard, { menu = false; nav.navigate(Routes.layout(machineId, paneId)) })
-                    MenuRow(if (keepHost) "Fit to phone" else "Desktop size", if (keepHost) HerdrIcons.Smartphone else HerdrIcons.Computer, { menu = false; keepHost = !keepHost })
-                    MenuRow("Reconnect", HerdrIcons.Sync, { menu = false; generation++ })
+                    MenuRow("Copy screen", HerdrIcons.Copy, { menu = false; view?.let { context.copyToClipboard("terminal", it.screenText(), "Screen copied") } })
+                    MenuRow("Resize pane…", HerdrIcons.Maximize2, { menu = false; resizeOpen = true })
+                    MenuRow("Layout…", HerdrIcons.LayoutDashboard, { menu = false; nav.navigate(Routes.layout(machineId, paneId)) })
+                    MenuRow(if (keepHost) "Fit to phone" else "Desktop size", if (keepHost) HerdrIcons.Smartphone else HerdrIcons.Monitor, { menu = false; keepHost = !keepHost })
+                    MenuRow("Reconnect", HerdrIcons.RefreshCcw, { menu = false; generation++ })
                 }
             }
         },
@@ -376,9 +379,9 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
                                 color = Herdr.colors.muted,
                                 modifier = Modifier.weight(1f).padding(start = Space.xs),
                             )
-                            BarIcon(HerdrIcons.KeyboardArrowUp, "Older", { find(true) })
-                            BarIcon(HerdrIcons.KeyboardArrowDown, "Newer", { find(false) })
-                            BarIcon(HerdrIcons.Close, "Close", {
+                            BarIcon(HerdrIcons.ChevronUp, "Older", { find(true) })
+                            BarIcon(HerdrIcons.ChevronDown, "Newer", { find(false) })
+                            BarIcon(HerdrIcons.X, "Close", {
                                 finding = false
                                 search?.reset()
                                 found = null
@@ -387,10 +390,13 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
                     }
                 }
             }
-            Box(Modifier.weight(1f).fillMaxWidth().background(Color(TerminalPalette.Default.background))) {
+            val hc = Herdr.colors
+            val termPalette = remember(hc) { hc.terminalPalette() }
+            Box(Modifier.weight(1f).fillMaxWidth().background(hc.panel)) {
                 AndroidView(
                     factory = { ctx ->
                         TerminalView(ctx).also { v ->
+                            androidx.core.content.res.ResourcesCompat.getFont(ctx, com.makefunstuff.herdr.R.font.jetbrains_mono_regular)?.let(v::setTypeface)
                             v.onGridSize = { c, r -> grid = c to r }
                             v.onCellTap = { cell -> v.showKeyboard(); tapCell(cell) }
                             v.onCellLongPress = { cell -> v.startSelection(cell); selecting = true }
@@ -402,6 +408,7 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
                         }
                     },
                     update = { v ->
+                        v.setColors(termPalette, hc.termSelection.toArgb())
                         v.onInput = { text -> stream?.send(text) }
                         v.onScroll = { lines -> if (lines != 0) stream?.scroll(lines > 0, kotlin.math.abs(lines)) }
                         if (v.fitToView != !keepHost) v.fitToView = !keepHost
@@ -426,7 +433,7 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
                         modifier = Modifier
                             .align(Alignment.TopCenter)
                             .fillMaxWidth()
-                            .background(Herdr.colors.tint(Herdr.colors.amber).compositeOver(Herdr.colors.ground))
+                            .background(Herdr.colors.tint(Herdr.colors.notice).compositeOver(Herdr.colors.panel))
                             .padding(horizontal = Space.m, vertical = Space.xs),
                     )
                 }
@@ -439,7 +446,7 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
                         Column(Modifier.padding(Space.xl), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(Space.l)) {
                             Text(message, style = MaterialTheme.typography.bodyMedium, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                             SecondaryButton(onClick = { generation++ }) {
-                                Icon(HerdrIcons.Sync, null, Modifier.size(18.dp))
+                                Icon(HerdrIcons.RefreshCcw, null, Modifier.size(18.dp))
                                 Text("Reconnect")
                             }
                         }
@@ -501,7 +508,11 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
     }
 }
 
-/** A key for the row above the keyboard: a 48dp target with a 40dp grey key drawn in it. */
+/**
+ * A key for the row above the keyboard (the web UI's `.key`): a 48dp target with a 40dp key drawn
+ * in it, no fill and a hairline, `--radius-sm`. An armed modifier is the chosen one: `--bg-elevated`
+ * with an amber edge and strong text.
+ */
 @Composable
 private fun Key(label: String, selected: Boolean = false, highlighted: Boolean = false, onClick: () -> Unit) {
     val c = Herdr.colors
@@ -513,22 +524,23 @@ private fun Key(label: String, selected: Boolean = false, highlighted: Boolean =
             Modifier
                 .heightIn(min = 40.dp)
                 .widthIn(min = 44.dp)
-                .clip(RoundedCornerShape(Radius.s + 2.dp))
+                .clip(RoundedCornerShape(Radius.s))
                 .background(
                     when {
-                        selected -> MaterialTheme.colorScheme.primary
-                        highlighted -> c.fieldFocused
-                        else -> c.field
+                        selected -> c.card
+                        highlighted -> c.hover
+                        else -> Color.Transparent
                     },
                 )
+                .border(1.dp, if (selected) c.accent else c.line, RoundedCornerShape(Radius.s))
                 .padding(horizontal = 10.dp),
             contentAlignment = Alignment.Center,
         ) {
             Text(
                 label,
-                fontFamily = FontFamily.Monospace,
+                fontFamily = Mono,
                 style = MaterialTheme.typography.labelLarge,
-                color = if (selected) MaterialTheme.colorScheme.onPrimary else c.text,
+                color = if (selected) c.strong else c.text,
             )
         }
     }
@@ -543,12 +555,12 @@ private fun ResizeSheet(onPick: (ResizeDirection) -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(Space.s),
     ) {
-        PadKey(HerdrIcons.KeyboardArrowUp, "Grow up") { onPick(ResizeDirection.Up) }
+        PadKey(HerdrIcons.ChevronUp, "Grow up") { onPick(ResizeDirection.Up) }
         Row(horizontalArrangement = Arrangement.spacedBy(72.dp)) {
             PadKey(HerdrIcons.ChevronLeft, "Grow left") { onPick(ResizeDirection.Left) }
             PadKey(HerdrIcons.ChevronRight, "Grow right") { onPick(ResizeDirection.Right) }
         }
-        PadKey(HerdrIcons.KeyboardArrowDown, "Grow down") { onPick(ResizeDirection.Down) }
+        PadKey(HerdrIcons.ChevronDown, "Grow down") { onPick(ResizeDirection.Down) }
     }
 }
 

@@ -1,5 +1,6 @@
 package com.makefunstuff.herdr.ui.settings
 
+import com.makefunstuff.herdr.ui.theme.Mono
 import com.makefunstuff.herdr.ui.design.Notice
 import com.makefunstuff.herdr.ui.design.HerdrIcons
 import com.makefunstuff.herdr.ui.design.PrimaryButton
@@ -86,7 +87,7 @@ fun ImportKeyDialog(replacing: Boolean, onDismiss: () -> Unit) {
                 if (replacing) {
                     Notice(
                         "This replaces the app's current key. Machines that only trust the current key will refuse the app.",
-                        color = Herdr.colors.red, icon = HerdrIcons.Warning,
+                        color = Herdr.colors.red, icon = HerdrIcons.TriangleAlert,
                     )
                 }
                 SecondaryButton(onClick = { pick.launch(arrayOf("*/*")) }) {
@@ -101,7 +102,7 @@ fun ImportKeyDialog(replacing: Boolean, onDismiss: () -> Unit) {
                     },
                     placeholder = { Text("-----BEGIN OPENSSH PRIVATE KEY-----") },
                     modifier = Modifier.fillMaxWidth().height(140.dp),
-                    textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                    textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = Mono),
                 )
                 HerdrField(
                     value = passphrase,
@@ -109,7 +110,7 @@ fun ImportKeyDialog(replacing: Boolean, onDismiss: () -> Unit) {
                         passphrase = it
                         error = null
                     },
-                    label = { Text(if (needsPassphrase) "Passphrase" else "Passphrase (if it has one)") },
+                    label = if (needsPassphrase) "Passphrase" else "Passphrase (if it has one)",
                     singleLine = true,
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
@@ -187,7 +188,7 @@ fun ExportKeyDialog(onDismiss: () -> Unit) {
                 HerdrField(
                     value = passphrase,
                     onValueChange = { passphrase = it },
-                    label = { Text("Passphrase") },
+                    label = "Passphrase",
                     supportingText = { Text("At least $MIN_PASSPHRASE characters") },
                     singleLine = true,
                     visualTransformation = PasswordVisualTransformation(),
@@ -197,7 +198,7 @@ fun ExportKeyDialog(onDismiss: () -> Unit) {
                 HerdrField(
                     value = repeat,
                     onValueChange = { repeat = it },
-                    label = { Text("Repeat passphrase") },
+                    label = "Repeat passphrase",
                     isError = mismatch,
                     supportingText = if (mismatch) ({ Text("Doesn't match") }) else null,
                     singleLine = true,

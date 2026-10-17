@@ -65,7 +65,7 @@ fun MachinesScreen(nav: NavController) {
             EmptyState(
                 "Connect your first machine",
                 "Any Linux or macOS computer you can SSH into that runs herdr. You can import the rest of your herdr machines from it afterwards.",
-                icon = HerdrIcons.Dns,
+                icon = HerdrIcons.Monitor,
             ) { PrimaryButton("Add machine") { nav.navigate(Routes.edit()) } }
             return@Scaffold
         }

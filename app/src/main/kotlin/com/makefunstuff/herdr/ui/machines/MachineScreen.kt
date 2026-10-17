@@ -74,6 +74,7 @@ import com.makefunstuff.herdr.ui.design.BarIcon
 import com.makefunstuff.herdr.ui.design.HerdrChip
 import com.makefunstuff.herdr.ui.design.HerdrDialog
 import com.makefunstuff.herdr.ui.design.HerdrIcons
+import com.makefunstuff.herdr.ui.design.AgentMark
 import com.makefunstuff.herdr.ui.design.HerdrMenu
 import com.makefunstuff.herdr.ui.design.HerdrShapes
 import com.makefunstuff.herdr.ui.design.HerdrTopBar
@@ -137,16 +138,16 @@ fun MachineScreen(nav: NavController, machineId: String) {
                 onBack = { nav.popBackStack() },
             ) {
                 if (state.notices.isNotEmpty()) {
-                    BarIcon(HerdrIcons.Notifications, "Notifications", { showNotices = true; session.markNoticesRead() }, badge = state.unreadNotices)
+                    BarIcon(HerdrIcons.Bell, "Notifications", { showNotices = true; session.markNoticesRead() }, badge = state.unreadNotices)
                 }
-                BarIcon(HerdrIcons.Refresh, "Refresh", { session.retry(); session.refresh(); scope.launch { session.checkBoard() } })
-                BarIcon(HerdrIcons.MoreVert, "More", { menu = true })
+                BarIcon(HerdrIcons.RefreshCw, "Refresh", { session.retry(); session.refresh(); scope.launch { session.checkBoard() } })
+                BarIcon(HerdrIcons.Ellipsis, "More", { menu = true })
                 HerdrMenu(expanded = menu, onDismissRequest = { menu = false }, title = state.machine.label) {
-                    MenuRow("Notify herdr…", HerdrIcons.NotificationsActive, { menu = false; showNotify = true })
-                    MenuRow("Plugins", HerdrIcons.Extension, { menu = false; nav.navigate(Routes.admin(machineId, 0)) })
-                    MenuRow("Integrations", HerdrIcons.Hub, { menu = false; nav.navigate(Routes.admin(machineId, 1)) })
+                    MenuRow("Notify herdr…", HerdrIcons.BellRing, { menu = false; showNotify = true })
+                    MenuRow("Plugins", HerdrIcons.Puzzle, { menu = false; nav.navigate(Routes.admin(machineId, 0)) })
+                    MenuRow("Integrations", HerdrIcons.Plug, { menu = false; nav.navigate(Routes.admin(machineId, 1)) })
                     MenuRow("Server and updates", HerdrIcons.CloudDownload, { menu = false; nav.navigate(Routes.admin(machineId, 2)) })
-                    MenuRow("herdr's saved machines", HerdrIcons.Lan, { menu = false; nav.navigate(Routes.admin(machineId, 3)) })
+                    MenuRow("herdr's saved machines", HerdrIcons.Network, { menu = false; nav.navigate(Routes.admin(machineId, 3)) })
                     RowDivider(inset = Space.l)
                     MenuRow("Import herdr machines from here", HerdrIcons.Download, {
                         menu = false
@@ -158,15 +159,15 @@ fun MachineScreen(nav: NavController, machineId: String) {
                                 .onFailure { context.toast(it.message ?: "Couldn't read machines") }
                         }
                     })
-                    MenuRow("Worktrees", HerdrIcons.AccountTree, { menu = false; nav.navigate(Routes.worktrees(machineId)) })
-                    MenuRow("Edit machine", HerdrIcons.Edit, { menu = false; nav.navigate(Routes.edit(machineId)) })
+                    MenuRow("Worktrees", HerdrIcons.FolderGit2, { menu = false; nav.navigate(Routes.worktrees(machineId)) })
+                    MenuRow("Edit machine", HerdrIcons.Pencil, { menu = false; nav.navigate(Routes.edit(machineId)) })
                 }
             }
         },
         floatingActionButton = { if (state.online) HerdrFab("New") { showNew = true } },
     ) { padding ->
         if (snap == null) {
-            EmptyState(state.status.label(), state.status.detail() ?: "Waiting for ${state.machine.label}…", icon = HerdrIcons.Dns)
+            EmptyState(state.status.label(), state.status.detail() ?: "Waiting for ${state.machine.label}…", icon = HerdrIcons.Monitor)
             return@Scaffold
         }
         LazyColumn(
@@ -175,7 +176,7 @@ fun MachineScreen(nav: NavController, machineId: String) {
             verticalArrangement = Arrangement.spacedBy(Space.s),
         ) {
             if (!state.online) {
-                item { Notice("Offline · showing the last known state", color = Herdr.colors.amber, icon = HerdrIcons.Schedule) }
+                item { Notice("Offline · showing the last known state", color = Herdr.colors.notice, icon = HerdrIcons.Clock) }
             }
             if (state.hasBoard) {
                 item(key = "board") { BoardCard(state.machine.label, showMachine = false) { nav.navigate(Routes.board(machineId)) } }
@@ -296,16 +297,16 @@ private fun WorkspaceCard(
             Text(ws.label.ifBlank { ws.workspaceId }, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
             repo?.takeIf { it.isLinkedWorktree }?.let { Pill("worktree"); Spacer(Modifier.width(Space.xs)) }
             Pill("${ws.tabCount} tab${if (ws.tabCount == 1) "" else "s"}")
-            RowIcon(HerdrIcons.MoreVert, "Workspace actions", onWorkspaceMenu)
+            RowIcon(HerdrIcons.Ellipsis, "Workspace actions", onWorkspaceMenu)
         }
         HerdrMenu(expanded = menu, onDismissRequest = { menu = false }, title = ws.label.ifBlank { ws.workspaceId }) {
             MenuRow(
                 if (repo != null) "Worktrees of ${repo.repoName.ifBlank { "this repository" }}" else "Worktrees in this folder",
-                HerdrIcons.AccountTree, { menu = false; onWorktrees() },
+                HerdrIcons.FolderGit2, { menu = false; onWorktrees() },
             )
-            MenuRow("New worktree…", HerdrIcons.Add, { menu = false; onNewWorktree() }, enabled = online)
+            MenuRow("New worktree…", HerdrIcons.Plus, { menu = false; onNewWorktree() }, enabled = online)
             if (repo?.isLinkedWorktree == true) {
-                MenuRow("Remove this worktree…", HerdrIcons.Delete, { menu = false; onRemoveWorktree() }, enabled = online, destructive = true)
+                MenuRow("Remove this worktree…", HerdrIcons.Trash2, { menu = false; onRemoveWorktree() }, enabled = online, destructive = true)
             }
         }
         if (meta.isNotEmpty()) {
@@ -337,7 +338,7 @@ private fun WorkspaceCard(
                 )
             }
             tabs.firstOrNull { it.tabId == tabId }?.let { active ->
-                RowIcon(HerdrIcons.MoreVert, "Tab actions", { onTabMenu(active) })
+                RowIcon(HerdrIcons.Ellipsis, "Tab actions", { onTabMenu(active) })
             }
         }
         Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(Space.m)) {
@@ -354,17 +355,21 @@ private fun WorkspaceCard(
                             .combinedClickable(onClick = { onOpenPane(pane) }, onLongClick = { onPaneMenu(pane) })
                             .heightIn(min = 52.dp),
                     ) {
-                        StatusDot(if (agent == null) c.off else status.color(), size = 8)
+                        // The leading cell says who the pane is: the agent's brand mark, else the shell's glyph.
+                        if (agent != null) AgentMark(agent.agent ?: agent.displayName, size = 20.dp)
+                        else Icon(HerdrIcons.Terminal, null, tint = c.muted, modifier = Modifier.size(20.dp))
                         Spacer(Modifier.width(Space.m))
                         Text(
                             buildAnnotatedString {
                                 append(agent?.displayName ?: pane.displayName)
-                                withStyle(SpanStyle(color = c.muted)) {
-                                    if (agent != null) append(" · " + agent.statusLabel)
-                                    else (pane.foregroundCwd ?: pane.cwd)?.let { append(" · " + it.replace(Regex("^/(home|Users)/[^/]+"), "~")) }
+                                if (agent != null) withStyle(SpanStyle(color = if (status == AgentStatus.Unknown) c.muted else status.color())) {
+                                    append(" · " + agent.statusLabel)
+                                }
+                                else withStyle(SpanStyle(color = c.muted)) {
+                                    (pane.foregroundCwd ?: pane.cwd)?.let { append(" · " + it.replace(Regex("^/(home|Users)/[^/]+"), "~")) }
                                 }
                             },
-                            style = MaterialTheme.typography.bodyLarge,
+                            style = MaterialTheme.typography.bodyMedium,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f),
@@ -384,10 +389,10 @@ private fun WorkspaceCard(
 @Composable
 private fun RowIcon(icon: ImageVector, description: String, onClick: () -> Unit) {
     Box(
-        Modifier.size(48.dp).clip(CircleShape).clickable(role = Role.Button, onClick = onClick)
+        Modifier.size(48.dp).padding(4.dp).clip(HerdrShapes.Field).clickable(role = Role.Button, onClick = onClick)
             .semantics { contentDescription = description },
         contentAlignment = Alignment.Center,
-    ) { Icon(icon, null, tint = Herdr.colors.muted, modifier = Modifier.size(22.dp)) }
+    ) { Icon(icon, null, tint = Herdr.colors.muted, modifier = Modifier.size(20.dp)) }
 }
 
 /** A thumbnail of the tab's split layout, from herdr's pane rects. */

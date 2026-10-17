@@ -170,7 +170,7 @@ fun EditMachineScreen(nav: NavController, id: String?) {
         containerColor = Herdr.colors.ground,
         topBar = {
             HerdrTopBar(if (existing == null) "Add machine" else "Edit ${existing.label}", onBack = { nav.popBackStack() }) {
-                if (existing != null) BarIcon(HerdrIcons.Delete, "Remove machine", { confirmDelete = true })
+                if (existing != null) BarIcon(HerdrIcons.Trash2, "Remove machine", { confirmDelete = true })
             }
         },
         bottomBar = {
@@ -225,12 +225,12 @@ fun EditMachineScreen(nav: NavController, id: String?) {
                         readOnly = true,
                     )
                     Box(Modifier.matchParentSize().clickable(onClickLabel = "Choose a jump host") { jumpOpen = true })
-                    Icon(HerdrIcons.ExpandMore, null, tint = Herdr.colors.muted, modifier = Modifier.align(Alignment.TopEnd).padding(top = 16.dp, end = 12.dp))
+                    Icon(HerdrIcons.ChevronDown, null, tint = Herdr.colors.muted, modifier = Modifier.align(Alignment.TopEnd).padding(top = 16.dp, end = 12.dp))
                 }
                 HerdrMenu(expanded = jumpOpen, onDismissRequest = { jumpOpen = false }, title = "Connect through", subtitle = "A jump host for a machine only reachable from there") {
                     ActionRow("Direct", icon = HerdrIcons.Smartphone, detail = "From this phone", selected = viaId == null, onClick = { viaId = null; jumpOpen = false })
                     others.forEach { o ->
-                        ActionRow(o.label, icon = HerdrIcons.Dns, detail = o.target, selected = o.id == viaId, onClick = { viaId = o.id; jumpOpen = false })
+                        ActionRow(o.label, icon = HerdrIcons.Monitor, detail = o.target, selected = o.id == viaId, onClick = { viaId = o.id; jumpOpen = false })
                     }
                 }
             }
@@ -261,7 +261,7 @@ fun EditMachineScreen(nav: NavController, id: String?) {
                     if (publicKey != null) {
                         MonoBlock(publicKey!!)
                         SecondaryButton(onClick = { context.copyToClipboard("public key", publicKey!!, "Public key copied") }) {
-                            Icon(HerdrIcons.ContentCopy, null, modifier = Modifier.size(18.dp))
+                            Icon(HerdrIcons.Copy, null, modifier = Modifier.size(18.dp))
                             Text("Copy public key")
                         }
                     } else {
@@ -276,7 +276,7 @@ fun EditMachineScreen(nav: NavController, id: String?) {
                     Column(verticalArrangement = Arrangement.spacedBy(Space.m)) {
                         MonoBlock(fp)
                         SecondaryButton(onClick = { pinnedKey = null; test = null }) {
-                            Icon(HerdrIcons.RestartAlt, null, modifier = Modifier.size(18.dp))
+                            Icon(HerdrIcons.RotateCcw, null, modifier = Modifier.size(18.dp))
                             Text("Forget and check again")
                         }
                     }
@@ -307,7 +307,7 @@ fun EditMachineScreen(nav: NavController, id: String?) {
 private fun ConnectedCard(result: TestResult.Ok, pinnedKey: String?, chosen: String, onChoose: (String) -> Unit) {
     QuietCard(padded = true) {
         Column(verticalArrangement = Arrangement.spacedBy(Space.m)) {
-            StatusBadge("Connected", Herdr.colors.green)
+            StatusBadge("Connected", Herdr.colors.done)
             if (pinnedKey == null) {
                 Text(
                     "The host key is only seen on the first connection. Check it matches the machine before saving:",

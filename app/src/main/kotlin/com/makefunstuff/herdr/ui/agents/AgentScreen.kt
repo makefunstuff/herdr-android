@@ -179,7 +179,7 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
                 onBack = { nav.popBackStack() },
             ) {
                 QuietButton(onClick = { nav.navigate(Routes.terminal(machineId, paneId)) }) { Text("Terminal") }
-                BarIcon(HerdrIcons.MoreVert, "More", { menu = true })
+                BarIcon(HerdrIcons.Ellipsis, "More", { menu = true })
             }
         },
     ) { padding ->
@@ -189,12 +189,12 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 when {
                     agent == null && pane == null && snapshot != null ->
-                        EmptyState("This agent is gone", "Its pane closed, or the agent exited.", icon = HerdrIcons.SmartToy)
+                        EmptyState("This agent is gone", "Its pane closed, or the agent exited.", icon = HerdrIcons.Bot)
                     rows.isEmpty() && state.source == AgentChat.Source.Loading ->
                         if (host.online) LoadingState("Loading the conversation", Modifier.align(Alignment.Center))
-                        else EmptyState("Not connected", host.machine.label, icon = HerdrIcons.Dns)
+                        else EmptyState("Not connected", host.machine.label, icon = HerdrIcons.Monitor)
                     rows.isEmpty() ->
-                        EmptyState("No messages yet", "Send a prompt to get started.", icon = HerdrIcons.Forum)
+                        EmptyState("No messages yet", "Send a prompt to get started.", icon = HerdrIcons.MessagesSquare)
                     else -> LazyColumn(
                         state = listState,
                         reverseLayout = true,
@@ -210,7 +210,7 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
                 }
                 if (!atBottom) {
                     Box(Modifier.align(Alignment.BottomEnd).padding(Space.m)) {
-                        RoundAction(HerdrIcons.ArrowDownward, "Newest") { scope.launch { listState.animateScrollToItem(0) } }
+                        RoundAction(HerdrIcons.ArrowDown, "Newest", primary = false) { scope.launch { listState.animateScrollToItem(0) } }
                     }
                 }
             }

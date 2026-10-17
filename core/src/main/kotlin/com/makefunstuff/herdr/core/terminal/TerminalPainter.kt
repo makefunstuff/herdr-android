@@ -16,6 +16,13 @@ class TerminalPalette(
     val background: Int,
     val cursor: Int,
     val ansi: IntArray,
+    /**
+     * The least contrast a cell's text keeps on its background (WCAG ratio; 1 = as the program
+     * asked). Text below it moves toward black or white until it reaches it, as xterm.js's
+     * `minimumContrastRatio` does; dim text needs half, and box-drawing and block glyphs keep
+     * their colour so borders still meet the background.
+     */
+    val minimumContrast: Double = 1.0,
 ) {
     fun resolve(color: Int, fallback: Int): Int = when {
         color == Cell.DEFAULT_COLOR -> fallback
@@ -75,12 +82,16 @@ class TerminalPainter(var palette: TerminalPalette = TerminalPalette.Default) {
                 var bg = p.resolve(cell.bg, p.background)
                 if (cell.attrs and Cell.BOLD != 0 && cell.fg in 0..7) fg = p.resolve(cell.fg + 8, p.foreground)
                 if (cell.attrs and Cell.INVERSE != 0) { val t = fg; fg = bg; bg = t }
-                if (cell.attrs and Cell.DIM != 0) fg = blend(fg, bg, 0.6f)
+                val dim = cell.attrs and Cell.DIM != 0
+                if (dim) fg = blend(fg, bg, 0.6f)
                 if (bg != p.background) canvas.fillRect(left, top, right, bottom, bg)
                 if (cell.attrs and Cell.HIDDEN != 0) continue
                 val text = cell.text
                 if (!text.isNullOrEmpty() && text != " ") {
                     val cp = text.codePointAt(0)
+                    if (p.minimumContrast > 1.0 && !isGraphic(cp)) {
+                        fg = ensureContrast(fg, bg, if (dim) maxOf(1.0, p.minimumContrast / 2) else p.minimumContrast)
+                    }
                     when {
                         cp in 0x2500..0x257F && BOX[cp - 0x2500] != 0 ->
                             drawBox(canvas, BOX[cp - 0x2500], left, top, right, bottom, cellW, fg)
@@ -197,7 +208,34 @@ class TerminalPainter(var palette: TerminalPalette = TerminalPalette.Default) {
         }
     }
 
+    /** Box drawing, blocks and powerline glyphs: drawn in the program's colour so they meet the background. */
+    private fun isGraphic(cp: Int) = cp in 0x2500..0x259F || cp in 0xE0B0..0xE0BF
+
     companion object {
+        /** WCAG relative luminance of an ARGB colour. */
+        fun luminance(argb: Int): Double {
+            fun ch(v: Int): Double { val c = v / 255.0; return if (c <= 0.03928) c / 12.92 else Math.pow((c + 0.055) / 1.055, 2.4) }
+            return 0.2126 * ch((argb shr 16) and 0xFF) + 0.7152 * ch((argb shr 8) and 0xFF) + 0.0722 * ch(argb and 0xFF)
+        }
+
+        fun contrast(a: Int, b: Int): Double {
+            val x = luminance(a) + 0.05; val y = luminance(b) + 0.05
+            return maxOf(x, y) / minOf(x, y)
+        }
+
+        /** [fg] moved toward black or white (whichever [bg] is further from) until it reads at [ratio] on [bg]. */
+        fun ensureContrast(fg: Int, bg: Int, ratio: Double): Int {
+            if (contrast(fg, bg) >= ratio) return fg
+            val toward = if (luminance(bg) > 0.18) 0xFF000000.toInt() else 0xFFFFFFFF.toInt()
+            var c = fg
+            var t = 0f
+            while (t < 1f) {
+                t = minOf(1f, t + 0.05f)
+                c = blend(fg, toward, 1f - t)
+                if (contrast(c, bg) >= ratio) break
+            }
+            return c
+        }
         private fun px(v: Float): Float = v.roundToInt().toFloat()
 
         /** [amount] of [fg] over [bg]. */

@@ -27,6 +27,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -40,13 +42,19 @@ import androidx.compose.ui.unit.dp
 import com.makefunstuff.herdr.ui.theme.Herdr
 import com.makefunstuff.herdr.ui.theme.Space
 
-/** The bottom bar of the three top-level screens: on the card surface, the selected icon on a mint pill. */
+/**
+ * The bottom bar of the three top-level screens, as the web UI's sidebar footer and key bar:
+ * `--bg-panel` under a hairline. The chosen screen is the chosen lens: its glyph in amber on the
+ * neutral `--bg-hover` pill, its label strong.
+ */
 @Composable
 fun HerdrNavBar(content: @Composable RowScope.() -> Unit) {
     val c = Herdr.colors
-    Column(Modifier.fillMaxWidth().background(c.card)) {
+    Column(Modifier.fillMaxWidth().background(c.panel).drawBehind {
+        drawLine(c.line, Offset(0f, 0.5f), Offset(size.width, 0.5f), 1.dp.toPx())
+    }) {
         Row(
-            Modifier.fillMaxWidth().navigationBarsPadding().heightIn(min = 72.dp).padding(horizontal = Space.s),
+            Modifier.fillMaxWidth().navigationBarsPadding().heightIn(min = 64.dp).padding(horizontal = Space.s),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically,
             content = content,
@@ -57,9 +65,9 @@ fun HerdrNavBar(content: @Composable RowScope.() -> Unit) {
 @Composable
 fun RowScope.NavItem(label: String, icon: ImageVector, selected: Boolean, badge: Int = 0, onClick: () -> Unit) {
     val c = Herdr.colors
-    val pill by animateColorAsState(if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent, tween(180), label = "nav")
+    val pill by animateColorAsState(if (selected) c.hover else Color.Transparent, tween(180), label = "nav")
     Column(
-        Modifier.weight(1f).heightIn(min = 64.dp)
+        Modifier.weight(1f).heightIn(min = 56.dp)
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
             .clearAndSetSemantics {
                 contentDescription = if (badge > 0) "$label, $badge need you" else label
@@ -70,15 +78,15 @@ fun RowScope.NavItem(label: String, icon: ImageVector, selected: Boolean, badge:
         verticalArrangement = Arrangement.Center,
     ) {
         Box(contentAlignment = Alignment.Center) {
-            Box(Modifier.width(56.dp).height(32.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(50)).background(pill), contentAlignment = Alignment.Center) {
-                Icon(icon, null, tint = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else c.muted, modifier = Modifier.size(24.dp))
+            Box(Modifier.width(52.dp).height(30.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(50)).background(pill), contentAlignment = Alignment.Center) {
+                Icon(icon, null, tint = if (selected) c.accent else c.muted, modifier = Modifier.size(20.dp))
             }
             if (badge > 0) CountBadge(badge, Modifier.align(Alignment.TopEnd).offset(x = (-8).dp, y = (-2).dp))
         }
         Spacer(Modifier.height(Space.xs))
         Text(
             label, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis,
-            color = if (selected) c.text else c.muted,
+            color = if (selected) c.strong else c.muted,
         )
     }
 }

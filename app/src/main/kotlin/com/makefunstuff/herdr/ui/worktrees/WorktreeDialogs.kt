@@ -76,7 +76,7 @@ fun CreateWorktreeSheet(
         ) {
             HerdrField(
                 branch, { branch = it.filterNot(Char::isWhitespace) },
-                label = { Text("New branch") },
+                label = "New branch",
                 placeholder = { Text("herdr picks a name if empty") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
@@ -89,15 +89,15 @@ fun CreateWorktreeSheet(
             }
             HerdrField(
                 base, { base = it.trim() },
-                label = { Text("Base (branch, tag or commit, optional)") },
+                label = "Base (branch, tag or commit, optional)",
                 placeholder = { Text("the current checkout") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
-            HerdrField(label, { label = it }, label = { Text("Workspace name (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            HerdrField(label, { label = it }, label = "Workspace name (optional)", singleLine = true, modifier = Modifier.fillMaxWidth())
             HerdrField(
                 path, { path = it },
-                label = { Text("Folder (absolute path, optional)") },
+                label = "Folder (absolute path, optional)",
                 placeholder = { Text("herdr's worktree folder") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),

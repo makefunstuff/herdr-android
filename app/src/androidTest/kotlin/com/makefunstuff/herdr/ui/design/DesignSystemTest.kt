@@ -19,6 +19,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
+import com.makefunstuff.herdr.ui.design.AgentMark
 import com.makefunstuff.herdr.ui.theme.HerdrTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -40,7 +41,7 @@ class DesignSystemTest {
         rule.setContent {
             HerdrTheme {
                 Column {
-                    HerdrTopBar("Machines") { BarIcon(HerdrIcons.Notifications, "Notifications", {}, badge = 3) }
+                    HerdrTopBar("Machines") { BarIcon(HerdrIcons.Bell, "Notifications", {}, badge = 3) }
                     HerdrFab("Add machine") { added++ }
                 }
             }
@@ -105,9 +106,9 @@ class DesignSystemTest {
         rule.setContent {
             HerdrTheme { ChatComposer(draft, { draft = it }, "Message claude", onSend = { sent++ }, stop = { stopped++ }) }
         }
-        // Nothing typed while the agent works: the button stops it.
-        rule.onNodeWithText("Stop").atLeast48()
-        rule.onNodeWithText("Stop").performClick()
+        // Nothing typed while the agent works: the round button stops it.
+        rule.onNodeWithContentDescription("Stop").atLeast48()
+        rule.onNodeWithContentDescription("Stop").performClick()
         assertEquals(1, stopped)
         rule.onNodeWithText("Message claude").performTextInput("hi")
         rule.onNodeWithContentDescription("Send").assertIsEnabled().performClick()
@@ -134,5 +135,20 @@ class DesignSystemTest {
         rule.onNodeWithText("Cancel").atLeast48()
         rule.onNodeWithText("Remove").performClick()
         assertTrue(confirmed)
+    }
+
+    @Test fun fieldIsNamedByItsLabelAboveIt() {
+        var value by mutableStateOf("")
+        rule.setContent { HerdrTheme { HerdrTextField(value, { value = it }, "SSH target", hint = "user@host") } }
+        // The label is drawn in capitals over the box, and names the field in its own words.
+        rule.onNodeWithContentDescription("SSH target").performTextInput("demo@devbox")
+        assertEquals("demo@devbox", value)
+        rule.onNodeWithContentDescription("SSH target").atLeast48()
+    }
+
+    @Test fun agentRowsLeadWithTheAgentsMark() {
+        rule.setContent { HerdrTheme { Column { AgentMark("claude"); AgentMark("hermes") } } }
+        // A drawn mark for claude; the initial for an agent nobody drew.
+        rule.onNodeWithText("H").assertIsDisplayed()
     }
 }

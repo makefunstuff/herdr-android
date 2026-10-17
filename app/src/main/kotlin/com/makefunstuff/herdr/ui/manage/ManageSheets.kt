@@ -211,11 +211,11 @@ fun WorkspaceActionsSheet(
 
     ManageSheet(label, "Workspace ${ws.number} · ${ws.tabCount} tab${if (ws.tabCount == 1) "" else "s"} · ${ws.paneCount} pane${if (ws.paneCount == 1) "" else "s"}", onDismiss) {
         if (!ws.focused) {
-            ManageRow("Focus in herdr", icon = HerdrIcons.CropFree) {
+            ManageRow("Focus in herdr", icon = HerdrIcons.Focus) {
                 manage(context, scope, session, onDismiss) { it.focusWorkspace(ws.workspaceId); null }
             }
         }
-        ManageRow("Rename", icon = HerdrIcons.Edit, chevron = true) { rename = true }
+        ManageRow("Rename", icon = HerdrIcons.Pencil, chevron = true) { rename = true }
         ManageRow(
             "Metadata",
             icon = HerdrIcons.Info,
@@ -224,14 +224,14 @@ fun WorkspaceActionsSheet(
             chevron = true,
         ) { metadata = true }
         ManageHeading("Reorder")
-        ManageRow("Move up", icon = HerdrIcons.KeyboardArrowUp, detail = "Earlier in the workspace list", enabled = up != null) {
+        ManageRow("Move up", icon = HerdrIcons.ChevronUp, detail = "Earlier in the workspace list", enabled = up != null) {
             manage(context, scope, session, onDismiss) { it.moveWorkspace(ws.workspaceId, up!!); null }
         }
-        ManageRow("Move down", icon = HerdrIcons.KeyboardArrowDown, detail = "Later in the workspace list", enabled = down != null) {
+        ManageRow("Move down", icon = HerdrIcons.ChevronDown, detail = "Later in the workspace list", enabled = down != null) {
             manage(context, scope, session, onDismiss) { it.moveWorkspace(ws.workspaceId, down!!); null }
         }
         ManageHeading("Danger")
-        ManageRow("Close workspace", icon = HerdrIcons.Delete, destructive = true) { confirmClose = true }
+        ManageRow("Close workspace", icon = HerdrIcons.Trash2, destructive = true) { confirmClose = true }
     }
 
     if (rename) {
@@ -288,11 +288,11 @@ fun TabActionsSheet(
     val panes = "${tab.paneCount} pane${if (tab.paneCount == 1) "" else "s"}"
     ManageSheet(label, if (label == "Tab ${tab.number}") panes else "Tab ${tab.number} · $panes", onDismiss) {
         if (!tab.focused) {
-            ManageRow("Focus in herdr", icon = HerdrIcons.CropFree) {
+            ManageRow("Focus in herdr", icon = HerdrIcons.Focus) {
                 manage(context, scope, session, onDismiss) { it.focusTab(tab.tabId); null }
             }
         }
-        ManageRow("Rename", icon = HerdrIcons.Edit, chevron = true) { rename = true }
+        ManageRow("Rename", icon = HerdrIcons.Pencil, chevron = true) { rename = true }
         val canClose = order.size > 1
         ManageHeading("Reorder")
         ManageRow("Move left", icon = HerdrIcons.ChevronLeft, enabled = up != null) {
@@ -304,7 +304,7 @@ fun TabActionsSheet(
         ManageHeading("Danger")
         ManageRow(
             "Close tab",
-            icon = HerdrIcons.Delete,
+            icon = HerdrIcons.Trash2,
             detail = if (canClose) null else "A workspace keeps its last tab",
             destructive = true,
             enabled = canClose,
@@ -369,52 +369,52 @@ fun PaneActionsSheet(
         when (screen) {
             PaneScreen.Actions -> {
                 if (!pane.focused) {
-                    ManageRow("Focus in herdr", icon = HerdrIcons.CropFree) {
+                    ManageRow("Focus in herdr", icon = HerdrIcons.Focus) {
                         manage(context, scope, session, onDismiss) { it.focusPane(pane.paneId); null }
                     }
                 }
-                ManageRow("Rename", icon = HerdrIcons.Edit, chevron = true) { rename = true }
+                ManageRow("Rename", icon = HerdrIcons.Pencil, chevron = true) { rename = true }
                 ManageRow(
                     if (zoomed) "Unzoom" else "Zoom to fit",
-                    icon = if (zoomed) HerdrIcons.CloseFullscreen else HerdrIcons.FitScreen,
+                    icon = if (zoomed) HerdrIcons.Minimize2 else HerdrIcons.Maximize2,
                     detail = if (zoomed) "Show the whole layout again" else "Fill the tab with this pane",
                     enabled = open,
                 ) {
                     manage(context, scope, session, onDismiss) { it.zoomPane(pane.paneId).refusal }
                 }
                 ManageRow("What's running", icon = HerdrIcons.Info, chevron = true) { screen = PaneScreen.Process }
-                ManageRow("Clear screen and scrollback", icon = HerdrIcons.Delete) { confirmClear = true }
+                ManageRow("Clear screen and scrollback", icon = HerdrIcons.Trash2) { confirmClear = true }
                 ManageHeading("Layout")
-                ManageRow("Move to another tab or workspace", icon = HerdrIcons.ArrowForward, chevron = true) { screen = PaneScreen.Move }
-                ManageRow("Swap with another pane", icon = HerdrIcons.SwapHoriz, enabled = open, chevron = true) { screen = PaneScreen.Swap }
+                ManageRow("Move to another tab or workspace", icon = HerdrIcons.ArrowRight, chevron = true) { screen = PaneScreen.Move }
+                ManageRow("Swap with another pane", icon = HerdrIcons.ArrowLeftRight, enabled = open, chevron = true) { screen = PaneScreen.Swap }
                 if (open) {
                     ManageRow("Focus left", icon = HerdrIcons.ChevronLeft) { manage(context, scope, session, onDismiss) { it.focusDirection(pane.paneId, "left").refusal } }
                     ManageRow("Focus right", icon = HerdrIcons.ChevronRight) { manage(context, scope, session, onDismiss) { it.focusDirection(pane.paneId, "right").refusal } }
-                    ManageRow("Focus up", icon = HerdrIcons.KeyboardArrowUp) { manage(context, scope, session, onDismiss) { it.focusDirection(pane.paneId, "up").refusal } }
-                    ManageRow("Focus down", icon = HerdrIcons.KeyboardArrowDown) { manage(context, scope, session, onDismiss) { it.focusDirection(pane.paneId, "down").refusal } }
+                    ManageRow("Focus up", icon = HerdrIcons.ChevronUp) { manage(context, scope, session, onDismiss) { it.focusDirection(pane.paneId, "up").refusal } }
+                    ManageRow("Focus down", icon = HerdrIcons.ChevronDown) { manage(context, scope, session, onDismiss) { it.focusDirection(pane.paneId, "down").refusal } }
                 }
                 ManageHeading("Danger")
-                ManageRow("Close pane", icon = HerdrIcons.Delete, destructive = true) { confirmClose = true }
+                ManageRow("Close pane", icon = HerdrIcons.Trash2, destructive = true) { confirmClose = true }
             }
 
             PaneScreen.Move -> {
-                ManageRow("Back", icon = HerdrIcons.ArrowBack) { screen = PaneScreen.Actions }
+                ManageRow("Back", icon = HerdrIcons.ArrowLeft) { screen = PaneScreen.Actions }
                 ManageHeading("Into a tab")
                 if (tabs.isEmpty()) ManageRow("No other tabs", enabled = false)
                 tabs.forEach { t ->
-                    ManageRow(t.label.ifBlank { t.tabId }, icon = HerdrIcons.ArrowForward, detail = "Split into this tab") {
+                    ManageRow(t.label.ifBlank { t.tabId }, icon = HerdrIcons.ArrowRight, detail = "Split into this tab") {
                         manage(context, scope, session, onDismiss) {
                             it.movePane(pane.paneId, PaneDestination.Tab(t.tabId)).refusal
                         }
                     }
                 }
                 ManageHeading("Into something new")
-                ManageRow("A new tab here", icon = HerdrIcons.AddCircle) {
+                ManageRow("A new tab here", icon = HerdrIcons.CirclePlus) {
                     manage(context, scope, session, onDismiss) {
                         it.movePane(pane.paneId, PaneDestination.NewTab(workspaceId = pane.workspaceId)).refusal
                     }
                 }
-                ManageRow("A new workspace", icon = HerdrIcons.AddCircle) {
+                ManageRow("A new workspace", icon = HerdrIcons.CirclePlus) {
                     manage(context, scope, session, onDismiss) {
                         it.movePane(pane.paneId, PaneDestination.NewWorkspace()).refusal
                     }
@@ -422,7 +422,7 @@ fun PaneActionsSheet(
             }
 
             PaneScreen.Swap -> {
-                ManageRow("Back", icon = HerdrIcons.ArrowBack) { screen = PaneScreen.Actions }
+                ManageRow("Back", icon = HerdrIcons.ArrowLeft) { screen = PaneScreen.Actions }
                 ManageHeading("With the pane next to it")
                 listOf("left", "right", "up", "down").forEach { direction ->
                     ManageRow("Swap $direction", icon = arrowFor(direction)) {
@@ -431,14 +431,14 @@ fun PaneActionsSheet(
                 }
                 ManageHeading("With a pane in this tab")
                 siblings.filter { it.paneId != pane.paneId }.forEach { other ->
-                    ManageRow(other.displayName, icon = HerdrIcons.SwapHoriz) {
+                    ManageRow(other.displayName, icon = HerdrIcons.ArrowLeftRight) {
                         manage(context, scope, session, onDismiss) { it.swapPane(pane.paneId, targetPaneId = other.paneId).refusal }
                     }
                 }
             }
 
             PaneScreen.Process -> {
-                ManageRow("Back", icon = HerdrIcons.ArrowBack) { screen = PaneScreen.Actions }
+                ManageRow("Back", icon = HerdrIcons.ArrowLeft) { screen = PaneScreen.Actions }
                 ProcessInfo(session, pane)
             }
         }
@@ -531,14 +531,14 @@ fun AgentActionsSheet(
 
     ManageSheet(label, agent?.let { "${it.statusLabel} · ${it.agent ?: "terminal"}" } ?: "No agent in this pane", onDismiss) {
         if (target != null) {
-            ManageRow("Rename agent", icon = HerdrIcons.Edit, chevron = true) { rename = true }
-            ManageRow("Focus in herdr", icon = HerdrIcons.CropFree) {
+            ManageRow("Rename agent", icon = HerdrIcons.Pencil, chevron = true) { rename = true }
+            ManageRow("Focus in herdr", icon = HerdrIcons.Focus) {
                 manage(context, scope, session, onDismiss) { it.focusAgent(target); null }
             }
             ManageRow("Why this state?", icon = HerdrIcons.Info, chevron = true) { explain = true }
-            ManageRow("Details", icon = HerdrIcons.Description, chevron = true) { details = true }
+            ManageRow("Details", icon = HerdrIcons.FileText, chevron = true) { details = true }
         }
-        if (onTerminal != null) ManageRow("Open terminal", icon = HerdrIcons.Terminal, chevron = true) { onTerminal() }
+        if (onTerminal != null) ManageRow("Open terminal", icon = HerdrIcons.SquareTerminal, chevron = true) { onTerminal() }
         if (onToggleKeys != null) {
             ManageRow(if (showKeys) "Hide keys" else "Show keys", icon = HerdrIcons.Keyboard) { onToggleKeys() }
         }
@@ -674,6 +674,6 @@ fun NotifySheet(session: HostSession, machineLabel: String, onDismiss: () -> Uni
 private fun arrowFor(direction: String): ImageVector = when (direction) {
     "left" -> HerdrIcons.ChevronLeft
     "right" -> HerdrIcons.ChevronRight
-    "up" -> HerdrIcons.KeyboardArrowUp
-    else -> HerdrIcons.KeyboardArrowDown
+    "up" -> HerdrIcons.ChevronUp
+    else -> HerdrIcons.ChevronDown
 }

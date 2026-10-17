@@ -3,6 +3,7 @@ package com.makefunstuff.herdr.core
 import com.makefunstuff.herdr.core.terminal.TerminalCanvas
 import com.makefunstuff.herdr.core.terminal.TerminalEmulator
 import com.makefunstuff.herdr.core.terminal.TerminalPainter
+import com.makefunstuff.herdr.core.terminal.TerminalPalette
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -11,11 +12,13 @@ class PainterTest {
     private class Recorder : TerminalCanvas {
         val rects = mutableListOf<List<Float>>()
         val texts = mutableListOf<Pair<String, Float>>()
+        val colors = mutableListOf<Int>()
         override fun fillRect(left: Float, top: Float, right: Float, bottom: Float, argb: Int) {
             rects += listOf(left, top, right, bottom)
         }
         override fun drawText(text: String, x: Float, baseline: Float, maxWidth: Float, argb: Int, bold: Boolean, italic: Boolean) {
             texts += text to maxWidth
+            colors += argb
         }
     }
 
@@ -41,5 +44,20 @@ class PainterTest {
     fun wideGlyphsGetTwoCellsAndTextGetsOne() {
         val r = paint("a界")
         assertEquals(listOf("a" to 10f, "界" to 20f), r.texts)
+    }
+
+    @Test
+    fun minimumContrastLiftsUnreadableTextButNotBoxLines() {
+        // White text on a paper-coloured terminal, as Claude Code draws its titles in a light theme.
+        val paper = 0xFFFAF8F3.toInt()
+        val palette = TerminalPalette(0xFF2A251F.toInt(), paper, 0xFF8C5000.toInt(), TerminalPalette.Default.ansi, minimumContrast = 4.5)
+        val emu = TerminalEmulator(4, 1)
+        emu.feed("\u001b[38;2;255;255;255mab─".toByteArray())
+        val r = Recorder()
+        TerminalPainter(palette).paint(emu, r, 10f, 20f, 15f, showCursor = false)
+        assertEquals(listOf("a", "b"), r.texts.map { it.first })
+        r.colors.forEach { assertTrue(TerminalPainter.contrast(it, paper) >= 4.5, "text lifted to 4.5:1") }
+        // Readable colours are left as the program asked.
+        assertEquals(0xFF2A251F.toInt(), TerminalPainter.ensureContrast(0xFF2A251F.toInt(), paper, 4.5))
     }
 }

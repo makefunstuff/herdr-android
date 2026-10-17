@@ -28,6 +28,7 @@ import com.makefunstuff.herdr.AppContainer
 import com.makefunstuff.herdr.core.host.HostStatus
 import com.makefunstuff.herdr.ui.design.HerdrIcons
 import com.makefunstuff.herdr.ui.design.HerdrShapes
+import com.makefunstuff.herdr.ui.design.hairline
 import com.makefunstuff.herdr.ui.design.StateBlock
 import com.makefunstuff.herdr.ui.theme.Herdr
 
@@ -39,21 +40,23 @@ fun StatusDot(color: Color, modifier: Modifier = Modifier, size: Int = 8) {
 }
 
 /**
- * A small label: neutral (grey fill, muted text) or, with [color], the status colour's tint with
- * the colour itself as text. 8dp corners, 12sp.
+ * A small label. Neutral, it is the web UI's `.pill`: dim text in a hairline pill. With [color], a
+ * badge: the state colour's tint with the colour itself as text, `--radius-sm`.
  */
 @Composable
 fun Pill(text: String, color: Color? = null, container: Color? = null) {
     val c = Herdr.colors
-    val tone = color?.takeIf { it != MaterialTheme.colorScheme.onSurfaceVariant }
+    val tone = color?.takeIf { it != MaterialTheme.colorScheme.onSurfaceVariant && it != c.muted }
+    val shape = if (tone == null && container == null) HerdrShapes.Pill else HerdrShapes.Badge
     Text(
         text,
         color = tone ?: c.muted,
         style = MaterialTheme.typography.labelMedium,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
-        modifier = Modifier.clip(HerdrShapes.Badge).background(container ?: tone?.let { c.tint(it) } ?: c.field)
-            .padding(horizontal = 8.dp, vertical = 3.dp),
+        modifier = Modifier.clip(shape).background(container ?: tone?.let { c.tint(it) } ?: Color.Transparent)
+            .hairline(shape, if (tone == null && container == null) c.line else Color.Transparent)
+            .padding(horizontal = 8.dp, vertical = 2.dp),
     )
 }
 
@@ -82,10 +85,11 @@ fun HostStatus.label(): String = when (this) {
 @ReadOnlyComposable
 fun HostStatus.color(): Color = Herdr.colors.let { c ->
     when (this) {
-        HostStatus.Online -> c.green
-        HostStatus.Connecting, is HostStatus.Reconnecting -> c.amber
+        // The web UI's PC dot: done = connected, working = connecting, blocked = error, idle = off.
+        HostStatus.Online -> c.done
+        HostStatus.Connecting, is HostStatus.Reconnecting -> c.working
         is HostStatus.Attention -> c.red
-        HostStatus.Stopped -> c.grey
+        HostStatus.Stopped -> c.idle
     }
 }
 

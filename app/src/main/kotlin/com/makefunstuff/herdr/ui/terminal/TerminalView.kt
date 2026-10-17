@@ -17,6 +17,7 @@ import android.view.inputmethod.InputConnection
 import android.view.inputmethod.InputMethodManager
 import com.makefunstuff.herdr.core.terminal.TerminalCanvas
 import com.makefunstuff.herdr.core.terminal.TerminalPainter
+import com.makefunstuff.herdr.core.terminal.TerminalPalette
 import com.makefunstuff.herdr.core.terminal.Keys
 import com.makefunstuff.herdr.core.terminal.TerminalEmulator
 import kotlin.math.abs
@@ -67,6 +68,24 @@ class TerminalView(context: Context) : View(context) {
     private var fontSizePx = 11f * resources.displayMetrics.scaledDensity
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { typeface = Typeface.MONOSPACE }
     private val boldPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD) }
+
+    /** The face the grid is drawn in (the app's JetBrains Mono); bold is the same face, emboldened. */
+    fun setTypeface(face: Typeface) {
+        textPaint.typeface = face
+        boldPaint.typeface = Typeface.create(face, Typeface.BOLD)
+        updateMetrics()
+        reportGrid()
+        invalidate()
+    }
+
+    /** The theme's colours: ground, text, cursor and ANSI colours, and the selection's fill. */
+    fun setColors(palette: TerminalPalette, selection: Int) {
+        painter.palette = palette
+        selectionColor = (selection and 0xFFFFFF) or (0x99 shl 24)
+        invalidate()
+    }
+
+    private var selectionColor = 0x554A90D9
     private val bgPaint = Paint()
     private var cellW = 1f
     private var cellH = 1f
@@ -173,7 +192,7 @@ class TerminalView(context: Context) : View(context) {
         val (a, b) = selection ?: return
         val first = if (a.row < b.row || (a.row == b.row && a.col <= b.col)) a else b
         val last = if (first === a) b else a
-        selectionPaint.color = 0x554A90D9
+        selectionPaint.color = selectionColor
         for (row in first.row..last.row) {
             val from = if (row == first.row) first.col else 0
             val to = if (row == last.row) last.col else emu.cols - 1

@@ -43,6 +43,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -83,6 +84,7 @@ import com.makefunstuff.herdr.ui.design.SectionHeading
 import com.makefunstuff.herdr.ui.design.StateBlock
 import com.makefunstuff.herdr.ui.design.StatusBadge
 import com.makefunstuff.herdr.ui.theme.Herdr
+import com.makefunstuff.herdr.ui.theme.CodeStyle
 import com.makefunstuff.herdr.ui.theme.Space
 import com.makefunstuff.herdr.ui.theme.tone
 import kotlinx.coroutines.CancellationException
@@ -214,12 +216,12 @@ fun BoardScreen(nav: NavController, machineId: String) {
                     )
                 }) else null,
             ) {
-                BarIcon(if (searching) HerdrIcons.Close else HerdrIcons.Search, "Search", { if (searching) query = ""; searching = !searching })
-                BarIcon(HerdrIcons.Forum, "Coordinator chat", { nav.navigate(Routes.coordinator(machineId)) })
-                BarIcon(HerdrIcons.MoreVert, "Filter and more", { menu = true })
+                BarIcon(if (searching) HerdrIcons.X else HerdrIcons.Search, "Search", { if (searching) query = ""; searching = !searching })
+                BarIcon(HerdrIcons.MessagesSquare, "Coordinator chat", { nav.navigate(Routes.coordinator(machineId)) })
+                BarIcon(HerdrIcons.Ellipsis, "Filter and more", { menu = true })
                 HerdrMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                    MenuRow(if (archived) "Hide archived" else "Show archived", if (archived) HerdrIcons.Unarchive else HerdrIcons.Archive, { archived = !archived; menu = false })
-                    MenuRow("Refresh", HerdrIcons.Refresh, { readNow.trySend(Unit); menu = false })
+                    MenuRow(if (archived) "Hide archived" else "Show archived", if (archived) HerdrIcons.ArchiveRestore else HerdrIcons.Archive, { archived = !archived; menu = false })
+                    MenuRow("Refresh", HerdrIcons.RefreshCw, { readNow.trySend(Unit); menu = false })
                 }
             }
         },
@@ -246,8 +248,8 @@ fun BoardScreen(nav: NavController, machineId: String) {
                 }
             }
             when {
-                !state.online -> EmptyState(state.status.label(), state.status.detail() ?: "Waiting for ${state.machine.label}…", icon = HerdrIcons.Dns)
-                state.boardPath == null -> EmptyState("No work board here", "herdr-projects isn't installed on ${state.machine.label}.", icon = HerdrIcons.ViewKanban)
+                !state.online -> EmptyState(state.status.label(), state.status.detail() ?: "Waiting for ${state.machine.label}…", icon = HerdrIcons.Monitor)
+                state.boardPath == null -> EmptyState("No work board here", "herdr-projects isn't installed on ${state.machine.label}.", icon = HerdrIcons.SquareKanban)
                 !loaded -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { LoadingState("Reading the board on ${state.machine.label}") }
                 problem != null && tasks.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     ErrorState("The board isn't answering", problem.orEmpty(), onRetry = { readNow.trySend(Unit) })
@@ -265,7 +267,7 @@ fun BoardScreen(nav: NavController, machineId: String) {
                     if (groups.isEmpty()) {
                         item(key = "empty") {
                             StateBlock(
-                                if (query.isNotBlank()) HerdrIcons.Search else HerdrIcons.ViewKanban,
+                                if (query.isNotBlank()) HerdrIcons.Search else HerdrIcons.SquareKanban,
                                 if (query.isNotBlank()) "No task matches “$query”" else if (archived) "Nothing archived" else "No tasks yet",
                                 if (query.isNotBlank() || archived) null else "Add one with +.",
                                 Modifier.padding(top = Space.xxl),
@@ -283,7 +285,7 @@ fun BoardScreen(nav: NavController, machineId: String) {
                                     .heightIn(min = 48.dp),
                                 top = if (title == groups.first().first) Space.xs else Space.m,
                                 trailing = if (collapsible) ({
-                                    Icon(if (open) HerdrIcons.ExpandLess else HerdrIcons.ExpandMore, null, tint = Herdr.colors.muted, modifier = Modifier.size(20.dp))
+                                    Icon(if (open) HerdrIcons.ChevronUp else HerdrIcons.ChevronDown, null, tint = Herdr.colors.muted, modifier = Modifier.size(20.dp))
                                 }) else null,
                             )
                         }
@@ -327,7 +329,7 @@ internal fun BusyLine(what: String) {
     Column(Modifier.fillMaxWidth().padding(horizontal = Space.screen, vertical = Space.xs)) {
         LinearProgressIndicator(
             Modifier.fillMaxWidth().height(3.dp).clip(HerdrShapes.Pill).semantics { contentDescription = "Running: $what" },
-            color = Herdr.colors.accent, trackColor = Herdr.colors.field,
+            color = Herdr.colors.accent, trackColor = Herdr.colors.line,
         )
         Text("$what…", style = MaterialTheme.typography.labelMedium, color = Herdr.colors.muted, modifier = Modifier.padding(top = Space.xs))
     }
@@ -337,7 +339,7 @@ internal fun BusyLine(what: String) {
 @Composable
 internal fun Progress(p: Int, color: Color, modifier: Modifier = Modifier) {
     LinearProgressIndicator(
-        progress = { p / 100f }, color = color, trackColor = Herdr.colors.field,
+        progress = { p / 100f }, color = color, trackColor = Herdr.colors.line,
         gapSize = 0.dp, drawStopIndicator = {},
         modifier = modifier.height(4.dp).clip(HerdrShapes.Pill),
     )
@@ -365,7 +367,7 @@ private fun TaskRow(t: BoardTask, onOpen: () -> Unit, onMenu: () -> Unit) {
             Box(Modifier.padding(start = Space.s, top = Space.m, bottom = Space.m).width(if (t.needsYou) 4.dp else 3.dp).fillMaxHeight().clip(HerdrShapes.Pill).background(color))
             Column(Modifier.padding(start = Space.m, end = Space.l, top = Space.m, bottom = Space.m)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(t.name, style = MaterialTheme.typography.titleSmall, color = c.text)
+                    Text(t.name, style = CodeStyle.copy(fontSize = 12.sp), color = c.strong)
                     Spacer(Modifier.width(Space.s))
                     StatusBadge(t.status.label, color)
                     if (t.research) { Spacer(Modifier.width(Space.xs)); Pill("research") }

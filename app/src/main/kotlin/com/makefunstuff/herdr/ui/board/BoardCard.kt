@@ -24,12 +24,12 @@ import com.makefunstuff.herdr.ui.theme.Space
 /** The way into a machine's task board, shown where the machine has herdr-projects. */
 @Composable
 fun BoardCard(machineLabel: String, showMachine: Boolean, onOpen: () -> Unit) =
-    EntryCard(HerdrIcons.ViewKanban, if (showMachine) "Board · $machineLabel" else "Board", "Tasks, reviews and approvals", "tasks", onOpen)
+    EntryCard(HerdrIcons.SquareKanban, if (showMachine) "Board · $machineLabel" else "Board", "Tasks, reviews and approvals", "tasks", onOpen)
 
 /** The way into a machine's Coordinator chat, shown where the machine has the work board. */
 @Composable
 fun CoordinatorCard(machineLabel: String, showMachine: Boolean, onOpen: () -> Unit) =
-    EntryCard(HerdrIcons.Forum, if (showMachine) "Coordinator · $machineLabel" else "Coordinator", "Chat with the board's Coordinator", "work board", onOpen)
+    EntryCard(HerdrIcons.MessagesSquare, if (showMachine) "Coordinator · $machineLabel" else "Coordinator", "Chat with the board's Coordinator", "work board", onOpen)
 
 /** A card that opens a part of the work board: its mark, its name and what it is for, a small tag. */
 @Composable
@@ -37,11 +37,11 @@ private fun EntryCard(icon: ImageVector, title: String, body: String, tag: Strin
     val c = Herdr.colors
     QuietCard(onClick = onOpen, padded = true) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(icon, null, tint = c.accent, modifier = Modifier.size(20.dp))
+            Icon(icon, null, tint = c.text, modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(Space.m))
             Column(Modifier.weight(1f)) {
-                Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(body, style = MaterialTheme.typography.bodyMedium, color = c.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(title, style = MaterialTheme.typography.titleMedium, color = c.strong, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(body, style = MaterialTheme.typography.bodySmall, color = c.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             Spacer(Modifier.width(Space.s))
             Pill(tag)

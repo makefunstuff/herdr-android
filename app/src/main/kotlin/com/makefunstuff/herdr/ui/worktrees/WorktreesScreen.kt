@@ -234,13 +234,13 @@ fun WorktreesScreen(nav: NavController, machineId: String, workspaceId: String?)
                 subtitle = if (onlyRepo != null) "Worktrees · ${state.machine.label}" else state.machine.label,
                 onBack = { nav.popBackStack() },
             ) {
-                BarIcon(HerdrIcons.Refresh, "Refresh", { session.refresh(); refreshTick++ })
+                BarIcon(HerdrIcons.RefreshCw, "Refresh", { session.refresh(); refreshTick++ })
             }
         },
     ) { padding ->
         if (snap == null || (!state.online && visible.isEmpty())) {
             if (state.online) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { com.makefunstuff.herdr.ui.design.LoadingState("Loading worktrees") }
-            else EmptyState("Offline", "Worktrees show once ${state.machine.label} is connected.", icon = HerdrIcons.AccountTree)
+            else EmptyState("Offline", "Worktrees show once ${state.machine.label} is connected.", icon = HerdrIcons.FolderGit2)
             return@Scaffold
         }
         LazyColumn(
@@ -249,12 +249,12 @@ fun WorktreesScreen(nav: NavController, machineId: String, workspaceId: String?)
             verticalArrangement = Arrangement.spacedBy(Space.m),
         ) {
             if (!state.online) {
-                item { com.makefunstuff.herdr.ui.design.Notice("Offline · showing the last known state", color = Herdr.colors.amber, icon = HerdrIcons.Schedule) }
+                item { com.makefunstuff.herdr.ui.design.Notice("Offline · showing the last known state", color = Herdr.colors.notice, icon = HerdrIcons.Clock) }
             }
             if (visible.isEmpty()) {
                 item {
                     com.makefunstuff.herdr.ui.design.StateBlock(
-                        HerdrIcons.AccountTree, "No repositories yet",
+                        HerdrIcons.FolderGit2, "No repositories yet",
                         "No workspace here is in a Git repository. Open a repository by its folder to see its worktrees.",
                     )
                 }
@@ -361,7 +361,7 @@ private fun RepoCard(
             subtitle = repo.root.shortPath(),
             trailing = {
                 QuietButton(onClick = onNew, enabled = listing !is Listing.Failed) {
-                    Icon(HerdrIcons.Add, null, Modifier.size(18.dp))
+                    Icon(HerdrIcons.Plus, null, Modifier.size(18.dp))
                     Text("New")
                 }
             },
@@ -404,7 +404,7 @@ private fun WorktreeRow(wt: GitWorktree, snap: SessionSnapshot, onClick: () -> U
                 Modifier.size(48.dp).clip(CircleShape).clickable(role = Role.Button, onClick = onLongClick)
                     .semantics { contentDescription = "Actions for ${wt.title}" },
                 contentAlignment = Alignment.Center,
-            ) { Icon(HerdrIcons.MoreVert, null, tint = c.muted) }
+            ) { Icon(HerdrIcons.Ellipsis, null, tint = c.muted) }
         },
         onLongClick = onLongClick,
         onClick = onClick,
@@ -416,9 +416,9 @@ private fun WorktreeRow(wt: GitWorktree, snap: SessionSnapshot, onClick: () -> U
 private fun WorktreeActionsSheet(wt: GitWorktree, onDismiss: () -> Unit, onOpen: () -> Unit, onCopy: () -> Unit, onRemove: () -> Unit) {
     HerdrMenu(expanded = true, onDismissRequest = onDismiss, title = wt.title, subtitle = wt.path.shortPath()) {
         MenuRow(if (wt.isOpen) "Go to workspace" else "Open as workspace", HerdrIcons.Folder, onOpen)
-        MenuRow("Copy path", HerdrIcons.ContentCopy, onCopy)
+        MenuRow("Copy path", HerdrIcons.Copy, onCopy)
         if (wt.isLinkedWorktree) {
-            MenuRow("Remove worktree…", HerdrIcons.Delete, onRemove, destructive = true)
+            MenuRow("Remove worktree…", HerdrIcons.Trash2, onRemove, destructive = true)
         } else {
             Text(
                 "The repository's main checkout can't be removed.",
@@ -442,7 +442,7 @@ private fun AddRepoDialog(onDismiss: () -> Unit, onAdd: (path: String) -> Unit) 
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 HerdrField(
                     path, { path = it },
-                    label = { Text("Folder inside the repository") },
+                    label = "Folder inside the repository",
                     placeholder = { Text("/home/you/src/project") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
