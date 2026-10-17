@@ -34,8 +34,10 @@ data class LiveItem(
     val taskId: String = "",
     /** The task's short key (`AND-7`), or its id where it has none. */
     val taskName: String = "",
-    /** An agent working on a board task: that task's id, whose Live Update then stands for both. */
-    val forTask: String = "",
+    /** An agent's name in herdr: the board's agents have names made from their task (see [LiveItems.belongs]). */
+    val agentName: String = "",
+    /** The label of an agent's workspace: the board names a task's workspace after the task. */
+    val workspace: String = "",
 ) {
     enum class Kind { Task, Agent }
 
@@ -128,32 +130,54 @@ object LiveItems {
         )
     }
 
-    /** The board names a task's agent `sw-<repo>-<number>`, and its Coordinator `sw-coordinator`. */
-    private val taskAgent = Regex("^sw-(.+)-(\\d+)$")
-
-    /** [a] as a Live Update while it works, else null. */
-    fun agent(machineId: String, machineLabel: String, a: AgentInfo, where: String, since: Long = 0): LiveItem? {
+    /**
+     * [a] as a Live Update while it works, else null. [workspace]: its workspace's label (the part of
+     * [where] before its tab, when not given).
+     */
+    fun agent(machineId: String, machineLabel: String, a: AgentInfo, where: String, since: Long = 0, workspace: String = ""): LiveItem? {
         if (a.agentStatus != AgentStatus.Working) return null
         val raw = a.name?.takeIf { it.isNotBlank() }
-        val forTask = raw?.let { taskAgent.matchEntire(it) }?.let { "${it.groupValues[1]}/${it.groupValues[2]}" }.orEmpty()
         val title = a.title?.takeIf { it.isNotBlank() }
         val name = when {
-            raw == "sw-coordinator" -> "Coordinator"
-            forTask.isNotEmpty() && title != null -> title
+            // `sw-coordinator`, or `sw-coordinator-2` when that name was taken.
+            raw != null && (raw == "sw-coordinator" || raw.startsWith("sw-coordinator-")) -> "Coordinator"
+            // A board task's agent: its name is made up, its title says which task.
+            raw != null && raw.startsWith("sw-") && title != null -> title
             else -> raw ?: a.displayName
         }
+        // Each part once: an agent's title is often its workspace's label too.
+        val doing = a.subtitle?.takeIf { it != name && !where.contains(it) }
         return LiveItem(
             tag = agentTag(machineId, a.paneId),
             kind = LiveItem.Kind.Agent,
             machineId = machineId,
             machineLabel = machineLabel,
             title = name,
-            text = listOfNotNull("Working", a.subtitle?.takeIf { it != name }, where.takeIf { it.isNotBlank() }).joinToString(" · "),
+            text = listOfNotNull("Working", doing, where.takeIf { it.isNotBlank() }).joinToString(" · "),
             chip = "",
             since = since,
             paneId = a.paneId,
-            forTask = forTask,
+            agentName = raw.orEmpty(),
+            workspace = workspace.ifEmpty { where.substringBefore(" › ", "") },
         )
+    }
+
+    /**
+     * Whether [agent] works on [task] (its worker, its reviewer, the one picking among attempts), so
+     * the task's Live Update stands for it. herdr-projects names them `sw-<repo>-<n>` (the repo in
+     * lower case, other characters as `-`, at most 16), with `-<hash>` when that name is taken, `-r`
+     * for the reviewer and `-pick` for the pick, cut to 32 characters, with `-NNNN` when taken. A
+     * reviewer can also be `sw-task-<n>-r`. And it opens the task's workspace under the task's key and
+     * title, which ties every one of them to it, whatever the name.
+     */
+    fun belongs(agent: LiveItem, task: LiveItem): Boolean {
+        if (agent.kind != LiveItem.Kind.Agent || task.kind != LiveItem.Kind.Task || agent.machineId != task.machineId) return false
+        val key = task.taskName.takeIf { it != task.taskId && '-' in it }
+        if (key != null && (agent.workspace == key || agent.workspace.startsWith("$key "))) return true
+        val name = agent.agentName.ifEmpty { return false }
+        val repo = task.taskId.substringBeforeLast('/').lowercase().map { if (it in 'a'..'z' || it in '0'..'9') it else '-' }.joinToString("").take(16)
+        val base = "sw-$repo-${task.taskId.substringAfterLast('/')}"
+        return name == base || name.startsWith("$base-")
     }
 
     /** A time on the machine's clock (seconds), sent at [at] by it, on the phone's clock at [now] (ms); 0 unknown. */
@@ -162,12 +186,13 @@ object LiveItems {
 
     /** A push's live event as Live Updates: its agents and its tasks, each null when the push didn't say. */
     fun of(machineId: String, machineLabel: String, e: PushEvent.Live, at: Long, now: Long): Pair<List<LiveItem>?, List<LiveItem>?> =
-        e.agents?.mapNotNull { agent(machineId, machineLabel, it.agent, it.where, phoneTime(it.since, at, now)) } to
+        e.agents?.mapNotNull { agent(machineId, machineLabel, it.agent, it.where, phoneTime(it.since, at, now), it.workspace) } to
             e.tasks?.mapNotNull { task(machineId, machineLabel, it.task, it.reviews, phoneTime(it.since, at, now)) }
 
     /** What the app sees on a machine itself (on screen, or a look while closed). */
-    fun agents(machineId: String, machineLabel: String, snapshot: SessionSnapshot): List<LiveItem> =
-        snapshot.agents.mapNotNull { agent(machineId, machineLabel, it, snapshot.location(it.workspaceId, it.tabId)) }
+    fun agents(machineId: String, machineLabel: String, snapshot: SessionSnapshot): List<LiveItem> = snapshot.agents.mapNotNull {
+        agent(machineId, machineLabel, it, snapshot.location(it.workspaceId, it.tabId), workspace = snapshot.workspace(it.workspaceId)?.label.orEmpty())
+    }
 
     fun tasks(machineId: String, machineLabel: String, tasks: List<BoardTask>): List<LiveItem> =
         tasks.mapNotNull { task(machineId, machineLabel, it) }
@@ -242,10 +267,10 @@ class LiveTracker {
 
     private fun diff(refresh: String?, gone: List<String>): LiveChanges {
         val all = parts.values.flatten()
-        val tasks = all.filter { it.kind == LiveItem.Kind.Task }.map { it.machineId to it.taskId }.toSet()
+        val tasks = all.filter { it.kind == LiveItem.Kind.Task }
         val next = LinkedHashMap<String, LiveItem>()
         for (i in all) {
-            if (i.kind == LiveItem.Kind.Agent && i.forTask.isNotEmpty() && (i.machineId to i.forTask) in tasks) continue
+            if (i.kind == LiveItem.Kind.Agent && tasks.any { LiveItems.belongs(i, it) }) continue
             next[i.tag] = i
         }
         val post = next.values.filter { shown[it.tag] != it || (refresh != null && it.tag.startsWith(refresh)) }

@@ -81,7 +81,7 @@ Inside, the message is:
    "where": "api › agents", "screen": "…the bottom of its screen…"},
   {"type": "task", "key": "AND-7", "task": {"id": "herdr-android/7", "state": "blocked", "stage": "approval", "…": "…as list --json gives it"}},
   {"type": "test"},
-  {"type": "live", "agents": [{"agent": {"pane_id": "w1:p3", "agent_status": "working", "…": "…"}, "where": "api › agents", "since": 1759999000}],
+  {"type": "live", "agents": [{"agent": {"pane_id": "w1:p3", "agent_status": "working", "…": "…"}, "where": "api › agents", "workspace": "api", "since": 1759999000}],
    "tasks": [{"key": "AND-7", "task": {"id": "herdr-android/7", "stage": "reviewing", "reviewRound": 2, "…": "…"}, "reviews": 4, "since": 1759999900}]}
 ]}
 ```

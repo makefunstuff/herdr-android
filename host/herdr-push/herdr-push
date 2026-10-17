@@ -342,7 +342,9 @@ def live_agents(snap, st, now):
         since.setdefault(pane, int(now))
         keep = ("pane_id", "workspace_id", "tab_id", "agent", "name", "title", "display_agent", "agent_status", "state_change_seq")
         agent = {k: (_short(a[k]) if isinstance(a[k], str) else a[k]) for k in keep if a.get(k) is not None}
-        out.append({"agent": agent, "where": _short(location(snap, a), 80), "since": since[pane]})
+        ws = next((w for w in snap.get("workspaces", []) if w.get("workspace_id") == a.get("workspace_id")), {})
+        # The workspace's label: the board names a task's workspace after it, which ties its agents (worker, reviewer) to it.
+        out.append({"agent": agent, "where": _short(location(snap, a), 80), "workspace": _short(ws.get("label"), 80), "since": since[pane]})
     working = {e["agent"]["pane_id"] for e in out}
     for pane in list(since):
         if pane not in working:

@@ -26,8 +26,8 @@ sealed interface PushEvent {
     data class Live(val agents: List<LiveAgent>?, val tasks: List<LiveTask>?) : PushEvent
 }
 
-/** A working agent; [since] is when it started working (the machine's clock, seconds; 0 unknown). */
-data class LiveAgent(val agent: AgentInfo, val where: String, val since: Long = 0)
+/** A working agent; [since] is when it started working (the machine's clock, seconds; 0 unknown). [workspace]: its workspace's label. */
+data class LiveAgent(val agent: AgentInfo, val where: String, val since: Long = 0, val workspace: String = "")
 
 /** A running task; [reviews] is how many reviews it gets at most, when known. [since]: when its current part began. */
 data class LiveTask(val task: BoardTask, val reviews: Int? = null, val since: Long = 0)
@@ -75,7 +75,7 @@ object PushMessages {
             agents = (e["agents"] as? JsonArray)?.mapNotNull { x ->
                 val o = x as? JsonObject ?: return@mapNotNull null
                 val a = (o["agent"] as? JsonObject)?.let { runCatching { HerdrJson.decodeFromJsonElement(AgentInfo.serializer(), it) }.getOrNull() }
-                a?.let { LiveAgent(it, o.str("where"), o.long("since")) }
+                a?.let { LiveAgent(it, o.str("where"), o.long("since"), o.str("workspace")) }
             },
             tasks = (e["tasks"] as? JsonArray)?.mapNotNull { x ->
                 val o = x as? JsonObject ?: return@mapNotNull null
