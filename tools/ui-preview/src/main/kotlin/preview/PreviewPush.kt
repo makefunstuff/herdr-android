@@ -2,16 +2,19 @@ package preview
 
 import com.makefunstuff.herdr.core.push.Alert
 import com.makefunstuff.herdr.core.push.LiveItem
+import com.makefunstuff.herdr.core.push.PhoneQuiet
+import com.makefunstuff.herdr.core.push.QuietSummary
 import com.makefunstuff.herdr.push.AlertSink
 import com.makefunstuff.herdr.push.LiveLook
 import com.makefunstuff.herdr.push.LiveSink
 import com.makefunstuff.herdr.push.PushPhone
 
-/** The phone's push side in the previews: by default ntfy installed, notifications and Live Updates allowed; no alarms. */
+/** The phone's push side in the previews: by default ntfy installed, notifications and Live Updates allowed, no Do Not Disturb; no alarms. */
 object PreviewPhone : PushPhone {
     var apps: List<String> = listOf("io.heckel.ntfy")
     var allowed = true
     var liveAllowed: Boolean? = true
+    var quietMode: PhoneQuiet? = null
     override val name = "Pixel 8"
     override fun distributors() = apps
     override fun label(pkg: String) = if (pkg == "io.heckel.ntfy") "ntfy" else pkg
@@ -23,6 +26,8 @@ object PreviewPhone : PushPhone {
     override fun openLiveSettings() {}
     override fun getPushApp() {}
     override fun planChecks() {}
+    override fun quietMode() = quietMode
+    override fun planQuiet(at: Long?) {}
 }
 
 /** Notifications go nowhere in the previews. */
@@ -30,6 +35,7 @@ object PreviewAlerts : AlertSink {
     override fun show(alert: Alert, quiet: Boolean, note: String?) {}
     override fun working(alert: Alert, words: String) {}
     override fun finished(alert: Alert, words: String) {}
+    override fun summary(held: List<Alert>, summary: QuietSummary, quiet: Boolean) {}
     override fun cancel(tag: String) {}
 }
 

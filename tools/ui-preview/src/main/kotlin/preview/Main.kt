@@ -4,6 +4,8 @@
 package preview
 
 import com.makefunstuff.herdr.push.PushState
+import com.makefunstuff.herdr.core.push.Alert
+import com.makefunstuff.herdr.core.push.PhoneQuiet
 import android.content.Context
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.toAwtImage
@@ -76,6 +78,10 @@ class SceneData {
     var notificationsAllowed: Boolean = true
     /** Whether Android shows Live Updates as such (null: before Android 16). */
     var liveAllowed: Boolean? = true
+    /** Do Not Disturb (or Bedtime) or car mode on the phone, for quiet hours. */
+    var quietMode: PhoneQuiet? = null
+    /** Notifications held during quiet hours, as saved before the app opens (Inbox). */
+    var held: List<Alert> = emptyList()
     fun host(id: String): FakeMachine = hosts.getValue(id)
 }
 
@@ -119,6 +125,8 @@ fun render(scene: Scene, dark: Boolean, file: File) {
     PreviewPhone.apps = data.pushApps
     PreviewPhone.allowed = data.notificationsAllowed
     PreviewPhone.liveAllowed = data.liveAllowed
+    PreviewPhone.quietMode = data.quietMode
+    if (data.held.isNotEmpty()) context.filesDir.resolve("held.json").writeText(Json.encodeToString(ListSerializer(Alert.serializer()), data.held))
     IdentityStore.initial = scene.key
     FakeMachines.machines = data.hosts
     Toasts.dismiss()

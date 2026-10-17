@@ -16,6 +16,7 @@ import androidx.core.app.RemoteInput
 import com.makefunstuff.herdr.MainActivity
 import com.makefunstuff.herdr.R
 import com.makefunstuff.herdr.core.push.Alert
+import com.makefunstuff.herdr.core.push.QuietSummary
 import kotlinx.serialization.json.Json
 
 /** [AlertSink] on Android: notifications with their buttons, on two channels. */
@@ -62,6 +63,26 @@ class AndroidAlerts(private val context: Context) : AlertSink {
 
     override fun finished(alert: Alert, words: String) {
         post(alert.tag, base(alert, quiet = true).setContentText(words).setStyle(NotificationCompat.BigTextStyle().bigText(words)).setTimeoutAfter(6_000))
+    }
+
+    override fun summary(held: List<Alert>, summary: QuietSummary, quiet: Boolean) {
+        val style = NotificationCompat.InboxStyle().setBigContentTitle(summary.title)
+        summary.lines.forEach { style.addLine(it) }
+        val open = Intent(context, MainActivity::class.java)
+            .setData(Uri.parse("herdr://alert/$SUMMARY"))
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        val b = NotificationCompat.Builder(context, FINISHED)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setColor(0xFFF0A830.toInt())
+            .setContentTitle(summary.title)
+            .setContentText(summary.text)
+            .setStyle(style)
+            .setNumber(held.size)
+            .setContentIntent(PendingIntent.getActivity(context, SUMMARY.hashCode(), open, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT))
+            .setAutoCancel(true)
+            .setSilent(quiet)
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
+        post(SUMMARY, b)
     }
 
     override fun cancel(tag: String) = nm.cancel(tag, ID)
@@ -112,6 +133,8 @@ class AndroidAlerts(private val context: Context) : AlertSink {
         const val NEEDS_YOU = "needs-you"
         const val FINISHED = "finished"
         const val WORKING = "working"
+        /** The one notification for what was held during quiet hours. */
+        const val SUMMARY = "quiet:summary"
         private const val ID = 1
         val json = Json { ignoreUnknownKeys = true }
     }

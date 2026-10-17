@@ -3,6 +3,9 @@
 // gpu-box and ci-runner are reached through it; mac-mini refuses the app's key.
 package preview
 
+import com.makefunstuff.herdr.core.push.Alert
+import com.makefunstuff.herdr.core.push.Alerts
+import com.makefunstuff.herdr.core.push.QuietHours
 import com.makefunstuff.herdr.push.MachinePush
 import com.makefunstuff.herdr.push.PushState
 import com.makefunstuff.herdr.core.ssh.ConnectError
@@ -51,6 +54,15 @@ object Demo {
             ),
         )
     }
+
+    /** Quiet hours as someone might set them: with the phone's modes, and weeknights from 22:00 to 07:00. */
+    fun quiet() = QuietHours(followPhone = true, schedule = true, start = 22 * 60, end = 7 * 60, days = (1..5).toSet())
+
+    /** Two agents that finished while it was quiet. */
+    fun held() = listOf(
+        Alert(Alerts.agentTag(DEVBOX, APP_AGENT), "done#12", Alert.Kind.Finished, DEVBOX, "app finished", "Speed up /jobs", paneId = APP_AGENT),
+        Alert(Alerts.agentTag(DEVBOX, SITE_AGENT), "done#7", Alert.Kind.Finished, DEVBOX, "site finished", "Rewrite the install page", paneId = SITE_AGENT),
+    )
 
     /** What each machine has and answers. */
     fun hosts(): Map<String, FakeMachine> = mapOf(

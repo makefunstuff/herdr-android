@@ -47,7 +47,8 @@ enum class LiveLook {
 /**
  * Live Updates for what runs on the machines: running board tasks and working agents, from pushes
  * (herdr-push's live event), from what the app sees while on screen, and from its own looks while
- * closed. Their Stop button: Esc to an agent, the board's `stop` for a task, over SSH.
+ * closed. Their Stop button: Esc to an agent, the board's `stop` for a task, over SSH. During quiet
+ * hours ([quiet]) they are taken down and still followed, and come back up when quiet hours end.
  */
 class LiveWork(
     private val scope: CoroutineScope,
@@ -55,9 +56,12 @@ class LiveWork(
     private val machines: MachineStore,
     private val store: PushStore,
     private val sink: LiveSink,
+    private val quiet: QuietWork? = null,
 ) {
     private val tracker = LiveTracker()
     @Volatile private var adopted = false
+    /** Taken down for quiet hours. */
+    @Volatile private var hushed = false
     /** Live Updates showing "Stop it?" (with the job that puts them back) or being stopped: updates leave them be. */
     private val asking = HashMap<String, Job>()
     private val busy = HashSet<String>()
@@ -67,6 +71,9 @@ class LiveWork(
     private val on: Boolean get() = store.state.value.let { it.on && it.live }
 
     fun start() {
+        quiet?.let { q ->
+            scope.launch { q.reason.map { it != null }.distinctUntilChanged().collect { if (it) hush() else wake() } }
+        }
         // On screen, the app follows its machines' agents itself, also on a machine without herdr-push.
         scope.launch {
             hosts.hosts.collect { states ->
@@ -126,7 +133,7 @@ class LiveWork(
             asking[item.tag] = scope.launch {
                 delay(ASK_MS)
                 synchronized(asking) { asking.remove(item.tag) }
-                tracker.item(item.tag)?.let { sink.show(it) }
+                if (!hushed) tracker.item(item.tag)?.let { sink.show(it) }
             }
         }
         sink.show(current, LiveLook.Ask)
@@ -165,7 +172,7 @@ class LiveWork(
         scope.launch {
             delay(AFTER_STOP_MS)
             val held = synchronized(asking) { tag in busy || tag in asking }
-            if (!held) tracker.item(tag)?.let { sink.show(it) }
+            if (!held && !hushed) tracker.item(tag)?.let { sink.show(it) }
         }
     }
 
@@ -192,8 +199,29 @@ class LiveWork(
         tracker.adopt(runCatching { sink.active() }.getOrDefault(emptyList()))
     }
 
+    /** Quiet hours began: every Live Update comes down; the tracker still follows what runs. */
+    private fun hush() {
+        if (hushed) return
+        hushed = true
+        val up = tracker.items().map { it.tag } + runCatching { sink.active() }.getOrDefault(emptyList())
+        up.distinct().forEach(sink::cancel)
+    }
+
+    /** Quiet hours ended: what runs now is up again. */
+    private fun wake() {
+        if (!hushed) return
+        hushed = false
+        val held = synchronized(asking) { asking.keys + busy }
+        for (i in tracker.items()) if (i.tag !in held) sink.show(i)
+    }
+
     private fun apply(c: LiveChanges) {
         if (c.isEmpty) return
+        if (quiet?.check() == true) {
+            hush()
+            c.cancel.forEach(sink::cancel)
+            return
+        }
         val held = synchronized(asking) {
             for (tag in c.cancel) asking.remove(tag)?.cancel()
             asking.keys + busy

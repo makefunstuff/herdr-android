@@ -28,6 +28,7 @@ class AlertWork(
     private val store: PushStore,
     private val inbox: Inbox,
     private val live: LiveWork,
+    private val quiet: QuietWork,
 ) {
     /** A push from a push app: opened with the machine's key and shown. False when it isn't one of ours. */
     fun received(text: String, now: Long = System.currentTimeMillis()): Boolean {
@@ -42,7 +43,7 @@ class AlertWork(
         if (msg.events.any { it is com.makefunstuff.herdr.core.push.PushEvent.Test }) {
             store.machine(machineId) { it.copy(testedAt = now, problem = null) }
         }
-        inbox.apply(changes, quiet = hosts.isForeground)
+        inbox.apply(changes, quiet = hosts.isForeground, hold = quiet.check(now))
         return true
     }
 
@@ -127,7 +128,7 @@ class AlertWork(
         val snapshot = api.snapshot()
         val tasks = board?.let { PushLook.tasks(it) }
         val events = PushLook.events(api, snapshot, tasks)
-        inbox.apply(Alerts.all(machineId, s.machine.label, events), quiet = hosts.isForeground)
+        inbox.apply(Alerts.all(machineId, s.machine.label, events), quiet = hosts.isForeground, hold = quiet.check())
         live.looked(machineId, s.machine.label, snapshot, tasks)
     }
 
