@@ -82,6 +82,15 @@ carries ink, as in the web UI.
 | Done | `--status-done` | `#93C36B` | `#2F6317` | done | ready to approve, done |
 | Idle | `--status-idle` | `#9B9183` | `#685E52` | idle, other | to do, queued, archived |
 
+Code takes the web UI's `--syntax-*` colours (`HerdrColors.syntax(role)`): keywords `#E8875F` /
+`#A33A17`, strings `#A8C17C` / `#4B6B18`, numbers and literals `#D6A0C9` / `#8A3F7A`, types
+`#6CB8D6` / `#155A72`, variables and keys `#E0C08F` / `#7A5418`, meta (annotations, attributes)
+`#B49DD6` / `#5D4791`; comments are `muted`, functions `accent`. Line numbers are `muted`
+(`--line-number`); a marked or chosen line sits on `accentTint` with its number amber. A diff's
+added and removed lines sit on `lineTint` (the done and blocked colours at 10%, a little under a
+badge's tint so a dim comment keeps 4.5:1), with a `+` or `−` in that colour; a hunk's heading on
+`hover`. Every syntax colour holds 4.5:1 on all of these (`ContrastTest`).
+
 A chart's series (a machine's RAM and CPU over the hour) take `chart1` (blue) and `chart2`
 (orange): not states and not amber, checked for colour-blind separation and 3:1 on `card` in both
 themes. The second series is also dashed, and a legend names both.
@@ -165,6 +174,7 @@ gets its initial in a quiet disc; a shell pane gets Lucide's terminal glyph.
 | Floating "Add" | `primary` | | `--shadow-card` |
 | Toast | black (the web UI's in-app alert, both themes) | pill | yes |
 | Code block | `panel` | `line`, `Radius.l` | |
+| Code viewer, diff | `panel` | | |
 | Terminal | `panel` (`--term-bg`) | | |
 
 ## Components
@@ -197,6 +207,7 @@ gets its initial in a quiet disc; a shell pane gets Lucide's terminal glyph.
 | `ChatSurface` | A chat's body as on the web UI's phone layout: the transcript (a reversed list, so it stays at its end when the keyboard opens or the box grows) with the composer floating over its end; the region over the card fades the transcript into `ground`, and the list leaves the composer's measured height free under its newest line. A phone on its side with the keyboard up puts the bars aside while you type (`typingInShortWindow`). |
 | Chat | Your turns: neutral `card` bubbles (hairline in light), `Radius.l`, on the right. Answers: plain prose. Tool calls: the web UI's work block, one quiet row each (state, verb, object in mono), a hairline under the run. |
 | Prompt card (`BlockedCard`) | `card`, `lineStrong` hairline, `Radius.xl`; "Needs you" is its one red; the question in strong prose; the command in the one mono box; the choices flat rows with a keycap, the agent's current one on `hover`. |
+| `CodeLines` | The code viewer's and the diff's lines (`ui/code`): a right-aligned `muted` number column (two for a diff, old and new), the code in JetBrains Mono at the size you set (9–22sp, 1.5 line height), coloured by role; wrapped, or the whole list scrolled sideways. A tap on a number (or a long press on the line) chooses it, a tap on another chooses the lines between; then a `BottomActionBar` says which, with Copy and the primary **Comment**. |
 | Terminal | `panel` ground, `text`, amber cursor, xterm's default ANSI colours, any text held at 4.5:1 on its background (`TerminalPalette.minimumContrast`, as the web UI's xterm `minimumContrastRatio`); keys are `.key`s: hairline, `Radius.s`, an armed modifier on `card` with an amber edge. |
 | Admin | Plugins / Integrations / Server / Machines as a scrollable tab row on `panel`, the active tab underlined in amber. |
 

@@ -123,6 +123,17 @@ The **Brief** (the newspaper icon above the agents, or **Settings → Brief**) t
 
 To put it together the app reaches every machine over SSH, as for notifications while it is closed. Where [herdr-push](host/herdr-push/README.md) runs, its journal tells everything that happened, with times (herdr-push keeps a week of it: each task done, waiting for you, gone wrong, started or added, and each agent that finished or asked). Elsewhere the brief compares how the machine stands now with what the app showed you when you last looked, and says so under the machine; a machine it can't reach is named, with why.
 
+## Code
+
+The code on your machines, to read and comment on from the phone. **Code** opens from the code icon on the Machines tab (choose a machine), from a machine's **⋯** menu and a workspace's actions, from an agent chat's **⋯** (**Browse the code**: the folder it works in) and from a board task (**Changes and files**: its worktree, at its changes).
+
+- **Browse.** A machine's repositories, each with its checkouts: the main one and the worktrees (an agent's, a task's), with the agents at work in each. **Open a folder** takes any other path. A checkout's files are folders; **Go to file** finds a file by a few letters of its name; the search icon searches the code itself, on the machine (`git grep`: words or a regular expression, with or without case).
+- **Read.** Numbered lines in the herdr web UI's code colours, long lines wrapped or scrolled sideways, the text size you set (**Aa**), **Go to line** (**#**), Markdown as it reads (and its source a tap away). A big file opens at once: its first 4 MB, said so, drawn a line at a time as you scroll.
+- **Changes.** Git's status (branch, ahead and behind, what isn't committed), the diff against the branch it left (`main`, or whatever `origin/HEAD` names), or only what isn't committed yet, new files included; a file's diff with both line numbers, stepping through the files. **History** lists the commits, those not in `main` yet first, and each commit's own diff.
+- **Comment.** Tap a line number (or long-press a line), then another to take the lines between, in a file or in a diff, and **Comment**. It goes to the agent at work in that checkout, the task's agent (`tell`) or the Coordinator, as a review note: the path, the lines, the quoted code (a diff's with its `+` and `-`) and your words. **Keep for later** adds it to the **Comments** waiting on that machine (the speech-bubble icon, with a count), to change, drop, or send together as one message.
+
+Everything is read over the machine's SSH connection with `git` and the shell, and nothing is changed there: Git runs with `GIT_OPTIONAL_LOCKS=0`, so not even `git status` touches the index. Only sending a comment does something, and that is a message.
+
 ## The work board
 
 Next to the Coordinator chat, a machine with herdr-projects gets a **Board** screen: the task list as the board shows it (short key such as `AND-7`, title, status in the board's colours, agent, the "doing now" line, progress and minutes left, `[research]` marks, PR links), with **Needs you** (approvals, plans, pick one, errors, questions) first. Search runs the board's `--query`; chips filter by repo and machine; the menu shows archived tasks. Tap a task for its details (failure and next step, reviews with findings and severity, handovers, plan, attempts, PR and report links, limits and usage); long-press for its actions: start, tell, stop, retry, fix, review, finish, approve (and approve anyway, which shows the failure and asks for a tick), approve or send back a plan, pick an attempt, archive/restore, clear, edit title/description. **+** adds a task. It reads `herdr-projects list --json` and `details <id>` and runs the board's own CLI commands over the app's SSH connection, every few seconds while the screen is in front and not at all when backgrounded; a refused command shows the board's own reason.
@@ -161,11 +172,11 @@ UI changes are checked, and shown in review, with screen previews instead of an 
 ./gradlew -p tools/ui-preview render -Ponly=board,chat   # some of them
 ```
 
-It needs JDK 17, no Android SDK, and takes about 3 minutes for all 53 scenes (agents, machines, a machine, a machine's health and cleanup, agent chats, the Coordinator, floating chats, the board and a task, the brief and when it comes, the terminal, settings with its notifications, the dialogs and sheets, and the three panes of a wide window, also across a rotation). CI renders them too and uploads them as the `herdr-screens-<run>` artifact. See [`tools/ui-preview/README.md`](tools/ui-preview/README.md) for how it works and how to add a scene, and [`AGENTS.md`](AGENTS.md) for how changes are reviewed.
+It needs JDK 17, no Android SDK, and takes about 4 minutes for all 70 scenes (agents, machines, the code browser (repositories, files, a file, a comment, changes, a diff, history, search, comments waiting), a machine, a machine's health and cleanup, agent chats, the Coordinator, floating chats, the board and a task, the brief and when it comes, the terminal, settings with its notifications, the dialogs and sheets, and the three panes of a wide window, also across a rotation). CI renders them too and uploads them as the `herdr-screens-<run>` artifact. See [`tools/ui-preview/README.md`](tools/ui-preview/README.md) for how it works and how to add a scene, and [`AGENTS.md`](AGENTS.md) for how changes are reviewed.
 
 ## Layout
 
-- `core/`: pure Kotlin/JVM: SSH, herdr API, host sessions, terminal emulator. `./gradlew -p core test`.
+- `core/`: pure Kotlin/JVM: SSH, herdr API, host sessions, terminal emulator, reading code (`core/code`). `./gradlew -p core test`.
 - `app/`: the Android app. `ui/theme` and `ui/design` hold its look and shared components ([`docs/DESIGN.md`](docs/DESIGN.md)).
 - `tools/ui-preview/`: the screen previews. `./gradlew -p tools/ui-preview render`.
 - `host/herdr-push/`: the watcher that runs on a machine and pushes to the phone (Python 3; core carries it as a resource, and its tests run it).
