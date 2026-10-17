@@ -1,0 +1,212 @@
+package com.makefunstuff.herdr.push
+
+import com.makefunstuff.herdr.core.api.AgentStatus
+import com.makefunstuff.herdr.core.api.SessionSnapshot
+import com.makefunstuff.herdr.core.board.BoardAction
+import com.makefunstuff.herdr.core.board.BoardTask
+import com.makefunstuff.herdr.core.chat.AgentInput
+import com.makefunstuff.herdr.core.host.HostSession
+import com.makefunstuff.herdr.core.push.LiveChanges
+import com.makefunstuff.herdr.core.push.LiveItem
+import com.makefunstuff.herdr.core.push.LiveItems
+import com.makefunstuff.herdr.core.push.LiveTracker
+import com.makefunstuff.herdr.core.push.PushEvent
+import com.makefunstuff.herdr.data.HostManager
+import com.makefunstuff.herdr.data.MachineStore
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
+import java.io.IOException
+
+/** Where Live Updates go: Android's notifications on the phone, nowhere in the screen previews. */
+interface LiveSink {
+    /** Puts [item] up, or replaces it. [look]: which buttons it has; [note]: words in place of its text. */
+    fun show(item: LiveItem, look: LiveLook = LiveLook.Normal, note: String? = null)
+
+    fun cancel(tag: String)
+
+    /** The Live Updates up now: after a restart the app knows them only from here. */
+    fun active(): List<String>
+}
+
+enum class LiveLook {
+    /** Its Stop button. */
+    Normal,
+    /** "Stop it?", with Stop it and Keep going: a task's Stop asks first. */
+    Ask,
+    /** Stopping, or just stopped: no buttons. */
+    Busy,
+}
+
+/**
+ * Live Updates for what runs on the machines: running board tasks and working agents, from pushes
+ * (herdr-push's live event), from what the app sees while on screen, and from its own looks while
+ * closed. Their Stop button: Esc to an agent, the board's `stop` for a task, over SSH.
+ */
+class LiveWork(
+    private val scope: CoroutineScope,
+    private val hosts: HostManager,
+    private val machines: MachineStore,
+    private val store: PushStore,
+    private val sink: LiveSink,
+) {
+    private val tracker = LiveTracker()
+    @Volatile private var adopted = false
+    /** Live Updates showing "Stop it?" (with the job that puts them back) or being stopped: updates leave them be. */
+    private val asking = HashMap<String, Job>()
+    private val busy = HashSet<String>()
+    /** When the app last posted a machine's agents again while on screen, so they outlast their timeout. */
+    private val refreshed = HashMap<String, Long>()
+
+    private val on: Boolean get() = store.state.value.let { it.on && it.live }
+
+    fun start() {
+        // On screen, the app follows its machines' agents itself, also on a machine without herdr-push.
+        scope.launch {
+            hosts.hosts.collect { states ->
+                if (!hosts.isForeground || !on) return@collect
+                val now = System.currentTimeMillis()
+                for (s in states) {
+                    val snap = s.snapshot ?: continue
+                    if (!s.online || store.state.value.machine(s.machine.id).off) continue
+                    val id = s.machine.id
+                    val again = now - (refreshed[id] ?: 0) > REFRESH_MS
+                    if (again) refreshed[id] = now
+                    apply(tracker.update(id, LiveItem.Kind.Agent, LiveItems.agents(id, s.machine.label, snap), refresh = again))
+                }
+            }
+        }
+        // Turned off, a machine left out, or gone from the app: theirs come down.
+        scope.launch {
+            store.state.map { st -> (st.on && st.live) to st.machines.filterValues { it.off }.keys }.distinctUntilChanged().collect { (live, off) ->
+                if (!live) {
+                    adopt()
+                    apply(tracker.clear())
+                } else {
+                    off.forEach { apply(tracker.drop(it)) }
+                }
+            }
+        }
+        scope.launch {
+            machines.machines.map { list -> list.filter { it.enabled }.map { it.id }.toSet() }.distinctUntilChanged().collect { ids ->
+                tracker.items().map { it.machineId }.distinct().filter { it !in ids }.forEach { apply(tracker.drop(it)) }
+            }
+        }
+    }
+
+    /** A push's live event from [machineId], sent at [at] (its clock, seconds). */
+    fun received(machineId: String, label: String, event: PushEvent.Live, at: Long, now: Long = System.currentTimeMillis()) {
+        if (!on || store.state.value.machine(machineId).off) return
+        adopt()
+        val (agents, tasks) = LiveItems.of(machineId, label, event, at, now)
+        // The machine still watches: each one is posted again, so it stays up.
+        agents?.let { apply(tracker.update(machineId, LiveItem.Kind.Agent, it, refresh = true)) }
+        tasks?.let { apply(tracker.update(machineId, LiveItem.Kind.Task, it, refresh = true)) }
+    }
+
+    /** The app's own look at [machineId]: its agents and, when the board answered, its tasks. */
+    fun looked(machineId: String, label: String, snapshot: SessionSnapshot, tasks: List<BoardTask>?) {
+        if (!on || store.state.value.machine(machineId).off) return
+        adopt()
+        apply(tracker.update(machineId, LiveItem.Kind.Agent, LiveItems.agents(machineId, label, snapshot), refresh = true))
+        tasks?.let { apply(tracker.update(machineId, LiveItem.Kind.Task, LiveItems.tasks(machineId, label, it), refresh = true)) }
+    }
+
+    /** A task's Stop: asks first, and goes back to its Stop button after a while without an answer. */
+    fun ask(item: LiveItem) {
+        val current = tracker.item(item.tag) ?: item
+        synchronized(asking) {
+            asking.remove(item.tag)?.cancel()
+            asking[item.tag] = scope.launch {
+                delay(ASK_MS)
+                synchronized(asking) { asking.remove(item.tag) }
+                tracker.item(item.tag)?.let { sink.show(it) }
+            }
+        }
+        sink.show(current, LiveLook.Ask)
+    }
+
+    /** Keep going: the Stop button again. */
+    fun keep(item: LiveItem) {
+        synchronized(asking) { asking.remove(item.tag)?.cancel() }
+        sink.show(tracker.item(item.tag) ?: item)
+    }
+
+    /** Stops [item] over SSH, with how it went on the Live Update. It comes down when the machine says it stopped. */
+    suspend fun stop(item: LiveItem) {
+        val tag = item.tag
+        synchronized(asking) {
+            asking.remove(tag)?.cancel()
+            busy += tag
+        }
+        sink.show(tracker.item(tag) ?: item, LiveLook.Busy, "Stopping…")
+        val problem = try {
+            withTimeout(90_000) { hosts.borrow(item.machineId) { s -> act(s, item) } }
+            null
+        } catch (e: TimeoutCancellationException) {
+            "Took too long. Try again, or open the app."
+        } catch (e: CancellationException) {
+            throw e
+        } catch (t: Throwable) {
+            t.message ?: "Couldn't stop it"
+        } finally {
+            synchronized(asking) { busy -= tag }
+        }
+        val now = tracker.item(tag) ?: if (problem != null) item else return
+        if (problem != null) return sink.show(now, LiveLook.Normal, problem)
+        sink.show(now, LiveLook.Busy, if (item.kind == LiveItem.Kind.Task) "Stopped its agent" else "Esc sent: it stops after this step")
+        // Still running a while later (Esc only interrupts a step): its Stop button again.
+        scope.launch {
+            delay(AFTER_STOP_MS)
+            val held = synchronized(asking) { tag in busy || tag in asking }
+            if (!held) tracker.item(tag)?.let { sink.show(it) }
+        }
+    }
+
+    private suspend fun act(s: HostSession, item: LiveItem) = when (item.kind) {
+        LiveItem.Kind.Agent -> {
+            val api = s.awaitApi()
+            val agent = api.snapshot().agents.firstOrNull { it.paneId == item.paneId }
+            if (agent?.agentStatus != AgentStatus.Working) throw IOException("It isn't working any more.")
+            AgentInput.keys(api, item.paneId, listOf("esc"), named = true)
+            s.refresh()
+        }
+        LiveItem.Kind.Task -> {
+            s.awaitConnection()
+            if (!s.state.value.hasBoard) s.checkBoard()
+            s.awaitBoard().act(BoardAction.Stop, item.taskId)
+            Unit
+        }
+    }
+
+    /** Live Updates up from before the app started (it was closed by Android): known, so they can come down. */
+    private fun adopt() {
+        if (adopted) return
+        adopted = true
+        tracker.adopt(runCatching { sink.active() }.getOrDefault(emptyList()))
+    }
+
+    private fun apply(c: LiveChanges) {
+        if (c.isEmpty) return
+        val held = synchronized(asking) {
+            for (tag in c.cancel) asking.remove(tag)?.cancel()
+            asking.keys + busy
+        }
+        c.cancel.forEach(sink::cancel)
+        for (i in c.post) if (i.tag !in held) sink.show(i)
+    }
+
+    companion object {
+        /** A Live Update nothing confirmed for this long comes down by itself (Android's timeout): its machine may be gone. */
+        const val TIMEOUT_MS = 75L * 60 * 1000
+        private const val REFRESH_MS = 10L * 60 * 1000
+        private const val ASK_MS = 15_000L
+        private const val AFTER_STOP_MS = 20_000L
+    }
+}

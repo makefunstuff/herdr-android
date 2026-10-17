@@ -8,9 +8,11 @@ import com.makefunstuff.herdr.data.IdentityStore
 import com.makefunstuff.herdr.data.MachineStore
 import com.makefunstuff.herdr.push.AlertWork
 import com.makefunstuff.herdr.push.Inbox
+import com.makefunstuff.herdr.push.LiveWork
 import com.makefunstuff.herdr.push.PushHosts
 import com.makefunstuff.herdr.push.PushStore
 import preview.PreviewAlerts
+import preview.PreviewLive
 import preview.PreviewPhone
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -27,7 +29,8 @@ class AppContainer(app: Context) {
     val inbox = Inbox(java.io.File(app.filesDir, "alerts.json"), PreviewAlerts)
     val phone = PreviewPhone
     val pushHosts = PushHosts(scope, hosts, machines, push, phone)
-    val alertWork = AlertWork(hosts, machines, push, inbox)
+    val liveWork = LiveWork(scope, hosts, machines, push, PreviewLive)
+    val alertWork = AlertWork(hosts, machines, push, inbox, liveWork)
 
     init {
         // The app is in front for the whole scene.

@@ -49,6 +49,7 @@ val androidOnly = listOf(
     "com/makefunstuff/herdr/core/ssh/SshConnector.kt",
     "com/makefunstuff/herdr/push/AndroidPush.kt",
     "com/makefunstuff/herdr/push/AndroidAlerts.kt",
+    "com/makefunstuff/herdr/push/AndroidLive.kt",
     "com/makefunstuff/herdr/push/WorkService.kt",
 )
 

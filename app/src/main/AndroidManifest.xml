@@ -11,6 +11,8 @@
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Live Updates (Android 16): running tasks and agents as promoted notifications with a status bar chip. -->
+    <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
 
     <!-- Push apps (UnifiedPush distributors such as ntfy) that give the app an address for its machines. -->
     <queries>
@@ -47,6 +49,8 @@
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
+        <!-- A Live Update's Stop for a task, which asks first, and Keep going. -->
+        <receiver android:name=".push.LiveReceiver" android:exported="false" />
         <!-- Pushes from the machines through a push app (UnifiedPush). Only its token is taken, and only
              pushes sealed with a machine's own key are shown. -->
         <receiver android:name=".push.PushReceiver" android:exported="true">

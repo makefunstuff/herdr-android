@@ -7,6 +7,8 @@ A small watcher that runs on a machine with herdr and tells your phone when some
 
 When that is over (answered on the desktop, the agent back at work, the task moved on), it says so too, and the phone takes the notification down.
 
+For a phone with **Live Updates** on, it also sends what runs: the working agents and the running board tasks (stage, progress, minutes left, the review round and the most reviews there are), which the phone shows as Live Updates with a Stop button. That push goes out at once when something starts, stops or moves on a stage, with progress and the "doing now" line at most every 90 seconds (`HERDR_PUSH_LIVE_MINOR`), and again every 30 minutes while anything runs (`HERDR_PUSH_LIVE_KEEP`), so the phone knows the machine still watches. A phone without Live Updates gets none of these.
+
 The phone shows each one as a notification with buttons: **Approve** and **Deny** for an agent's yes-or-no question, **Reply** (to the agent, to the task's agent, or to the Coordinator about the task), **Approve and merge**, **Approve plan**, **Continue** or **Retry**. A tap opens the agent's chat or the task on the board. The buttons work over the app's own SSH connection, never through the push.
 
 It is one Python 3 file (`herdr-push`), standard library only, and needs nothing installed besides `python3` (3.6 or newer).
@@ -51,7 +53,7 @@ journalctl --user -u herdr-push -f   # its log, under systemd (else ~/.local/sta
 
 To install it without the app's help, copy `herdr-push` from this folder to `~/.local/share/herdr-push/` and run `python3 herdr-push install`. A phone still has to subscribe from the app (Settings → Notifications), because only the app has the phone's push address and makes the key.
 
-What it watches comes from each phone's subscription: the herdr session (`default` unless the machine is set to another in the app), and the `herdr` and `herdr-projects` the app found there. It reads them with `herdr api snapshot`, `herdr pane read <pane> --source visible` (for a blocked agent's question) and `herdr-projects list --json`, every 4 seconds and every 12 seconds for the board. `HERDR_PUSH_INTERVAL` (seconds) and `HERDR_PUSH_BOARD_EVERY` (looks between board reads) change that; under systemd, set them with `systemctl --user edit herdr-push` (`[Service]` / `Environment=HERDR_PUSH_INTERVAL=10`).
+What it watches comes from each phone's subscription: the herdr session (`default` unless the machine is set to another in the app), and the `herdr` and `herdr-projects` the app found there. It reads them with `herdr api snapshot`, `herdr pane read <pane> --source visible` (for a blocked agent's question), `herdr-projects list --json` and, for a task in review on a phone with Live Updates, `herdr-projects show <id>` once an hour (its `review.rounds`), every 4 seconds and every 12 seconds for the board. `HERDR_PUSH_INTERVAL` (seconds) and `HERDR_PUSH_BOARD_EVERY` (looks between board reads) change that; under systemd, set them with `systemctl --user edit herdr-push` (`[Service]` / `Environment=HERDR_PUSH_INTERVAL=10`).
 
 Removing a machine from the app doesn't reach the machine. Turn it off in Settings → Notifications first, or run `herdr-push uninstall --purge` there.
 
@@ -78,8 +80,10 @@ Inside, the message is:
   {"type": "agent", "agent": {"pane_id": "w1:p2", "agent_status": "blocked", "…": "…as session.snapshot gives it"},
    "where": "api › agents", "screen": "…the bottom of its screen…"},
   {"type": "task", "key": "AND-7", "task": {"id": "herdr-android/7", "state": "blocked", "stage": "approval", "…": "…as list --json gives it"}},
-  {"type": "test"}
+  {"type": "test"},
+  {"type": "live", "agents": [{"agent": {"pane_id": "w1:p3", "agent_status": "working", "…": "…"}, "where": "api › agents", "since": 1759999000}],
+   "tasks": [{"key": "AND-7", "task": {"id": "herdr-android/7", "stage": "reviewing", "reviewRound": 2, "…": "…"}, "reviews": 4, "since": 1759999900}]}
 ]}
 ```
 
-A message stays under 4 KB sealed (what ntfy and most push servers take): several events go in separate pushes, and a long screen is shortened.
+A message stays under 4 KB sealed (what ntfy and most push servers take): several events go in separate pushes, a long screen is shortened, and a live event leaves out what doesn't fit (at most 10 agents and 10 tasks). `since` is when the agent started working, or the task's current part of its run began (working, checking, review, merging), on the machine's clock; the phone counts from the push's `at`. A live event without `tasks` (no board there) leaves the tasks as they were.

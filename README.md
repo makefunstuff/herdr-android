@@ -89,6 +89,15 @@ Two ways in, both on every machine the app knows:
 
 Each state is shown once, however it arrives, and comes down again when it is over (answered on the desktop, the agent back at work). The switch next to a machine in Settings leaves it out.
 
+### Live Updates
+
+With **Live Updates** on (Settings → Notifications, on by default), what is at work stays in the notifications while it runs: each running board task and each working agent, with a **Stop** button. On Android 16 (a Pixel 10, say) they are Live Updates: promoted to the top of the shade and the lock screen, with a chip in the status bar.
+
+- **A board task** shows its part of the run on a bar in the board's colours (working, checking, in review, merging), its "doing now" line and minutes left, and the chip says where it is: `40%` while it works (or `12m` left), `Check`, `Rev 2/4` in its second of at most four reviews (the first, and one after each time the work went back, `review.rounds`), `Merge`. Stop asks first (**Stop it** or **Keep going**), then runs the board's `stop`: the task waits for you as stopped, and **Continue** starts it again.
+- **An agent** shows what it does and how long it has worked (the chip is that time). Stop presses Esc, as the chat's stop button does. A board task's agent is shown as its task, not twice.
+
+They come from herdr-push, which also sends what runs to a phone that asked for it: at once when something starts, stops or moves on, its progress at most every 90 seconds, and again every 30 minutes while anything runs (a push server counts pushes; ntfy.sh allows a few hundred a day). While the app is open it follows its machines' agents itself too, and its own looks while closed count as well. One that nothing confirmed for 75 minutes comes down by itself, as its machine may be gone. On Android 15 and older they are ordinary ongoing notifications with a progress bar. If Live Updates are turned off for the app in Android's settings, Settings says so and has a button to turn them on.
+
 ## The work board
 
 Next to the Coordinator chat, a machine with herdr-projects gets a **Board** screen: the task list as the board shows it (short key such as `AND-7`, title, status in the board's colours, agent, the "doing now" line, progress and minutes left, `[research]` marks, PR links), with **Needs you** (approvals, plans, pick one, errors, questions) first. Search runs the board's `--query`; chips filter by repo and machine; the menu shows archived tasks. Tap a task for its details (failure and next step, reviews with findings and severity, handovers, plan, attempts, PR and report links, limits and usage); long-press for its actions: start, tell, stop, retry, fix, review, finish, approve (and approve anyway, which shows the failure and asks for a tick), approve or send back a plan, pick an attempt, archive/restore, clear, edit title/description. **+** adds a task. It reads `herdr-projects list --json` and `details <id>` and runs the board's own CLI commands over the app's SSH connection, every few seconds while the screen is in front and not at all when backgrounded; a refused command shows the board's own reason.
@@ -106,7 +115,7 @@ UI changes are checked, and shown in review, with screen previews instead of an 
 ./gradlew -p tools/ui-preview render -Ponly=board,chat   # some of them
 ```
 
-It needs JDK 17, no Android SDK, and takes about 2 minutes for all 22 scenes (agents, machines, a machine, agent chats, the Coordinator, the board and a task, the terminal, settings with its notifications, and the dialogs and sheets). CI renders them too and uploads them as the `herdr-screens-<run>` artifact. See [`tools/ui-preview/README.md`](tools/ui-preview/README.md) for how it works and how to add a scene, and [`AGENTS.md`](AGENTS.md) for how changes are reviewed.
+It needs JDK 17, no Android SDK, and takes about 2 minutes for all 23 scenes (agents, machines, a machine, agent chats, the Coordinator, the board and a task, the terminal, settings with its notifications, and the dialogs and sheets). CI renders them too and uploads them as the `herdr-screens-<run>` artifact. See [`tools/ui-preview/README.md`](tools/ui-preview/README.md) for how it works and how to add a scene, and [`AGENTS.md`](AGENTS.md) for how changes are reviewed.
 
 ## Layout
 

@@ -67,10 +67,12 @@ fun NotificationsCard() {
     val busy by container.pushHosts.busy.collectAsStateWithLifecycle()
     val phone = container.phone
     var allowed by remember { mutableStateOf(phone.notificationsAllowed()) }
+    var liveAllowed by remember { mutableStateOf(phone.liveAllowed()) }
     // Back from Android's settings or the store: the permission or the push app may have changed.
     var pushApps by remember { mutableStateOf(phone.distributors()) }
     LifecycleResumeEffect(Unit) {
         allowed = phone.notificationsAllowed()
+        liveAllowed = phone.liveAllowed()
         pushApps = phone.distributors()
         onPauseOrDispose {}
     }
@@ -126,6 +128,17 @@ fun NotificationsCard() {
                     },
                 )
             }
+        }
+
+        SwitchRow(
+            "Live Updates",
+            detail = "Board tasks and agents at work stay in the notifications with their stage and progress, and a Stop button. " +
+                "On Android 16 they also show as a chip in the status bar, such as “Rev 2/4”.",
+            checked = st.live,
+        ) { on -> container.push.change { it.copy(live = on) } }
+        if (st.live && liveAllowed == false) {
+            Notice("Live Updates are off for this app in Android's settings, so they show as ordinary notifications.", icon = HerdrIcons.Zap)
+            SecondaryButton("Turn on Live Updates") { phone.openLiveSettings() }
         }
 
         Text("The app also looks", style = MaterialTheme.typography.titleSmall)

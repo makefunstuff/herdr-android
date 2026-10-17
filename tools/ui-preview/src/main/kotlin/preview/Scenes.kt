@@ -52,6 +52,8 @@ fun scenes(): List<Scene> = listOf(
     // Notifications while the app is closed: each machine's herdr-push, and before a push app is there.
     // A taller window shows the whole section under the SSH key (scrolling never settles in the desktop test harness).
     Scene("settings-notifications", route = Routes.SETTINGS, heightDp = 1460, setup = { push = Demo.push() }),
+    // Live Updates turned off for the app in Android's settings: they show as ordinary notifications.
+    Scene("settings-live-off", route = Routes.SETTINGS, heightDp = 1460, setup = { push = Demo.push(); liveAllowed = false }),
     Scene(
         "settings-no-push-app", route = Routes.SETTINGS, heightDp = 1200,
         setup = { push = Demo.push().copy(endpoint = null, distributor = null); pushApps = emptyList(); notificationsAllowed = false },

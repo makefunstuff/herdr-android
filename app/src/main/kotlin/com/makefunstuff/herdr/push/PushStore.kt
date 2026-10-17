@@ -26,6 +26,8 @@ data class PushState(
     val pushProblem: String? = null,
     /** How often the app looks at the machines itself while closed, in minutes; 0 never. */
     val checkMinutes: Int = 15,
+    /** Live Updates for running board tasks and agents (herdr-push then also sends what runs). */
+    val live: Boolean = true,
     val machines: Map<String, MachinePush> = emptyMap(),
 ) {
     fun machine(id: String): MachinePush = machines[id] ?: MachinePush()
@@ -50,6 +52,8 @@ data class MachinePush(
     val testedAt: Long = 0,
     /** The newest push taken from it (its own clock, seconds): an older one is a replay or a straggler. */
     val lastAt: Long = 0,
+    /** Whether its subscription asks for what runs (Live Updates); null before one was made with it. */
+    val live: Boolean? = null,
 ) {
     val keyBytes: ByteArray? get() = key.takeIf { it.isNotEmpty() }?.let { runCatching { Base64.getDecoder().decode(it) }.getOrNull() }
 }
