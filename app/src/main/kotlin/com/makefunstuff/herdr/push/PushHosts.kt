@@ -84,7 +84,7 @@ class PushHosts(
         val m = store.state.value.machine(id)
         // Already set up for this address with this version: only make sure it runs and still reaches the phone.
         if (m.sentTo == endpoint && m.version == HerdrPush.version) {
-            val status = runCatching { HerdrPush.status(client.run("ensure"), store.state.value.phoneId) }.getOrNull()
+            val status = runCatching { HerdrPush.status(client.run("ensure"), subscriber(id)) }.getOrNull()
             if (status != null && status.subscribed && !status.gone && status.version == HerdrPush.version) {
                 store.machine(id) { it.copy(problem = status.error?.let { e -> "Its last push didn't go through: $e" }) }
                 return
@@ -94,7 +94,7 @@ class PushHosts(
         session.checkBoard()
         val host = session.state.value
         val sub = HerdrPush.subscription(
-            phoneId = store.state.value.phoneId,
+            id = subscriber(id),
             phoneName = phone.name,
             endpoint = endpoint,
             key = store.key(id),
@@ -113,7 +113,7 @@ class PushHosts(
         val id = session.machine.id
         val client = HerdrPush.Client(session.awaitConnection(), session.machine.label)
         try {
-            val left = client.run("unsubscribe", store.state.value.phoneId)
+            val left = client.run("unsubscribe", subscriber(id))
             // The last phone gone: nothing to watch for, so it stops and leaves no start-up entry.
             if ((left["phones"] as? kotlinx.serialization.json.JsonPrimitive)?.content == "0") client.run("uninstall")
         } catch (_: HerdrPush.MissingException) {
@@ -121,11 +121,14 @@ class PushHosts(
         store.machine(id) { it.copy(sentTo = null, version = "", problem = null, note = null) }
     }
 
+    /** This phone's subscription for [machineId] on its host: one per machine in the app, also when two share a host. */
+    private fun subscriber(machineId: String) = HerdrPush.subscriberId(store.state.value.phoneId, machineId)
+
     /** Asks [machineId]'s herdr-push for a test notification. */
     suspend fun test(machineId: String) {
         hosts.borrow(machineId) { session ->
             val client = HerdrPush.Client(session.awaitConnection(), session.machine.label)
-            client.run("test", store.state.value.phoneId)
+            client.run("test", subscriber(machineId))
         }
     }
 

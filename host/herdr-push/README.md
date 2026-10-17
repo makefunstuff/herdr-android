@@ -28,7 +28,7 @@ The app also **looks at its machines itself** while it is closed (every 15 minut
 | Path | What |
 | --- | --- |
 | `~/.local/share/herdr-push/herdr-push` | the watcher (the app replaces it when the app carries a newer version) |
-| `~/.config/herdr-push/subscribers.json` | the phones: each one's push address and key (mode 600) |
+| `~/.config/herdr-push/subscribers.json` | the subscriptions, one per phone and machine in the app (two machines in the app on this host, say two herdr sessions, are two): each one's push address, key and herdr session (mode 600) |
 | `~/.local/state/herdr-push/` | `state.json` (what it saw last, so a restart doesn't repeat itself), `herdr-push.log`, `run.lock` |
 | `~/.config/systemd/user/herdr-push.service` | Linux with systemd: a user service, `Restart=always` |
 | `~/Library/LaunchAgents/dev.herdr.push.plist` | macOS: a launchd agent |

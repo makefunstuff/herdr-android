@@ -31,12 +31,10 @@ class AlertWork(
     /** A push from a push app: opened with the machine's key and shown. False when it isn't one of ours. */
     fun received(text: String, now: Long = System.currentTimeMillis()): Boolean {
         val (machineId, msg) = PushMessages.open(text, store.keys().filterKeys { machines.get(it) != null }) ?: return false
-        // A push held back for days (phone off, push app asleep) is old news; the next look catches up.
-        if (msg.at > 0 && now / 1000 - msg.at > 2 * 24 * 3600) return true
         val label = machines.get(machineId)?.label ?: return false
-        // Older than one already taken: a push sent again by someone who saw it, or one overtaken by a newer state.
+        // Days old, or older than one already taken (sent again, or overtaken by a newer state): ours, but not shown.
         val last = store.state.value.machine(machineId).lastAt
-        if (msg.at in 1 until last) return true
+        if (!PushMessages.fresh(msg.at, last, now / 1000)) return true
         if (msg.at > last) store.machine(machineId) { it.copy(lastAt = msg.at) }
         val changes = msg.events.map { Alerts.of(machineId, label, it, msg.host) }
         if (msg.events.any { it is com.makefunstuff.herdr.core.push.PushEvent.Test }) {

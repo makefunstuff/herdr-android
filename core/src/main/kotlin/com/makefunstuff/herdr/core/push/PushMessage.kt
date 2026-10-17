@@ -32,6 +32,20 @@ object PushMessages {
         return null
     }
 
+    /** Pushes older than this are old news (phone off, push app asleep): the app's next look catches up. */
+    const val MAX_AGE_SECONDS = 2L * 24 * 3600
+
+    /**
+     * Whether a push sent at [at] (the machine's clock, seconds; 0 when it didn't say) is taken, given
+     * the newest one taken from that machine, [lastAt]. An older one is a push sent again by someone
+     * who saw it, or one overtaken by a newer state; one from the same second is not.
+     */
+    fun fresh(at: Long, lastAt: Long, nowSeconds: Long): Boolean {
+        if (at <= 0) return true
+        if (nowSeconds - at > MAX_AGE_SECONDS) return false
+        return at >= lastAt
+    }
+
     fun parse(json: String): PushMessage? {
         val o = runCatching { HerdrJson.parseToJsonElement(json).jsonObject }.getOrNull() ?: return null
         val events = (o["events"] as? kotlinx.serialization.json.JsonArray).orEmpty().mapNotNull { e -> event(e as? JsonObject ?: return@mapNotNull null) }

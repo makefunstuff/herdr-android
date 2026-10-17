@@ -57,6 +57,20 @@ class PushSealTest {
     }
 
     @Test
+    fun takesPushesInOrder() {
+        val now = 1_760_000_000L
+        assertTrue(PushMessages.fresh(now, 0, now))
+        assertTrue(PushMessages.fresh(now, now, now), "two pushes in the same second")
+        assertTrue(PushMessages.fresh(now + 5, now, now + 5))
+        // Sent again after a newer one was taken, or overtaken by a newer state: dropped.
+        assertTrue(!PushMessages.fresh(now - 1, now, now))
+        // Held back for days: dropped.
+        assertTrue(!PushMessages.fresh(now - PushMessages.MAX_AGE_SECONDS - 1, 0, now))
+        // A push that doesn't say when: taken.
+        assertTrue(PushMessages.fresh(0, now, now))
+    }
+
+    @Test
     fun findsTheMachineByItsKey() {
         val other = PushSeal.newKey()
         val sealed = PushSeal.sealText(key, "{\"v\":1,\"host\":\"devbox\",\"at\":5,\"events\":[{\"type\":\"test\"}]}")
@@ -260,7 +274,7 @@ class HerdrPushTest {
             assertTrue(File(dir, ".local/share/herdr-push/herdr-push").canExecute())
 
             val key = PushSeal.newKey()
-            val sub = HerdrPush.subscription("phone1", "Pixel", "http://127.0.0.1:${server.address.port}/up", key, "default", herdr.path, board.path)
+            val sub = HerdrPush.subscription(HerdrPush.subscriberId("phone1", "m1"), "Pixel", "http://127.0.0.1:${server.address.port}/up", key, "default", herdr.path, board.path)
             val subscribed = sh(dir, env, HerdrPush.command("subscribe"), sub)
             assertEquals(true, HerdrPush.answer(subscribed.out)?.get("ok")?.toString()?.toBoolean())
 
@@ -295,19 +309,93 @@ class HerdrPushTest {
             )
 
             // A test notification, and the status the app reads.
-            val test = sh(dir, env, HerdrPush.command("test", "phone1"))
+            val test = sh(dir, env, HerdrPush.command("test", "phone1:m1"))
             assertEquals(0, test.exit)
             val (_, t) = assertNotNull(PushMessages.open(received[2], mapOf("m1" to key)))
             assertEquals(listOf<PushEvent>(PushEvent.Test), t.events)
-            val status = HerdrPush.status(assertNotNull(HerdrPush.answer(sh(dir, env, HerdrPush.command("status")).out)), "phone1")
+            val status = HerdrPush.status(assertNotNull(HerdrPush.answer(sh(dir, env, HerdrPush.command("status")).out)), "phone1:m1")
             assertEquals("1", status.version)
             assertTrue(status.subscribed)
             assertNull(status.error)
 
-            assertEquals(0, sh(dir, env, HerdrPush.command("unsubscribe", "phone1")).exit)
-            assertTrue(!HerdrPush.status(HerdrPush.answer(sh(dir, env, HerdrPush.command("status")).out)!!, "phone1").subscribed)
+            assertEquals(0, sh(dir, env, HerdrPush.command("unsubscribe", "phone1:m1")).exit)
+            assertTrue(!HerdrPush.status(HerdrPush.answer(sh(dir, env, HerdrPush.command("status")).out)!!, "phone1:m1").subscribed)
         } finally {
             server.stop(0)
+        }
+    }
+
+    /** Two machines in the app on one host (herdr sessions default and work): each keeps its subscription, session and key. */
+    @Test
+    fun twoMachinesOnOneHost() {
+        assumeTrue(python(), "python3 isn't installed")
+        val dir = Files.createTempDirectory("herdr-push").toFile()
+        val received = CopyOnWriteArrayList<String>()
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+        server.createContext("/up") { ex ->
+            received += ex.requestBody.readBytes().toString(Charsets.UTF_8)
+            ex.sendResponseHeaders(200, -1)
+            ex.close()
+        }
+        server.start()
+        try {
+            val fake = File(dir, "fake").apply { mkdirs() }
+            // Each session answers its own snapshot, as herdr does for HERDR_SESSION.
+            val herdr = File(fake, "herdr").apply {
+                writeText(
+                    """
+                    #!/bin/sh
+                    s="${'$'}{HERDR_SESSION:-default}"
+                    case "${'$'}1 ${'$'}2" in
+                    "api snapshot") cat "${'$'}FAKE/snapshot-${'$'}s.json";;
+                    "pane read") echo;;
+                    *) exit 3;;
+                    esac
+                    """.trimIndent() + "\n",
+                )
+                setExecutable(true)
+            }
+            fun snapshot(session: String, status: String) = File(fake, "snapshot-$session.json").writeText(
+                """{"result":{"snapshot":{"agents":[{"pane_id":"$session:p1","workspace_id":"w1","tab_id":"t1","agent":"claude","name":"$session-agent","agent_status":"$status"}]}}}""",
+            )
+            snapshot("default", "working")
+            snapshot("work", "working")
+            val env = mapOf("HOME" to dir.path, "FAKE" to fake.path, "HERDR_PUSH_HOME" to File(dir, "state").path)
+            assertEquals(0, sh(dir, env, HerdrPush.installCommand(), HerdrPush.script).exit)
+            val url = "http://127.0.0.1:${server.address.port}/up"
+            val keyA = PushSeal.newKey()
+            val keyB = PushSeal.newKey()
+            val a = HerdrPush.subscriberId("phone1", "m1")
+            val b = HerdrPush.subscriberId("phone1", "m2")
+            // A board that isn't there: only the agents count here.
+            sh(dir, env, HerdrPush.command("subscribe"), HerdrPush.subscription(a, "Pixel", url, keyA, "default", herdr.path, "/nonexistent"))
+            sh(dir, env, HerdrPush.command("subscribe"), HerdrPush.subscription(b, "Pixel", url, keyB, "work", herdr.path, "/nonexistent"))
+
+            val status = assertNotNull(HerdrPush.answer(sh(dir, env, HerdrPush.command("status")).out))
+            assertTrue(HerdrPush.status(status, a).subscribed)
+            assertTrue(HerdrPush.status(status, b).subscribed)
+
+            assertEquals(0, sh(dir, env, HerdrPush.command("once")).exit)
+            snapshot("default", "blocked")
+            snapshot("work", "done")
+            assertEquals(0, sh(dir, env, HerdrPush.command("once")).exit)
+            assertEquals(2, received.size)
+            // Each push opens only with its own machine's key and tells about its own session.
+            val opened = received.map { assertNotNull(PushMessages.open(it, mapOf("m1" to keyA, "m2" to keyB))) }
+                .associate { (id, msg) -> id to (msg.events.single() as PushEvent.Agent).agent }
+            assertEquals("default-agent", opened["m1"]?.name)
+            assertEquals("blocked", opened["m1"]?.agentStatusRaw)
+            assertEquals("work-agent", opened["m2"]?.name)
+            assertEquals("done", opened["m2"]?.agentStatusRaw)
+
+            // Leaving one out keeps the other.
+            sh(dir, env, HerdrPush.command("unsubscribe", a))
+            val after = assertNotNull(HerdrPush.answer(sh(dir, env, HerdrPush.command("status")).out))
+            assertTrue(!HerdrPush.status(after, a).subscribed)
+            assertTrue(HerdrPush.status(after, b).subscribed)
+        } finally {
+            server.stop(0)
+            dir.deleteRecursively()
         }
     }
 

@@ -59,9 +59,16 @@ object HerdrPush {
 
     const val MISSING_EXIT = 126
 
-    /** What `herdr-push subscribe` reads: this phone, its push address and its key for this machine. */
+    /**
+     * This phone's subscription for one machine in the app. Per machine, not per phone: two machines in
+     * the app can be one host (two herdr sessions, or the same host by two names), each with its own
+     * session and key, and one subscription mustn't replace the other.
+     */
+    fun subscriberId(phoneId: String, machineId: String): String = "$phoneId:$machineId"
+
+    /** What `herdr-push subscribe` reads: this subscription ([subscriberId]), its push address and its key for this machine. */
     fun subscription(
-        phoneId: String,
+        id: String,
         phoneName: String,
         endpoint: String,
         key: ByteArray,
@@ -69,7 +76,7 @@ object HerdrPush {
         herdrPath: String?,
         boardPath: String?,
     ): String = buildJsonObject {
-        put("id", phoneId)
+        put("id", id)
         put("name", phoneName)
         put("endpoint", endpoint)
         put("key", Base64.getEncoder().encodeToString(key))
@@ -89,9 +96,10 @@ object HerdrPush {
     /** What `status` says about this phone and the watcher. */
     data class Status(val version: String, val running: Boolean, val autostart: String, val subscribed: Boolean, val error: String?, val gone: Boolean)
 
-    fun status(o: JsonObject, phoneId: String): Status {
+    /** How the watcher stands for subscription [id] ([subscriberId]). */
+    fun status(o: JsonObject, id: String): Status {
         val phone = (o["phones"] as? kotlinx.serialization.json.JsonArray).orEmpty()
-            .mapNotNull { it as? JsonObject }.firstOrNull { it.str("id") == phoneId }
+            .mapNotNull { it as? JsonObject }.firstOrNull { it.str("id") == id }
         return Status(
             version = o.str("version"),
             running = (o["running"] as? JsonPrimitive)?.booleanOrNull == true,
