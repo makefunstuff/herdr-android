@@ -1,5 +1,54 @@
 package com.makefunstuff.herdr.ui.design
 
+import android.os.Build
+import android.view.HapticFeedbackConstants
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.isImeVisible
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.selection.LocalTextSelectionColors
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.sp
+import com.makefunstuff.herdr.ui.theme.Pretendard
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -24,8 +73,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -47,12 +94,25 @@ val BubbleShape = RoundedCornerShape(12.dp)
 val ReplyBubbleShape = RoundedCornerShape(12.dp)
 
 /**
- * The box you type into at the bottom of a chat, as herdr-android lays it out (a field, and beside
- * it the round Send button, or Stop while the agent works and nothing is typed), drawn as the web
- * UI's input card: `--bg-elevated`, a hairline that turns amber while you type, `--radius-2xl`,
- * `--shadow-card`. Send is the amber circle with an up arrow; Stop the same circle in strong text
- * with a square. [below] holds a second action under the field (the Coordinator's "Send and start
- * agents").
+ * The message composer at the bottom of a chat, the web UI's input card (`.composer-surface`):
+ * one card on `--bg-elevated` with a hairline that turns amber while you type, `--radius-2xl`,
+ * `--shadow-card`, no Material underline or inner outline. Inside it the message box is a row of
+ * its own at the card's full width, growing from one line to [maxLines] (and never past 40% of the
+ * room it has, so a keyboard and a large font still leave the transcript in sight) and then
+ * scrolling inside. Under it ONE row of controls: [leading] on the left (both chats put the
+ * attach button there, [ComposerIconButton] with Lucide `Plus`), then on the right the [status]
+ * text, [trailing] (the Coordinator's "Start agents") and the one round Send/Stop button.
+ * [holdSend] keeps Send off without touching the text (a file still being copied).
+ *
+ * Send is the amber circle with an up arrow, faded and off while the draft is empty; Stop (while
+ * the agent works, nothing is typed and the screen can [stop] it) is the same circle in strong text
+ * with a square. While [sending] the button holds a progress ring and the draft stays in the box,
+ * dimmed, until the screen clears it (sent; see [com.makefunstuff.herdr.data.DraftStore.afterSend]) or it is yours again (failed).
+ *
+ * Enter makes a new line; Ctrl+Enter (or ⌘+Enter) on a hardware keyboard sends. A send gives a
+ * light haptic. [floating] draws the composer for a place over the transcript's end (see
+ * [ChatSurface]): the region over the card fades the transcript into the ground. [above] goes over
+ * the card, inside the composer (the agent's key row).
  */
 @Composable
 fun ChatComposer(
@@ -62,46 +122,260 @@ fun ChatComposer(
     onSend: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    sending: Boolean = false,
     stop: (() -> Unit)? = null,
-    below: (@Composable () -> Unit)? = null,
+    status: String? = null,
+    holdSend: Boolean = false,
+    sendLabel: String = "Send",
+    maxLines: Int = 8,
+    floating: Boolean = false,
+    above: (@Composable () -> Unit)? = null,
+    leading: (@Composable RowScope.() -> Unit)? = null,
+    trailing: (@Composable RowScope.() -> Unit)? = null,
 ) {
     val c = Herdr.colors
+    val view = LocalView.current
     val focus = remember { MutableInteractionSource() }
     val focused by focus.collectIsFocusedAsState()
+    val focusRequester = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
+    val canSend = enabled && !sending && !holdSend && draft.isNotBlank()
+    val showStop = stop != null && draft.isBlank() && !sending
     val card = RoundedCornerShape(Radius.xxl)
-    Column(modifier.fillMaxWidth().background(c.ground).padding(start = Space.m, end = Space.m, top = Space.s, bottom = Space.m)) {
-        Row(
-            Modifier.fillMaxWidth().shadow(6.dp, card, ambientColor = Color.Black.copy(alpha = 0.35f), spotColor = Color.Black.copy(alpha = 0.35f))
-                .clip(card).background(c.card).border(1.dp, if (focused) c.accent else c.line, card)
-                .padding(start = Space.xs, end = Space.xs),
-            verticalAlignment = Alignment.Bottom,
+    val fade = Space.xxl
+
+    fun send() {
+        if (!canSend) return
+        // A light confirmation under the thumb, as a keyboard's own send key gives.
+        view.performHapticFeedback(if (Build.VERSION.SDK_INT >= 30) HapticFeedbackConstants.CONFIRM else HapticFeedbackConstants.KEYBOARD_TAP)
+        onSend()
+    }
+
+    // The text with its cursor and selection; the draft itself is the screen's (saved per chat).
+    // Opened with a draft, the cursor stands at its end.
+    var field by remember { mutableStateOf(TextFieldValue(draft, TextRange(draft.length))) }
+    // A draft changed from outside (an attached file's mention put in front, a sent message taken
+    // out): the cursor keeps its place in the words you typed, or goes to the end.
+    val value = if (field.text == draft) field else {
+        val grew = draft.length - field.text.length
+        val cursor = if (grew > 0 && draft.endsWith(field.text)) field.selection.end + grew else draft.length
+        TextFieldValue(draft, TextRange(cursor.coerceIn(0, draft.length)))
+    }
+    SideEffect { if (value != field) field = value }
+
+    BoxWithConstraints(modifier.fillMaxWidth(), contentAlignment = Alignment.BottomCenter) {
+        val room = if (constraints.hasBoundedHeight) maxHeight else Dp.Infinity
+        // A short window (a phone on its side with the keyboard up) keeps the card whole: no fade over
+        // it, and the box gives up lines before the controls do.
+        val short = room < 240.dp
+        val glide = floating && !short
+        val textMax = when {
+            room == Dp.Infinity -> 320.dp
+            short -> (room - 72.dp).coerceAtLeast(48.dp)
+            else -> (room * 0.4f).coerceAtLeast(72.dp)
+        }
+        Column(
+            Modifier.fillMaxWidth()
+                // Never clipped by its slot: on a short screen it rises over what is above it.
+                .wrapContentHeight(Alignment.Bottom, unbounded = true)
+                .background(
+                    if (glide) Brush.verticalGradient(0f to Color.Transparent, 1f to c.ground, endY = with(LocalDensity.current) { (fade + Space.m).toPx() })
+                    else SolidColor(c.ground),
+                )
+                .padding(start = Space.m, end = Space.m, top = if (glide) fade else Space.s, bottom = Space.s),
         ) {
-            TextField(
-                value = draft,
-                onValueChange = onDraft,
-                enabled = enabled,
-                interactionSource = focus,
-                placeholder = { Text(placeholder, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                maxLines = 6,
-                textStyle = MaterialTheme.typography.bodyLarge,
-                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
-                colors = TextFieldDefaults.colors(
-                    focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent, disabledContainerColor = Color.Transparent,
-                    focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent,
-                    disabledIndicatorColor = Color.Transparent,
-                    focusedTextColor = c.strong, unfocusedTextColor = c.strong,
-                    focusedPlaceholderColor = c.muted, unfocusedPlaceholderColor = c.muted, disabledPlaceholderColor = c.off,
-                    cursorColor = c.accent,
-                    selectionColors = TextSelectionColors(c.accent, c.accentTint),
-                ),
-                modifier = Modifier.weight(1f).heightIn(min = 52.dp),
-            )
-            Box(Modifier.padding(bottom = 2.dp)) {
-                if (stop != null && draft.isBlank()) RoundAction(HerdrIcons.Square, "Stop", stop = true, onClick = stop)
-                else RoundAction(HerdrIcons.ArrowUp, "Send", enabled = enabled && draft.isNotBlank(), onClick = onSend)
+            if (above != null) Box(Modifier.padding(bottom = Space.s)) { above() }
+            Column(
+                Modifier.fillMaxWidth()
+                    .shadow(6.dp, card, ambientColor = c.shadow, spotColor = c.shadow)
+                    .clip(card).background(c.card).border(1.dp, if (focused && enabled) c.accent else c.line, card)
+                    // A tap anywhere on the card that is not a control puts the cursor in the box.
+                    .pointerInput(enabled) {
+                        detectTapGestures {
+                            if (enabled) { focusRequester.requestFocus(); keyboard?.show() }
+                        }
+                    },
+            ) {
+                CompositionLocalProvider(LocalTextSelectionColors provides TextSelectionColors(c.accent, c.accent.copy(alpha = 0.32f))) {
+                    BasicTextField(
+                        value = value,
+                        onValueChange = { field = it; if (it.text != draft) onDraft(it.text) },
+                        // Not read-only while sending: that would put the keyboard away and bring it back.
+                        enabled = enabled,
+                        textStyle = ComposerTextStyle.copy(color = if (sending || !enabled) c.muted else c.strong),
+                        cursorBrush = SolidColor(c.accent),
+                        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                        minLines = 1,
+                        maxLines = maxLines,
+                        interactionSource = focus,
+                        modifier = Modifier.fillMaxWidth().heightIn(max = textMax)
+                            .focusRequester(focusRequester)
+                            .onPreviewKeyEvent { e ->
+                                // A hardware keyboard: Ctrl/⌘+Enter sends, Enter stays a new line.
+                                val enter = e.key == Key.Enter || e.key == Key.NumPadEnter
+                                if (enter && (e.isCtrlPressed || e.isMetaPressed)) {
+                                    if (e.type == KeyEventType.KeyDown) send()
+                                    true
+                                } else false
+                            }
+                            .semantics { if (sending) stateDescription = "Sending" },
+                        decorationBox = { inner ->
+                            Box(Modifier.padding(start = Space.l, end = Space.l, top = Space.m + Space.xxs, bottom = Space.xs)) {
+                                if (draft.isEmpty()) {
+                                    Text(
+                                        placeholder,
+                                        style = ComposerTextStyle,
+                                        color = if (enabled) c.muted else c.off,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                                inner()
+                            }
+                        },
+                    )
+                }
+                Row(
+                    Modifier.fillMaxWidth().padding(start = Space.xs, end = Space.xxs, bottom = Space.xxs),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    leading?.invoke(this)
+                    Spacer(Modifier.weight(1f))
+                    if (status != null) {
+                        Text(
+                            status,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = c.muted,
+                            textAlign = TextAlign.End,
+                            modifier = Modifier.weight(1f, fill = false).padding(horizontal = Space.s)
+                                .semantics { liveRegion = LiveRegionMode.Polite },
+                        )
+                    }
+                    trailing?.invoke(this)
+                    when {
+                        showStop -> ComposerAction(ComposerActionKind.Stop, "Stop", enabled = enabled, onClick = { stop?.invoke() })
+                        sending -> ComposerAction(ComposerActionKind.Sending, "Sending…", enabled = false, onClick = {})
+                        else -> ComposerAction(ComposerActionKind.Send, sendLabel, enabled = canSend, onClick = ::send)
+                    }
+                }
             }
         }
-        if (below != null) Box(Modifier.padding(top = Space.s, end = Space.xs)) { below() }
+    }
+}
+
+/** The message's type: `--fs-input` (16sp, the web UI's touch size) on `--lh-base`. */
+private val ComposerTextStyle = TextStyle(fontFamily = Pretendard, fontSize = 16.sp, lineHeight = 24.sp)
+
+private enum class ComposerActionKind { Send, Stop, Sending }
+
+/**
+ * The composer's one round button (`.composer-action`): a compact 32dp circle in a 48dp target, the
+ * same place and size for Send, Stop and an in-flight send, so only the glyph changes.
+ */
+@Composable
+private fun ComposerAction(kind: ComposerActionKind, description: String, enabled: Boolean, onClick: () -> Unit) {
+    val c = Herdr.colors
+    val fill = if (kind == ComposerActionKind.Stop) c.strong else c.primary
+    Box(
+        Modifier.size(48.dp).clip(CircleShape).clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .semantics { contentDescription = description },
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            Modifier.size(32.dp)
+                // Send with nothing to send: the amber circle, faded (the web UI's disabled opacity).
+                .alpha(if (kind == ComposerActionKind.Send && !enabled) 0.4f else 1f)
+                .background(fill, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            when (kind) {
+                ComposerActionKind.Send -> Icon(HerdrIcons.ArrowUp, null, tint = c.onPrimary, modifier = Modifier.size(16.dp))
+                ComposerActionKind.Stop -> Box(Modifier.size(10.dp).background(c.ground, RoundedCornerShape(2.dp)))
+                ComposerActionKind.Sending -> CircularProgressIndicator(
+                    Modifier.size(14.dp), color = c.onPrimary, strokeWidth = 2.dp, trackColor = c.onPrimary.copy(alpha = 0.25f),
+                )
+            }
+        }
+    }
+}
+
+/**
+ * An icon button in the composer's row of controls (`.composer-controls .icon-button`): a 20dp
+ * glyph in `--text-dim` in a 48dp round target, `--bg-hover` while pressed; `off` when disabled.
+ * The attach button (Lucide `Plus`, "Attach files").
+ */
+@Composable
+fun ComposerIconButton(icon: ImageVector, description: String, enabled: Boolean = true, onClick: () -> Unit) {
+    val c = Herdr.colors
+    Box(
+        Modifier.size(48.dp).clip(CircleShape)
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .semantics { contentDescription = description },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, null, tint = if (enabled) c.muted else c.off, modifier = Modifier.size(20.dp))
+    }
+}
+
+/**
+ * A switch in the composer's row of controls, beside Send: a compact pill in a 48dp target. Off it
+ * is quiet (a hairline and dim text); on it takes the accent (tint, edge, glyph and words), so it
+ * is plain which way Send will go. The Coordinator's "Start agents" (the board's Tab).
+ */
+@Composable
+fun ComposerToggle(label: String, icon: ImageVector, checked: Boolean, onCheckedChange: (Boolean) -> Unit, enabled: Boolean = true) {
+    val c = Herdr.colors
+    val pill = RoundedCornerShape(50)
+    val tone = when {
+        !enabled -> c.off
+        checked -> c.accent
+        else -> c.muted
+    }
+    Box(
+        Modifier.heightIn(min = 48.dp).clip(pill)
+            .toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = onCheckedChange),
+        contentAlignment = Alignment.Center,
+    ) {
+        Row(
+            Modifier.heightIn(min = 32.dp).clip(pill)
+                .background(if (checked) c.accentTint else Color.Transparent)
+                .border(1.dp, if (checked && enabled) c.accent else c.line, pill)
+                .padding(horizontal = Space.m - Space.xxs, vertical = Space.xxs),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(icon, null, tint = tone, modifier = Modifier.size(14.dp))
+            Spacer(Modifier.width(Space.xs + Space.xxs))
+            Text(label, style = MaterialTheme.typography.labelLarge, color = tone, maxLines = 1)
+        }
+    }
+}
+
+/**
+ * A phone on its side with the keyboard up: room for the composer and little else, so a chat
+ * screen puts its bars aside while you type (they come back with the keyboard's going).
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun typingInShortWindow(): Boolean = WindowInsets.isImeVisible && LocalConfiguration.current.screenHeightDp < 520
+
+/**
+ * A chat screen's body as the web UI lays it out on a phone: the transcript fills the space and
+ * the [composer] floats over its end, so the transcript's last lines fade behind the card. The
+ * [transcript] gets the composer's measured height to leave free under its last line (as bottom
+ * content padding), so the newest message is never under the card, and a reversed list stays at
+ * its end while the box grows or the keyboard opens.
+ */
+@Composable
+fun ChatSurface(
+    modifier: Modifier = Modifier,
+    composer: @Composable () -> Unit,
+    transcript: @Composable BoxScope.(bottom: Dp) -> Unit,
+) {
+    var height by remember { mutableIntStateOf(0) }
+    val density = LocalDensity.current
+    Box(modifier) {
+        transcript(with(density) { height.toDp() })
+        Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().onSizeChanged { height = it.height }) { composer() }
     }
 }
 

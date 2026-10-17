@@ -94,6 +94,18 @@ class MachineConnection internal constructor(
         }
     }
 
+    /** Runs [command] with [input] on its stdin (closed at its end), to completion. */
+    suspend fun runWithInput(command: String, input: InputStream, timeoutSeconds: Long = 120): CommandResult = withContext(Dispatchers.IO) {
+        client.startSession().use { session ->
+            val cmd = session.exec(command)
+            cmd.outputStream.use { out -> input.copyTo(out) }
+            val out = cmd.inputStream.readBytes().toString(Charsets.UTF_8)
+            val err = cmd.errorStream.readBytes().toString(Charsets.UTF_8)
+            cmd.join(timeoutSeconds, TimeUnit.SECONDS)
+            CommandResult(cmd.exitStatus, out, err)
+        }
+    }
+
     internal fun openTunnel(host: String, port: Int) = client.newDirectConnection(host, port)
 
     /**
