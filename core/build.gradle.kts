@@ -29,16 +29,25 @@ dependencies {
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
 }
 
-// The host-side watcher (host/herdr-push) rides along as a resource: the app copies it to a machine.
+// The host-side watcher (host/herdr-push) and the AI quick commands' worker (host/herdr-quick) ride
+// along as resources: the app copies them to a machine.
 sourceSets.main {
     resources.srcDir("../host/herdr-push")
     resources.include("herdr-push")
+}
+tasks.processResources {
+    from("../host/herdr-quick") {
+        include("herdr-quick.mjs", "package.json")
+        into("herdr-quick")
+    }
 }
 
 tasks.test {
     useJUnitPlatform()
     // The interop tests run the watcher itself with python3.
     systemProperty("herdrPush", file("../host/herdr-push/herdr-push").absolutePath)
+    // The quick commands' tests run their shell scripts with sh.
+    systemProperty("herdrQuick", file("../host/herdr-quick/herdr-quick.mjs").absolutePath)
     // A failure says why in the build's own log (CI shows nothing else): its message and where.
     testLogging {
         events("failed", "skipped")
