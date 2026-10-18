@@ -215,6 +215,8 @@ fun TaskDetailScreen(
     backEnabled: Boolean = true,
     /** Opens the code of the task's worktree, at its changes. */
     onCode: ((TaskDetails) -> Unit)? = null,
+    /** Opens the quick commands of the task's worktree. */
+    onQuick: ((TaskDetails) -> Unit)? = null,
 ) {
     BackHandler(enabled = backEnabled, onBack = onBack)
     val owner = LocalLifecycleOwner.current
@@ -235,7 +237,7 @@ fun TaskDetailScreen(
             }
         }
     }
-    TaskDetailContent(t, details, problem, busy, onBack, onAction, onPick, onMore, onCode)
+    TaskDetailContent(t, details, problem, busy, onBack, onAction, onPick, onMore, onCode, onQuick)
 }
 
 /** The screen itself, from data alone: what [TaskDetailScreen] draws once it has read `details`. */
@@ -251,6 +253,7 @@ fun TaskDetailContent(
     onPick: (String) -> Unit,
     onMore: () -> Unit,
     onCode: ((TaskDetails) -> Unit)? = null,
+    onQuick: ((TaskDetails) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val primary = BoardActions.primary(t)
@@ -356,6 +359,16 @@ fun TaskDetailContent(
                                     listOf(d.branch, d.worktree).filter { it.isNotEmpty() }.joinToString(" · "),
                                     style = MaterialTheme.typography.bodySmall, color = Herdr.colors.muted, maxLines = 2, overflow = TextOverflow.Ellipsis,
                                 )
+                            }
+                            Icon(HerdrIcons.ChevronRight, null, tint = Herdr.colors.faint, modifier = Modifier.size(20.dp))
+                        }
+                    }
+                    if (onQuick != null) QuietCard(Modifier.padding(top = Space.s), onClick = { onQuick(d) }, onClickLabel = "Run a quick command in the task's worktree", padded = true) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(HerdrIcons.Zap, null, tint = Herdr.colors.muted, modifier = Modifier.size(20.dp))
+                            Column(Modifier.weight(1f).padding(start = Space.m)) {
+                                Text("Quick commands", style = MaterialTheme.typography.labelLarge, color = Herdr.colors.accent)
+                                Text("Its project's scripts and AI commands, run in its worktree", style = MaterialTheme.typography.bodySmall, color = Herdr.colors.muted, maxLines = 2)
                             }
                             Icon(HerdrIcons.ChevronRight, null, tint = Herdr.colors.faint, modifier = Modifier.size(20.dp))
                         }

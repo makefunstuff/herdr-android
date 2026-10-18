@@ -134,6 +134,52 @@ The code on your machines, to read and comment on from the phone. **Code** opens
 
 Everything is read over the machine's SSH connection with `git` and the shell, and nothing is changed there: Git runs with `GIT_OPTIONAL_LOCKS=0`, so not even `git status` touches the index. Only sending a comment does something, and that is a message.
 
+## Quick commands
+
+Your own scripts, one tap away: ask Claude (or any agent) to write a script into a commands folder, and the app shows it as a quick command. **Quick commands** (the ⚡ icon) opens from a machine's screen, a workspace's actions, an agent chat's **⋯**, a board task (under **Changes and files**) and a file in **Code** (for `{{file}}` and the lines chosen there). Tap one to run it; long-press (or **⋯**) to pin it to the top, run it in a new herdr pane, read its file or copy its path.
+
+**Where they live, on the machine:**
+
+| Folder | Shows |
+| --- | --- |
+| `<repo>/.herdr/commands/` | in that repository's workspaces, worktrees, agents and tasks (a worktree's own folder first, then its main checkout's) |
+| `~/.config/herdr/commands/` | everywhere on that machine |
+
+A project's commands come first; one with the same name as the machine's wins. A command is an **executable file** (a script in any language) or a **`<name>.prompt.md`** file (an AI command, below). The list is read again each time it opens and when the machine connects; pull it down (or **↻**) to read it again.
+
+**The header** is a comment block at the top of the file, one `# key: value` per line (after the `#!` line). Without one, the file's name is the command's name.
+
+```sh
+#!/usr/bin/env bash
+# name: Deploy staging
+# desc: Builds and pushes to the staging server
+# icon: rocket              # a Lucide icon name (git-branch, test-tube-diagonal, hard-drive…)
+# confirm: true             # asks before it runs
+# args: Which branch?       # asks for arguments in a small form first
+# pane: true                # runs in a new herdr pane (long or interactive ones)
+```
+
+**Running one.** It runs on the machine in the checkout's folder (the home folder for a machine command), detached from the phone: its output streams into a sheet (a long log shows its end, the last 256 KB, and says how much is left out), with how it ended (exit status, how long), **Stop**, **Copy** and **Run again**. Arguments typed in the form come as its arguments (split like a shell's words, quotes keep spaces) and whole in `$HERDR_ARGS`; it also gets `$HERDR_REPO`, `$HERDR_CWD` and `$HERDR_COMMAND`. **Run in a new pane** types it into a new tab of the workspace instead and opens its terminal. Every run is kept on the machine (`~/.local/state/herdr-android/quick/<run>/`, the newest 80), so closing the app or losing the connection doesn't stop it: **Runs** (the history icon in the sheet, or the machine's **⋯ → Quick command runs**) lists them with what they printed, to open, run again or remove.
+
+**AI commands** are prompts run by a durable AI worker on the machine ([`host/herdr-quick`](host/herdr-quick/README.md), on [pi-durable](https://www.npmjs.com/package/@earendil-works/pi-durable)): `<name>.prompt.md`, the same header (its keys at the top, so a Markdown heading starts the prompt) and the prompt as the rest of the file.
+
+```markdown
+# name: Summarise today
+# desc: What changed in this repo today
+# icon: newspaper
+# model: pi/deepseek/deepseek-flash   # or claude/claude-opus-5-5; none: pi's default model there
+# tools: read-only                    # read-only (the default: files, search, git history), shell (and writing files), web
+# args: Anything in particular?
+# timeout: 10m                        # its limits: 10 minutes and 200k tokens unless it says
+# tokens: 200k
+
+Summarise what changed today ({{date}}) in {{repo}} on {{branch}}. {{args}}
+```
+
+Placeholders: `{{args}}` (what was typed; added at the end when the prompt has none), `{{repo}}`, `{{worktree}}`, `{{branch}}`, `{{selection}}` (the lines chosen where it was opened, else the clipboard), `{{file}}`, `{{clipboard}}`, `{{machine}}`, `{{date}}`. Models: `claude/<model>` is Anthropic's API (with `ANTHROPIC_API_KEY` there or pi's key for it), `pi/<provider>/<model>` a provider of pi's own `~/.pi/agent/models.json` with pi's keys. Tapping one starts the worker in the checkout's folder; the app shows what it does and its answer as it is written (Markdown), and reattaches when you come back. It survives the phone going away, the app closing and the worker being killed (its conversation is kept in the run's folder, and **Carry on** picks it up where it stopped). When one ends while the app is closed, a notification says so (through herdr-push, or the app's own looks), and a tap opens it. Its answer can be copied, run again, **sent to the Coordinator** (into its message box) or **made a board task**. The first AI command on a machine installs pi-durable with npm (it needs Node.js 22 or newer there).
+
+**New command** (in the sheet) asks an agent to write one for you: what it should do, a script or an AI prompt, for this project or everywhere; it goes to the agent the sheet was opened from, the task's agent, or the Coordinator, as a request naming the folder and the header.
+
 ## The work board
 
 Next to the Coordinator chat, a machine with herdr-projects gets a **Board** screen: the task list as the board shows it (short key such as `AND-7`, title, status in the board's colours, agent, the "doing now" line, progress and minutes left, `[research]` marks, PR links), with **Needs you** (approvals, plans, pick one, errors, questions) first. Search runs the board's `--query`; chips filter by repo and machine; the menu shows archived tasks. Tap a task for its details (failure and next step, reviews with findings and severity, handovers, plan, attempts, PR and report links, limits and usage); long-press for its actions: start, tell, stop, retry, fix, review, finish, approve (and approve anyway, which shows the failure and asks for a tick), approve or send back a plan, pick an attempt, archive/restore, clear, edit title/description. **+** adds a task. It reads `herdr-projects list --json` and `details <id>` and runs the board's own CLI commands over the app's SSH connection, every few seconds while the screen is in front and not at all when backgrounded; a refused command shows the board's own reason.
@@ -172,11 +218,12 @@ UI changes are checked, and shown in review, with screen previews instead of an 
 ./gradlew -p tools/ui-preview render -Ponly=board,chat   # some of them
 ```
 
-It needs JDK 17, no Android SDK, and takes about 4 minutes for all 70 scenes (agents, machines, the code browser (repositories, files, a file, a comment, changes, a diff, history, search, comments waiting), a machine, a machine's health and cleanup, agent chats, the Coordinator, floating chats, the board and a task, the brief and when it comes, the terminal, settings with its notifications, the dialogs and sheets, and the three panes of a wide window, also across a rotation). CI renders them too and uploads them as the `herdr-screens-<run>` artifact. See [`tools/ui-preview/README.md`](tools/ui-preview/README.md) for how it works and how to add a scene, and [`AGENTS.md`](AGENTS.md) for how changes are reviewed.
+It needs JDK 17, no Android SDK, and takes about 5 minutes for all 82 scenes (agents, machines, the code browser (repositories, files, a file, a comment, changes, a diff, history, search, comments waiting), quick commands (a machine's, a project's with one pinned, arguments, a command's menu, a run, its runs, an AI answer and one at work, a long log, a new one, none yet), a machine, a machine's health and cleanup, agent chats, the Coordinator, floating chats, the board and a task, the brief and when it comes, the terminal, settings with its notifications, the dialogs and sheets, and the three panes of a wide window, also across a rotation). CI renders them too and uploads them as the `herdr-screens-<run>` artifact. See [`tools/ui-preview/README.md`](tools/ui-preview/README.md) for how it works and how to add a scene, and [`AGENTS.md`](AGENTS.md) for how changes are reviewed.
 
 ## Layout
 
-- `core/`: pure Kotlin/JVM: SSH, herdr API, host sessions, terminal emulator, reading code (`core/code`). `./gradlew -p core test`.
+- `core/`: pure Kotlin/JVM: SSH, herdr API, host sessions, terminal emulator, reading code (`core/code`), quick commands (`core/quick`). `./gradlew -p core test`.
 - `app/`: the Android app. `ui/theme` and `ui/design` hold its look and shared components ([`docs/DESIGN.md`](docs/DESIGN.md)).
 - `tools/ui-preview/`: the screen previews. `./gradlew -p tools/ui-preview render`.
 - `host/herdr-push/`: the watcher that runs on a machine and pushes to the phone (Python 3; core carries it as a resource, and its tests run it).
+- `host/herdr-quick/`: the AI quick commands' durable worker (Node.js and pi-durable; core carries it, and the app copies it to a machine as it runs one).

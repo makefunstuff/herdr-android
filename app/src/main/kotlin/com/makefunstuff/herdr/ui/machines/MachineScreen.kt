@@ -53,6 +53,8 @@ import com.makefunstuff.herdr.LocalPanes
 import com.makefunstuff.herdr.Routes
 import com.makefunstuff.herdr.ui.worktrees.workspaceFolder
 import com.makefunstuff.herdr.ui.code.CodeSpot
+import com.makefunstuff.herdr.ui.quick.QuickPlace
+import com.makefunstuff.herdr.ui.quick.QuickSheets
 import com.makefunstuff.herdr.core.api.AgentStatus
 import com.makefunstuff.herdr.core.api.PaneInfo
 import com.makefunstuff.herdr.core.api.SessionSnapshot
@@ -119,6 +121,7 @@ fun MachineScreen(nav: NavController, machineId: String) {
     val snap = state.snapshot
     var menu by remember { mutableStateOf(false) }
     var showNew by remember { mutableStateOf(false) }
+    var quick by remember { mutableStateOf<QuickPlace?>(null) }
     var importing by remember { mutableStateOf<List<ImportCandidate>?>(null) }
     var workspaceMenu by remember { mutableStateOf<WorkspaceInfo?>(null) }
     var tabMenu by remember { mutableStateOf<TabInfo?>(null) }
@@ -146,6 +149,7 @@ fun MachineScreen(nav: NavController, machineId: String) {
                 if (state.notices.isNotEmpty()) {
                     BarIcon(HerdrIcons.Bell, "Notifications", { showNotices = true; session.markNoticesRead() }, badge = state.unreadNotices)
                 }
+                if (state.online) BarIcon(HerdrIcons.Zap, "Quick commands", { quick = QuickPlace(machineId, label = state.machine.label) })
                 BarIcon(HerdrIcons.RefreshCw, "Refresh", { session.retry(); session.refresh(); scope.launch { session.checkBoard() } })
                 BarIcon(HerdrIcons.Ellipsis, "More", { menu = true })
                 HerdrMenu(expanded = menu, onDismissRequest = { menu = false }, title = state.machine.label) {
@@ -166,6 +170,7 @@ fun MachineScreen(nav: NavController, machineId: String) {
                         }
                     })
                     MenuRow("Code", HerdrIcons.Code, { menu = false; nav.navigate(Routes.codeRepos(machineId)) })
+                    MenuRow("Quick command runs", HerdrIcons.History, { menu = false; nav.navigate(Routes.quickRuns(machineId)) })
                     MenuRow("Worktrees", HerdrIcons.FolderGit2, { menu = false; nav.navigate(Routes.worktrees(machineId)) })
                     MenuRow("Health and cleanup", HerdrIcons.Activity, { menu = false; nav.navigate(Routes.health(machineId)) })
                     MenuRow("Edit machine", HerdrIcons.Pencil, { menu = false; nav.navigate(Routes.edit(machineId)) })
@@ -254,11 +259,13 @@ fun MachineScreen(nav: NavController, machineId: String) {
             WorkspaceActionsSheet(
                 session, ws, s, state.workspaceMeta[ws.workspaceId].orEmpty(),
                 onCode = folder?.let { f -> { nav.navigate(Routes.codeAt(CodeSpot(machineId, f))) } },
+                onQuick = { quick = QuickPlace(machineId, folder.orEmpty(), label = ws.label.ifBlank { ws.workspaceId }, workspaceId = ws.workspaceId) },
             ) { workspaceMenu = null }
         }
         tabMenu?.let { tab -> TabActionsSheet(session, tab, s) { tabMenu = null } }
         paneMenu?.let { pane -> PaneActionsSheet(session, pane, s) { paneMenu = null } }
     }
+    quick?.let { place -> QuickSheets(nav, place, onDismiss = { quick = null }) }
     if (showNotices) {
         val rows = state.notices.map { NoticeRow(machineId, state.machine.label, it) }
         NoticesSheet(

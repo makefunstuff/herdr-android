@@ -46,6 +46,25 @@ class HerdrApi(private val connection: ApiCaller) {
         connection.call("tab.create", params("workspace_id" to workspaceId, "label" to label, "focus" to false))
     }
 
+    /**
+     * Opens a shell in [cwd] with [env]: a new tab of [workspaceId], or a new workspace when it is
+     * null. Returns the new pane's id.
+     */
+    suspend fun openShell(workspaceId: String?, label: String, cwd: String?, env: Map<String, String> = emptyMap()): String {
+        val vars = JsonObject(env.mapValues { JsonPrimitive(it.value) })
+        val result = if (workspaceId != null) {
+            connection.call("tab.create", params("workspace_id" to workspaceId, "label" to label, "cwd" to cwd, "env" to vars, "focus" to false))
+        } else {
+            connection.call("workspace.create", params("label" to label, "cwd" to cwd, "env" to vars, "focus" to false))
+        }
+        fun id(obj: String, key: String) = ((result[obj] as? JsonObject)?.get(key) as? JsonPrimitive)?.content
+        val tab = id("tab", "tab_id")
+        val workspace = id("workspace", "workspace_id")
+        val panes = snapshot().panes
+        return (panes.firstOrNull { tab != null && it.tabId == tab } ?: panes.firstOrNull { workspace != null && it.workspaceId == workspace })?.paneId
+            ?: throw java.io.IOException("herdr didn't say which pane it opened")
+    }
+
     suspend fun splitPane(paneId: String, direction: String) {
         connection.call("pane.split", params("target_pane_id" to paneId, "direction" to direction, "focus" to false))
     }

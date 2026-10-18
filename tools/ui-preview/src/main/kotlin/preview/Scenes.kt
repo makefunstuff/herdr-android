@@ -143,6 +143,39 @@ fun scenes(): List<Scene> = listOf(
     Scene("code-search", route = Routes.codeSearch(TASK_CODE, "answered")),
     Scene("code-notes", route = Routes.codeNotes(TASK_CODE), heightDp = 1000, setup = { notes = Demo.notes() }),
 
+    // Quick commands: the machine's own from its screen; an agent's project's and the machine's, one pinned; a command
+    // that asks for its arguments, and its menu; a script that failed, an AI one's answer and one still at work, and
+    // the runs (a notification of an AI one that ended opens it there); asking an agent for a new one; a machine
+    // without any yet.
+    Scene("quick", route = Routes.machine(DEVBOX), actions = { tapLabel("Quick commands") }),
+    Scene(
+        "quick-project", route = Routes.agent(DEVBOX, APP_AGENT), heightDp = 1100,
+        setup = { quickPins = mapOf(DEVBOX to listOf("Project:Run unit tests")) },
+        actions = { tapLabel("More"); tapText("Quick commands") },
+    ),
+    Scene("quick-args", route = Routes.agent(DEVBOX, APP_AGENT), heightDp = 1100, actions = {
+        tapLabel("More"); tapText("Quick commands"); tapText("Draft a PR description"); typeInto("Anything to point out?", "Mention that the card's colour follows the theme")
+    }),
+    Scene("quick-menu", route = Routes.agent(DEVBOX, APP_AGENT), heightDp = 1100, actions = {
+        tapLabel("More"); tapText("Quick commands"); tapLabel("More for Render the screens")
+    }),
+    Scene("quick-run", route = Routes.agent(DEVBOX, APP_AGENT), heightDp = 1100, actions = {
+        tapLabel("More"); tapText("Quick commands"); tapText("Run unit tests"); settle()
+    }),
+    Scene("quick-failed", route = Routes.quickRuns(DEVBOX, FakeQuick.TESTS), heightDp = 1100),
+    Scene("quick-answer", route = Routes.quickRuns(DEVBOX, FakeQuick.TODOS), heightDp = 1100),
+    // A long build log: the sheet shows its end, where the error is, and says how much of it is left out.
+    Scene("quick-long", route = Routes.quickRuns(DEVBOX, FakeQuick.BUILD), heightDp = 1100),
+    Scene("quick-working", route = Routes.quickRuns(DEVBOX, FakeQuick.TODAY)),
+    Scene("quick-runs", route = Routes.quickRuns(DEVBOX)),
+    Scene("quick-new", route = Routes.agent(DEVBOX, APP_AGENT), heightDp = 1100, actions = {
+        tapLabel("More"); tapText("Quick commands"); tapText("New command"); tapText("AI prompt")
+        typeInto("What should it do?", "Check why the last CI run of this branch failed and say how to fix it")
+    }),
+    Scene("quick-empty", route = Routes.machine(GPU), actions = { tapLabel("Quick commands") }),
+    // A task's quick commands, under its code.
+    Scene("task-quick", route = Routes.board(DEVBOX), heightDp = 1400, actions = { tapText("Show when each machine last answered") }),
+
     // A pane as a live terminal.
     Scene("terminal", route = Routes.terminal(DEVBOX, APP_SHELL)),
 

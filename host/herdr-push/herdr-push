@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# version: 4
+# version: 5
 """herdr-push: tells your phone when a herdr agent or a work board task needs you.
 
 It runs on the machine with herdr, watches its agents (`herdr api snapshot`) and, where the board
@@ -13,6 +13,8 @@ subscribed (Herdr for Android sets this up over SSH) when:
     stage and progress, as that changes (a few times a minute at most);
   - the machine runs low on RAM (under 10% available) or on a disk, naming what uses the most, and
     when it has room again. It also keeps the last hour of RAM and CPU readings for the app's chart.
+  - an AI quick command that the app started there ends (done, failed, or at its limit), with the
+    start of its answer.
 
 It also keeps a journal of the last week: each time a board task is done, starts waiting for you,
 goes wrong, starts or is added, and each time an agent finishes or asks something. The app reads it
@@ -55,7 +57,7 @@ import urllib.parse
 import urllib.request
 import zlib
 
-VERSION = "4"
+VERSION = "5"
 NAME = "herdr-push"
 
 HOME = os.path.expanduser("~")
@@ -103,6 +105,14 @@ SKIP_FS = {"tmpfs", "devtmpfs", "squashfs", "overlay", "efivarfs", "proc", "sysf
 JOURNAL = os.path.join(STATE_DIR, "journal.json")
 JOURNAL_DAYS = float(os.environ.get("HERDR_PUSH_JOURNAL_DAYS", "8"))
 JOURNAL_MAX = 600
+
+# Quick commands: each run the app starts has a folder here (core/…/quick/QuickCommands.kt); an AI
+# one (a prompt) that ends is told once, unless it ended over QUICK_FRESH seconds ago (the watcher
+# was stopped) or it was stopped from the app.
+QUICK_DIR = os.environ.get("HERDR_PUSH_QUICK") or os.path.join(
+    os.environ.get("XDG_STATE_HOME") or os.path.join(HOME, ".local", "state"), "herdr-android", "quick")
+QUICK_ENDED = ("done", "failed", "stopped", "limit")
+QUICK_FRESH = 3600
 
 SKIP_MOUNTS = ("/boot", "/dev", "/proc", "/sys", "/run", "/snap", "/var/lib/docker", "/var/snap", "/System/Volumes/",
                "/private/var/vm", "/Volumes/Recovery")
@@ -610,6 +620,44 @@ def health_look(st, now):
     return None
 
 
+# ---- quick commands ------------------------------------------------------------------------------
+
+def quick_look(st, now):
+    """The AI quick commands that ended since the last look, as events; the first look only learns."""
+    try:
+        ids = sorted(os.listdir(QUICK_DIR))[-200:]
+    except OSError:
+        ids = []
+    first = "seen" not in st
+    seen = st.get("seen") or {}
+    events, keep = [], {}
+    for rid in ids:
+        run = os.path.join(QUICK_DIR, rid)
+        status = read_json(os.path.join(run, "status.json"), None)
+        if not isinstance(status, dict) or status.get("state") not in QUICK_ENDED:
+            continue
+        state = status["state"]
+        keep[rid] = state
+        if first or seen.get(rid) == state or state == "stopped":
+            continue
+        if now - float(status.get("ended") or now) > QUICK_FRESH:
+            continue
+        meta = read_json(os.path.join(run, "meta.json"), {})
+        if not isinstance(meta, dict) or meta.get("kind") != "prompt":
+            continue
+        answer = ""
+        try:
+            with open(os.path.join(run, "answer.md"), encoding="utf-8", errors="replace") as f:
+                answer = f.read(600)
+        except OSError:
+            pass
+        events.append({"type": "quick", "id": rid, "name": _short(meta.get("name") or rid, 80), "state": state,
+                       "error": _short(status.get("error") or "", 200), "text": _short(answer.strip(), 300),
+                       "cwd": meta.get("cwd") or ""})
+    st["seen"] = keep
+    return events
+
+
 # ---- the journal (the app's brief) ---------------------------------------------------------------
 
 def task_phase(task):
@@ -872,6 +920,17 @@ def tick(state, n, dry_run=False, now=None):
                 record = state.setdefault("phones", {}).setdefault(sub["id"], {})
                 if not dry_run and not gone(record, sub):
                     send(sub, [ev], record)
+        try:
+            quick = quick_look(state.setdefault("quick", {}), now)
+        except Exception as e:  # noqa: BLE001 - a nicety next to the agents
+            log("quick commands:", e)
+            quick = []
+        if quick:
+            sent["@quick"] = quick
+            for sub in subs:
+                record = state.setdefault("phones", {}).setdefault(sub["id"], {})
+                if not dry_run and not gone(record, sub):
+                    send(sub, quick, record)
     return sent
 
 

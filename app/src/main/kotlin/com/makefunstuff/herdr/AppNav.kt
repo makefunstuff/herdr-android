@@ -138,6 +138,8 @@ object Routes {
     const val CODE_DIFF = "code/{mid}/diff?${CodeSpot.ARGS}&src={src}&file={file}"
     const val CODE_COMMIT = "code/{mid}/commit?${CodeSpot.ARGS}&sha={sha}"
     const val CODE_NOTES = "code/{mid}/notes?${CodeSpot.ARGS}"
+    /** A machine's quick-command runs, with one open ([quickRuns]'s run, from its notification). */
+    const val QUICK = "quick/{mid}?run={run}"
 
     fun machine(id: String) = "machine/$id"
     fun edit(id: String? = null) = if (id == null) "edit" else "edit?id=$id"
@@ -158,6 +160,7 @@ object Routes {
         "code/${spot.machine}/diff?${spot.query()}&src=${Uri.encode(src)}&file=${Uri.encode(file)}"
     fun codeCommit(spot: CodeSpot, sha: String) = "code/${spot.machine}/commit?${spot.query()}&sha=$sha"
     fun codeNotes(spot: CodeSpot) = "code/${spot.machine}/notes?${spot.query()}"
+    fun quickRuns(mid: String, run: String? = null) = if (run == null) "quick/$mid" else "quick/$mid?run=${Uri.encode(run)}"
     fun worktrees(mid: String, workspaceId: String? = null) =
         if (workspaceId == null) "worktrees/$mid" else "worktrees/$mid?ws=${Uri.encode(workspaceId)}"
 
@@ -298,6 +301,9 @@ internal fun NavGraphBuilder.screens(nav: NavHostController, agents: @Composable
     }
     composable(Routes.CODE_COMMIT) { CommitScreen(nav, it.codeSpot(), it.arguments?.getString("sha").orEmpty()) }
     composable(Routes.CODE_NOTES) { NotesScreen(nav, it.codeSpot()) }
+    composable(Routes.QUICK) {
+        com.makefunstuff.herdr.ui.quick.QuickRunsScreen(nav, it.arguments?.getString("mid").orEmpty(), it.arguments?.getString("run")?.let(Uri::decode)?.ifEmpty { null })
+    }
     composable(Routes.COORDINATOR) { CoordinatorScreen(nav, it.arguments?.getString("mid").orEmpty()) }
     composable(Routes.TERMINAL) {
         TerminalScreen(nav, it.arguments?.getString("mid").orEmpty(), Uri.decode(it.arguments?.getString("pane").orEmpty()))

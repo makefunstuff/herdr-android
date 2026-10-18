@@ -103,6 +103,8 @@ class SceneData {
     /** Comments on code kept for later (CodeStore), and how code is shown. */
     var notes: List<com.makefunstuff.herdr.core.code.ReviewNote> = emptyList()
     var codeView: com.makefunstuff.herdr.data.CodeView? = null
+    /** Quick commands pinned, per machine (`Project:Run unit tests`). */
+    var quickPins: Map<String, List<String>> = emptyMap()
     fun host(id: String): FakeMachine = hosts.getValue(id)
 }
 
@@ -157,6 +159,7 @@ fun render(scene: Scene, dark: Boolean, file: File) {
     data.shared?.let { container.shares.share(it) }
     data.notes.forEach { container.code.add(it) }
     data.codeView?.let { container.code.setView(it) }
+    data.quickPins.forEach { (m, keys) -> keys.forEach { container.quick.setPinned(m, it, true) } }
     try {
         // Every machine has answered (or refused) before the first frame, so a shot never catches "Connecting".
         val deadline = System.currentTimeMillis() + 15_000
@@ -248,6 +251,12 @@ fun ComposeUiTest.longPressText(text: String) { node(hasText(text, substring = t
 fun ComposeUiTest.type(value: String, field: String? = null) {
     val matcher = androidx.compose.ui.test.hasSetTextAction().let { if (field != null) it and hasText(field, substring = true) else it }
     node(matcher).performTextInput(value)
+    settle()
+}
+
+/** Types into the text field labelled [label] (a form's field, whose label is its content description). */
+fun ComposeUiTest.typeInto(label: String, value: String) {
+    node(androidx.compose.ui.test.hasSetTextAction() and hasContentDescription(label)).performTextInput(value)
     settle()
 }
 
