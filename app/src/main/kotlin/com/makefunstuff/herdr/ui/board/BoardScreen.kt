@@ -59,6 +59,8 @@ import com.makefunstuff.herdr.ui.quick.QuickPlace
 import com.makefunstuff.herdr.ui.quick.QuickSheets
 import com.makefunstuff.herdr.core.board.Approvals
 import com.makefunstuff.herdr.core.board.BoardAction
+import com.makefunstuff.herdr.core.guard.Guarded
+import com.makefunstuff.herdr.ui.common.LocalGuard
 import com.makefunstuff.herdr.core.board.BoardFilter
 import com.makefunstuff.herdr.core.board.BoardStatus
 import com.makefunstuff.herdr.core.board.BoardTask
@@ -129,6 +131,7 @@ fun BoardScreen(nav: NavController, machineId: String, openTask: String? = null,
     val panes = LocalPanes.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val guard = LocalGuard.current
     val session = container.hosts.session(machineId)
     if (session == null) {
         EmptyState("Machine not found", "It may have been removed.")
@@ -184,7 +187,7 @@ fun BoardScreen(nav: NavController, machineId: String, openTask: String? = null,
         }
     }
 
-    fun perform(task: BoardTask, action: BoardAction, text: String = "", letter: String = "") {
+    fun act(task: BoardTask, action: BoardAction, text: String, letter: String) {
         if (busy != null) return
         busy = "${action.label.removeSuffix("…")} · ${task.name}"
         scope.launch {
@@ -194,6 +197,15 @@ fun BoardScreen(nav: NavController, machineId: String, openTask: String? = null,
             busy = null
             readNow.trySend(Unit)
         }
+    }
+
+    fun perform(task: BoardTask, action: BoardAction, text: String = "", letter: String = "") {
+        if (busy != null) return
+        // A merge can't be taken back: the fingerprint first, when that is on.
+        if (action == BoardAction.Approve || action == BoardAction.ApproveAnyway) {
+            return guard.run(Guarded.Merge, "Approve and merge ${task.name}?", task.title) { act(task, action, text, letter) }
+        }
+        act(task, action, text, letter)
     }
 
     /** Offers an action: words first, a confirmation for the ones that can't be undone, else just runs it. */

@@ -8,11 +8,12 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.fragment.app.FragmentActivity
 import androidx.activity.enableEdgeToEdge
 import com.makefunstuff.herdr.HerdrApp
 
-/** A floating chat's window: the chat in its bubble ([BubbleRoot]), over whatever app is open. */
-class BubbleActivity : ComponentActivity() {
+/** A floating chat's window: the chat in its bubble ([BubbleRoot]), over whatever app is open; the fingerprint prompt shows over it too. */
+class BubbleActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)

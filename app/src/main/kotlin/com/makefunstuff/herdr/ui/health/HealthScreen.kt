@@ -1,5 +1,7 @@
 package com.makefunstuff.herdr.ui.health
 
+import com.makefunstuff.herdr.core.guard.Guarded
+
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -614,6 +616,7 @@ private fun PathLine(label: String, path: String) {
 
 @Composable
 private fun ConfirmDialog(c: Confirm, machine: String, model: HealthModel, onDone: () -> Unit) {
+    val guard = com.makefunstuff.herdr.ui.common.LocalGuard.current
     val leftovers = model.leftovers.flatMap { it.procs }
     val (title, body, yes) = when (c) {
         is Confirm.Stop -> Triple(
@@ -654,11 +657,14 @@ private fun ConfirmDialog(c: Confirm, machine: String, model: HealthModel, onDon
         confirmButton = {
             QuietButton(onClick = {
                 onDone()
-                when (c) {
-                    is Confirm.Stop -> model.stop(c.procs, c.what)
-                    Confirm.Leftovers -> model.stopLeftovers()
-                    Confirm.Gradle -> model.stopGradle()
-                    is Confirm.Worktree -> model.removeWorktree(c.leftover)
+                // Then the fingerprint, when that is on: none of these can be taken back.
+                guard.run(if (c is Confirm.Worktree) Guarded.RemoveWorktree else Guarded.StopProcess, title) {
+                    when (c) {
+                        is Confirm.Stop -> model.stop(c.procs, c.what)
+                        Confirm.Leftovers -> model.stopLeftovers()
+                        Confirm.Gradle -> model.stopGradle()
+                        is Confirm.Worktree -> model.removeWorktree(c.leftover)
+                    }
                 }
             }, color = Herdr.colors.red) { Text(yes) }
         },

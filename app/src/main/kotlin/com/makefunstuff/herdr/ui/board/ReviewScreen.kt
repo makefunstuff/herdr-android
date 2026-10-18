@@ -62,6 +62,8 @@ import com.makefunstuff.herdr.LocalPanes
 import com.makefunstuff.herdr.Routes
 import com.makefunstuff.herdr.core.board.Approvals
 import com.makefunstuff.herdr.core.board.BoardAction
+import com.makefunstuff.herdr.core.guard.Guarded
+import com.makefunstuff.herdr.ui.common.LocalGuard
 import com.makefunstuff.herdr.core.board.BoardStatus
 import com.makefunstuff.herdr.core.board.BoardTask
 import com.makefunstuff.herdr.core.board.CheckRun
@@ -152,6 +154,7 @@ fun ReviewScreen(nav: NavController, startMachine: String? = null, startTask: St
     val panes = LocalPanes.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val guard = LocalGuard.current
     val owner = LocalLifecycleOwner.current
     val hosts by container.hosts.hosts.collectAsStateWithLifecycle()
     val boards = hosts.filter { it.hasBoard }
@@ -222,7 +225,7 @@ fun ReviewScreen(nav: NavController, startMachine: String? = null, startTask: St
         current?.let { container.inbox.dismiss(Alerts.taskTag(it.machineId, it.task.id)) }
     }
 
-    fun perform(item: Approvals.Item, action: BoardAction, text: String = "", letter: String = "") {
+    fun act(item: Approvals.Item, action: BoardAction, text: String, letter: String) {
         if (busy != null) return
         val session = container.hosts.session(item.machineId) ?: return
         busy = "${action.label.removeSuffix("…")} · ${item.task.name}"
@@ -233,6 +236,15 @@ fun ReviewScreen(nav: NavController, startMachine: String? = null, startTask: St
             busy = null
             readNow.trySend(Unit)
         }
+    }
+
+    fun perform(item: Approvals.Item, action: BoardAction, text: String = "", letter: String = "") {
+        if (busy != null) return
+        // A merge can't be taken back: the fingerprint first, when that is on.
+        if (action == BoardAction.Approve || action == BoardAction.ApproveAnyway) {
+            return guard.run(Guarded.Merge, "Approve and merge ${item.task.name}?", item.task.title) { act(item, action, text, letter) }
+        }
+        act(item, action, text, letter)
     }
 
     fun openBoard(item: Approvals.Item?) {

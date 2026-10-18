@@ -1,5 +1,7 @@
 package com.makefunstuff.herdr.ui.settings
 
+import com.makefunstuff.herdr.core.guard.Guarded
+
 import com.makefunstuff.herdr.ui.theme.Mono
 import com.makefunstuff.herdr.ui.design.Notice
 import com.makefunstuff.herdr.ui.design.HerdrIcons
@@ -56,6 +58,8 @@ private const val MAX_KEY_FILE = 64 * 1024
 @Composable
 fun ImportKeyDialog(replacing: Boolean, onDismiss: () -> Unit) {
     val container = LocalContainer.current
+    val guard = com.makefunstuff.herdr.ui.common.LocalGuard.current
+    var confirmed by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var text by remember { mutableStateOf("") }
@@ -124,6 +128,7 @@ fun ImportKeyDialog(replacing: Boolean, onDismiss: () -> Unit) {
                 enabled = text.isNotBlank() && !busy,
                 color = if (replacing) Herdr.colors.red else Color.Unspecified,
                 onClick = {
+                    fun import() {
                     busy = true
                     scope.launch {
                         runCatching { container.identity.import(text, passphrase.ifEmpty { null }, replace = replacing) }
@@ -138,6 +143,9 @@ fun ImportKeyDialog(replacing: Boolean, onDismiss: () -> Unit) {
                             }
                         busy = false
                     }
+                    }
+                    // Replacing the key can't be undone: the fingerprint first (once, also when the passphrase was wrong).
+                    if (replacing && !confirmed) guard.run(Guarded.NewKey, "Replace the SSH key?") { confirmed = true; import() } else import()
                 },
             ) { Text(if (replacing) "Replace key" else "Use this key") }
         },
@@ -222,6 +230,7 @@ fun ExportKeyDialog(onDismiss: () -> Unit) {
 @Composable
 fun NewKeyDialog(replacing: Boolean, onDismiss: () -> Unit) {
     val container = LocalContainer.current
+    val guard = com.makefunstuff.herdr.ui.common.LocalGuard.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var busy by remember { mutableStateOf(false) }
@@ -240,14 +249,18 @@ fun NewKeyDialog(replacing: Boolean, onDismiss: () -> Unit) {
         confirmButton = {
             // The dialog's scope ends when it closes, so it closes once the key is saved.
             QuietButton(enabled = !busy, color = if (replacing) Herdr.colors.red else Color.Unspecified, onClick = {
-                busy = true
-                scope.launch {
-                    runCatching { container.identity.create(replace = replacing) }
-                        .onSuccess { container.hosts.retryAll() }
-                        .onFailure { context.toast(it.message ?: "Couldn't make a key") }
-                    busy = false
-                    onDismiss()
+                fun make() {
+                    busy = true
+                    scope.launch {
+                        runCatching { container.identity.create(replace = replacing) }
+                            .onSuccess { container.hosts.retryAll() }
+                            .onFailure { context.toast(it.message ?: "Couldn't make a key") }
+                        busy = false
+                        onDismiss()
+                    }
                 }
+                // Throwing the key away can't be undone: the fingerprint first, when that is on.
+                if (replacing) guard.run(Guarded.NewKey, "Replace the SSH key?") { make() } else make()
             }) { Text(if (replacing) "Replace key" else "Make new key") }
         },
         dismissButton = { QuietButton(enabled = !busy, onClick = onDismiss) { Text("Cancel") } },

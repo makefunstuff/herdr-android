@@ -98,7 +98,7 @@ fun HerdrRoot(container: AppContainer, dark: Boolean = isSystemInDarkTheme(), na
     CompositionLocalProvider(LocalContainer provides container) {
         HerdrTheme(dark) {
             Box {
-                AppNav(nav)
+                com.makefunstuff.herdr.ui.common.GuardHost(container.guard) { AppNav(nav) }
                 com.makefunstuff.herdr.ui.design.ToastHost()
             }
         }
@@ -123,6 +123,8 @@ object Routes {
     const val MACHINES = "machines"
     const val SETTINGS = "settings"
     const val QUIET = "settings/quiet"
+    /** Which actions ask for the fingerprint, and the app lock. */
+    const val GUARD = "settings/guard"
     /** Which notifications reach the phone, holding them while you are at a machine, and the watches. */
     const val RULES = "settings/rules"
     /** What happened while you were away; and when it comes as a notification. */
@@ -302,6 +304,7 @@ internal fun NavGraphBuilder.screens(nav: NavHostController, agents: @Composable
     composable(Routes.MACHINES) { MachinesScreen(nav) }
     composable(Routes.SETTINGS) { SettingsScreen(nav) }
     composable(Routes.QUIET) { QuietHoursScreen(nav) }
+    composable(Routes.GUARD) { com.makefunstuff.herdr.ui.settings.GuardScreen(nav) }
     composable(Routes.RULES) { com.makefunstuff.herdr.ui.settings.AlertRulesScreen(nav) }
     composable(Routes.BRIEF) { BriefScreen(nav) }
     composable(Routes.BRIEF_SETTINGS) { BriefSettingsScreen(nav) }

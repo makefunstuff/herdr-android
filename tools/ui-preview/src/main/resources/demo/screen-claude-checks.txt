@@ -1,0 +1,20 @@
+[32m●[0m [1mWrite[0m(migrations/0042_jobs_created_at.sql)
+  ⎿  Wrote 1 line
+
+────────────────────────────────────────────────────────
+←  ☒ Index  ☐ Checks  ☐ Rollout  ✔ Submit  →
+
+Which checks should run after the migration?
+
+❯ 1. [✔] Unit tests
+         npm test, about 40 s.
+  2. [ ] Load test on the big tenant
+         k6 against staging, 5 minutes.
+  3. [✔] EXPLAIN the slow query
+         Confirms the index is used.
+  4. [ ] Type something
+     Submit
+────────────────────────────────────────────────────────
+  5. Chat about this
+
+Enter to select · ↑/↓ to navigate · Esc to cancel
