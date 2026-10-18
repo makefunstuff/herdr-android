@@ -102,7 +102,9 @@ object Search {
         val agentScores = agents.score(words) { h ->
             listOf(h.title, h.agent.agent.name.orEmpty(), h.agent.agent.displayName, h.task?.name.orEmpty(), h.agent.workspace, h.agent.machineLabel)
         }
+        // With nothing typed, only the tasks that wait for you: the rest of the board is a tap away.
         val taskScores = tasks.score(words) { h -> listOf(h.task.title, h.task.name, h.task.repo, h.machineLabel) }
+            .filter { words.isNotEmpty() || it.first.task.needsYou }
         val machineScores = if (words.isEmpty()) emptyList() else inScope.map(::MachineHit).score(words) { h -> listOf(h.host.machine.label, h.host.machine.target) }
         val workspaces = if (words.isEmpty()) emptyList() else inScope.flatMap { s ->
             val snap = s.snapshot ?: return@flatMap emptyList()
@@ -126,8 +128,7 @@ object Search {
         val all = filter == SearchFilter.All
         return SearchResults(
             agents = agentScores.best { it.state },
-            // With nothing typed, only the tasks that wait for you: the rest of the board is a tap away.
-            tasks = taskScores.filter { words.isNotEmpty() || it.first.task.needsYou }.best { it.state },
+            tasks = taskScores.best { it.state },
             machines = if (all) machineScores.best { null } else emptyList(),
             workspaces = if (all) workspaces.best { null } else emptyList(),
             counts = counts,

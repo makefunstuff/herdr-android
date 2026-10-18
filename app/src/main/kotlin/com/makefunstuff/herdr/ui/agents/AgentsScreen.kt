@@ -261,8 +261,9 @@ fun AgentsScreen(
         containerColor = Herdr.colors.ground,
         topBar = {
             HerdrTopBar("Agents") {
-                // The tightest limit across the machines, a tap from their usage.
-                com.makefunstuff.herdr.ui.usage.UsageChip(nav, compact = panes.wide)
+                // The tightest limit across the machines, a tap from their usage; short, so the title and the search fit beside it.
+                com.makefunstuff.herdr.ui.usage.UsageChip(nav, compact = true)
+                BarIcon(HerdrIcons.Search, "Search agents, tasks and chats", { panes.open(nav, Routes.search()) })
                 BarIcon(HerdrIcons.Newspaper, "Brief: what happened while you were away", { panes.open(nav, Routes.BRIEF) })
                 BarIcon(
                     HerdrIcons.Bell, "Notifications",
@@ -276,7 +277,12 @@ fun AgentsScreen(
         },
         floatingActionButton = {
             // The Coordinator: the one used last, or the machine to ask on (AskScreen decides).
-            if (anyBoard) HerdrFab("Ask", "Ask the Coordinator", icon = HerdrIcons.MessagesSquare) { panes.open(nav, Routes.ask(Ask.COORDINATOR)) }
+            // A long press starts work from a sentence; with no board anywhere, that is the button.
+            if (anyBoard) HerdrFab(
+                "Ask", "Ask the Coordinator", icon = HerdrIcons.MessagesSquare,
+                onLongClick = { panes.open(nav, Routes.start()) }, onLongClickLabel = "Start work",
+            ) { panes.open(nav, Routes.ask(Ask.COORDINATOR)) }
+            else if (hosts.any { it.online }) HerdrFab("Start work") { panes.open(nav, Routes.start()) }
         },
     ) { padding ->
         when {

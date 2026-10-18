@@ -60,14 +60,24 @@ object StartWork {
 
     /**
      * Folders to start in on a machine: the ones used from the phone first ([used], newest first),
-     * then each workspace's (its checkout, else its first pane's), without repeats, at most [max].
+     * then each workspace's (its checkout, else its first pane's; a task's worktree counts as the
+     * repository it was made from, and one in herdr's worktrees folder whose repository herdr doesn't
+     * name is left out), without repeats, at most [max].
      */
     fun recentFolders(snapshot: SessionSnapshot?, used: List<String>, max: Int = 6): List<String> {
         val workspaces = snapshot?.workspaces.orEmpty().mapNotNull { ws ->
-            ws.worktree?.checkoutPath?.ifEmpty { null } ?: snapshot?.panes?.firstOrNull { it.workspaceId == ws.workspaceId }?.cwd?.ifEmpty { null }
+            val tree = ws.worktree
+            when {
+                tree != null && tree.isLinkedWorktree && tree.repoRoot.isNotEmpty() -> tree.repoRoot
+                tree != null && tree.checkoutPath.isNotEmpty() -> tree.checkoutPath
+                else -> snapshot?.panes?.firstOrNull { it.workspaceId == ws.workspaceId }?.cwd?.ifEmpty { null }
+            }?.takeIf { WORKTREES !in it }
         }
         return (used + workspaces).map { it.trimEnd('/').ifEmpty { "/" } }.distinct().take(max)
     }
+
+    /** Where herdr makes its worktrees (`~/.herdr/worktrees/<repo>/<branch>`): a task's checkout, not a place to start new work. */
+    private const val WORKTREES = "/.herdr/worktrees/"
 
     /** A folder's name, as a chip shows it: its last part. */
     fun folderName(path: String): String = path.trimEnd('/').substringAfterLast('/').ifEmpty { path }

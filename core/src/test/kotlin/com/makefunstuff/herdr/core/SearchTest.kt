@@ -127,6 +127,9 @@ class SearchTest {
         assertEquals(3, r.agents.size)
         assertEquals(listOf("API-3"), r.tasks.map { it.task.name })
         assertTrue(r.machines.isEmpty() && r.workspaces.isEmpty())
+        // The chips count what is listed.
+        assertEquals(4, r.counts[SearchFilter.All])
+        assertEquals(2, r.counts[SearchFilter.NeedsYou])
     }
 }
 
@@ -216,8 +219,13 @@ class StartWorkTest {
                 WorkspaceInfo("w1", worktree = WorktreeInfo(checkoutPath = "/home/demo/src/herdr-android")),
                 WorkspaceInfo("w2"),
                 WorkspaceInfo("w3"),
+                WorkspaceInfo("w4", worktree = WorktreeInfo(repoRoot = "/home/demo/src/herdr-android", checkoutPath = "/home/demo/.worktrees/work-6", isLinkedWorktree = true)),
+                WorkspaceInfo("w5"),
             ),
-            panes = listOf(PaneInfo("w2:p1", workspaceId = "w2", tabId = "t", cwd = "/home/demo/src/api-server/"), PaneInfo("w3:p1", workspaceId = "w3", tabId = "t")),
+            panes = listOf(
+                PaneInfo("w2:p1", workspaceId = "w2", tabId = "t", cwd = "/home/demo/src/api-server/"), PaneInfo("w3:p1", workspaceId = "w3", tabId = "t"),
+                PaneInfo("w5:p1", workspaceId = "w5", tabId = "t", cwd = "/home/demo/.herdr/worktrees/website/work-4"),
+            ),
         )
         assertEquals(
             listOf("/home/demo/notes", "/home/demo/src/api-server", "/home/demo/src/herdr-android"),

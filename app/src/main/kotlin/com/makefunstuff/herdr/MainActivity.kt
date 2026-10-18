@@ -4,6 +4,10 @@ import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.os.Build
+import android.view.KeyEvent
+import android.view.KeyboardShortcutGroup
+import android.view.KeyboardShortcutInfo
+import android.view.Menu
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.fragment.app.FragmentActivity
@@ -31,12 +35,31 @@ class MainActivity : FragmentActivity() {
         open(intent)
     }
 
+    /** Ctrl+K from a hardware keyboard opens the search, also when nothing on screen has the focus. */
+    override fun onKeyShortcut(keyCode: Int, event: KeyEvent): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_K && event.isCtrlPressed) {
+            Links.open(Routes.search())
+            return true
+        }
+        return super.onKeyShortcut(keyCode, event)
+    }
+
+    /** The keyboard's shortcuts as Android lists them (Meta+/): Ctrl+K. */
+    override fun onProvideKeyboardShortcuts(data: MutableList<KeyboardShortcutGroup>, menu: Menu?, deviceId: Int) {
+        super.onProvideKeyboardShortcuts(data, menu, deviceId)
+        data += KeyboardShortcutGroup("Herdr", listOf(KeyboardShortcutInfo("Search agents, tasks and chats", KeyEvent.KEYCODE_K, KeyEvent.META_CTRL_ON)))
+    }
+
     /**
-     * A tapped notification: its agent's chat, its task on the board (or its review card), its machine's health or usage, a quick command's run, or the brief. The tile,
+     * A launcher shortcut: Needs you, Start work, the Coordinator ([Ask]) or a recent agent's chat. A tapped notification: its agent's chat, its task on the board (or its review card), its machine's health or usage, a quick command's run, or the brief. The tile,
      * a widget or a share: [Ask]. A floating chat's "Open in the app" or its shortcut: that chat. False
      * when it opens nothing.
      */
     private fun open(intent: Intent?): Boolean {
+        // A launcher shortcut: the launcher learns which ones are used.
+        intent?.getStringExtra(OPEN_SHORTCUT)?.let { runCatching { androidx.core.content.pm.ShortcutManagerCompat.reportShortcutUsed(this, it) } }
+        if (intent?.getBooleanExtra(OPEN_NEEDS, false) == true) { Links.open(Routes.AGENTS); return true }
+        if (intent?.getBooleanExtra(OPEN_START, false) == true) { Links.open(Routes.start()); return true }
         intent?.getStringExtra(OPEN_ASK)?.takeIf { it in ASKS }?.let { Links.open(Routes.ask(it)); return true }
         if (intent?.getBooleanExtra(OPEN_BRIEF, false) == true) { Links.open(Routes.BRIEF); return true }
         val machine = intent?.getStringExtra(OPEN_MACHINE)?.takeIf { it.isNotEmpty() } ?: return false
@@ -68,6 +91,10 @@ class MainActivity : FragmentActivity() {
         const val OPEN_COORDINATOR = "open_coordinator"
         const val OPEN_ASK = "open_ask"
         const val OPEN_BRIEF = "open_brief"
+        /** The launcher's shortcuts: Needs you (the Agents screen), Start work, and which shortcut it was. */
+        const val OPEN_NEEDS = "open_needs"
+        const val OPEN_START = "open_start"
+        const val OPEN_SHORTCUT = "open_shortcut"
         private val ASKS = setOf(Ask.COORDINATOR, Ask.BOARD, Ask.SHARE)
 
         /** Opens the app on [to] (an [Ask]), in its own task, from the tile, a widget or a share. */

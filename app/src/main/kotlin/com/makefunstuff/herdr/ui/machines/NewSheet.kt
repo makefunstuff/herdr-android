@@ -21,6 +21,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -29,12 +30,15 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.makefunstuff.herdr.core.api.SessionSnapshot
 import com.makefunstuff.herdr.core.host.HostSession
+import com.makefunstuff.herdr.core.start.AgentLaunch
+import com.makefunstuff.herdr.core.start.StartWork
 import com.makefunstuff.herdr.ui.common.toast
 import kotlinx.coroutines.launch
 
-private val KINDS = listOf("claude", "codex", "pi", "opencode", "amp", "droid", "copilot")
-
-/** Start an agent, or create a workspace, tab or split. */
+/**
+ * Start an agent, or create a workspace, tab or split. An agent gets what it should do first, as
+ * Start work asks it, and the agents offered are the ones the machine has installed.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NewSheet(session: HostSession, snap: SessionSnapshot, onDismiss: () -> Unit) {
@@ -42,8 +46,14 @@ fun NewSheet(session: HostSession, snap: SessionSnapshot, onDismiss: () -> Unit)
     val scope = rememberCoroutineScope()
     var mode by remember { mutableStateOf(0) }
     var workspaceId by remember { mutableStateOf(snap.workspaces.firstOrNull { it.focused }?.workspaceId ?: snap.workspaces.firstOrNull()?.workspaceId) }
-    var kind by remember { mutableStateOf(KINDS.first()) }
+    // The agents installed there, as herdr finds their programs; the usual list when it can't say.
+    val kinds by produceState(StartWork.KINDS, session.machine.id) {
+        runCatching { StartWork.installed(session.awaitApi(10_000).integrations()) }.getOrNull()?.takeIf { it.isNotEmpty() }?.let { value = it }
+    }
+    var picked by remember { mutableStateOf<String?>(null) }
+    val kind = picked?.takeIf { it in kinds } ?: kinds.first()
     var name by remember { mutableStateOf("") }
+    var prompt by remember { mutableStateOf("") }
     var label by remember { mutableStateOf("") }
     var cwd by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
@@ -86,15 +96,20 @@ fun NewSheet(session: HostSession, snap: SessionSnapshot, onDismiss: () -> Unit)
             }
             when (mode) {
                 0 -> {
+                    HerdrField(
+                        prompt, { prompt = it }, label = "What should it do?", minLines = 2, modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("Optional: its first message") },
+                    )
                     FieldLabel("Agent")
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(Space.s)) {
-                        items(KINDS) { k -> HerdrChip(selected = k == kind, onClick = { kind = k }, label = { Text(k) }) }
+                        items(kinds) { k -> HerdrChip(selected = k == kind, onClick = { picked = k }, label = { Text(k) }) }
                     }
                     HerdrField(
                         value = name,
                         onValueChange = { name = it.filter { c -> c.isLetterOrDigit() || c == '-' || c == '_' } },
                         label = "Name",
-                        placeholder = { Text("reviewer") },
+                        // The name it gets when none is typed: its first words.
+                        placeholder = { Text(StartWork.agentName(prompt, kind, snap.agents.mapNotNull { it.name })) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )
@@ -106,7 +121,9 @@ fun NewSheet(session: HostSession, snap: SessionSnapshot, onDismiss: () -> Unit)
                     PrimaryButton(
                         onClick = {
                             val pane = anchorPane() ?: return@PrimaryButton context.toast("Pick a workspace first")
-                            act { session.awaitApi().startAgent(name.ifBlank { kind }, kind, pane) }
+                            val taken = snap.agents.mapNotNull { it.name }
+                            val n = name.ifBlank { StartWork.agentName(prompt, kind, taken) }
+                            act { AgentLaunch.beside(session.awaitApi(), pane, kind, n, prompt) }
                         },
                         enabled = !busy && workspaceId != null,
                         modifier = Modifier.fillMaxWidth(),

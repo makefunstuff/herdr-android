@@ -77,6 +77,7 @@ fun BoardsScreen(nav: NavController) {
         containerColor = Herdr.colors.ground,
         topBar = {
             HerdrTopBar("Board", subtitle = if (boards.isEmpty()) null else if (waiting > 0) "$waiting need you" else "Nothing waits for you") {
+                BarIcon(HerdrIcons.Search, "Search tasks, agents and chats", { panes.open(nav, Routes.search()) })
                 BarIcon(HerdrIcons.Layers, "Review finished work", { panes.open(nav, Routes.review()) })
                 BarIcon(HerdrIcons.MessagesSquare, "Ask the Coordinator", { panes.open(nav, Routes.ask(Ask.COORDINATOR)) })
             }
