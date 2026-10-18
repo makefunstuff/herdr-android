@@ -41,6 +41,8 @@ class AgentChat(private val host: HostSession, val paneId: String, private val s
         /** The agent's recent screen text, in [Source.Screen] mode or while it is blocked. */
         val screen: String = "",
         val prompt: BlockedPrompt? = null,
+        /** The line its pane asks for a password with ([PasswordPrompt]); null when it asks for none. */
+        val password: String? = null,
         /** Prompts sent from the app that the transcript doesn't show yet. */
         val pending: List<SentMatch.Pending> = emptyList(),
         /** The transcript read as timed turns ([ActivityLog]): when each turn and step was, what an edit changed. */
@@ -159,6 +161,7 @@ class AgentChat(private val host: HostSession, val paneId: String, private val s
             val status = agent?.agentStatus ?: host.state.value.snapshot?.pane(paneId)?.agentStatus ?: AgentStatus.Unknown
             val source = _state.value.source
             val blocked = status == AgentStatus.Blocked
+            val working = status == AgentStatus.Working
             if (blocked || source == Source.Screen) {
                 try {
                     val api = host.awaitApi(10_000)
@@ -168,6 +171,7 @@ class AgentChat(private val host: HostSession, val paneId: String, private val s
                         s.copy(
                             screen = (recent ?: visible ?: s.screen).trimEnd(),
                             prompt = visible?.let { BlockedPrompt.parse(it) },
+                            password = PasswordPrompt.find(visible ?: recent.orEmpty()),
                             pending = if (source == Source.Screen && recent != null) SentMatch.unconfirmed(s.pending) { p -> SentMatch.slid(p, SentMatch.countOnScreen(p.text, recent), System.currentTimeMillis()) } else s.pending,
                         )
                     }
@@ -175,14 +179,25 @@ class AgentChat(private val host: HostSession, val paneId: String, private val s
                     throw e
                 } catch (_: Throwable) {
                 }
-            } else if (_state.value.prompt != null) {
-                _state.update { it.copy(prompt = null) }
+            } else if (working) {
+                // A command it runs may stop for a password (sudo, ssh, a key's passphrase): the
+                // end of its screen, looked at now and then while it works.
+                try {
+                    val tail = host.awaitApi(10_000).readPane(paneId, source = "visible", lines = 6).text
+                    _state.update { it.copy(prompt = null, password = PasswordPrompt.find(tail)) }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Throwable) {
+                }
+            } else if (_state.value.prompt != null || _state.value.password != null) {
+                _state.update { it.copy(prompt = null, password = null) }
             }
             delay(
                 when {
                     blocked -> 1_200L
-                    source == Source.Screen && status == AgentStatus.Working -> 1_500L
+                    source == Source.Screen && working -> 1_500L
                     source == Source.Screen -> 3_000L
+                    working -> 2_500L
                     else -> 700L
                 },
             )

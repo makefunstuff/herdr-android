@@ -273,8 +273,10 @@ fun CoordinatorScreen(nav: NavController, machineId: String) {
     ) { padding ->
         // The top bar's inset comes from the scaffold; the bottom follows the keyboard or the nav bar.
         Column(Modifier.padding(top = padding.calculateTopPadding()).fillMaxSize().imePadding().navigationBarsPadding()) {
+            val sizes by container.textSizes.state.collectAsStateWithLifecycle()
             ChatSurface(
                 Modifier.weight(1f).fillMaxWidth(),
+                textScale = sizes.chat,
                 composer = {
                     CoordinatorComposer(
                         draft = draft,

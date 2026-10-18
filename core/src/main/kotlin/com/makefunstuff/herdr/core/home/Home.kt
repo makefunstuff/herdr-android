@@ -87,6 +87,11 @@ data class Home(
     val isEmpty: Boolean get() = needsYou.isEmpty() && pinned.isEmpty() && working.isEmpty() && done.isEmpty() && idle.isEmpty() && snoozed.isEmpty()
 
     companion object {
+        /** [agent]'s task among its own machine's board [tasks], by the names herdr-projects gives them; null when it works on none. */
+        fun taskOf(agent: HomeAgent, tasks: List<BoardTask>): BoardTask? = tasks.firstOrNull { t ->
+            t.machine.isEmpty() && !t.archived && LiveItems.belongs(agent.agent.name.orEmpty(), agent.workspace, t.id, t.name)
+        }
+
         /** The order tasks wait in: ready to merge first, then what failed, plans and choices, questions, the rest. */
         val ORDER = listOf(
             BoardStatus.Approval, BoardStatus.ReviewFailed, BoardStatus.Error, BoardStatus.PlanReady, BoardStatus.PickOne,
@@ -107,11 +112,7 @@ data class Home(
         ): Home {
             val tasks = own(boards)
             // Each agent's task: one of its own machine's board, by the names herdr-projects gives them.
-            val taskOf = agents.associate { a ->
-                a.key to tasks[a.machineId].orEmpty().firstOrNull { t ->
-                    t.machine.isEmpty() && !t.archived && LiveItems.belongs(a.agent.name.orEmpty(), a.workspace, t.id, t.name)
-                }
-            }
+            val taskOf = agents.associate { a -> a.key to taskOf(a, tasks[a.machineId].orEmpty()) }
             val questions = agents.filter { it.agent.agentStatus == AgentStatus.Blocked }
             val asked = questions.mapNotNull { taskOf[it.key]?.let { t -> it.machineId to t.id } }.toSet()
             val waiting = boards.flatMap { b ->

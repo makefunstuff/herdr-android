@@ -1,5 +1,11 @@
 package com.makefunstuff.herdr.ui.board
 
+import com.makefunstuff.herdr.core.board.BoardActions
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import com.makefunstuff.herdr.ui.design.approves
+import androidx.compose.ui.platform.LocalView
+import com.makefunstuff.herdr.ui.design.confirmTap
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -134,6 +140,7 @@ fun BoardScreen(nav: NavController, machineId: String, openTask: String? = null,
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val guard = LocalGuard.current
+    val view = LocalView.current
     val session = container.hosts.session(machineId)
     if (session == null) {
         EmptyState("Machine not found", "It may have been removed.")
@@ -204,6 +211,7 @@ fun BoardScreen(nav: NavController, machineId: String, openTask: String? = null,
     fun act(task: BoardTask, action: BoardAction, text: String, letter: String) {
         if (busy != null) return
         busy = "${action.label.removeSuffix("…")} · ${task.name}"
+        if (action.approves) view.confirmTap()
         scope.launch {
             runCatching { session.awaitBoard().act(action, task.id, text, letter) }
                 .onSuccess { context.toast(it.ifEmpty { "Done" }) }
@@ -350,7 +358,13 @@ fun BoardScreen(nav: NavController, machineId: String, openTask: String? = null,
                             )
                         }
                         if (open) items(list, key = { it.id }) { t ->
-                            TaskRow(t, onOpen = { openId = t.id }, onMenu = { actionsFor = t })
+                            // Its sheet's actions, as TalkBack's on the card; the sheet for the rest (edit, watches).
+                            val actions = BoardActions.forTask(t).map { a -> CustomAccessibilityAction(a.label.removeSuffix("…")) { choose(t, a); true } } +
+                                listOfNotNull(
+                                    CustomAccessibilityAction("Open its review card") { openReview(t); true }.takeIf { Approvals.waits(t) },
+                                    CustomAccessibilityAction("More actions") { actionsFor = t; true },
+                                )
+                            TaskRow(t, onOpen = { openId = t.id }, onMenu = { actionsFor = t }, actions = actions)
                         }
                     }
                 } }
@@ -419,7 +433,7 @@ internal fun Progress(p: Int, color: Color, modifier: Modifier = Modifier) {
  * agent, the title, what it is doing, progress and its pull request. Tasks that need you get a wider stripe.
  */
 @Composable
-internal fun TaskRow(t: BoardTask, onOpen: () -> Unit, onMenu: () -> Unit) {
+internal fun TaskRow(t: BoardTask, onOpen: () -> Unit, onMenu: () -> Unit, actions: List<CustomAccessibilityAction> = emptyList()) {
     val c = Herdr.colors
     val color = t.status.color()
     val quiet = t.status == BoardStatus.Done || t.status == BoardStatus.Archived
@@ -427,6 +441,7 @@ internal fun TaskRow(t: BoardTask, onOpen: () -> Unit, onMenu: () -> Unit) {
     QuietCard(
         Modifier.semantics(mergeDescendants = true) {
             contentDescription = "${t.name}, ${t.status.label}${if (t.needsYou) ", needs you" else ""}, ${t.title}"
+            if (actions.isNotEmpty()) customActions = actions
         },
         onClick = onOpen,
         onLongClick = onMenu,

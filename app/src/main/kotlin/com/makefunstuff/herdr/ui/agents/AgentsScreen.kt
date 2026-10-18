@@ -1,5 +1,11 @@
 package com.makefunstuff.herdr.ui.agents
 
+import com.makefunstuff.herdr.ui.manage.ExplainSheet
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import com.makefunstuff.herdr.core.board.BoardTask
+import com.makefunstuff.herdr.ui.design.approves
+import androidx.compose.ui.platform.LocalView
+import com.makefunstuff.herdr.ui.design.confirmTap
 import com.makefunstuff.herdr.core.chat.OptionRole
 import com.makefunstuff.herdr.core.guard.Guarded
 
@@ -144,8 +150,11 @@ fun AgentsScreen(
     // Beside a wide window's list: what is open in the middle, to show it chosen here.
     val entry by nav.currentBackStackEntryAsState()
     val inMiddle = if (panes.wide) entry?.let(::opened) else null
-    var menuAgent by remember { mutableStateOf<HomeAgent?>(null) }
+    // The agent whose long-press sheet is open, with the task it works on.
+    var menuAgent by remember { mutableStateOf<Pair<HomeAgent, BoardTask?>?>(null) }
     var snoozing by remember { mutableStateOf<HomeAgent?>(null) }
+    // "Why this state?" asked from TalkBack's actions on a card.
+    var why by remember { mutableStateOf<HomeAgent?>(null) }
     // The row swiped open on the left (Pin, Snooze, Mute), by agent key: one at a time.
     var swiped by remember { mutableStateOf<String?>(null) }
     val triageActions = rememberTriageActions { snoozing = it }
@@ -172,11 +181,13 @@ fun AgentsScreen(
     val anyBoard = hosts.any { it.hasBoard }
 
     val guard = com.makefunstuff.herdr.ui.common.LocalGuard.current
+    val view = LocalView.current
 
     fun press(q: Waiting.Question, prompt: BlockedPrompt, index: Int) {
         if (q.key in busy) return
         val label = prompt.options[index].label
         busy[q.key] = "Answering: $label"
+        view.confirmTap()
         scope.launch {
             runCatching {
                 val session = container.hosts.session(q.machineId) ?: error("This machine isn't in the app any more")
@@ -225,6 +236,7 @@ fun AgentsScreen(
     fun carryOut(w: Waiting.Task, action: BoardAction, label: String) {
         if (w.key in busy) return
         busy[w.key] = "$label · ${w.task.name}"
+        if (action.approves) view.confirmTap()
         scope.launch {
             runCatching { (container.hosts.session(w.machineId) ?: error("This machine isn't in the app any more")).awaitBoard().act(action, w.task.id) }
                 .onSuccess {
@@ -255,6 +267,16 @@ fun AgentsScreen(
     }
 
     fun openAgent(a: HomeAgent) = panes.open(nav, Routes.agent(a.machineId, a.agent.paneId))
+
+    /**
+     * What an agent's long-press sheet offers besides its triage, as TalkBack's actions on its card
+     * or row: its terminal, why it is in this state, and the sheet itself for the rest.
+     */
+    fun sheetActions(a: HomeAgent, task: BoardTask?) = listOf(
+        CustomAccessibilityAction("Open terminal") { panes.open(nav, Routes.terminal(a.machineId, a.agent.paneId)); true },
+        CustomAccessibilityAction("Why this state?") { why = a; true },
+        CustomAccessibilityAction("More actions") { menuAgent = a to task; true },
+    )
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -345,9 +367,13 @@ fun AgentsScreen(
                     when (w) {
                         is Waiting.Question -> QuestionCard(
                             w, showMachine, selected = inMiddle == w.agent.key, busy = busy[w.key],
-                            onOpen = { openAgent(w.agent) }, onMenu = { menuAgent = w.agent },
+                            onOpen = { openAgent(w.agent) }, onMenu = { menuAgent = w.agent to w.task },
                             onChoose = { prompt, i -> answer(w, prompt, i) },
                             onReply = { reply = Reply.ToAgent(w) },
+                            more = sheetActions(w.agent, w.task).let { sheet ->
+                                // Muting it, before the sheet's last one (More actions).
+                                sheet.dropLast(1) + triageActions.muteAction(AgentRow(w.agent, w.task, muted = w.agent.key in triage.muted)) + sheet.last()
+                            },
                         )
                         is Waiting.Task -> {
                             val a = Home.answer(w.task)
@@ -363,7 +389,8 @@ fun AgentsScreen(
                 }
                 val lines = Lines(
                     inMiddle, showMachine, triageActions, swiped, { swiped = it },
-                    snoozed = { r -> r.snooze?.label(now, container.triage.zone()) }, onOpen = ::openAgent, onMenu = { menuAgent = it },
+                    snoozed = { r -> r.snooze?.label(now, container.triage.zone()) }, onOpen = ::openAgent, onMenu = { a, t -> menuAgent = a to t },
+                    more = ::sheetActions,
                 )
                 section("Pinned", "Pinned · ${home.pinned.size}", home.pinned, showAll = true, onMore = {}, lines)
                 section("Working", "Working · ${home.working.size}", home.working, showAll = true, onMore = {}, lines)
@@ -387,7 +414,7 @@ fun AgentsScreen(
         }
     }
 
-    menuAgent?.let { a ->
+    menuAgent?.let { (a, task) ->
         container.hosts.session(a.machineId)?.let { session ->
             AgentActionsSheet(
                 session = session,
@@ -396,10 +423,12 @@ fun AgentsScreen(
                 onDismiss = { menuAgent = null },
                 onTerminal = { menuAgent = null; panes.open(nav, Routes.terminal(a.machineId, a.agent.paneId)) },
                 triage = { TriageRows(a, onSnooze = { menuAgent = null; snoozing = a }) },
+                task = task,
             )
         }
     }
     snoozing?.let { a -> SnoozeSheet(a, onDismiss = { snoozing = null }) }
+    why?.let { a -> container.hosts.session(a.machineId)?.let { ExplainSheet(it, a.agent.paneId, onDismiss = { why = null }) } }
     reply?.let { r ->
         var text by remember(r) { mutableStateOf("") }
         val dismiss = { reply = null }
@@ -458,7 +487,9 @@ private class Lines(
     val onSwiped: (String?) -> Unit,
     val snoozed: (AgentRow) -> String?,
     val onOpen: (HomeAgent) -> Unit,
-    val onMenu: (HomeAgent) -> Unit,
+    val onMenu: (HomeAgent, BoardTask?) -> Unit,
+    /** The rest of an agent's long-press sheet, as TalkBack's actions on its row. */
+    val more: (HomeAgent, BoardTask?) -> List<CustomAccessibilityAction>,
 )
 
 /** A section of one-line agents under its [heading]; a long resting one folds after [FOLDED] rows. [onSeen]: Mark all seen. */
@@ -485,8 +516,9 @@ private fun LazyListScope.section(
         SwipeRow(row, lines.actions, open = lines.swiped == key, onOpen = { lines.onSwiped(if (it) key else null) }) {
             AgentLine(
                 row, lines.showMachine, selected = lines.inMiddle == key,
-                onOpen = { lines.onOpen(row.agent) }, onMenu = { lines.onMenu(row.agent) },
-                snoozed = lines.snoozed(row), actions = lines.actions.accessibility(row),
+                onOpen = { lines.onOpen(row.agent) }, onMenu = { lines.onMenu(row.agent, row.task) },
+                snoozed = lines.snoozed(row),
+                actions = lines.actions.accessibility(row) + lines.more(row.agent, row.task),
             )
         }
     }

@@ -312,7 +312,7 @@ private fun WorkspaceCard(
         Row(
             verticalAlignment = Alignment.CenterVertically,
             // Long-press the header for the workspace's Git actions.
-            modifier = Modifier.combinedClickable(onClick = {}, onLongClick = { menu = true }),
+            modifier = Modifier.combinedClickable(onClick = {}, onLongClickLabel = "show the workspace's actions", onLongClick = { menu = true }),
         ) {
             StatusDot(if (ws.agentStatus == AgentStatus.Unknown) c.off else ws.agentStatus.color())
             Spacer(Modifier.width(Space.m))
@@ -374,7 +374,7 @@ private fun WorkspaceCard(
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.fillMaxWidth().clip(HerdrShapes.Tile)
-                            .combinedClickable(onClick = { onOpenPane(pane) }, onLongClick = { onPaneMenu(pane) })
+                            .combinedClickable(onClickLabel = "Open", onClick = { onOpenPane(pane) }, onLongClickLabel = "show the pane's actions", onLongClick = { onPaneMenu(pane) })
                             .heightIn(min = 52.dp),
                     ) {
                         // The leading cell says who the pane is: the agent's brand mark, else the shell's glyph.

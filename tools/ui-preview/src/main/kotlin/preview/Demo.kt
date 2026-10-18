@@ -404,6 +404,21 @@ object Demo {
     private fun rect(x: Int, y: Int, w: Int, h: Int) = obj("x" to x, "y" to y, "width" to w, "height" to h)
 
     /** The shell beside the herdr-android agent, as `demo-session` leaves it. */
+    /** devbox's shell after `sudo` asked for the password, the cursor after the question. */
+    fun shellAsking(): String = SHELL + "sudo systemctl restart herdr-push\n[sudo] password for demo: "
+
+    /** What "Why this state?" says of the blocked api-server agent (herdr's `agent.explain`). */
+    fun explain() = obj(
+        "explain" to obj(
+            "state" to "blocked", "agent" to "claude", "matched_rule" to "claude_permission_prompt", "visible_blocker" to true,
+            "manifest_version" to "3", "manifest_source" to "builtin",
+            "evaluated_rules" to arr(
+                obj("id" to "claude_permission_prompt", "state" to "blocked", "matched" to true, "region" to "bottom 12 lines", "evidence" to obj("region_preview" to "Do you want to proceed?")),
+                obj("id" to "claude_spinner", "state" to "working", "matched" to false, "region" to "bottom 6 lines"),
+            ),
+        ),
+    )
+
     private val SHELL = run {
         val p = "\u001b[1;32mdemo@devbox\u001b[0m:\u001b[1;34m~/src/herdr-android\u001b[0m$ "
         val y = "\u001b[33m"; val g = "\u001b[32m"; val c = "\u001b[36m"; val r = "\u001b[31m"; val b = "\u001b[1m"; val o = "\u001b[0m"
