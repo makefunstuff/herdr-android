@@ -27,7 +27,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
@@ -296,6 +298,35 @@ class ActivityTest {
         assertTrue(edits.all { it is Entry.TurnEntry })
     }
 
+    @Test
+    fun aCutSessionKeepsOneStartAndNamesItsHarness() {
+        // The agent's session was cut: its first turn, and the board's message that started it, aren't read.
+        val record = assertNotNull(BoardHistory.read(taskJson, saidBy))
+        val log = ClaudeActivity()
+        claude.drop(1).take(2).forEach(log::feed)
+        val reader = log.turns()
+        assertEquals("Earlier in this session", reader.single().prompt)
+        assertEquals(Origin.Agent, reader.single().from)
+        val starts = Timeline.of(listOf(reader), record.events).entries.filterIsInstance<Entry.Event>().filter { it.step.title == "Started the agent" }
+        // The record's start (with its agent and model) and the board's typed one are one start.
+        assertEquals(1, starts.size)
+        assertEquals("claude · claude-opus-5-5", starts.single().step.note)
+    }
+
+    @Test
+    fun aTurnThatEndedAtOnceNamesItsHarness() = runBlocking {
+        val dir = Files.createTempDirectory("activity").toFile()
+        try {
+            val f = sessionFile(dir, "r.jsonl", listOf("""{"timestamp":"${ts(0)}","type":"event_msg","payload":{"type":"user_message","message":"Work board task app/3, role: reviewer, round 1."}}"""))
+            val sources = listOf(SessionSource("codex", "path", f.path))
+            val reader = SessionsReader(sources)
+            SessionsReader.stream({ local(it) }, ActivityCommands.sessions(sources, follow = false), reader) {}
+            assertEquals("codex", reader.turns().single().single().agent)
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
+
     // ---- words ----
 
     @Test
@@ -463,8 +494,10 @@ class ActivityTest {
                 }
                     assertEquals("/w/repo/README.md", reader.turns()[0].last().steps.single().path)
             } finally {
-                job.cancel()
-                stopProcesses()
+                // Leaving the screen: cancelling alone stops the reading, the channel and the tail, at once.
+                val stopped = withTimeoutOrNull(5_000) { job.cancelAndJoin(); true }
+                if (stopped == null) stopProcesses()
+                assertEquals(true, stopped, "cancelling didn't stop the reading")
             }
             // The tail on the machine stops with the reading.
             val left = ProcessBuilder("sh", "-c", "pgrep -f '[t]ail -c .* -F ${new.path}' || true").start().inputStream.readBytes().toString(Charsets.UTF_8).trim()

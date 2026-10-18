@@ -75,7 +75,7 @@ abstract class ActivityLog(private val prefix: String = "") {
     }
 
     protected fun step(s: Step) {
-        val t = turns.lastOrNull() ?: Building(prefix + "start", "Earlier in this session", "", Origin.System, s.at, s.at, model).also { turns += it }
+        val t = turns.lastOrNull() ?: Building(prefix + "start", "Earlier in this session", "", Origin.Agent, s.at, s.at, model).also { turns += it }
         t.steps += s.copy(id = prefix + s.id)
         where[s.id] = t to t.steps.lastIndex
         extend(t, maxOf(s.at, s.end))

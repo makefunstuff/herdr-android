@@ -159,6 +159,8 @@ fun ActivityScreen(nav: NavController, machineId: String, taskId: String?, taskN
         if (failures.isEmpty()) return
         failureAt = (failureAt + 1) % failures.size
         val id = failures[failureAt]
+        // A filter that hides it (Edits, Messages) gives way, or the jump would have nowhere to go.
+        timeline.steps.firstOrNull { it.id == id }?.let { if (!filter.keeps(it)) filter = StepFilter.All }
         turns.firstOrNull { t -> t.steps.any { it.id == id } }?.let { opened[it.id] = true }
         openSteps[id] = true
         jumpTo = id

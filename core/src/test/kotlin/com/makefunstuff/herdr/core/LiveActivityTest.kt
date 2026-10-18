@@ -8,12 +8,18 @@ import com.makefunstuff.herdr.core.activity.SessionsReader
 import com.makefunstuff.herdr.core.activity.Timeline
 import com.makefunstuff.herdr.core.ssh.Duplex
 import com.makefunstuff.herdr.core.ssh.Machine
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
@@ -53,12 +59,40 @@ class LiveActivityTest {
         assertTrue(timeline.entries.isNotEmpty())
     }
 
+    /**
+     * Follows a real session that is being written (HERDR_ACTIVITY_FOLLOW, a path: say this agent's own)
+     * for a while, then leaves: the reading, the channel and the tail must stop at once.
+     */
+    @Test
+    fun leavingALiveTimelineStopsIt() = runBlocking {
+        val path = System.getenv("HERDR_ACTIVITY_FOLLOW")
+        assumeTrue(path != null)
+        val sources = listOf(com.makefunstuff.herdr.core.activity.SessionSource("claude", "path", path!!))
+        val reader = SessionsReader(sources)
+        var updates = 0
+        val job = launch(Dispatchers.IO) { SessionsReader.stream({ local(it) }, ActivityCommands.sessions(sources, follow = true), reader) { updates++ } }
+        delay(20_000)
+        val seen = updates
+        val took = kotlin.system.measureTimeMillis { withTimeout(10_000) { job.cancelAndJoin() } }
+        val countAtCancel = updates
+        delay(5_000)
+        val left = ProcessBuilder("sh", "-c", "pgrep -af '[t]ail -c .* -F $path' || true").start().inputStream.readBytes().toString(Charsets.UTF_8).trim()
+        println("updates while following: $seen, cancel took $took ms, updates after: ${updates - countAtCancel}, tails left: '$left'")
+        assertTrue(took < 5_000)
+        assertEquals(countAtCancel, updates)
+        assertEquals("", left)
+    }
+
     private fun local(cmd: String): Duplex {
         val p = ProcessBuilder("sh", "-c", cmd).start()
         return object : Duplex {
             override val input: InputStream = p.inputStream
             override val output: OutputStream = p.outputStream
-            override fun close() { p.destroy() }
+            // As SSH closes a channel: the command's input ends.
+            override fun close() {
+                runCatching { p.outputStream.close() }
+                if (!p.waitFor(2, java.util.concurrent.TimeUnit.SECONDS)) p.destroy()
+            }
         }
     }
 }

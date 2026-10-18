@@ -3,6 +3,10 @@ package com.makefunstuff.herdr.core.activity
 import com.makefunstuff.herdr.core.ssh.Duplex
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import java.io.IOException
 
@@ -67,7 +71,10 @@ class SessionsReader(private val sources: List<SessionSource>) {
     }
 
     /** The sessions' turns, each in its role (read from its first message, else what the board said, else the agent). */
-    fun turns(): List<List<Turn>> = sessions.map { it.log.turns(it.source.role ?: Role.Agent) }
+    fun turns(): List<List<Turn>> = sessions.map { r ->
+        // A turn that ended before the agent said anything (handed over at once) names at least its harness.
+        r.log.turns(r.source.role ?: Role.Agent).map { t -> if (t.agent.isEmpty()) t.copy(agent = r.source.agent) else t }
+    }
 
     val truncated: Boolean get() = sessions.any { it.cut }
 
@@ -77,16 +84,19 @@ class SessionsReader(private val sources: List<SessionSource>) {
 
         /**
          * Runs [command] ([ActivityCommands.sessions]) and reads it into [reader], calling [onUpdate] once
-         * every session has come and then after each burst of new lines. Returns when the output ends;
-         * cancelling the caller closes the channel, which stops the remote tail.
+         * every session has come and then after each burst of new lines. Returns when the output ends.
+         *
+         * Cancelling the caller closes the channel at once, which ends the remote `tail -F`: the lines
+         * are read in a child coroutine, as a blocked read can't be cancelled, and this one only waits
+         * for it, so its `finally` runs on cancellation and the close unblocks the read.
          */
-        suspend fun stream(start: suspend (String) -> Duplex, command: String, reader: SessionsReader, onUpdate: () -> Unit) {
+        suspend fun stream(start: suspend (String) -> Duplex, command: String, reader: SessionsReader, onUpdate: () -> Unit): Unit = coroutineScope {
             val process = start(command)
             try {
-                withContext(Dispatchers.IO) {
+                val pump = async(Dispatchers.IO) {
                     val input = process.input.bufferedReader(Charsets.UTF_8)
                     var published = -1L
-                    while (true) {
+                    while (isActive) {
                         val line = input.readLine() ?: break
                         reader.line(line)
                         if (reader.done && !input.ready() && reader.revision != published) {
@@ -94,12 +104,18 @@ class SessionsReader(private val sources: List<SessionSource>) {
                             onUpdate()
                         }
                     }
+                    ensureActive()
                     if (!reader.done) throw IOException("The machine stopped sending the sessions")
                     if (reader.revision != published) onUpdate()
                 }
+                pump.await()
             } finally {
                 // NonCancellable: this runs when the screen closes, and the remote tail must stop then too.
-                withContext(NonCancellable + Dispatchers.IO) { runCatching { process.close() } }
+                // The command's input ends first (its `cat` returns and it stops the tail), then the channel.
+                withContext(NonCancellable + Dispatchers.IO) {
+                    runCatching { process.output.close() }
+                    runCatching { process.close() }
+                }
             }
         }
     }

@@ -167,6 +167,11 @@ fun scenes(): List<Scene> = listOf(
     Scene("activity-review", route = Routes.activity(DEVBOX, task = "herdr-android/9", name = "AND-9"), heightDp = 2700, actions = {
         tapText("Review round 1 passed")
     }),
+    // A jump to a failure the Edits filter hides: the filter gives way and the failed step shows.
+    Scene("activity-jump", route = Routes.activity(DEVBOX, task = "herdr-android/9", name = "AND-9"), actions = {
+        tapText("Edits")
+        tapText("Jump to a failure")
+    }),
     Scene("activity-agent", route = Routes.activity(DEVBOX, pane = APP_AGENT), heightDp = 1600),
     Scene(
         "float-off", route = Routes.coordinator(DEVBOX), setup = { bubblesAllowed = false },

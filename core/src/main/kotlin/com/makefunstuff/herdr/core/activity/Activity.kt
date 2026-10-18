@@ -165,6 +165,16 @@ data class Timeline(
     companion object {
         val Empty = Timeline(emptyList())
 
+        /** The board's events without one that repeats another's title within five minutes of it. */
+        private fun once(events: List<Step>): List<Step> {
+            val out = ArrayList<Step>()
+            for (e in events.sortedBy { it.at }) {
+                val same = out.indexOfFirst { o -> o.kind == StepKind.Board && e.kind == StepKind.Board && o.title == e.title && kotlin.math.abs(o.at - e.at) < 5 * 60_000 }
+                if (same < 0) out += e else if (out[same].note == null && e.note != null) out[same] = e.copy(at = out[same].at)
+            }
+            return out
+        }
+
         /**
          * The sessions' turns and the board's events as one timeline, by time. A board event that
          * repeats a turn's own start (the board typed that message, and the transcript has it) goes.
@@ -179,6 +189,8 @@ data class Timeline(
                         turns.none { t -> t.prompt == e.title && t.at > 0 && e.at > 0 && kotlin.math.abs(t.at - e.at) < 5 * 60_000 }
                     )
             }
+                // One start told twice (the record's, with its agent, and what the board typed): the one that says more.
+                .let(::once)
             val entries = (turns.map { Entry.TurnEntry(it) } + kept.map { Entry.Event(it) })
                 // Stable: what has no time keeps its place after what came before it.
                 .sortedWith(compareBy { if (it.at > 0) it.at else Long.MAX_VALUE })
