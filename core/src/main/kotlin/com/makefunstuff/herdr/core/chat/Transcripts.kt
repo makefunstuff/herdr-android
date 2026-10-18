@@ -30,6 +30,21 @@ abstract class Transcript {
 
     fun items(): List<ChatItem> = entries.values.toList()
 
+    /** The model the agent answers with and how full its context is, from the newest lines that say. */
+    var use: ModelUse? = null
+        private set
+
+    protected fun model(model: String?, effort: String? = use?.effort) {
+        val next = (use ?: ModelUse()).copy(model = model ?: use?.model, effort = effort)
+        if (next != use) { use = next; version++ }
+    }
+
+    /** A request filled [used] tokens of the context ([window] when the transcript states it). */
+    protected fun filled(used: Long, window: Long? = null) {
+        val next = ModelUse.filled(used, use?.model, window, use)
+        if (next != use) { use = next; version++ }
+    }
+
     fun feed(line: String) {
         activity?.feed(line)
         if (line.isBlank() || line[0] != '{') return
@@ -86,6 +101,10 @@ internal fun JsonObject.arr(key: String): JsonArray? = this[key] as? JsonArray
 
 internal fun JsonObject.bool(key: String): Boolean = (this[key] as? JsonPrimitive)?.booleanOrNull == true
 
+/** A count, or 0 when it is missing, not a number or not above 0. */
+internal fun JsonObject.count(key: String): Long =
+    (this[key] as? JsonPrimitive)?.takeIf { !it.isString }?.contentOrNull?.toDoubleOrNull()?.takeIf { it > 0 && it.isFinite() }?.toLong() ?: 0
+
 /** Text from a string or a list of `{type: text, text}` blocks. */
 internal fun textOf(element: JsonElement?): String = when (element) {
     null, JsonNull -> ""
@@ -115,9 +134,21 @@ class ClaudeTranscript : Transcript() {
         val uuid = obj.str("uuid") ?: return
         when (obj.str("type")) {
             "user" -> user(uuid, obj.obj("message") ?: return)
-            "assistant" -> assistant(uuid, obj.obj("message") ?: return)
+            "assistant" -> {
+                val message = obj.obj("message") ?: return
+                meter(obj, message)
+                assistant(uuid, message)
+            }
             "system" -> if (obj.str("subtype") == "compact_boundary") put(ChatItem.Notice(uuid, "Conversation compacted"))
         }
+    }
+
+    /** Claude Code records the model and its usage on each answer, and the effort it ran at (newer versions). */
+    private fun meter(obj: JsonObject, message: JsonObject) {
+        val model = message.str("model")?.takeIf { it.isNotBlank() && !it.startsWith("<") } ?: return
+        model(model, if ("effort" in obj) obj.str("effort") else use?.effort)
+        val usage = message.obj("usage") ?: return
+        filled(usage.count("input_tokens") + usage.count("cache_creation_input_tokens") + usage.count("cache_read_input_tokens"))
     }
 
     private fun user(uuid: String, message: JsonObject) {
@@ -220,6 +251,20 @@ class CodexTranscript : Transcript() {
                     settleTools()
                     put(ChatItem.Notice("abort${seq++}", "Interrupted"))
                 }
+                // What the last request filled, against the window Codex itself states.
+                "token_count" -> payload.obj("info")?.let { info ->
+                    filled(info.obj("last_token_usage")?.count("total_tokens") ?: 0, info.count("model_context_window").takeIf { it > 0 })
+                }
+            }
+            "turn_context", "session_meta" -> {
+                val settings = payload.obj("collaboration_mode")?.obj("settings")
+                val model = payload.str("model") ?: settings?.str("model")
+                val effort = when {
+                    "effort" in payload -> payload.str("effort")
+                    "reasoning_effort" in payload -> payload.str("reasoning_effort")
+                    else -> settings?.str("reasoning_effort")
+                }
+                if (model != null || effort != null) model(model, effort)
             }
             "response_item" -> if (!itemMode) legacyCall(payload)
             "compacted" -> put(ChatItem.Notice("compact${seq++}", "Conversation compacted"))
@@ -332,6 +377,10 @@ class PiTranscript : Transcript() {
                 if ((text.isNotEmpty() || images > 0) && !isInjected(text)) put(ChatItem.User(id, text, images))
             }
             "assistant" -> {
+                message.str("model")?.takeIf { it.isNotBlank() }?.let { model(it) }
+                message.obj("usage")?.takeIf { message.str("stopReason") != "error" && message.str("stopReason") != "aborted" }?.let { u ->
+                    filled(u.count("totalTokens").takeIf { it > 0 } ?: (u.count("input") + u.count("output") + u.count("cacheRead") + u.count("cacheWrite")))
+                }
                 val content = message["content"] as? JsonArray ?: JsonArray(emptyList())
                 content.filterIsInstance<JsonObject>().forEachIndexed { i, block ->
                     when (block.str("type")) {

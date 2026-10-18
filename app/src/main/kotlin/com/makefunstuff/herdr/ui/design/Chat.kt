@@ -49,6 +49,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
 import com.makefunstuff.herdr.ui.theme.Pretendard
+import com.makefunstuff.herdr.core.chat.Completions
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -117,6 +118,10 @@ val ReplyBubbleShape = RoundedCornerShape(12.dp)
  * the card, inside the composer (a blocked agent's question, the agent's key row), and never takes
  * more than about 60% of the room: what it holds scrolls inside. [focusRequester] lets the screen put
  * the cursor in the box (a reply the question asks for).
+ *
+ * [completion] draws what the word at the cursor completes to, over all of that: a `/command` at
+ * the start of the message or an `@path` ([Completions.at]); what it accepts replaces the word,
+ * with a space after it, and the cursor goes there.
  */
 @Composable
 fun ChatComposer(
@@ -139,6 +144,7 @@ fun ChatComposer(
     attachments: (@Composable () -> Unit)? = null,
     attached: Boolean = false,
     focusRequester: FocusRequester? = null,
+    completion: (@Composable (query: Completions.Query, accept: (String) -> Unit) -> Unit)? = null,
 ) {
     val c = Herdr.colors
     val view = LocalView.current
@@ -192,6 +198,17 @@ fun ChatComposer(
                 )
                 .padding(start = Space.m, end = Space.m, top = if (glide) fade else Space.s, bottom = Space.s),
         ) {
+            val query = if (completion != null && enabled) Completions.at(value.text, value.selection.min, value.selection.max) else null
+            if (query != null) {
+                Box(Modifier.padding(bottom = Space.s).then(if (room != Dp.Infinity) Modifier.heightIn(max = room * 0.45f) else Modifier)) {
+                    completion?.invoke(query) { replacement ->
+                        val (text, cursor) = Completions.accept(value.text, query, replacement)
+                        field = TextFieldValue(text, TextRange(cursor))
+                        onDraft(text)
+                        focusRequester.requestFocus()
+                    }
+                }
+            }
             if (above != null) {
                 Box(Modifier.padding(bottom = Space.s).then(if (room != Dp.Infinity) Modifier.heightIn(max = room * 0.6f) else Modifier)) { above() }
             }
