@@ -289,6 +289,10 @@ fun BoardScreen(nav: NavController, machineId: String, openTask: String? = null,
                     MenuRow(if (archived) "Hide archived" else "Show archived", if (archived) HerdrIcons.ArchiveRestore else HerdrIcons.Archive, { archived = !archived; menu = false })
                     MenuRow("Refresh", HerdrIcons.RefreshCw, { readNow.trySend(Unit); menu = false })
                     MenuRow("Review finished work", HerdrIcons.Layers, { menu = false; openReview(null) })
+                    MenuRow("Routines", HerdrIcons.CalendarClock, {
+                        menu = false
+                        if (pane != null) panes.open(nav, Routes.routines(machineId)) else nav.navigate(Routes.routines(machineId))
+                    })
                 }
             }
         },
