@@ -13,6 +13,10 @@ It also tells the phone when an **AI quick command** the app started there ends 
 
 It also keeps a **journal** of the last week for the app's brief: each time a board task is done, starts waiting for you, goes wrong, starts work or is added, and each time an agent finishes or asks something, with the time and the task or agent as it was then (`journal.json`, at most 600 entries per herdr session; `HERDR_PUSH_JOURNAL_DAYS` changes the 8 days). The first look only learns how things stand, as for the pushes. The app reads it with `herdr-push journal --session <name> --since <seconds>`, which answers `{"ok": true, "now", "from", "upto", "entries": [...]}`: `from` is when the journal began (null before any look), `upto` its last look, so the app can tell a journal that stopped keeping track.
 
+It also follows what a phone **watches** (a one-shot watch set in the app: "tell me when AND-7's checks pass", "when this agent finishes"): each change of a watched task's state or stage, or of a watched agent's status, goes to that phone alone, so its watch can fire while the app is closed. The subscription lists them (`watch_tasks`, `watch_panes`); the app subscribes again when they change.
+
+Every push also says whether someone is **at the machine** (`present`), so the phone can keep quiet then: how many seconds ago someone typed in a herdr client there (the last input of the terminal it runs in, as `w` reads it, or the last touch of `~/.local/state/herdr-push/present`, which anything may touch, a shell prompt say), and whether a desktop session of yours there is unlocked (logind's `LockedHint` and `IdleHint`, or a screen locker such as hyprlock or swaylock running; on macOS the console's lock), or null with no desktop. `herdr-push presence` answers the same, for the app's own looks.
+
 For a phone with **Live Updates** on, it also sends what runs: the working agents and the running board tasks (stage, progress, minutes left, the review round and the most reviews there are), which the phone shows as Live Updates with a Stop button. That push goes out at once when something starts, stops or moves on a stage, with progress and the "doing now" line at most every 90 seconds (`HERDR_PUSH_LIVE_MINOR`), and again every 30 minutes while anything runs (`HERDR_PUSH_LIVE_KEEP`), so the phone knows the machine still watches. A phone without Live Updates gets none of these.
 
 The phone shows each one as a notification with buttons: **Approve** and **Deny** for an agent's yes-or-no question, **Reply** (to the agent, to the task's agent, or to the Coordinator about the task), **Approve and merge**, **Approve plan**, **Continue** or **Retry**. A tap opens the agent's chat or the task on the board. The buttons work over the app's own SSH connection, never through the push.
@@ -52,6 +56,7 @@ python3 $P status          # running?, start-up entry, phones, last error
 python3 $P once --dry-run  # one look: what it would send now (the first look only learns how things stand)
 python3 $P test            # a test notification to every phone
 python3 $P journal         # what it kept for the brief (--since <unix seconds>)
+python3 $P presence        # whether someone is at this machine: typed (seconds ago) and unlocked
 python3 $P ensure          # start it if it isn't running
 python3 $P install         # start it now and with the machine
 python3 $P uninstall       # stop it and remove the start-up entry (--purge: and the phones and its state)
@@ -83,7 +88,7 @@ So the push server sees only that a machine sent the phone a few hundred bytes, 
 Inside, the message is:
 
 ```json
-{"v": 1, "host": "devbox", "at": 1760000000, "events": [
+{"v": 1, "host": "devbox", "at": 1760000000, "present": {"typed": 35, "unlocked": true}, "events": [
   {"type": "agent", "agent": {"pane_id": "w1:p2", "agent_status": "blocked", "…": "…as session.snapshot gives it"},
    "where": "api › agents", "screen": "…the bottom of its screen…"},
   {"type": "task", "key": "AND-7", "task": {"id": "herdr-android/7", "state": "blocked", "stage": "approval", "…": "…as list --json gives it"}},
