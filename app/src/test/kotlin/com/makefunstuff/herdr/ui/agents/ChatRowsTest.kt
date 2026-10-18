@@ -50,6 +50,17 @@ class ChatRowsTest {
         assertEquals("Needs you", rows(listOf(turn("u1", 1_000, 2_000, answer = false)), live = ChatRow.Live.Blocked).filterIsInstance<ChatRow.Head>().single().title)
     }
 
+    @Test fun anAnsweredTurnDoesNotReopenForWorkTheTranscriptHasntShown() {
+        // Working, but the prompt it works on (typed in the terminal) isn't in the transcript yet.
+        val old = rows(listOf(turn("u1", 1_000, 8_000)), live = ChatRow.Live.Working).filterIsInstance<ChatRow.Head>().single()
+        assertEquals("Worked for 7s", old.title)
+        assertFalse(old.open)
+        // Words just now are narration on the way to its next call.
+        assertEquals("Working for 3m 19s", rows(listOf(turn("u1", 1_000, 190_000)), live = ChatRow.Live.Working).filterIsInstance<ChatRow.Head>().single().title)
+        // A question waits for you however long ago it came.
+        assertEquals("Needs you", rows(listOf(turn("u1", 1_000, 8_000)), live = ChatRow.Live.Blocked).filterIsInstance<ChatRow.Head>().single().title)
+    }
+
     @Test fun aTurnOpenedByHandShowsItsWorkQuietly() {
         val r = rows(listOf(turn("u1", 1_000, 8_000)), opened = mapOf("u1" to true))
         assertEquals(listOf("u1", "head/u1", "u1/n", "tools/u1/t", "u1/a"), r.map { it.key })

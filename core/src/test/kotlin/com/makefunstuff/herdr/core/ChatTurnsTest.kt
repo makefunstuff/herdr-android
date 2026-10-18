@@ -1,6 +1,10 @@
 package com.makefunstuff.herdr.core
 
 import com.makefunstuff.herdr.core.activity.ActivityLog
+import com.makefunstuff.herdr.core.activity.Origin
+import com.makefunstuff.herdr.core.activity.Step
+import com.makefunstuff.herdr.core.activity.StepKind
+import com.makefunstuff.herdr.core.activity.Turn
 import com.makefunstuff.herdr.core.chat.AwaySummary
 import com.makefunstuff.herdr.core.chat.ChatItem
 import com.makefunstuff.herdr.core.chat.ChatTurns
@@ -190,6 +194,15 @@ class ChatTurnsTest {
         val away = assertNotNull(AwaySummary.of(turns, since = ms("2026-10-17T07:39:05Z"), now = ms("2026-10-17T07:50:00Z"), live = true))
         assertEquals("10 min", away.gone)
         assertEquals(listOf("Now editing HostSession.kt"), away.lines)
+    }
+
+    @Test
+    fun aMachineClockAheadOfThePhonesIsMeasured() {
+        val turn = Turn("u1", "Fix it", "Fix it", Origin.You, 10_000, 40_000, listOf(Step("s1", StepKind.Command, "ls", at = 50_000, end = 65_000)))
+        assertEquals(15_000, ChatTurns.ahead(listOf(turn), now = 50_000))
+        // Behind or in step: nothing to tell from the transcript alone.
+        assertEquals(0, ChatTurns.ahead(listOf(turn), now = 90_000))
+        assertEquals(0, ChatTurns.ahead(emptyList(), now = 90_000))
     }
 
     @Test

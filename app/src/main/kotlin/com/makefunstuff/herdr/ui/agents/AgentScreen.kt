@@ -288,6 +288,10 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
     val zone = remember { container.briefWork.zone() }
     val turns = remember(state.items, state.turns) { ChatTurns.of(state.items, state.turns) }
     val steps = remember(state.turns) { ChatTurns.Steps(state.turns) }
+    // The turns are timed on the machine's clock: one running ahead of the phone's shows as steps from the future.
+    var ahead by remember(machineId) { mutableLongStateOf(0L) }
+    LaunchedEffect(state.turns) { ahead = maxOf(ahead, ChatTurns.ahead(state.turns, container.clock())) }
+    val machineNow = now + ahead
     // The newest turn runs while the agent works or asks; not once a message was sent over it and the transcript hasn't shown it yet.
     val live = when {
         state.pending.isNotEmpty() -> null
@@ -295,11 +299,11 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
         status == AgentStatus.Blocked -> ChatRow.Live.Blocked
         else -> null
     }
-    val rows = remember(turns, steps, live, opened.toMap(), now, state.pending, state.source, state.screen, state.truncated) {
+    val rows = remember(turns, steps, live, opened.toMap(), machineNow, state.pending, state.source, state.screen, state.truncated) {
         buildList {
             if (state.truncated) add(ChatRow.Info("truncated", "Earlier messages aren't loaded"))
             when (state.source) {
-                AgentChat.Source.Transcript -> addAll(chatRows(turns, steps, live, opened, now) { at -> clock(at, now, zone) })
+                AgentChat.Source.Transcript -> addAll(chatRows(turns, steps, live, opened, machineNow) { at -> clock(at - ahead, now, zone) })
                 AgentChat.Source.Screen -> {
                     add(ChatRow.Info("screen-note", "No transcript for this agent, so this is its screen"))
                     // TUIs pad with blank rows; one blank line is enough on a phone.
@@ -326,8 +330,8 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
     LaunchedEffect(atBottom) { shown = if (atBottom) null else currentRows.map { it.key }.toSet() }
     val fresh = shown?.let { keys -> rows.count { it.isMessage && it.key !in keys } } ?: 0
     // What happened since the chat was last on screen, until hidden or until you write.
-    val away = remember(state.turns, since, back, live) {
-        AwaySummary.of(state.turns, since, back, live != null)
+    val away = remember(state.turns, since, back, ahead, live) {
+        AwaySummary.of(state.turns, since + ahead, back + ahead, live != null)
     }?.takeIf { !awayHidden && state.source == AgentChat.Source.Transcript }
 
     val imeUp = WindowInsets.isImeVisible
@@ -352,12 +356,12 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
         // The top bar's inset comes from the scaffold; the bottom follows the keyboard or the nav bar.
         Column(Modifier.padding(top = padding.calculateTopPadding()).fillMaxSize().imePadding().navigationBarsPadding()) {
             if (!typing) {
-                // The newest turn's time and what it is at: one Working line, the turn's header in the chat being the other half.
-                val running = state.turns.lastOrNull()?.takeIf { live == ChatRow.Live.Working }
+                // What the newest turn is at, and its time when no header in the chat says it: one Working line.
+                val running = state.turns.lastOrNull()?.takeIf { live == ChatRow.Live.Working && turns.lastOrNull()?.let { ChatTurns.mayBeRunning(it, machineNow) } != false }
                 StatusStrip(
                     status, agent?.statusLabel,
                     listOfNotNull(
-                        running?.at?.takeIf { it in 1 until now }?.let { minutes(now - it) },
+                        running?.at?.takeIf { !liveHead && it in 1 until machineNow }?.let { ChatTurns.duration(machineNow - it) },
                         ChatTurns.doing(running) ?: activity,
                     ).joinToString(" · ").ifEmpty { null },
                     online = host.online,
@@ -501,13 +505,6 @@ private fun command(p: BlockedPrompt): String =
 private fun clock(at: Long, now: Long, zone: ZoneId): String {
     val day = Instant.ofEpochMilli(at).atZone(zone).toLocalDate() != Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
     return DateTimeFormatter.ofPattern(if (day) "MMM d, HH:mm" else "HH:mm", Locale.getDefault()).withZone(zone).format(Instant.ofEpochMilli(at))
-}
-
-/** `40s`, `3m`, `1h 5m`: how long the newest turn has been at work, for the strip. */
-private fun minutes(ms: Long): String = when {
-    ms < 60_000 -> "${ms / 1000}s"
-    ms < 3_600_000 -> "${ms / 60_000}m"
-    else -> "${ms / 3_600_000}h ${(ms / 60_000) % 60}m"
 }
 
 /** "No, tell it…" being written: the option to press once the words go, on this question. */

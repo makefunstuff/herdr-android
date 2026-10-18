@@ -145,6 +145,25 @@ object ChatTurns {
         return parts.first() + "/…/" + parts.takeLast(2).joinToString("/")
     }
 
+    /** Words after its last call this long ago: the turn is over, whatever the agent works on now. */
+    const val SETTLED_MS = 3 * 60_000L
+
+    /**
+     * Whether [turn] can be the one an agent reported working is at, at [now]: not when it ended on
+     * its answer a while ago, as when a prompt typed in the terminal or sent by the board hasn't
+     * reached the transcript yet (that turn would reopen, timed from its old start).
+     */
+    fun mayBeRunning(turn: ChatTurn, now: Long): Boolean =
+        turn.answer.isEmpty() || turn.end <= 0 || now - turn.end < SETTLED_MS
+
+    /**
+     * How far the machine's clock is ahead of the phone's at least, from [turns] (timed on the
+     * machine) seen at the phone's [now]: a step can't have happened later than now. Added to the
+     * phone's clock to time the turns, it keeps a fast machine from showing no time, or a short one.
+     */
+    fun ahead(turns: List<Turn>, now: Long): Long =
+        maxOf(0L, (turns.lastOrNull()?.let { t -> maxOf(t.end, t.steps.maxOfOrNull { maxOf(it.at, it.end) } ?: 0) } ?: 0) - now)
+
     /** `7s`, `1m 12s`, `3m`, `1h 5m`: as the web UI's work header says it. */
     fun duration(ms: Long): String {
         val seconds = (ms + 500) / 1000

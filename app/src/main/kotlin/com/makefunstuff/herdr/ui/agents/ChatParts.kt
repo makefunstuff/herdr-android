@@ -119,7 +119,8 @@ fun chatRows(
     turns.forEachIndexed { i, turn ->
         turn.user?.let { rows += ChatRow.User(it) }
         val started = turn.at.takeIf { it > 0 }?.let(time)
-        val running = live.takeIf { i == turns.lastIndex }
+        // Working only on the newest turn, and not one that settled on its answer a while ago.
+        val running = live.takeIf { i == turns.lastIndex && (it == ChatRow.Live.Blocked || ChatTurns.mayBeRunning(turn, now)) }
         if (turn.hasWork) {
             val open = opened[turn.key] ?: (running != null || turn.keepsOpen)
             val title = when {
