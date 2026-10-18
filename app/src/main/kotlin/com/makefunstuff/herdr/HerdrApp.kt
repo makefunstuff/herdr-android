@@ -108,7 +108,9 @@ class AppContainer(app: Application) {
     val quietWork = QuietWork(scope, push.state, phone, inbox, foreground = { hosts.isForeground })
     val liveWork = LiveWork(scope, hosts, machines, push, AndroidLive(app), quietWork)
     val tally = TallyStore(java.io.File(app.filesDir, "tally.json"), machines)
-    val alertWork = AlertWork(hosts, machines, push, inbox, liveWork, quietWork, tally, quick)
+    /** One-shot watches set from the long-press sheets. */
+    val watchWork = com.makefunstuff.herdr.push.WatchWork(push, inbox, quietWork)
+    val alertWork = AlertWork(hosts, machines, push, inbox, liveWork, quietWork, tally, quick, watchWork)
     /** Every board's list as last read, and which finished agents the phone has shown: the Agents screen's and the Board tab's. */
     val boards = com.makefunstuff.herdr.data.BoardLists(hosts, onRead = { id, tasks -> tally.tasks(id, tasks) })
     val seen = com.makefunstuff.herdr.data.SeenStore(java.io.File(app.filesDir, "seen.json"))
@@ -128,6 +130,7 @@ class AppContainer(app: Application) {
         // The boards the app reads while on screen are what the person saw, for the brief.
         tally.start(scope, hosts, onBoard = { id, tasks -> boards.put(id, tasks); briefWork.looked(id, tasks, null) })
         briefWork.start()
+        watchWork.start(scope, hosts, boards)
         // Shared files waiting for a machine taken out of the app go with it.
         scope.launch { machines.machines.collect { list -> shares.keep(list.map { it.id }.toSet()) } }
         // The push app's address may have lapsed while the app was closed: ask again, it answers with the same or a new one.

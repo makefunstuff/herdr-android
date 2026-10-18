@@ -10,6 +10,7 @@ import com.makefunstuff.herdr.core.host.HostSession
 import com.makefunstuff.herdr.core.push.Alert
 import com.makefunstuff.herdr.core.push.AlertAction
 import com.makefunstuff.herdr.core.push.Alerts
+import com.makefunstuff.herdr.core.push.HerdrPush
 import com.makefunstuff.herdr.core.push.PushLook
 import com.makefunstuff.herdr.core.push.PushMessages
 import com.makefunstuff.herdr.data.HostManager
@@ -34,7 +35,10 @@ class AlertWork(
     private val quiet: QuietWork,
     private val tally: TallyStore,
     private val quick: com.makefunstuff.herdr.data.QuickStore,
+    private val watches: WatchWork,
 ) {
+    private val rules get() = store.state.value.rules
+
     /** A push from a push app: opened with the machine's key and shown. False when it isn't one of ours. */
     fun received(text: String, now: Long = System.currentTimeMillis()): Boolean {
         val (machineId, msg) = PushMessages.open(text, store.keys().filterKeys { machines.get(it) != null }) ?: return false
@@ -49,7 +53,10 @@ class AlertWork(
         if (msg.events.any { it is com.makefunstuff.herdr.core.push.PushEvent.Test }) {
             store.machine(machineId) { it.copy(testedAt = now, problem = null) }
         }
-        inbox.apply(changes, quiet = hosts.isForeground, hold = quiet.check(now))
+        // Who is at the machine as it sent this (a push that took long says so of then, not of now).
+        msg.presence?.let { quiet.presence.record(machineId, label, it, minOf(now, msg.at * 1000).takeIf { msg.at > 0 } ?: now) }
+        inbox.apply(changes, quiet = quiet.silent(now), hold = quiet.check(now), rules = rules)
+        watches.events(machineId, label, msg.events)
         return true
     }
 
@@ -129,19 +136,22 @@ class AlertWork(
         val events = PushLook.events(api, snapshot, tasks)
         tally.agents(machineId, snapshot)
         tasks?.let { tally.tasks(machineId, it) }
-        inbox.apply(Alerts.all(machineId, s.machine.label, events), quiet = hosts.isForeground, hold = quiet.check())
+        val conn = s.awaitConnection()
+        // Whether someone is at the machine, from its herdr-push (a machine without one can't tell).
+        if (rules.holdAtMachine) HerdrPush.Client(conn, s.machine.label).presence()?.let { quiet.presence.record(machineId, s.machine.label, it, System.currentTimeMillis()) }
+        inbox.apply(Alerts.all(machineId, s.machine.label, events), quiet = quiet.silent(), hold = quiet.check(), rules = rules)
+        watches.look(machineId, s.machine.label, snapshot.agents, tasks)
         live.looked(machineId, s.machine.label, snapshot, tasks)
         // Low on RAM or disk, for a machine without herdr-push (where it runs, the push said so already: shown once).
-        val conn = s.awaitConnection()
         runCatching { HealthClient { cmd, timeout -> conn.run(cmd, timeout) }.sample() }.getOrNull()?.let { sample ->
             val report = HealthReport.of(sample, ProcLabels.label(sample, null, snapshot)) ?: return@let
-            inbox.apply(listOf(Alerts.health(machineId, s.machine.label, report)), quiet = hosts.isForeground, hold = quiet.check())
+            inbox.apply(listOf(Alerts.health(machineId, s.machine.label, report)), quiet = quiet.silent(), hold = quiet.check(), rules = rules)
         }
         // AI quick commands that ended (where herdr-push runs, it told already: shown once). Only the last hours' are news.
         runCatching { s.quick().runs(20) }.getOrNull()?.let { list ->
             val changes = list.runs.filter { list.now - it.ended < QUICK_FRESH_SECONDS }
                 .mapNotNull { Alerts.quickRun(machineId, s.machine.label, it) }
-            if (changes.isNotEmpty()) inbox.apply(changes, quiet = hosts.isForeground, hold = quiet.check())
+            if (changes.isNotEmpty()) inbox.apply(changes, quiet = quiet.silent(), hold = quiet.check(), rules = rules)
         }
     }
 

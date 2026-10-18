@@ -53,6 +53,7 @@ import com.makefunstuff.herdr.ui.activity.ActivityScreen
 import com.makefunstuff.herdr.ui.admin.AdminScreen
 import com.makefunstuff.herdr.ui.agents.AgentScreen
 import com.makefunstuff.herdr.ui.agents.AgentsScreen
+import com.makefunstuff.herdr.ui.agents.AlertPill
 import com.makefunstuff.herdr.ui.board.BoardScreen
 import com.makefunstuff.herdr.ui.board.BoardsScreen
 import com.makefunstuff.herdr.ui.board.rememberBoards
@@ -122,6 +123,8 @@ object Routes {
     const val MACHINES = "machines"
     const val SETTINGS = "settings"
     const val QUIET = "settings/quiet"
+    /** Which notifications reach the phone, holding them while you are at a machine, and the watches. */
+    const val RULES = "settings/rules"
     /** What happened while you were away; and when it comes as a notification. */
     const val BRIEF = "brief"
     const val BRIEF_SETTINGS = "settings/brief"
@@ -201,7 +204,8 @@ private fun AppNav(nav: NavHostController) {
     val seen by container.seen.marks.collectAsStateWithLifecycle()
     val homeBoards = rememberBoards()
     // The tabs' badges: everything on the Needs you list, and the tasks waiting for you across the boards.
-    val needsYou = remember(hosts, homeBoards, seen) { Home.of(HomeAgent.of(hosts), homeBoards, seen).needsYou.size }
+    val waiting = remember(hosts, homeBoards, seen) { Home.of(HomeAgent.of(hosts), homeBoards, seen).needsYou }
+    val needsYou = waiting.size
     val tasksWaiting = remember(homeBoards) { BoardGroup.waiting(homeBoards) }
     val keyState by container.identity.state.collectAsStateWithLifecycle()
     var keySetupDismissed by rememberSaveable { mutableStateOf(false) }
@@ -280,6 +284,13 @@ private fun AppNav(nav: NavHostController) {
                     }
                 }
             }
+            // Another agent needs you while you are in a chat: one line drops from the top.
+            AlertPill(
+                nav, panes, entry, waiting,
+                agentsRead = remember(hosts) { hosts.filter { it.snapshot != null }.map { it.machine.id }.toSet() },
+                boardsRead = remember(homeBoards) { homeBoards.map { it.machineId }.toSet() },
+                fired = container.watchWork.fired,
+            )
         }
     }
 }
@@ -291,6 +302,7 @@ internal fun NavGraphBuilder.screens(nav: NavHostController, agents: @Composable
     composable(Routes.MACHINES) { MachinesScreen(nav) }
     composable(Routes.SETTINGS) { SettingsScreen(nav) }
     composable(Routes.QUIET) { QuietHoursScreen(nav) }
+    composable(Routes.RULES) { com.makefunstuff.herdr.ui.settings.AlertRulesScreen(nav) }
     composable(Routes.BRIEF) { BriefScreen(nav) }
     composable(Routes.BRIEF_SETTINGS) { BriefSettingsScreen(nav) }
     composable(Routes.MACHINE) { MachineScreen(nav, it.arguments?.getString("id").orEmpty()) }
