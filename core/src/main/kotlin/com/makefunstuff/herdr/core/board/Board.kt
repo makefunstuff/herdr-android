@@ -307,6 +307,38 @@ class BoardClient(private val conn: MachineConnection, private val machine: Mach
             if (start) add("--delegate")
         })
 
+    /** The board's automations, `automations --json`. */
+    suspend fun automations(): List<Automation> {
+        val r = conn.run(BoardCommands.cli(machine, path, AutomationCommands.list()), timeoutSeconds = 20)
+        return runCatching { AutomationReader.list(r.stdout) }.getOrElse {
+            throw IOException(BoardTasks.plain(r.stderr).ifEmpty { it.message }, it)
+        }
+    }
+
+    /** One automation and every firing it kept, newest first. */
+    suspend fun automation(id: String): Pair<Automation, List<Firing>> {
+        val r = conn.run(BoardCommands.cli(machine, path, AutomationCommands.show(id)), timeoutSeconds = 20)
+        return runCatching { AutomationReader.show(r.stdout) }.getOrElse {
+            throw IOException(BoardTasks.plain(r.stderr).ifEmpty { it.message }, it)
+        }
+    }
+
+    suspend fun addAutomation(d: AutomationDraft): String = run(AutomationCommands.add(d))
+
+    /** Changes [old] into [d], a command at a time; the board's last sentence, or "" when nothing changed. */
+    suspend fun changeAutomation(old: Automation, d: AutomationDraft): String {
+        var said = ""
+        for (args in AutomationCommands.change(old, d)) said = run(args)
+        return said
+    }
+
+    suspend fun turnAutomation(id: String, on: Boolean): String = run(AutomationCommands.turn(id, on))
+
+    /** Fires it now: the board's sentence says the task it added, or why it did not fire. */
+    suspend fun runAutomation(id: String): String = run(AutomationCommands.run(id))
+
+    suspend fun removeAutomation(id: String): String = run(AutomationCommands.remove(id))
+
     companion object {
         /** The launcher's path on the machine, or null when the board isn't installed there. */
         suspend fun locate(conn: MachineConnection): String? {
