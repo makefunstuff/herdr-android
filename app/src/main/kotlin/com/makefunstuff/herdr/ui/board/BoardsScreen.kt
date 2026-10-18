@@ -63,8 +63,9 @@ fun BoardsScreen(nav: NavController) {
     val readNow = remember { Channel<Unit>(Channel.CONFLATED) }
     ReadBoards(readNow, everyMs = 10_000)
     val withBoard = hosts.filter { it.hasBoard }
-    var machine by rememberSaveable { mutableStateOf<String?>(null) }
-    if (machine != null && withBoard.none { it.machine.id == machine }) machine = null
+    var chosen by rememberSaveable { mutableStateOf<String?>(null) }
+    // A machine without a board (or not checked yet since it connected) shows all.
+    val machine = chosen?.takeIf { id -> withBoard.any { it.machine.id == id } }
     val groups = remember(boards, machine) { BoardGroup.of(boards, machine) }
     val waiting = remember(boards) { BoardGroup.waiting(boards) }
     // Adding a task: on the machine shown, or the one chosen first.
@@ -91,9 +92,9 @@ fun BoardsScreen(nav: NavController) {
         Column(Modifier.padding(padding).fillMaxSize()) {
             if (withBoard.size > 1) {
                 LazyRow(contentPadding = PaddingValues(horizontal = Space.screen), horizontalArrangement = Arrangement.spacedBy(Space.s)) {
-                    item { HerdrChip("All machines", selected = machine == null, onClick = { machine = null }) }
+                    item { HerdrChip("All machines", selected = machine == null, onClick = { chosen = null }) }
                     items(withBoard, key = { it.machine.id }) { h ->
-                        HerdrChip(h.machine.label, selected = machine == h.machine.id, onClick = { machine = if (machine == h.machine.id) null else h.machine.id })
+                        HerdrChip(h.machine.label, selected = machine == h.machine.id, onClick = { chosen = if (machine == h.machine.id) null else h.machine.id })
                     }
                 }
             }

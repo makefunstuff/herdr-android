@@ -20,22 +20,31 @@ import java.io.File
  * the Board tab. Read here ([readAll]) while one of them is on screen, and told of every other
  * read of a whole list (a machine's board screen, the review cards, the widget's look now and then).
  */
-class BoardLists(private val hosts: HostManager, private val onRead: (String, List<BoardTask>) -> Unit = { _, _ -> }) {
+class BoardLists(
+    private val hosts: HostManager,
+    private val onRead: (String, List<BoardTask>) -> Unit = { _, _ -> },
+    private val now: () -> Long = System::currentTimeMillis,
+) {
     /** One board's list; [problem] when the last read failed (the tasks are then the read before). */
     data class Read(val tasks: List<BoardTask>, val problem: String? = null)
 
     private val _lists = MutableStateFlow<Map<String, Read>>(emptyMap())
+    /** When each board was last read, so two screens reading at once (a wide window's) don't read it twice. */
+    private val readAt = java.util.concurrent.ConcurrentHashMap<String, Long>()
     /** By machine id; a machine never read isn't in it. */
     val lists: StateFlow<Map<String, Read>> = _lists.asStateFlow()
 
     /** [machineId]'s whole list, read somewhere in the app. */
     fun put(machineId: String, tasks: List<BoardTask>) {
+        readAt[machineId] = now()
         _lists.update { it + (machineId to Read(tasks)) }
     }
 
-    /** Reads every connected machine's board now, side by side. */
-    suspend fun readAll() = coroutineScope {
-        hosts.hosts.value.filter { it.online && it.hasBoard }.map { h -> async { read(h.machine.id) } }.awaitAll()
+    /** Reads every connected machine's board now, side by side; one read within [freshMs] is left as it is. */
+    suspend fun readAll(freshMs: Long = 3_000) = coroutineScope {
+        val t = now()
+        hosts.hosts.value.filter { it.online && it.hasBoard && t - (readAt[it.machine.id] ?: 0L) >= freshMs }
+            .map { h -> async { read(h.machine.id) } }.awaitAll()
         Unit
     }
 

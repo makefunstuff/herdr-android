@@ -48,9 +48,11 @@ fun ReadBoards(readNow: Channel<Unit>, everyMs: Long = 15_000) {
     LaunchedEffect(ids) {
         if (ids.isEmpty()) return@LaunchedEffect
         owner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            var asked = false
             while (true) {
-                container.boards.readAll()
-                withTimeoutOrNull(everyMs) { readNow.receive() }
+                // Asked for (after an action): read now, even if another screen just did.
+                container.boards.readAll(freshMs = if (asked) 0 else 3_000)
+                asked = withTimeoutOrNull(everyMs) { readNow.receive() } != null
             }
         }
     }

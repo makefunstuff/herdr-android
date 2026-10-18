@@ -49,6 +49,7 @@ import com.makefunstuff.herdr.core.home.AgentRow
 import com.makefunstuff.herdr.core.home.Home
 import com.makefunstuff.herdr.core.home.HomeAgent
 import com.makefunstuff.herdr.core.home.Waiting
+import com.makefunstuff.herdr.core.push.Alerts
 import com.makefunstuff.herdr.ui.board.BoardPanel
 import com.makefunstuff.herdr.ui.board.PanelCancel
 import com.makefunstuff.herdr.ui.board.ReadBoards
@@ -119,9 +120,9 @@ fun AgentsScreen(
     val boardProblems = rememberBoardProblems()
     val readNow = remember { Channel<Unit>(Channel.CONFLATED) }
     ReadBoards(readNow)
-    var filter by filterState
-    // A machine filter for one that's gone shows all.
-    if (filter != null && hosts.none { it.machine.id == filter }) filter = null
+    var chosen by filterState
+    // A machine filter for one that's gone (taken out of the app) shows all.
+    val filter = chosen?.takeIf { id -> hosts.any { it.machine.id == id } }
     // Beside a wide window's list: what is open in the middle, to show it chosen here.
     val entry by nav.currentBackStackEntryAsState()
     val inMiddle = if (panes.wide) entry?.let(::opened) else null
@@ -157,7 +158,11 @@ fun AgentsScreen(
                 AgentInput.choose(session.awaitApi(10_000), q.agent.agent.paneId, prompt.question, index, label)
                 session.refresh()
             }
-                .onSuccess { handled[q.key] = sig(q); context.toast("Answered: $label") }
+                .onSuccess {
+                    handled[q.key] = sig(q)
+                    container.inbox.dismiss(Alerts.agentTag(q.machineId, q.agent.agent.paneId))
+                    context.toast("Answered: $label")
+                }
                 .onFailure { context.toast(it.message ?: "Couldn't answer") }
             busy.remove(q.key)
         }
@@ -191,7 +196,11 @@ fun AgentsScreen(
         busy[w.key] = "$label · ${w.task.name}"
         scope.launch {
             runCatching { (container.hosts.session(w.machineId) ?: error("This machine isn't in the app any more")).awaitBoard().act(action, w.task.id) }
-                .onSuccess { handled[w.key] = sig(w); context.toast(it.ifEmpty { "Done" }) }
+                .onSuccess {
+                    handled[w.key] = sig(w)
+                    container.inbox.dismiss(Alerts.taskTag(w.machineId, w.task.id))
+                    context.toast(it.ifEmpty { "Done" })
+                }
                 .onFailure { refusal = it.message ?: "The board refused" }
             busy.remove(w.key)
             readNow.trySend(Unit)
@@ -256,12 +265,12 @@ fun AgentsScreen(
                         onFilter = if (hosts.size > 1) ({ filterMenu = true }) else null,
                     ) {
                         HerdrMenu(expanded = filterMenu, onDismissRequest = { filterMenu = false }, title = "Show") {
-                            MenuRow("All machines", HerdrIcons.Layers, { filter = null; filterMenu = false })
+                            MenuRow("All machines", HerdrIcons.Layers, { chosen = null; filterMenu = false })
                             hosts.forEach { h ->
                                 MenuRow(
                                     h.machine.label + if (h.online) "" else " · offline",
                                     if (h.machine.id == filter) HerdrIcons.Check else HerdrIcons.Monitor,
-                                    { filter = h.machine.id; filterMenu = false },
+                                    { chosen = h.machine.id; filterMenu = false },
                                 )
                             }
                         }
