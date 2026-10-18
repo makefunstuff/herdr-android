@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- What the app's FileProvider hands out: only the folder a camera app writes a new photo into. -->
+<paths>
+    <cache-path name="camera" path="camera/" />
+</paths>

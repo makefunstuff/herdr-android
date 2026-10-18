@@ -52,6 +52,8 @@ import androidx.compose.ui.draw.drawBehind
 import com.makefunstuff.herdr.core.chat.BlockedPrompt
 import com.makefunstuff.herdr.core.chat.ChatItem
 import com.makefunstuff.herdr.core.chat.ToolState
+import com.makefunstuff.herdr.core.host.Images
+import com.makefunstuff.herdr.ui.images.MessageImages
 import com.makefunstuff.herdr.ui.common.CodeBlock
 import com.makefunstuff.herdr.ui.common.MarkdownText
 import com.makefunstuff.herdr.ui.common.StatusDot
@@ -111,7 +113,10 @@ fun ChatRowView(row: ChatRow) {
 @Composable
 private fun UserBubble(item: ChatItem.User, pending: Boolean) {
     var expanded by rememberSaveable(item.id) { mutableStateOf(false) }
-    val long = item.text.length > 600 || item.text.count { it == '\n' } > 12
+    // The pictures it names show as pictures, over the words.
+    val split = remember(item.text) { Images.split(item.text) }
+    val text = split.text
+    val long = text.length > 600 || text.count { it == '\n' } > 12
     Row(Modifier.fillMaxWidth().padding(start = 48.dp), horizontalArrangement = Arrangement.End) {
         // Your turn: a neutral raised card (`.chat-turn-user`), never a wall of colour.
         Surface(
@@ -122,9 +127,10 @@ private fun UserBubble(item: ChatItem.User, pending: Boolean) {
             modifier = Modifier.alpha(if (pending) 0.6f else 1f).animateContentSize(),
         ) {
             Column(Modifier.padding(horizontal = Space.l, vertical = Space.m)) {
-                SelectionContainer {
+                if (split.paths.isNotEmpty()) MessageImages(split.paths, Modifier.padding(bottom = if (text.isEmpty()) 0.dp else Space.s))
+                if (text.isNotEmpty()) SelectionContainer {
                     Text(
-                        item.text,
+                        text,
                         style = MaterialTheme.typography.bodyLarge,
                         maxLines = if (long && !expanded) 10 else Int.MAX_VALUE,
                         overflow = TextOverflow.Ellipsis,

@@ -164,8 +164,33 @@ object Demo {
         ),
     )
 
-    /** A file to share for real: the app copies it to the machine, then deletes it. */
-    fun sharedFile(): java.io.File = kotlin.io.path.createTempFile("shared", ".png").toFile().apply { writeBytes(ByteArray(1024)) }
+    /** A file to share for real: a screenshot the app makes smaller into the Coordinator's composer, then deletes. */
+    fun sharedFile(): java.io.File = kotlin.io.path.createTempFile("shared", ".png").toFile().apply { writeBytes(picture("task").readBytes()) }
+
+    /**
+     * A screenshot on the phone, for the composer and the chat's pictures: the README's own
+     * screenshots of the app (540×1200, `docs/screenshots/<name>.webp`), as a phone's would be.
+     */
+    fun picture(name: String): java.io.File {
+        val start = java.io.File("").absoluteFile
+        val repo = generateSequence(start) { it.parentFile }.firstOrNull { java.io.File(it, "docs/screenshots").isDirectory } ?: error("no docs/screenshots above $start")
+        return java.io.File(repo, "docs/screenshots/$name.webp")
+    }
+
+    /** Where devbox keeps the pictures sent to its agents, as `HostSession.upload` puts them. */
+    const val UPLOADS = "/home/demo/.cache/herdr-android/uploads/20261018-101204-3f2a"
+
+    /** devbox's app agent, after you sent it two screenshots and it answered. */
+    fun appTranscriptWithPictures(): String = resource("claude-app.jsonl").trimEnd() + "\n" + """
+        |{"type": "user", "uuid": "00000000-0000-4000-8000-000000000030", "message": {"role": "user", "content": "@$UPLOADS/Screenshot_20261018_101204.png @$UPLOADS/Screenshot_20261018_101230.png The Board card jumps when a machine reconnects: first shot before, second after. Keep it where it was?"}}
+        |{"type": "assistant", "uuid": "00000000-0000-4000-8000-000000000031", "message": {"role": "assistant", "content": [{"type": "text", "text": "I see it: in the second screenshot the **Needs you** group is drawn again from the top when devbox answers, so the list scrolls back. I'll key the rows by task id so the list keeps its place."}]}}
+        |""".trimMargin()
+
+    /** The pictures in that conversation, as devbox has them. */
+    fun appPictures(): Map<String, java.io.File> = mapOf(
+        "$UPLOADS/Screenshot_20261018_101204.png" to picture("board"),
+        "$UPLOADS/Screenshot_20261018_101230.png" to picture("board-light"),
+    )
 
     /** What each machine has and answers. */
     fun hosts(): Map<String, FakeMachine> = mapOf(
@@ -209,7 +234,7 @@ object Demo {
         MINI to FakeMachine(MINI, refuse = ConnectError.Auth(null)),
     )
 
-    private const val APP_SESSION = "3f6c2a1e-8b7d-4c2a-9e51-0a1b2c3d4e5f"
+    const val APP_SESSION = "3f6c2a1e-8b7d-4c2a-9e51-0a1b2c3d4e5f"
     private const val API_SESSION = "9d2e4b7a-1c3f-4e6a-8b90-5f4e3d2c1b0a"
     private const val SITE_SESSION = "0199a3b2-7c41-7e10-9a2b-3c4d5e6f7a8b"
     private const val EVAL_SESSION = "0199a3c4-1d2e-7f30-8a4b-5c6d7e8f9a0b"

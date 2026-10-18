@@ -191,6 +191,17 @@ class HostSession(
         return path
     }
 
+    /**
+     * A picture named in a message ([Images.split]), read back from this machine to show it in the
+     * chat: its bytes, or an error when it isn't there any more or is larger than [Images.MAX_FETCH_BYTES].
+     */
+    suspend fun fetchImage(path: String): ByteArray {
+        val conn = awaitConnection()
+        val result = conn.run(Images.fetchCommand(path), timeoutSeconds = 60)
+        if (result.exitStatus != 0 || result.stdout.isBlank()) throw IOException("${path.substringAfterLast('/')} isn't on ${machine.label} any more")
+        return java.util.Base64.getMimeDecoder().decode(result.stdout.trim())
+    }
+
     /** The work board on this machine, when it has one. */
     suspend fun awaitBoard(timeoutMs: Long = 20_000): BoardClient {
         val conn = awaitConnection(timeoutMs)

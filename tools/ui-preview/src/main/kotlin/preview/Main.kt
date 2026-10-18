@@ -105,6 +105,8 @@ class SceneData {
     var codeView: com.makefunstuff.herdr.data.CodeView? = null
     /** Quick commands pinned, per machine (`Project:Run unit tests`). */
     var quickPins: Map<String, List<String>> = emptyMap()
+    /** Pictures waiting in a chat's composer, by DraftStore key: each a name and the picture it is (made smaller as the app does). */
+    val images = HashMap<String, List<Pair<String, File>>>()
     fun host(id: String): FakeMachine = hosts.getValue(id)
 }
 
@@ -160,6 +162,11 @@ fun render(scene: Scene, dark: Boolean, file: File) {
     data.notes.forEach { container.code.add(it) }
     data.codeView?.let { container.code.setView(it) }
     data.quickPins.forEach { (m, keys) -> keys.forEach { container.quick.setPinned(m, it, true) } }
+    data.images.forEach { (key, pictures) ->
+        pictures.forEach { (name, file) ->
+            com.makefunstuff.herdr.ui.images.ImageCodec.prepare(file, null, name, container.images)?.let { container.images.add(key, it) }
+        }
+    }
     try {
         // Every machine has answered (or refused) before the first frame, so a shot never catches "Connecting".
         val deadline = System.currentTimeMillis() + 15_000
@@ -246,6 +253,23 @@ private fun ComposeUiTest.tap(node: androidx.compose.ui.test.SemanticsNodeIntera
 }
 
 fun ComposeUiTest.longPressText(text: String) { node(hasText(text, substring = true)).performTouchInput { longClick() }; settle() }
+
+/**
+ * A finger on the element whose content description starts with [label], down on the first of
+ * [points], through the others, and up: each a point as a fraction (0 to 1) of the element's width
+ * and height, or of [within] when given (a picture's place in it, from its size).
+ */
+fun ComposeUiTest.drag(label: String, vararg points: Pair<Float, Float>, within: ((Float, Float) -> androidx.compose.ui.geometry.Rect)? = null) {
+    node(hasContentDescription(label, substring = true)).performTouchInput {
+        val area = within?.invoke(width.toFloat(), height.toFloat()) ?: androidx.compose.ui.geometry.Rect(0f, 0f, width.toFloat(), height.toFloat())
+        val at = points.map { (x, y) -> androidx.compose.ui.geometry.Offset(area.left + x * area.width, area.top + y * area.height) }
+        down(at.first())
+        // In small steps, as a finger moves.
+        at.zipWithNext().forEach { (a, b) -> for (i in 1..8) moveTo(a + (b - a) * (i / 8f), delayMillis = 16) }
+        up()
+    }
+    settle()
+}
 
 /** Types into the first text field (or the one showing [field]). */
 fun ComposeUiTest.type(value: String, field: String? = null) {

@@ -41,6 +41,9 @@ class AppContainer(app: Context) {
     val health = HealthStore()
     val quick = com.makefunstuff.herdr.data.QuickStore(java.io.File(app.filesDir, "quick.json"))
     val shares = Shares(java.io.File(app.filesDir, "shares.json"), java.io.File(app.filesDir, "shared"))
+    val images = com.makefunstuff.herdr.data.ImageStore(
+        java.io.File(app.filesDir, "images.json"), java.io.File(app.filesDir, "images"), java.io.File(app.filesDir, "sent-images"),
+    )
     val push = PushStore(app)
     val inbox = Inbox(java.io.File(app.filesDir, "alerts.json"), PreviewAlerts)
     val phone = PreviewPhone

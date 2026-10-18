@@ -56,6 +56,12 @@ import com.makefunstuff.herdr.ui.design.ChatComposer
 import com.makefunstuff.herdr.ui.design.ChatSurface
 import com.makefunstuff.herdr.ui.design.ComposerIconButton
 import com.makefunstuff.herdr.ui.common.rememberAttacher
+import com.makefunstuff.herdr.ui.images.AttachMenu
+import com.makefunstuff.herdr.ui.images.ChatImages
+import com.makefunstuff.herdr.ui.images.ComposerTray
+import com.makefunstuff.herdr.ui.images.LocalChatImages
+import com.makefunstuff.herdr.ui.images.rememberImageTray
+import androidx.compose.runtime.CompositionLocalProvider
 import com.makefunstuff.herdr.core.host.Attachments
 import com.makefunstuff.herdr.ui.common.rememberDraft
 import com.makefunstuff.herdr.data.DraftStore
@@ -120,8 +126,11 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
     var menu by remember { mutableStateOf(false) }
     var quick by remember { mutableStateOf<QuickPlace?>(null) }
     val listState = rememberLazyListState()
+    // Pictures for the agent wait in the composer (and are copied to its machine) until the message goes.
+    val tray = rememberImageTray(DraftStore.agent(machineId, paneId), machineId, session, host.online)
     // A file for the agent: copied to its machine, then named at the start of the draft.
-    val attach = rememberAttacher(session) { path -> draft = Attachments.withMention(draft, path) }
+    val attach = rememberAttacher(session, onAttached = { path -> draft = Attachments.withMention(draft, path) }, onImage = tray::add)
+    var attachMenu by remember { mutableStateOf(false) }
 
     fun keys(k: List<String>) {
         scope.launch {
@@ -132,8 +141,10 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
 
     fun send() {
         val typed = draft
-        val text = typed.trim()
-        if (text.isEmpty() || sending) return
+        val pictures = tray.images
+        // The pictures are named in front of what you typed.
+        val text = tray.message(typed)
+        if (text.isEmpty() || sending || tray.waiting) return
         sending = true
         val blocked = status == AgentStatus.Blocked
         // Counted before the send, so a transcript that is quicker than this call still confirms it.
@@ -143,6 +154,7 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
         scope.launch {
             runCatching { AgentInput.send(session.awaitApi(), paneId, text, named = agent != null, blocked = blocked) }.onSuccess {
                 draft = DraftStore.afterSend(draft, typed)
+                tray.sent(pictures)
             }.onFailure {
                 if (!blocked) chat.dropPending(text)
                 context.toast(it.message ?: "Couldn't send")
@@ -208,16 +220,19 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
                         },
                         onSend = ::send,
                         sending = sending,
-                        holdSend = attach.uploading,
+                        holdSend = attach.uploading || tray.waiting,
                         status = when {
                             sending -> "Sending…"
-                            attach.uploading -> "Uploading file…"
                             !host.online -> "Not connected"
+                            attach.uploading -> "Uploading file…"
+                            tray.waiting -> "Copying pictures…"
                             else -> null
                         },
                         leading = {
-                            ComposerIconButton(HerdrIcons.Plus, "Attach files", enabled = host.online && !attach.uploading, onClick = attach.pick)
+                            ComposerIconButton(HerdrIcons.Plus, "Attach files", enabled = !attach.uploading, onClick = { attachMenu = true })
                         },
+                        attachments = { ComposerTray(tray) },
+                        attached = !tray.isEmpty,
                         stop = if (status == AgentStatus.Working) ({ keys(listOf("esc")) }) else null,
                         floating = true,
                         above = if (showKeys) ({ KeyRow(onKeys = ::keys) }) else null,
@@ -235,7 +250,7 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
                     rows.isEmpty() -> Box(Modifier.padding(bottom = bottom)) {
                         EmptyState("No messages yet", "Send a prompt to get started.", icon = HerdrIcons.MessagesSquare)
                     }
-                    else -> LazyColumn(
+                    else -> CompositionLocalProvider(LocalChatImages provides ChatImages(machineId, session, container.images, host.online)) { LazyColumn(
                         state = listState,
                         reverseLayout = true,
                         // The composer floats over the list's end: its height stays free under the newest entry.
@@ -247,7 +262,7 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
                         if (status == AgentStatus.Blocked) item(key = "blocked") { BlockedCard(state.prompt, state.screen, onKeys = ::keys) }
                         if (status == AgentStatus.Working) item(key = "working") { WorkingLine(activity) }
                         items(rows.asReversed(), key = { it.key }) { ChatRowView(it) }
-                    }
+                    } }
                 }
                 if (!atBottom) {
                     Box(Modifier.align(Alignment.BottomEnd).padding(end = Space.m, bottom = bottom + Space.xs)) {
@@ -284,6 +299,7 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
         )
     }
     quick?.let { place -> QuickSheets(nav, place, onDismiss = { quick = null }) }
+    if (attachMenu) AttachMenu(attach, tray, online = host.online, onDismiss = { attachMenu = false })
 }
 
 /** Under the bar: the agent's state in its colour, and what it is doing. */

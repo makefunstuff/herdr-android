@@ -12,6 +12,7 @@ import java.io.OutputStream
 /** One scene's app storage: a temp folder for files and in-memory preferences. */
 open class Context(val root: File) {
     val filesDir: File get() = File(root, "files").apply { mkdirs() }
+    val cacheDir: File get() = File(root, "cache").apply { mkdirs() }
     private val prefs = HashMap<String, SharedPreferences>()
     val contentResolver = ContentResolver()
     private val clipboard = ClipboardManager()
