@@ -1,6 +1,7 @@
 package com.makefunstuff.herdr.core.push
 
 import com.makefunstuff.herdr.core.api.AgentStatus
+import com.makefunstuff.herdr.core.board.Approvals
 import com.makefunstuff.herdr.core.board.BoardAction
 import com.makefunstuff.herdr.core.board.BoardStatus
 import com.makefunstuff.herdr.core.board.BoardTask
@@ -39,6 +40,8 @@ data class Alert(
     val health: Boolean = false,
     /** A tap opens this quick command's run (an AI one that ended). */
     val quickRun: String = "",
+    /** A tap opens the review cards at the task: finished work that waits for a yes, a no or a choice ([Approvals.waits]). */
+    val review: Boolean = false,
 ) {
     enum class Kind { NeedsYou, Finished, Test }
 }
@@ -202,6 +205,7 @@ object Alerts {
                 taskId = t.id,
                 taskName = t.name,
                 actions = actions,
+                review = Approvals.waits(t),
             ),
         )
     }
