@@ -322,6 +322,18 @@ fun scenes(): List<Scene> = listOf(
     // A task at work offers watches: tell me once its checks pass, once it's done.
     Scene("task-watch", route = Routes.board(DEVBOX), heightDp = 1000, actions = { longPressText("Add app screenshots to the README") }),
     Scene("board-add", route = Routes.board(DEVBOX), actions = { tapLabel("Add a task") }),
+    // Routines: the board's automations, each with its trigger in words, how its last run went, a pause switch and
+    // Run now; reached from a board's menu, the Board tab's bar and a machine's Routines row. One open with its
+    // firings; a new one on a schedule and on a board event; one edited; one removed; every board's; none yet.
+    Scene("board-menu", route = Routes.board(DEVBOX), actions = { tapLabel("Filter and more") }),
+    Scene("routines", route = Routes.routines(DEVBOX), heightDp = 1100, setup = { home() }),
+    Scene("routines-all", route = Routes.routines(), setup = { home(); host(GPU).board = Demo.gpuBoard() }),
+    Scene("routine", route = Routes.routines(DEVBOX), heightDp = 1400, setup = { home() }, actions = { tapText("Check CI on open PRs") }),
+    Scene("routine-new", route = Routes.routines(DEVBOX), heightDp = 1500, actions = { tapText("New routine") }),
+    Scene("routine-new-event", route = Routes.routines(DEVBOX), heightDp = 1500, actions = { tapText("New routine"); tapText("On a board event") }),
+    Scene("routine-edit", route = Routes.routines(DEVBOX), heightDp = 1500, actions = { tapText("Bump dependencies"); tapLabel("Edit") }),
+    Scene("routine-remove", route = Routes.routines(DEVBOX), actions = { tapText("Weekly changelog draft"); tapLabel("More"); tapText("Remove") }),
+    Scene("routines-empty", route = Routes.routines(DEVBOX), setup = { host(DEVBOX).board = FakeBoard() }),
     // Finished work, one card a task across the boards: what changed and the agent's note, the review, the checks, the
     // pull request; its full diff a tap away; Approve anyway saying what failed; sending it back.
     Scene("review", route = Routes.review(DEVBOX)),

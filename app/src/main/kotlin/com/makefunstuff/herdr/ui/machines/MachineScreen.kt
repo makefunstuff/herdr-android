@@ -226,6 +226,7 @@ fun MachineScreen(nav: NavController, machineId: String) {
                         onCoordinator = { nav.navigate(Routes.coordinator(machineId)) },
                         onHealth = { nav.navigate(Routes.health(machineId)) },
                         onUsage = { nav.navigate(Routes.usage(machineId)) },
+                        onRoutines = { nav.navigate(Routes.routines(machineId)) },
                     )
                 }
             }

@@ -9,7 +9,9 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -19,6 +21,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -30,7 +33,10 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
+import com.makefunstuff.herdr.core.board.Automation
+import com.makefunstuff.herdr.core.board.AutomationWords
 import com.makefunstuff.herdr.core.board.BoardGlance
+import com.makefunstuff.herdr.core.board.Outcome
 import com.makefunstuff.herdr.core.board.CoordinatorView
 import com.makefunstuff.herdr.core.host.HostSession
 import com.makefunstuff.herdr.ui.common.LocalContainer
@@ -55,6 +61,7 @@ internal fun MachinePlaces(
     onCoordinator: () -> Unit,
     onHealth: () -> Unit,
     onUsage: () -> Unit,
+    onRoutines: () -> Unit = {},
 ) {
     val state by session.state.collectAsStateWithLifecycle()
     val board = state.hasBoard
@@ -76,6 +83,68 @@ internal fun MachinePlaces(
         }
     }
     if (state.online && board) UsageRow(session, onUsage, modifier = Modifier.padding(top = Space.s))
+    if (state.online && board) RoutinesRow(session, onRoutines, modifier = Modifier.padding(top = Space.s))
+}
+
+/**
+ * The board's routines as one row under the tiles: how many run and when the next one does, or how
+ * many need you. It reads `automations --json` every minute while shown.
+ */
+@Composable
+private fun RoutinesRow(session: HostSession, onOpen: () -> Unit, modifier: Modifier = Modifier) {
+    val container = LocalContainer.current
+    val owner = LocalLifecycleOwner.current
+    val state by session.state.collectAsStateWithLifecycle()
+    val lists by container.boards.lists.collectAsStateWithLifecycle()
+    var list by remember { mutableStateOf<List<Automation>?>(null) }
+    var failed by remember { mutableStateOf(false) }
+    LaunchedEffect(session.machine.id, state.online, state.boardPath) {
+        if (!state.online || state.boardPath == null) return@LaunchedEffect
+        owner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            while (true) {
+                try {
+                    list = session.awaitBoard().automations()
+                    failed = false
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Throwable) {
+                    failed = true
+                }
+                delay(60_000)
+            }
+        }
+    }
+    val c = Herdr.colors
+    val now = container.clock()
+    val tasks = lists[session.machine.id]?.tasks.orEmpty()
+    val l = list
+    val stuck = l.orEmpty().count { a -> a.on && Outcome.of(a, tasks.firstOrNull { it.id == a.last?.task }, now).mood == Outcome.Mood.Stuck }
+    val on = l.orEmpty().filter { it.on }
+    val next = on.mapNotNull { it.next }.minOrNull()
+    val (line, color) = when {
+        l == null -> (if (failed) "Didn't answer" else "Board tasks on a schedule") to c.muted
+        l.isEmpty() -> "None yet · board tasks on a schedule" to c.muted
+        stuck > 0 -> "$stuck need${if (stuck == 1) "s" else ""} you" to c.red
+        on.isEmpty() -> "${l.size} paused" to c.muted
+        else -> listOfNotNull(
+            "${on.size} on",
+            (l.size - on.size).takeIf { it > 0 }?.let { "$it paused" },
+            next?.let { "next ${AutomationWords.until(it, now)}" },
+        ).joinToString(" · ") to c.muted
+    }
+    QuietCard(
+        modifier.semantics(mergeDescendants = true) { contentDescription = "Routines: $line" },
+        onClick = onOpen, onClickLabel = "Open routines", edge = if (stuck > 0) c.red else c.line,
+    ) {
+        Row(Modifier.heightIn(min = 48.dp).padding(horizontal = Space.m), verticalAlignment = Alignment.CenterVertically) {
+            Icon(HerdrIcons.CalendarClock, null, tint = if (stuck > 0) c.red else c.text, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(Space.m))
+            Text("Routines", style = MaterialTheme.typography.titleSmall, color = c.strong, maxLines = 1)
+            Spacer(Modifier.width(Space.s))
+            Text(line, style = MaterialTheme.typography.bodySmall, color = color, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            Icon(HerdrIcons.ChevronRight, null, tint = c.faint, modifier = Modifier.padding(start = Space.s).size(18.dp))
+        }
+    }
 }
 
 /** The work board's tile: what needs you on it, else what is at work. It reads the board every half minute while shown. */

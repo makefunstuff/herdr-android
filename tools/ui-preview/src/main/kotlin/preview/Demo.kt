@@ -97,6 +97,54 @@ object Demo {
         plain = resource("board/gpu-list.txt"),
     )
 
+    /**
+     * devbox's routines (the board's automations), as `automations --json` prints them at [NOW]
+     * (Saturday 17 October, 07:42): one on a Monday schedule whose last task is ready to approve, one
+     * every two hours whose last task asks you, a research one at work, one on a board event that
+     * never ran, and a paused one.
+     */
+    fun routines(): kotlinx.serialization.json.JsonArray = kotlinx.serialization.json.Json.parseToJsonElement(
+        """
+        [
+          {"id": "a7f3c2e1", "name": "Bump dependencies", "on": true, "trigger": "mon 07:00", "repo": "herdr-android", "folder": "/home/demo/src/herdr-android",
+           "research": false, "prompt": "Update the outdated dependencies, run the tests and open a pull request with what changed.",
+           "settings": {"worker.agent": "claude/claude-opus-5-5"},
+           "last": {"at": ${NOW - 5 * DAY - 42 * MIN}, "cause": "schedule", "what": "mon 07:00", "task": "herdr-android/9"}, "next": ${NOW + 2 * DAY - 42 * MIN}},
+          {"id": "c1a2b3d4", "name": "Check CI on open PRs", "on": true, "trigger": "every 2h", "repo": "api-server", "folder": "/home/demo/src/api-server",
+           "research": false, "prompt": "Look at the CI runs of the open pull requests. Fix what broke, or say why it can't be fixed here.",
+           "settings": {},
+           "last": {"at": ${NOW - 42 * MIN}, "cause": "schedule", "what": "every 2h", "task": "api-server/3"}, "next": ${NOW + 78 * MIN}},
+          {"id": "e5f60718", "name": "Hunt flaky tests", "on": true, "trigger": "daily 02:00", "repo": "llm-eval", "folder": "/home/demo/src/llm-eval",
+           "research": true, "prompt": "Find the tests that fail now and then, and say why each one does. Change nothing.",
+           "settings": {"research.only": true},
+           "last": {"at": ${NOW - 5 * HOUR - 42 * MIN}, "cause": "schedule", "what": "daily 02:00", "task": "llm-eval/2"}, "next": ${NOW + 18 * HOUR + 18 * MIN}},
+          {"id": "0b9c8d7e", "name": "Look into failed reviews", "on": true, "trigger": "when a task failed its review, in every repo", "repo": "herdr-android",
+           "folder": "/home/demo/src/herdr-android", "research": true, "prompt": "Read the review that failed and say which findings are real.",
+           "settings": {"research.only": true}, "last": null, "next": null},
+          {"id": "9e8d7c6b", "name": "Weekly changelog draft", "on": false, "trigger": "fri 16:00", "repo": "website", "folder": "/home/demo/src/website",
+           "research": false, "prompt": "Draft the week's changelog from the merged pull requests.", "settings": {},
+           "last": {"at": ${NOW - 8 * DAY - 15 * HOUR - 42 * MIN}, "cause": "schedule", "what": "fri 16:00", "task": "website/2"}, "next": null}
+        ]
+        """,
+    ) as kotlinx.serialization.json.JsonArray
+
+    /** "Check CI on open PRs"' firings, newest first: the tasks it made, skips while one was at work, one without an agent. */
+    fun ciFirings(): kotlinx.serialization.json.JsonArray = kotlinx.serialization.json.Json.parseToJsonElement(
+        """
+        [
+          {"at": ${NOW - 42 * MIN}, "cause": "schedule", "what": "every 2h", "task": "api-server/3"},
+          {"at": ${NOW - 2 * HOUR - 42 * MIN}, "cause": "schedule", "what": "every 2h", "task": "api-server/5"},
+          {"at": ${NOW - 4 * HOUR - 42 * MIN}, "cause": "schedule", "what": "every 2h", "skipped": "its last task, api-server/1, is still being worked on", "n": 3},
+          {"at": ${NOW - 20 * HOUR}, "cause": "run", "what": "run now", "task": "api-server/2", "note": "added, but no agent could be put on it: claude is at its limit"},
+          {"at": ${NOW - DAY - 2 * HOUR}, "cause": "schedule", "what": "every 2h", "task": "api-server/1"}
+        ]
+        """,
+    ) as kotlinx.serialization.json.JsonArray
+
+    private const val MIN = 60_000L
+    private const val HOUR = 60 * MIN
+    private const val DAY = 24 * HOUR
+
     /** devbox's board with nothing waiting for a yes: its approvals already merged. */
     fun nothingToReview() = FakeBoard().apply {
         val keep = tasks.indices.filter { i -> (tasks[i] as kotlinx.serialization.json.JsonObject)["stage"]?.toString()?.trim('"') != "approval" }
@@ -265,7 +313,7 @@ object Demo {
                 API_SESSION to resource("claude-api.jsonl"),
                 SITE_SESSION to resource("codex-site.jsonl"),
             ),
-            board = FakeBoard(),
+            board = FakeBoard(automations = routines(), firings = mapOf("c1a2b3d4" to ciFirings())),
             // AND-9's timeline: its agent's session (Claude Code) and its reviewer's (codex), with their times, and the board's record of it.
             // The app agent's own timeline (from its chat) is that session while it still works.
             activity = mapOf(

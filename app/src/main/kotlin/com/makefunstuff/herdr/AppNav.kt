@@ -175,6 +175,8 @@ object Routes {
     const val QUICK = "quick/{mid}?run={run}"
     /** A workspace's dev servers, one open in the in-app browser through SSH ([port] first when given). */
     const val PREVIEW = "preview/{mid}?ws={ws}&port={port}"
+    /** The board's automations as routines: one machine's ([mid]), or every connected board's. */
+    const val ROUTINES = "routines?mid={mid}"
 
     fun machine(id: String) = "machine/$id"
     fun edit(id: String? = null) = if (id == null) "edit" else "edit?id=$id"
@@ -208,6 +210,7 @@ object Routes {
         "search" + listOfNotNull(mid?.let { "mid=" + Uri.encode(it) }, q?.let { "q=" + Uri.encode(it) }).joinToString("&").let { if (it.isEmpty()) "" else "?$it" }
     fun start(mid: String? = null, text: String? = null) =
         "start" + listOfNotNull(mid?.let { "mid=" + Uri.encode(it) }, text?.let { "text=" + Uri.encode(it) }).joinToString("&").let { if (it.isEmpty()) "" else "?$it" }
+    fun routines(mid: String? = null) = if (mid == null) "routines" else "routines?mid=${Uri.encode(mid)}"
     fun quickRuns(mid: String, run: String? = null) = if (run == null) "quick/$mid" else "quick/$mid?run=${Uri.encode(run)}"
     fun worktrees(mid: String, workspaceId: String? = null) =
         if (workspaceId == null) "worktrees/$mid" else "worktrees/$mid?ws=${Uri.encode(workspaceId)}"
@@ -395,6 +398,9 @@ internal fun NavGraphBuilder.screens(nav: NavHostController, agents: @Composable
             nav, it.arguments?.getString("mid").orEmpty(), it.arguments?.getString("ws")?.let(Uri::decode).orEmpty(),
             startPort = it.arguments?.getString("port")?.toIntOrNull(),
         )
+    }
+    composable(Routes.ROUTINES) {
+        com.makefunstuff.herdr.ui.routines.RoutinesScreen(nav, it.arguments?.getString("mid")?.let(Uri::decode)?.ifEmpty { null })
     }
     composable(Routes.SEARCH) {
         com.makefunstuff.herdr.ui.search.SearchScreen(

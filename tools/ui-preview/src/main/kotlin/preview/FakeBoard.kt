@@ -7,6 +7,7 @@ import com.makefunstuff.herdr.core.ssh.CommandResult
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
@@ -19,6 +20,10 @@ class FakeBoard(
     var remote: JsonObject = Json.parseToJsonElement(Demo.resource("board/remote-list.json")).jsonObject,
     /** Commands the board refuses (`approve` without `--anyway`, say), with the reason it prints. */
     var refuse: Map<String, String> = emptyMap(),
+    /** `automations --json`: the routines, as the board prints them (devbox's are [Demo.routines]). */
+    var automations: JsonArray = JsonArray(emptyList()),
+    /** Each automation's firings, newest first, by its id (`automations show <id> --json`); else its last one. */
+    var firings: Map<String, JsonArray> = emptyMap(),
 ) {
     fun run(command: String): CommandResult {
         // sh -c LOGIN sh '<what the login shell runs>'
@@ -66,8 +71,36 @@ class FakeBoard(
             |  reviewer.fallback         none                                                built in
             |  board.agents              4                                                   built in
             |""".trimMargin()
+        args.firstOrNull() == "automations" -> automations(args.drop(1).filter { it != "--json" })
         args.firstOrNull() == "details" -> Demo.resource("board/details-${args[1].replace('/', '-')}.json")
         else -> "Done (demo board)\n"
+    }
+
+    /** `automations …`: the list, one with its firings, and the board's sentence for each change (on and off are kept). */
+    private fun automations(args: List<String>): String {
+        val id = args.getOrNull(1).orEmpty()
+        val one = automations.firstOrNull { it.jsonObject["id"]?.jsonPrimitive?.content == id }?.jsonObject
+        val name = one?.get("name")?.jsonPrimitive?.content ?: args.getOrNull(1).orEmpty()
+        return when (args.firstOrNull()) {
+            null, "list" -> pretty.encodeToString(JsonArray.serializer(), automations) + "\n"
+            // Without firings of its own, its last one is all it has.
+            "show" -> one?.let { a ->
+                val all = firings[id] ?: JsonArray(listOfNotNull((a["last"] as? JsonObject)))
+                pretty.encodeToString(JsonObject.serializer(), JsonObject(a + ("firings" to all))) + "\n"
+            }
+                ?: "No automation \"$id\".\n"
+            "on", "off" -> {
+                automations = JsonArray(automations.map { a ->
+                    if (a.jsonObject["id"]?.jsonPrimitive?.content == id) JsonObject(a.jsonObject + ("on" to JsonPrimitive(args[0] == "on"))) else a
+                })
+                "\"$name\" is ${args[0]}.\n"
+            }
+            "run" -> "\"$name\" fired: api-server/6 was added and an agent is on it.\n"
+            "add" -> "Added the automation \"$name\". Each firing adds a task and puts an agent on it.\n"
+            "change" -> "Changed \"$name\". It applies from its next firing; tasks already made keep what they had.\n"
+            "remove" -> "Removed the automation \"$name\". The tasks it made stay.\n"
+            else -> "Unknown: automations ${args[0]}.\n"
+        }
     }
 
     /** What the board's record of [id] holds, as the facts command prints it; a task without one prints its parts empty. */
