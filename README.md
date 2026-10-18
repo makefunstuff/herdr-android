@@ -5,7 +5,7 @@ A native Android client for [herdr](https://herdr.dev) hosts: see your agents ac
 <table>
   <tr>
     <td align="center" width="25%"><img src="docs/screenshots/agents.webp" alt="Agents list" width="200"><br><sub><b>Agents</b>: what needs you on every machine first, answerable on the card</sub></td>
-    <td align="center" width="25%"><img src="docs/screenshots/chat.webp" alt="An agent's chat" width="200"><br><sub><b>Agent chat</b>: the agent's own transcript, with tool calls folded</sub></td>
+    <td align="center" width="25%"><img src="docs/screenshots/chat.webp" alt="An agent's chat" width="200"><br><sub><b>Agent chat</b>: the agent's own transcript, each turn's work folded to one line</sub></td>
     <td align="center" width="25%"><img src="docs/screenshots/blocked.webp" alt="A blocked agent asking for approval" width="200"><br><sub><b>Needs you</b>: the question docked over the composer, answered with a thumb</sub></td>
     <td align="center" width="25%"><img src="docs/screenshots/coordinator.webp" alt="Coordinator chat" width="200"><br><sub><b>Coordinator</b>: talk to the work board</sub></td>
   </tr>
@@ -90,6 +90,19 @@ A machine's screen opens with its places as tiles in one row, each with a live l
 Everything that exists in a session is editable from the app, not just readable. A workspace or tab header has an actions button (a workspace's one tab is under its actions, **Its tab**), and panes and agents answer to a long press: rename, focus, reorder, move, swap, zoom, clear a pane's scrollback, read what a pane is running, and ask `agent.explain` why an agent is in the state it shows. Closing a workspace, tab or pane asks first. herdr's own refusals ("There's no pane in that direction.") come back as plain sentences.
 
 The screens follow herdr's `events.subscribe` stream, so a change made anywhere — desktop or phone — appears here. Notifications are the exception: herdr has no list of them, so the app derives them from agents finishing or blocking and shows them behind the bell in the top bar; the menu can also show a notification on the desktop running herdr.
+
+## Reading a chat
+
+An agent's chat is its own transcript (Claude Code's, codex's, pi's or omp's), cut to fit a phone that shows about fifteen lines:
+
+- **One line per turn's work**, as in the herdr web UI: everything the agent did between your message and its answer (the calls, its words on the way) folds under **Worked for 2m 36s · 1 edit · 2 file reads · 1 command** once the turn is over, and the answer stays out of the fold. Calls that failed are counted apart, in red (**· 1 failed**), since the fold hides their rows. A tap opens or folds it again, and it stays as you left it. The turn at work is open, headed **Working for 3m** (or **Needs you** while it asks); a turn whose last words came before its last call stays open, so nothing it said is hidden.
+- **A time on each turn**: `10:05`, or `Oct 16, 09:12` on another day.
+- **Short paths**: a file in the repo shows from it, deep ones as `core/…/host/HostState.kt`, and an edit says what it changed (`+12 −2`). A tap on a row still shows the whole call and what it printed.
+- **One Working line**: the strip under the bar says what the newest turn is at (*Working · editing HostState.kt*) and the turn's own header how long it has worked (*Working for 3m 12s*), so there is no second "Working" at the bottom.
+- **While you were away**: coming back to a chat after five minutes or more, a card says what happened since it was last on screen, in up to three lines from the transcript (what the agent answered, what it was asked and what it is at, the files it changed with `+61 −8`, the commands it ran and whether the tests passed). It goes when you write, or with **Hide**. "Last on screen" is kept per chat on the phone: when you left it, or put the app away while it was open.
+- **"2 new messages"**: read further up while the agent writes, and a pill counts what came in; a tap goes to the newest (with nothing new, the round arrow does).
+
+The times, kinds, failures and edits come from the same reading of the agent's session as the activity timeline (below); a transcript without times still folds its turns, without durations or times.
 
 ## Answering a blocked agent
 
@@ -302,7 +315,7 @@ UI changes are checked, and shown in review, with screen previews instead of an 
 ./gradlew -p tools/ui-preview render -Ponly=board,chat   # some of them
 ```
 
-It needs JDK 17, no Android SDK, and takes about 6 minutes for all 126 scenes (agents, machines, the code browser (repositories, files, a file, a comment, changes, a diff, history, search, comments waiting), quick commands (a machine's, a project's with one pinned, arguments, a command's menu, a run, its runs, an AI answer and one at work, a long log, a new one, none yet), a machine, a machine's health and cleanup, agent chats, pictures in a chat (what + offers, two screenshots in the message box, one marked up and one cropped, sent ones in the chat and one full size), the Coordinator, floating chats, the board and a task, the activity timeline (a task's, its failures, a command opened, an edit's diff, a jump to a failure, a review's verdict, an agent's at work), finished work's review cards (a passed one, a failed one, its files and a diff, approve anyway, send back, a pick on another machine, none waiting), the brief and when it comes, a machine's usage and limits (its providers, one out of its allowance, one whose reset passed, a reading that failed, the agents to start a task with, one whose key was refused), the terminal, settings with its notifications, the dialogs and sheets, and the three panes of a wide window, also across a rotation). CI renders them too and uploads them as the `herdr-screens-<run>` artifact. See [`tools/ui-preview/README.md`](tools/ui-preview/README.md) for how it works and how to add a scene, and [`AGENTS.md`](AGENTS.md) for how changes are reviewed.
+It needs JDK 17, no Android SDK, and takes about 15 minutes for all 144 scenes (agents, machines, the code browser (repositories, files, a file, a comment, changes, a diff, history, search, comments waiting), quick commands (a machine's, a project's with one pinned, arguments, a command's menu, a run, its runs, an AI answer and one at work, a long log, a new one, none yet), a machine, a machine's health and cleanup, agent chats, pictures in a chat (what + offers, two screenshots in the message box, one marked up and one cropped, sent ones in the chat and one full size), the Coordinator, floating chats, the board and a task, the activity timeline (a task's, its failures, a command opened, an edit's diff, a jump to a failure, a review's verdict, an agent's at work), finished work's review cards (a passed one, a failed one, its files and a diff, approve anyway, send back, a pick on another machine, none waiting), the brief and when it comes, a machine's usage and limits (its providers, one out of its allowance, one whose reset passed, a reading that failed, the agents to start a task with, one whose key was refused), the terminal, settings with its notifications, the dialogs and sheets, and the three panes of a wide window, also across a rotation). CI renders them too and uploads them as the `herdr-screens-<run>` artifact. See [`tools/ui-preview/README.md`](tools/ui-preview/README.md) for how it works and how to add a scene, and [`AGENTS.md`](AGENTS.md) for how changes are reviewed.
 
 ## Layout
 

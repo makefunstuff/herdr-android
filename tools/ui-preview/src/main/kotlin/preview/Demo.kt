@@ -211,8 +211,25 @@ object Demo {
 
     /** devbox's app agent, after you sent it two screenshots and it answered. */
     fun appTranscriptWithPictures(): String = resource("claude-app.jsonl").trimEnd() + "\n" + """
-        |{"type": "user", "uuid": "00000000-0000-4000-8000-000000000030", "message": {"role": "user", "content": "@$UPLOADS/Screenshot_20261018_101204.png @$UPLOADS/Screenshot_20261018_101230.png The Board card jumps when a machine reconnects: first shot before, second after. Keep it where it was?"}}
-        |{"type": "assistant", "uuid": "00000000-0000-4000-8000-000000000031", "message": {"role": "assistant", "content": [{"type": "text", "text": "I see it: in the second screenshot the **Needs you** group is drawn again from the top when devbox answers, so the list scrolls back. I'll key the rows by task id so the list keeps its place."}]}}
+        |{"type": "user", "uuid": "00000000-0000-4000-8000-000000000030", "timestamp": "2026-10-17T07:40:30.000Z", "message": {"role": "user", "content": "@$UPLOADS/Screenshot_20261018_101204.png @$UPLOADS/Screenshot_20261018_101230.png The Board card jumps when a machine reconnects: first shot before, second after. Keep it where it was?"}}
+        |{"type": "assistant", "uuid": "00000000-0000-4000-8000-000000000031", "timestamp": "2026-10-17T07:40:41.000Z", "message": {"role": "assistant", "content": [{"type": "text", "text": "I see it: in the second screenshot the **Needs you** group is drawn again from the top when devbox answers, so the list scrolls back. I'll key the rows by task id so the list keeps its place."}]}}
+        |""".trimMargin()
+
+    /**
+     * What devbox's app agent writes after its second ask's first edit: the card, a core test run that
+     * fails, the fix, the tests again, and its answer (`claude-app-more.jsonl`, written by hand in the
+     * session's own format). [lines] keeps only the first of them.
+     */
+    fun appMore(lines: Int = Int.MAX_VALUE): String = resource("claude-app-more.jsonl").trimEnd().lines().take(lines).joinToString("\n") + "\n"
+
+    /** devbox's app agent once its second ask is done, a failed test run on the way. */
+    fun appTranscriptDone(): String = resource("claude-app.jsonl").trimEnd() + "\n" + appMore()
+
+    /** Then a third ask, typed at the desk, and the agent starting on it: two new messages for a chat scrolled up. */
+    val APP_NEXT = """
+        |{"type": "user", "uuid": "00000000-0000-4000-8000-000000000040", "timestamp": "2026-10-17T07:41:56.000Z", "cwd": "/home/demo/src/herdr-android", "message": {"role": "user", "content": "Make it amber when a machine hasn't answered for an hour."}}
+        |{"type": "assistant", "uuid": "00000000-0000-4000-8000-000000000041", "timestamp": "2026-10-17T07:41:59.000Z", "cwd": "/home/demo/src/herdr-android", "message": {"role": "assistant", "content": [{"type": "text", "text": "I'll use the notice colour for that, so a stale card stands out."}]}}
+        |{"type": "assistant", "uuid": "00000000-0000-4000-8000-000000000043", "timestamp": "2026-10-17T07:42:00.000Z", "cwd": "/home/demo/src/herdr-android", "message": {"role": "assistant", "content": [{"type": "tool_use", "id": "toolu_00000042", "name": "Edit", "input": {"file_path": "/home/demo/src/herdr-android/app/src/main/kotlin/com/makefunstuff/herdr/ui/machines/MachineCard.kt", "old_string": "Text(ago(it)", "new_string": "Text(ago(it), color = if (stale) Herdr.colors.notice else Herdr.colors.muted"}}]}}
         |""".trimMargin()
 
     /** The pictures in that conversation, as devbox has them. */

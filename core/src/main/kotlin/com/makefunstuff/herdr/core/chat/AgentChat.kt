@@ -1,5 +1,7 @@
 package com.makefunstuff.herdr.core.chat
 
+import com.makefunstuff.herdr.core.activity.ActivityLog
+import com.makefunstuff.herdr.core.activity.Turn
 import com.makefunstuff.herdr.core.api.AgentInfo
 import com.makefunstuff.herdr.core.api.AgentSessionRef
 import com.makefunstuff.herdr.core.api.AgentStatus
@@ -41,6 +43,8 @@ class AgentChat(private val host: HostSession, val paneId: String, private val s
         val prompt: BlockedPrompt? = null,
         /** Prompts sent from the app that the transcript doesn't show yet. */
         val pending: List<SentMatch.Pending> = emptyList(),
+        /** The transcript read as timed turns ([ActivityLog]): when each turn and step was, what an edit changed. */
+        val turns: List<Turn> = emptyList(),
     )
 
     private val _state = MutableStateFlow(State())
@@ -104,13 +108,16 @@ class AgentChat(private val host: HostSession, val paneId: String, private val s
     private suspend fun followLoop(ref: AgentSessionRef, kind: String) {
         var failures = 0
         while (true) {
-            val transcript = Transcript.forAgent(ref.agent.ifEmpty { kind }) ?: return
+            val agent = ref.agent.ifEmpty { kind }
+            val transcript = Transcript.forAgent(agent) ?: return
+            transcript.activity = ActivityLog.forAgent(agent)
             val result = try {
                 val connection = host.awaitConnection(timeoutMs = 60_000)
                 TranscriptFollower.follow(connection, ref, transcript) { truncated ->
                     val items = transcript.items()
+                    val turns = transcript.activity?.turns().orEmpty()
                     _state.update { s ->
-                        s.copy(source = Source.Transcript, items = items, truncated = truncated, pending = unseen(s.pending, items))
+                        s.copy(source = Source.Transcript, items = items, truncated = truncated, pending = unseen(s.pending, items), turns = turns)
                     }
                     failures = 0
                 }

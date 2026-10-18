@@ -13,12 +13,13 @@ Kotlin and Jetpack Compose; see the README's **Layout** for the modules and [`do
 Every change to what the app shows is checked by rendering its screens on the desktop JVM, not by starting an Android emulator:
 
 ```sh
-./gradlew -p tools/ui-preview render                     # all scenes, dark and light, about 2 minutes
-./gradlew -p tools/ui-preview render -Ponly=board,task   # just the ones the change touches
+./gradlew -p tools/ui-preview render -Ponly=board,task   # just the ones the change touches, a few seconds each
+./gradlew -p tools/ui-preview render                     # all scenes, dark and light, about 15 minutes
 ```
 
 The PNGs land in `tools/ui-preview/build/shots/` (`<scene>.png` dark, `<scene>-light.png` light). They are the app's real Compose screens running against a fake herdr machine with fixed demo data, so the same code always gives the same pixels. How it works and how to add a scene: [`tools/ui-preview/README.md`](tools/ui-preview/README.md).
 
+- **Render the scenes the change touches** with `-Ponly`; the whole set takes about 15 minutes (each shot about 3 s), so leave it to CI unless the change is shared by every screen.
 - **Look at the shots** of every screen you changed, in both themes, before you call a UI change done.
 - **Show them in review**: put the before and after shots of the changed screens in the pull request description (or your report). CI also renders every scene and uploads them as the `herdr-screens-<run>` artifact of the Android run.
 - **A new screen, sheet or dialog gets a scene** in `tools/ui-preview/src/main/kotlin/preview/Scenes.kt`. A new state worth seeing (an error, an empty list) does too.

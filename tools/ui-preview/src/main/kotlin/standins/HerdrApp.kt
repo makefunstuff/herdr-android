@@ -64,6 +64,10 @@ class AppContainer(app: Context) {
     /** Every board's list as last read, and which finished agents the phone has shown: the Agents screen's and the Board tab's. */
     val boards = com.makefunstuff.herdr.data.BoardLists(hosts, onRead = { id, tasks -> tally.tasks(id, tasks) })
     val seen = com.makefunstuff.herdr.data.SeenStore(java.io.File(app.filesDir, "seen.json"))
+    /** When each agent's chat was last on screen, for its "While you were away" card. */
+    val looked = com.makefunstuff.herdr.data.LookedStore(java.io.File(app.filesDir, "looked.json"))
+    /** The clock the screens read (a turn's "Working for 3m", the away card): the demo's fixed time. */
+    val clock: () -> Long = { Demo.NOW }
     val bubbles: Bubbles = PreviewBubbles
     val guard = com.makefunstuff.herdr.data.GuardStore(java.io.File(app.filesDir, "guard.json"), preview.PreviewUnlock)
     // The brief at the demo's fixed time, on UTC, so it reads the same every run.
