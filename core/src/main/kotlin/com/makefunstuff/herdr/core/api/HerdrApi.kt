@@ -65,15 +65,20 @@ class HerdrApi(private val connection: ApiCaller) {
             ?: throw java.io.IOException("herdr didn't say which pane it opened")
     }
 
-    suspend fun splitPane(paneId: String, direction: String) {
-        connection.call("pane.split", params("target_pane_id" to paneId, "direction" to direction, "focus" to false))
+    /** Splits [paneId] and opens a shell in the new pane; its id, when herdr says it. */
+    suspend fun splitPane(paneId: String, direction: String): String? {
+        val result = connection.call("pane.split", params("target_pane_id" to paneId, "direction" to direction, "focus" to false))
+        return ((result["pane"] as? JsonObject)?.get("pane_id") as? JsonPrimitive)?.content
     }
 
     suspend fun closePane(paneId: String) {
         connection.call("pane.close", params("pane_id" to paneId))
     }
 
-    /** Starts an agent of [kind] (claude, codex, pi…) named [name] in a new split next to [paneId]. */
+    /**
+     * Starts an agent of [kind] (claude, codex, pi…) named [name] in [paneId], which must be at its
+     * shell's prompt. No arguments go to the agent: the phone never starts one that skips its permission prompts.
+     */
     suspend fun startAgent(name: String, kind: String, paneId: String) {
         connection.call(
             "agent.start",
