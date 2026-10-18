@@ -342,7 +342,9 @@ private fun SpendRows(s: Spend, modifier: Modifier = Modifier) {
     val est = if (s.estimated) " (this machine)" else ""
     Column(modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
         s.balance?.let { MoneyRow("Balance left", UsageWords.money(it, s.currency), if (it <= 0) Herdr.colors.red else null) }
-        if (s.limit != null && s.left != null) MoneyRow("Key limit", "${UsageWords.money(s.left, s.currency)} of ${UsageWords.money(s.limit, s.currency)} left")
+        val limit = s.limit
+        val left = s.left
+        if (limit != null && left != null) MoneyRow("Key limit", "${UsageWords.money(left, s.currency)} of ${UsageWords.money(limit, s.currency)} left")
         s.today?.let { MoneyRow("Spent today$est", UsageWords.money(it, s.currency)) }
         s.month?.let { MoneyRow("This month$est", UsageWords.money(it, s.currency)) }
     }
@@ -505,11 +507,12 @@ private fun summary(providers: List<ProviderUsage>?, now: Long, zone: ZoneId): S
     if (providers == null) return "Claude, Codex and API limits, spend and balances"
     if (providers.isEmpty()) return "No AI provider found on this machine"
     return providers.joinToString(" · ") { p ->
+        val balance = p.spend?.balance
         when {
             p.error.isNotEmpty() -> "${p.short} unavailable"
             p.tightest != null -> "${p.short} ${UsageRules.percent(p.tightest!!.percent)}"
             p.kind == ProviderKind.Local -> "${p.short} local"
-            p.spend?.balance != null -> "${p.short} ${UsageWords.money(p.spend.balance, p.spend.currency)} left"
+            balance != null -> "${p.short} ${UsageWords.money(balance, p.spend?.currency ?: "USD")} left"
             else -> p.short
         }
     }
