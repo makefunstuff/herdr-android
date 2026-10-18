@@ -28,7 +28,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
@@ -277,16 +279,27 @@ fun TaskCard(
  * An agent below Needs you as one line: its mark, what it works on over its key and where, and on the
  * right how far along it is (working), a dot for a finish not seen yet (done). A working one has a
  * thin bar under it: its task's progress when the board knows it, else one that only says it works.
+ * The phone's triage shows last: how long it is snoozed, a crossed bell when muted, a pin.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun AgentLine(row: AgentRow, showMachine: Boolean, selected: Boolean, onOpen: () -> Unit, onMenu: () -> Unit) {
+fun AgentLine(
+    row: AgentRow,
+    showMachine: Boolean,
+    selected: Boolean,
+    onOpen: () -> Unit,
+    onMenu: () -> Unit,
+    /** How long it is snoozed, as the row says it ("until 18:00"); null when it isn't. */
+    snoozed: String? = null,
+    /** The row's triage (seen, pin, snooze, mute) as TalkBack offers it. */
+    actions: List<CustomAccessibilityAction> = emptyList(),
+) {
     val c = Herdr.colors
     val a = row.agent.agent
     val t: BoardTask? = row.task
     val status = a.agentStatus
     val working = status == AgentStatus.Working
-    val quiet = status == AgentStatus.Done && !row.new || status == AgentStatus.Idle || status == AgentStatus.Unknown
+    val quiet = status == AgentStatus.Done && !row.new || status == AgentStatus.Idle || status == AgentStatus.Unknown || snoozed != null
     val title = t?.title ?: a.subtitle ?: a.displayName
     Row(
         Modifier.fillMaxWidth().heightIn(min = 56.dp)
@@ -294,7 +307,11 @@ fun AgentLine(row: AgentRow, showMachine: Boolean, selected: Boolean, onOpen: ()
             .combinedClickable(onClickLabel = "Open chat", onClick = onOpen, onLongClick = onMenu)
             .semantics(mergeDescendants = true) {
                 this.selected = selected
-                contentDescription = listOfNotNull(title, t?.name, a.displayName, if (row.new) "finished, new" else a.statusLabel).joinToString(", ")
+                contentDescription = listOfNotNull(
+                    title, t?.name, a.displayName, if (row.new) "finished, new" else a.statusLabel,
+                    "pinned".takeIf { row.pinned }, snoozed?.let { "snoozed $it" }, "muted".takeIf { row.muted },
+                ).joinToString(", ")
+                if (actions.isNotEmpty()) customActions = actions
             }
             .padding(horizontal = Space.screen + Space.xs, vertical = Space.s),
         verticalAlignment = Alignment.CenterVertically,
@@ -316,7 +333,8 @@ fun AgentLine(row: AgentRow, showMachine: Boolean, selected: Boolean, onOpen: ()
             }
         }
         val trailing = when {
-            working -> listOfNotNull(t?.progress?.let { "$it%" }, t?.eta?.let { "${it}m left" }).joinToString(" · ")
+            // Snoozed, it says only until when.
+            working && snoozed == null -> listOfNotNull(t?.progress?.let { "$it%" }, t?.eta?.let { "${it}m left" }).joinToString(" · ")
             else -> ""
         }
         if (trailing.isNotEmpty()) {
@@ -328,6 +346,20 @@ fun AgentLine(row: AgentRow, showMachine: Boolean, selected: Boolean, onOpen: ()
             Text("new", style = MaterialTheme.typography.labelMedium, color = c.done)
             Spacer(Modifier.width(Space.xs))
             StatusDot(c.done)
+        }
+        if (snoozed != null) {
+            Spacer(Modifier.width(Space.m))
+            Text(snoozed, style = MaterialTheme.typography.labelMedium, color = c.muted, maxLines = 1)
+            Spacer(Modifier.width(Space.xs))
+            Icon(HerdrIcons.Clock, null, tint = c.accent, modifier = Modifier.size(16.dp))
+        }
+        if (row.muted) {
+            Spacer(Modifier.width(Space.s))
+            Icon(HerdrIcons.BellOff, null, tint = c.muted, modifier = Modifier.size(16.dp))
+        }
+        if (row.pinned) {
+            Spacer(Modifier.width(Space.s))
+            Icon(HerdrIcons.Pin, null, tint = c.muted, modifier = Modifier.size(16.dp))
         }
     }
 }

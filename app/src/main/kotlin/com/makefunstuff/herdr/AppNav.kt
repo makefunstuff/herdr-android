@@ -48,6 +48,7 @@ import androidx.navigation.compose.rememberNavController
 import com.makefunstuff.herdr.core.home.BoardGroup
 import com.makefunstuff.herdr.core.home.Home
 import com.makefunstuff.herdr.core.home.HomeAgent
+import com.makefunstuff.herdr.core.home.Waiting
 import com.makefunstuff.herdr.data.IdentityStore
 import com.makefunstuff.herdr.ui.activity.ActivityScreen
 import com.makefunstuff.herdr.ui.admin.AdminScreen
@@ -202,6 +203,7 @@ private fun AppNav(nav: NavHostController) {
     val topLevel = route in setOf(Routes.AGENTS, Routes.BOARDS, Routes.MACHINES)
     val hosts by container.hosts.hosts.collectAsStateWithLifecycle()
     val seen by container.seen.marks.collectAsStateWithLifecycle()
+    val triage by container.triage.state.collectAsStateWithLifecycle()
     val homeBoards = rememberBoards()
     // The tabs' badges: everything on the Needs you list, and the tasks waiting for you across the boards.
     val waiting = remember(hosts, homeBoards, seen) { Home.of(HomeAgent.of(hosts), homeBoards, seen).needsYou }
@@ -286,7 +288,8 @@ private fun AppNav(nav: NavHostController) {
             }
             // Another agent needs you while you are in a chat: one line drops from the top.
             AlertPill(
-                nav, panes, entry, waiting,
+                // A muted agent asking doesn't drop a line either; its card still waits on the list.
+                nav, panes, entry, remember(waiting, triage) { waiting.filter { !(it is Waiting.Question && it.agent.key in triage.muted) } },
                 agentsRead = remember(hosts) { hosts.filter { it.snapshot != null }.map { it.machine.id }.toSet() },
                 boardsRead = remember(homeBoards) { homeBoards.map { it.machineId }.toSet() },
                 fired = container.watchWork.fired,

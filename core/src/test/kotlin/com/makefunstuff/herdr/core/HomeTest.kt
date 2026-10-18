@@ -98,23 +98,25 @@ class HomeTest {
             agent("w3:p1", "idle", seq = 9, completion = 9),
         )
         val home = Home.of(agents, emptyList(), seen = mapOf("devbox/w2:p1" to 3L))
-        assertEquals(listOf("w1:p1" to true, "w2:p1" to false), home.done.map { it.agent.agent.paneId to it.new })
+        // Done holds what wasn't looked at; a finish seen is at rest with the idle ones.
+        assertEquals(listOf("w1:p1" to true), home.done.map { it.agent.agent.paneId to it.new })
         assertEquals(1, home.fresh)
-        assertEquals(listOf("w3:p1"), home.idle.map { it.agent.agent.paneId })
+        assertEquals(listOf("w3:p1", "w2:p1"), home.idle.map { it.agent.agent.paneId })
         // A later finish of a pane seen before is new again.
         val again = Home.of(listOf(agent("w2:p1", "done", seq = 12, completion = 12)), emptyList(), seen = mapOf("devbox/w2:p1" to 3L))
         assertTrue(again.done.single().new)
-        // Mark seen: every finish marked, and panes gone dropped.
-        val marks = Home.seenAll(mapOf("devbox/gone" to 1L), home, agents)
+        // Mark all seen: every finish marked, panes gone dropped, and the Done section empty.
+        val marks = Home.seenAll(mapOf("devbox/gone" to 1L, "devbox/w2:p1" to 3L), home, agents)
         assertEquals(mapOf("devbox/w1:p1" to 7L, "devbox/w2:p1" to 3L), marks)
         assertEquals(0, Home.of(agents, emptyList(), marks).fresh)
+        assertTrue(Home.of(agents, emptyList(), marks).done.isEmpty())
     }
 
     @Test
     fun anOlderHerdrUsesTheStateChange() {
         val a = agent("w1:p1", "done", seq = 4, completion = null)
         assertEquals(4L, a.finish)
-        assertFalse(Home.of(listOf(a), emptyList(), mapOf(a.key to 4L)).done.single().new)
+        assertFalse(Home.of(listOf(a), emptyList(), mapOf(a.key to 4L)).idle.single().new)
     }
 
     @Test

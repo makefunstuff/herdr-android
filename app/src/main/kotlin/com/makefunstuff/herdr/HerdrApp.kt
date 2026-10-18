@@ -102,7 +102,9 @@ class AppContainer(app: Application) {
         java.io.File(app.filesDir, "images.json"), java.io.File(app.filesDir, "images"), java.io.File(app.cacheDir, "sent-images"),
     )
     val push = PushStore(app)
-    val inbox = Inbox(java.io.File(app.filesDir, "alerts.json"), AndroidAlerts(app))
+    /** The Agents list's pins, snoozes and mutes; a muted agent's notifications don't show. */
+    val triage = com.makefunstuff.herdr.data.TriageStore(java.io.File(app.filesDir, "triage.json"))
+    val inbox = Inbox(java.io.File(app.filesDir, "alerts.json"), AndroidAlerts(app), muted = triage::mutes)
     val phone = AndroidPhone(app, push)
     val pushHosts = PushHosts(scope, hosts, machines, push, phone)
     val quietWork = QuietWork(scope, push.state, phone, inbox, foreground = { hosts.isForeground })
@@ -133,6 +135,8 @@ class AppContainer(app: Application) {
         watchWork.start(scope, hosts, boards)
         // Shared files waiting for a machine taken out of the app go with it.
         scope.launch { machines.machines.collect { list -> shares.keep(list.map { it.id }.toSet()) } }
+        // Pins, snoozes and mutes of panes gone (or snoozes over) go as the machines are read.
+        scope.launch { hosts.hosts.collect { triage.keep(it, machines.machines.value.map { m -> m.id }.toSet()) } }
         // The push app's address may have lapsed while the app was closed: ask again, it answers with the same or a new one.
         if (push.state.value.on) phone.register()
     }

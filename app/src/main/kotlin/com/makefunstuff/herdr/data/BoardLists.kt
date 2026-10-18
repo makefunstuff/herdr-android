@@ -70,7 +70,7 @@ class BoardLists(
 /**
  * Which finish of each agent the phone has shown ([com.makefunstuff.herdr.core.home.HomeAgent.finish],
  * by `machine/pane`): a finished agent is "new" on the Agents screen until its chat is opened here,
- * or Mark seen is pressed, or it is looked at on herdr's own screen (herdr then says idle).
+ * swiped right, or Mark all seen is pressed, or it is looked at on herdr's own screen (herdr then says idle).
  */
 class SeenStore(private val file: File) {
     private val json = Json { ignoreUnknownKeys = true }

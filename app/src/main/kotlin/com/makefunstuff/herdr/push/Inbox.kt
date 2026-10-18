@@ -3,6 +3,7 @@ package com.makefunstuff.herdr.push
 import com.makefunstuff.herdr.core.push.Alert
 import com.makefunstuff.herdr.core.push.AlertChange
 import com.makefunstuff.herdr.core.push.AlertRules
+import com.makefunstuff.herdr.core.push.Alerts
 import com.makefunstuff.herdr.core.push.PhoneQuiet
 import com.makefunstuff.herdr.core.push.QuietHours
 import com.makefunstuff.herdr.core.push.QuietSummary
@@ -75,10 +76,15 @@ interface PushPhone {
 /**
  * Turns alert changes into notifications, each state once: a push and the app's own look can both
  * report an agent that asks, and a notification swiped away stays away until something new happens.
- * What the notification rules switch off ([AlertRules]) isn't shown. During quiet hours what can wait
+ * What the notification rules switch off ([AlertRules]) isn't shown, nor what a muted agent says
+ * ([muted]: by machine and pane; a watch you set on it still comes). During quiet hours what can wait
  * is held instead ([QuietHours.holds]), and [release]d as one.
  */
-class Inbox(private val file: File, private val sink: AlertSink) {
+class Inbox(
+    private val file: File,
+    private val sink: AlertSink,
+    private val muted: (machineId: String, paneId: String) -> Boolean = { _, _ -> false },
+) {
     private val json = Json { ignoreUnknownKeys = true }
     private val serializer = MapSerializer(String.serializer(), Seen.serializer())
     private val seen: MutableMap<String, Seen> = load()
@@ -114,8 +120,8 @@ class Inbox(private val file: File, private val sink: AlertSink) {
                 if (a.sig.isNotEmpty() && seen[a.tag]?.sig == a.sig) continue
                 // A newer state replaces a held one under the same tag, held or shown.
                 if (held.remove(a.tag) != null) heldDirty = true
-                if (!rules.allows(a)) {
-                    // Switched off: one up from before (it was on then) comes down with it.
+                if (!rules.allows(a) || muted(a)) {
+                    // Switched off (or muted): one up from before (it was on then) comes down with it.
                     sink.cancel(a.tag)
                 } else if (hold && QuietHours.holds(a)) {
                     held[a.tag] = a
@@ -182,6 +188,10 @@ class Inbox(private val file: File, private val sink: AlertSink) {
         held.clear()
         saveHeld()
     }
+
+    /** An agent's own news (it asks, finished, went wrong) while it is muted; a watch and a test always come. */
+    private fun muted(a: Alert): Boolean =
+        a.tag == Alerts.agentTag(a.machineId, a.paneId) && muted(a.machineId, a.paneId)
 
     fun show(alert: Alert, quiet: Boolean, note: String?) = sink.show(alert, quiet, note)
     fun working(alert: Alert, words: String) = sink.working(alert, words)

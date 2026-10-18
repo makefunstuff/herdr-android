@@ -45,7 +45,9 @@ class AppContainer(app: Context) {
         java.io.File(app.filesDir, "images.json"), java.io.File(app.filesDir, "images"), java.io.File(app.filesDir, "sent-images"),
     )
     val push = PushStore(app)
-    val inbox = Inbox(java.io.File(app.filesDir, "alerts.json"), PreviewAlerts)
+    // Snoozes at the demo's fixed time, on UTC, so "until 09:00" reads the same every run.
+    val triage = com.makefunstuff.herdr.data.TriageStore(java.io.File(app.filesDir, "triage.json"), now = { Demo.NOW }, zone = { java.time.ZoneOffset.UTC })
+    val inbox = Inbox(java.io.File(app.filesDir, "alerts.json"), PreviewAlerts, muted = triage::mutes)
     val phone = PreviewPhone
     val pushHosts = PushHosts(scope, hosts, machines, push, phone)
     val quietWork = QuietWork(scope, push.state, phone, inbox, foreground = { hosts.isForeground })
