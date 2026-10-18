@@ -295,7 +295,7 @@ fun scenes(): List<Scene> = listOf(
     Scene("wide-empty", widthDp = 1280, heightDp = 800, setup = { home() }),
     Scene("wide", widthDp = 1280, heightDp = 800, setup = { home() }, actions = { tapText("Speed up /jobs") }),
     // The Board tab in the middle: a task tapped there opens on the right.
-    Scene("wide-boards", widthDp = 1280, heightDp = 800, setup = { home() }, actions = { tapLabel("Board"); tapText("Add app screenshots to the README") }),
+    Scene("wide-boards", widthDp = 1280, heightDp = 800, setup = { home() }, actions = { tapLabel("Board, 4 need you"); tapText("Taking the Coordinator screenshot") }),
     Scene("wide-terminal", route = Routes.terminal(DEVBOX, APP_SHELL), widthDp = 840, heightDp = 940),
     Scene("wide-task", route = Routes.coordinator(DEVBOX), widthDp = 1280, heightDp = 800, setup = { home() }, actions = { tapText("Taking the Coordinator screenshot") }),
     // A board opened as its own screen on a phone, the window then made wide: a notification's link to one of its
