@@ -35,15 +35,18 @@ class Panes(
     fun open(nav: NavController, route: String) {
         if (!wide) return nav.navigate(route)
         nav.navigate(route) {
-            // What was in the middle is kept as a top-level tab's screens are, so Machines or Settings come back as they were.
+            // What was in the middle is kept as a top-level tab's screens are, so the Board or Machines tab comes back as it was.
             popUpTo(nav.graph.findStartDestination().id) { saveState = true }
             launchSingleTop = true
         }
     }
 
-    /** Opens [machineId]'s board, on [task] if given: on the right, or on a phone as its own screen. */
-    fun openBoard(nav: NavController, machineId: String, task: String? = null) {
-        if (!wide) return nav.navigate(Routes.board(machineId, task))
+    /**
+     * Opens [machineId]'s board, on [task] if given: on the right, or on a phone as its own screen.
+     * [alone]: on a phone, closing the task goes back to where it was opened from (the Board tab), not to its board.
+     */
+    fun openBoard(nav: NavController, machineId: String, task: String? = null, alone: Boolean = false) {
+        if (!wide) return nav.navigate(Routes.board(machineId, task, alone = alone && task != null))
         // A board still open in the middle (it was opened while the window was narrow) hides the right pane:
         // close it, so the board asked for shows where boards go on a wide window, and its task opens there now.
         if (nav.currentDestination?.route == Routes.BOARD) nav.popBackStack()

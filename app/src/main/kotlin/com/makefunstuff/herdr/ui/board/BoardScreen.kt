@@ -122,10 +122,11 @@ sealed interface Pending {
  * The work board on one machine, as a phone screen: its tasks as `herdr-projects list --json` gives
  * them, read again while the screen is in front, every action the board's CLI has. With [pane] it is
  * the right pane of a wide window ([Panes]): no way back, and the task asked for in [pane] opens once.
+ * With [alone], [openTask] was opened from elsewhere (the Board tab): closing it goes back there.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun BoardScreen(nav: NavController, machineId: String, openTask: String? = null, pane: BoardChoice? = null) {
+fun BoardScreen(nav: NavController, machineId: String, openTask: String? = null, pane: BoardChoice? = null, alone: Boolean = false) {
     val container = LocalContainer.current
     val panes = LocalPanes.current
     val context = LocalContext.current
@@ -173,7 +174,7 @@ fun BoardScreen(nav: NavController, machineId: String, openTask: String? = null,
                 try {
                     tasks = session.awaitBoard().tasks(BoardFilter(query = query, archived = archived))
                     // The whole list: what the status widget counts on this machine.
-                    if (query.isBlank() && !archived) container.tally.tasks(machineId, tasks)
+                    if (query.isBlank() && !archived) { container.tally.tasks(machineId, tasks); container.boards.put(machineId, tasks) }
                     problem = null
                 } catch (e: CancellationException) {
                     throw e
@@ -347,7 +348,7 @@ fun BoardScreen(nav: NavController, machineId: String, openTask: String? = null,
     val middle by nav.currentBackStackEntryAsState()
     val middleCloses = pane != null && middle?.destination?.route != Routes.AGENTS
     if (openId != null && open != null) {
-        TaskDetailScreen(session, open, onBack = { openId = null }, busy = busy, onAction = { a -> choose(open, a) }, onPick = { letter -> perform(open, BoardAction.Pick, letter = letter) },
+        TaskDetailScreen(session, open, onBack = { if (alone && pane == null && openId == openTask) nav.popBackStack() else openId = null }, busy = busy, onAction = { a -> choose(open, a) }, onPick = { letter -> perform(open, BoardAction.Pick, letter = letter) },
             onMore = { actionsFor = open }, backEnabled = !middleCloses,
             onCode = { d -> nav.navigate(Routes.codeAt(CodeSpot(machineId, d.worktree, task = open.id, taskName = open.name), CheckoutTab.Changes)) },
             onQuick = { d -> quick = QuickPlace(machineId, d.worktree, label = open.name, task = open.id, taskName = open.name) },
@@ -402,7 +403,7 @@ internal fun Progress(p: Int, color: Color, modifier: Modifier = Modifier) {
  * agent, the title, what it is doing, progress and its pull request. Tasks that need you get a wider stripe.
  */
 @Composable
-private fun TaskRow(t: BoardTask, onOpen: () -> Unit, onMenu: () -> Unit) {
+internal fun TaskRow(t: BoardTask, onOpen: () -> Unit, onMenu: () -> Unit) {
     val c = Herdr.colors
     val color = t.status.color()
     val quiet = t.status == BoardStatus.Done || t.status == BoardStatus.Archived

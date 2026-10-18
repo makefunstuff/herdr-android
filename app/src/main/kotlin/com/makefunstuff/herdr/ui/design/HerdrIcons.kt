@@ -133,9 +133,9 @@ object HerdrIcons {
     val Plus: ImageVector by lazy { lucide("Plus", "M5 12h14", "M12 5v14") }
     val Power: ImageVector by lazy { lucide("Power", "M12 2v10", "M18.4 6.6a9 9 0 1 1-12.77.04") }
     val Puzzle: ImageVector by lazy { lucide("Puzzle", "M15.39 4.39a1 1 0 0 0 1.68-.474 2.5 2.5 0 1 1 3.014 3.015 1 1 0 0 0-.474 1.68l1.683 1.682a2.414 2.414 0 0 1 0 3.414L19.61 15.39a1 1 0 0 1-1.68-.474 2.5 2.5 0 1 0-3.014 3.015 1 1 0 0 1 .474 1.68l-1.683 1.682a2.414 2.414 0 0 1-3.414 0L8.61 19.61a1 1 0 0 0-1.68.474 2.5 2.5 0 1 1-3.014-3.015 1 1 0 0 0 .474-1.68l-1.683-1.682a2.414 2.414 0 0 1 0-3.414L4.39 8.61a1 1 0 0 1 1.68.474 2.5 2.5 0 1 0 3.014-3.015 1 1 0 0 1-.474-1.68l1.683-1.682a2.414 2.414 0 0 1 3.414 0z") }
-    val Reply: ImageVector by lazy { lucide("Reply", "M20 18v-2a4 4 0 0 0-4-4H4", "m9 17-5-5 5-5") }
     val RefreshCcw: ImageVector by lazy { lucide("RefreshCcw", "M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8", "M3 3v5h5", "M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16", "M16 16h5v5") }
     val RefreshCw: ImageVector by lazy { lucide("RefreshCw", "M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8", "M21 3v5h-5", "M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16", "M8 16H3v5") }
+    val Reply: ImageVector by lazy { lucide("Reply", "M20 18v-2a4 4 0 0 0-4-4H4", "M9 17l-5-5 5-5") }
     val Rocket: ImageVector by lazy { lucide("Rocket", "M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5", "M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09", "M9 12a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.4 22.4 0 0 1-4 2z", "M9 12H4s.55-3.03 2-4c1.62-1.08 5 .05 5 .05") }
     val RotateCcw: ImageVector by lazy { lucide("RotateCcw", "M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8", "M3 3v5h5") }
     val RotateCw: ImageVector by lazy { lucide("RotateCw", "M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8", "M21 3v5h-5") }
@@ -357,7 +357,7 @@ object HerdrIcons {
 }
 
 /** Arrows that point the way text reads, so they flip in right-to-left languages. */
-private val Mirrored = setOf("ArrowLeft", "ArrowRight", "ChevronLeft", "ChevronRight", "Send", "MessageSquare", "MessagesSquare", "Undo2", "Reply")
+private val Mirrored = setOf("ArrowLeft", "ArrowRight", "ChevronLeft", "ChevronRight", "Send", "MessageSquare", "MessagesSquare", "Reply", "Undo2")
 
 private fun lucide(name: String, vararg paths: String): ImageVector =
     ImageVector.Builder(name, 24.dp, 24.dp, 24f, 24f, autoMirror = name in Mirrored).apply {

@@ -57,7 +57,7 @@ fun SettingsScreen(nav: NavHostController) {
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         containerColor = c.ground,
-        topBar = { HerdrTopBar("Settings") },
+        topBar = { HerdrTopBar("Settings", onBack = { nav.popBackStack() }) },
     ) { padding ->
         Column(
             Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = Space.screen).padding(top = Space.xs, bottom = Space.xl),

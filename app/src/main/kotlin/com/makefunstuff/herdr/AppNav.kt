@@ -45,13 +45,17 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.makefunstuff.herdr.core.api.AgentStatus
+import com.makefunstuff.herdr.core.home.BoardGroup
+import com.makefunstuff.herdr.core.home.Home
+import com.makefunstuff.herdr.core.home.HomeAgent
 import com.makefunstuff.herdr.data.IdentityStore
 import com.makefunstuff.herdr.ui.activity.ActivityScreen
 import com.makefunstuff.herdr.ui.admin.AdminScreen
 import com.makefunstuff.herdr.ui.agents.AgentScreen
 import com.makefunstuff.herdr.ui.agents.AgentsScreen
 import com.makefunstuff.herdr.ui.board.BoardScreen
+import com.makefunstuff.herdr.ui.board.BoardsScreen
+import com.makefunstuff.herdr.ui.board.rememberBoards
 import com.makefunstuff.herdr.ui.board.ReviewScreen
 import com.makefunstuff.herdr.ui.brief.BriefScreen
 import com.makefunstuff.herdr.ui.brief.BriefSettingsScreen
@@ -113,6 +117,8 @@ object Links {
 
 object Routes {
     const val AGENTS = "agents"
+    /** The Board tab: every machine's tasks in one list. */
+    const val BOARDS = "boards"
     const val MACHINES = "machines"
     const val SETTINGS = "settings"
     const val QUIET = "settings/quiet"
@@ -127,7 +133,8 @@ object Routes {
     const val TERMINAL = "terminal/{mid}/{pane}"
     const val LAYOUT = "layout/{mid}/{pane}"
     const val COORDINATOR = "coordinator/{mid}"
-    const val BOARD = "board/{mid}?task={task}"
+    /** One machine's board; with [task] open, and with `alone` closing the task goes back instead of to the board. */
+    const val BOARD = "board/{mid}?task={task}&alone={alone}"
     /** Finished work across every board, one card a task; opened at a machine's (and a task's) card when given. */
     const val REVIEW = "review?mid={mid}&task={task}"
     const val ADMIN = "admin/{mid}?tab={tab}"
@@ -156,7 +163,8 @@ object Routes {
     fun layout(mid: String, pane: String) = "layout/$mid/${Uri.encode(pane)}"
     fun coordinator(mid: String) = "coordinator/$mid"
     fun ask(to: String) = "ask/$to"
-    fun board(mid: String, task: String? = null) = if (task == null) "board/$mid" else "board/$mid?task=${Uri.encode(task)}"
+    fun board(mid: String, task: String? = null, alone: Boolean = false) =
+        if (task == null) "board/$mid" else "board/$mid?task=${Uri.encode(task)}" + if (alone) "&alone=1" else ""
     fun review(mid: String? = null, task: String? = null) =
         "review" + listOfNotNull(mid?.let { "mid=" + Uri.encode(it) }, task?.let { "task=" + Uri.encode(it) }).joinToString("&").let { if (it.isEmpty()) "" else "?$it" }
     fun admin(mid: String, tab: Int = 0) = "admin/$mid?tab=$tab"
@@ -181,7 +189,7 @@ object Routes {
     fun boardOf(route: String): Pair<String, String?>? {
         if (!route.startsWith("board/")) return null
         val rest = route.removePrefix("board/")
-        return rest.substringBefore('?') to rest.substringAfter("?task=", "").takeIf { it.isNotEmpty() }?.let(Uri::decode)
+        return rest.substringBefore('?') to rest.substringAfter("?task=", "").substringBefore('&').takeIf { it.isNotEmpty() }?.let(Uri::decode)
     }
 }
 
@@ -190,10 +198,13 @@ private fun AppNav(nav: NavHostController) {
     val container = LocalContainer.current
     val entry by nav.currentBackStackEntryAsState()
     val route = entry?.destination?.route
-    val topLevel = route in setOf(Routes.AGENTS, Routes.MACHINES, Routes.SETTINGS)
-    val agents by container.hosts.agents.collectAsStateWithLifecycle()
+    val topLevel = route in setOf(Routes.AGENTS, Routes.BOARDS, Routes.MACHINES)
     val hosts by container.hosts.hosts.collectAsStateWithLifecycle()
-    val blocked = agents.count { it.agent.agentStatus == AgentStatus.Blocked }
+    val seen by container.seen.marks.collectAsStateWithLifecycle()
+    val homeBoards = rememberBoards()
+    // The tabs' badges: everything on the Needs you list, and the tasks waiting for you across the boards.
+    val needsYou = remember(hosts, homeBoards, seen) { Home.of(HomeAgent.of(hosts), homeBoards, seen).needsYou.size }
+    val tasksWaiting = remember(homeBoards) { BoardGroup.waiting(homeBoards) }
     val keyState by container.identity.state.collectAsStateWithLifecycle()
     var keySetupDismissed by rememberSaveable { mutableStateOf(false) }
     // The agents list's machine filter and scroll, kept here: the list moves between the phone layout and the left pane.
@@ -226,7 +237,7 @@ private fun AppNav(nav: NavHostController) {
             Scaffold(
                 contentWindowInsets = WindowInsets(0, 0, 0, 0),
                 containerColor = Herdr.colors.ground,
-                bottomBar = { if (topLevel && !wide) AppNavBar(nav, blocked) },
+                bottomBar = { if (topLevel && !wide) AppNavBar(nav, needsYou, tasksWaiting) },
             ) { padding ->
                 // One Row in both layouts, with the NavHost always in the same place in it, so a rotation or a
                 // resize across the line keeps every open screen as it was (the activity isn't recreated for them).
@@ -237,7 +248,7 @@ private fun AppNav(nav: NavHostController) {
                     if (wide) {
                         Column(Modifier.width(leftWidth).fillMaxHeight()) {
                             Box(Modifier.weight(1f)) { AgentsScreen(nav, agentsFilter, agentsList) }
-                            AppNavBar(nav, blocked)
+                            AppNavBar(nav, needsYou, tasksWaiting)
                         }
                         PaneEdge()
                     }
@@ -247,7 +258,7 @@ private fun AppNav(nav: NavHostController) {
                         modifier = Modifier.weight(1f).fillMaxHeight().padding(
                             bottom = when {
                                 !topLevel -> 0.dp
-                                // Machines and Settings in the middle: the nav bar is under the list, only the system's bar is below them.
+                                // Board and Machines in the middle: the nav bar is under the list, only the system's bar is below them.
                                 wide -> WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
                                 else -> padding.calculateBottomPadding()
                             },
@@ -278,6 +289,7 @@ private fun AppNav(nav: NavHostController) {
 /** Every screen of the app, by its [Routes] entry; [agents] is the Agents tab, which the layout around it places. */
 internal fun NavGraphBuilder.screens(nav: NavHostController, agents: @Composable () -> Unit) {
     composable(Routes.AGENTS) { agents() }
+    composable(Routes.BOARDS) { BoardsScreen(nav) }
     composable(Routes.MACHINES) { MachinesScreen(nav) }
     composable(Routes.SETTINGS) { SettingsScreen(nav) }
     composable(Routes.QUIET) { QuietHoursScreen(nav) }
@@ -297,7 +309,7 @@ internal fun NavGraphBuilder.screens(nav: NavHostController, agents: @Composable
     }
     composable(Routes.HEALTH) { HealthScreen(nav, it.arguments?.getString("mid").orEmpty()) }
     composable(Routes.BOARD) {
-        BoardScreen(nav, it.arguments?.getString("mid").orEmpty(), it.arguments?.getString("task")?.let(Uri::decode))
+        BoardScreen(nav, it.arguments?.getString("mid").orEmpty(), it.arguments?.getString("task")?.let(Uri::decode), alone = it.arguments?.getString("alone") == "1")
     }
     composable(Routes.REVIEW) {
         ReviewScreen(nav, it.arguments?.getString("mid")?.let(Uri::decode)?.ifEmpty { null }, it.arguments?.getString("task")?.let(Uri::decode)?.ifEmpty { null })
@@ -342,18 +354,21 @@ internal fun NavGraphBuilder.screens(nav: NavHostController, agents: @Composable
 private fun androidx.navigation.NavBackStackEntry.codeSpot(): CodeSpot =
     CodeSpot.of(arguments?.getString("mid").orEmpty()) { arguments?.getString(it) }
 
-/** The three top-level screens: under the whole screen on a phone, under the agents list on a wide window. */
+/**
+ * The three top-level screens: under the whole screen on a phone, under the agents list on a wide
+ * window. [needsYou] counts the Agents screen's Needs you list, [tasksWaiting] the boards' tasks waiting for you.
+ */
 @Composable
-private fun AppNavBar(nav: NavHostController, blocked: Int) {
+private fun AppNavBar(nav: NavHostController, needsYou: Int, tasksWaiting: Int) {
     val entry by nav.currentBackStackEntryAsState()
     // In the middle of a wide window a chat or a machine may be open: the tab is the one it was opened from.
     val tab = remember(entry) {
-        listOf(Routes.SETTINGS, Routes.MACHINES).firstOrNull { runCatching { nav.getBackStackEntry(it) }.isSuccess } ?: Routes.AGENTS
+        listOf(Routes.BOARDS, Routes.MACHINES).firstOrNull { runCatching { nav.getBackStackEntry(it) }.isSuccess } ?: Routes.AGENTS
     }
     HerdrNavBar {
-        NavItem("Agents", HerdrIcons.House, tab == Routes.AGENTS, badge = blocked) { nav.goTop(Routes.AGENTS) }
+        NavItem("Agents", HerdrIcons.House, tab == Routes.AGENTS, badge = needsYou) { nav.goTop(Routes.AGENTS) }
+        NavItem("Board", HerdrIcons.SquareKanban, tab == Routes.BOARDS, badge = tasksWaiting) { nav.goTop(Routes.BOARDS) }
         NavItem("Machines", HerdrIcons.List, tab == Routes.MACHINES) { nav.goTop(Routes.MACHINES) }
-        NavItem("Settings", HerdrIcons.Settings, tab == Routes.SETTINGS) { nav.goTop(Routes.SETTINGS) }
     }
 }
 

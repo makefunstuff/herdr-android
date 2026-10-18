@@ -917,7 +917,13 @@ fun FieldLabel(text: String, modifier: Modifier = Modifier) {
 
 /** A section's head: parted by space and a dim 13sp heading, never by a rule. */
 @Composable
-fun SectionHeading(text: String, modifier: Modifier = Modifier, top: Dp = Space.xxl, trailing: (@Composable () -> Unit)? = null) {
+fun SectionHeading(
+    text: String,
+    modifier: Modifier = Modifier,
+    top: Dp = Space.xxl,
+    color: Color = Herdr.colors.muted,
+    trailing: (@Composable () -> Unit)? = null,
+) {
     Row(
         modifier.fillMaxWidth().padding(top = top, bottom = Space.s).heightIn(min = 24.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -925,7 +931,7 @@ fun SectionHeading(text: String, modifier: Modifier = Modifier, top: Dp = Space.
         Text(
             text,
             style = MaterialTheme.typography.titleSmall,
-            color = Herdr.colors.muted,
+            color = color,
             modifier = Modifier.weight(1f).semantics { heading() },
         )
         trailing?.invoke()

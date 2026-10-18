@@ -1,7 +1,7 @@
 # Design
 
 How Herdr for Android looks and why. herdr-android keeps its own structure: its navigation
-(Agents, Machines, Settings), its screens and flows, its layouts (agent and machine cards, the
+(Agents, Board, Machines; Settings behind a gear), its screens and flows, its layouts (Needs you cards with their answers, one-line agent rows, machine cards, the
 work board's cards with a status stripe, workspace cards with Terminal buttons, floating "Add"
 buttons, the tabbed admin screen) and its own components. Its **visual language** is the
 [herdr web UI](https://github.com/devswha/herdr-web-ui)'s (MIT, by devswha): the same palette,
@@ -112,7 +112,7 @@ fingerprints and the terminal. Its scale, in sp so it follows the phone's font s
 
 | Style | Size / line | Weight | Web UI | Use |
 | --- | --- | --- | --- | --- |
-| `headlineMedium` | 22 / 27.5, −0.02em | SemiBold | `--fs-display` | Top-level screen titles (Agents, Machines, Settings) |
+| `headlineMedium` | 22 / 27.5, −0.02em | SemiBold | `--fs-display` | Top-level screen titles (Agents, Board, Machines) |
 | `headlineSmall` | 18 / 23.4, −0.01em | SemiBold | `--fs-xl` | A task's title, Markdown h1 |
 | `titleLarge` | 16 / 21.6, −0.01em | SemiBold | `--fs-lg` | A detail bar's title, sheet and dialog titles, state titles, Markdown h2 |
 | `titleMedium` | 14 / 21 | Medium | `--fs-md` | Row and card titles |
