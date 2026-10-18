@@ -62,9 +62,24 @@ Without these secrets, and for local builds, the APK is signed with the normal d
 
 ## Setting up a machine
 
+**By its code**, with nothing to copy or type:
+
+1. On the machine running herdr, run `herdr-push pair`. A machine the app already set up for notifications has it in `~/.local/share/herdr-push/`; elsewhere (or where that one is older and doesn't know `pair`), fetch it:
+   ```sh
+   curl -fsSLO https://raw.githubusercontent.com/makefunstuff/herdr-android/HEAD/host/herdr-push/herdr-push
+   python3 herdr-push pair
+   ```
+   It shows a QR code with where the machine is (its Tailscale name and address, its address on the local network), its user, its SSH host key's fingerprint and a one-time code, valid five minutes.
+2. In **Machines**, tap **Add machine**, then **Scan the code**. The phone's own code scanner reads it (Google Play services': the app asks for no camera permission). Without one, **Paste the link** takes the link printed under the code.
+3. The app finds the machine at the first address that answers with that host key and shows what it found. **Pair and add** logs in with the one-time code, which can do nothing but hand over this phone's public key: it goes into `~/.ssh/authorized_keys` there, the code is spent, and the app pins the host key and opens the machine.
+
+How it works and what it touches: [`host/herdr-push/README.md`](host/herdr-push/README.md#pairing-a-phone).
+
+**By hand** (**Add machine → Type the address instead**):
+
 1. Open **Settings** (the gear in the Machines bar) and copy the app's public key.
 2. Add it to `~/.ssh/authorized_keys` on the machine running herdr.
-3. In **Machines**, tap **Add machine** and enter `user@host[:port]`. The app pins the host key on first connect.
+3. In **Machines**, tap **Add machine**, then **Type the address instead**, and enter `user@host[:port]`. The app pins the host key on first connect.
 
 Machines reachable only through another one can use it as a jump host ("Connect through"). From a machine's menu, **Import herdr machines** adds the machines its herdr already knows (`herdr machine list`).
 
@@ -328,7 +343,7 @@ UI changes are checked, and shown in review, with screen previews instead of an 
 ./gradlew -p tools/ui-preview render -Ponly=board,chat   # some of them
 ```
 
-It needs JDK 17, no Android SDK, and takes about 15 minutes for all 169 scenes (agents, machines, the code browser (repositories, files, a file, a comment, changes, a diff, history, search, comments waiting), quick commands (a machine's, a project's with one pinned, arguments, a command's menu, a run, its runs, an AI answer and one at work, a long log, a new one, none yet), a machine, a machine's health and cleanup, agent chats, pictures in a chat (what + offers, two screenshots in the message box, one marked up and one cropped, sent ones in the chat and one full size), the Coordinator, floating chats, the board and a task, the activity timeline (a task's, its failures, a command opened, an edit's diff, a jump to a failure, a review's verdict, an agent's at work), finished work's review cards (a passed one, a failed one, its files and a diff, approve anyway, send back, a pick on another machine, none waiting), the brief and when it comes, a machine's usage and limits (its providers, one out of its allowance, one whose reset passed, a reading that failed, the agents to start a task with, one whose key was refused), the terminal (and a password asked there), settings with its notifications and text sizes, TalkBack's actions on a card, the dialogs and sheets, and the three panes of a wide window, also across a rotation). CI renders them too and uploads them as the `herdr-screens-<run>` artifact. See [`tools/ui-preview/README.md`](tools/ui-preview/README.md) for how it works and how to add a scene, and [`AGENTS.md`](AGENTS.md) for how changes are reviewed.
+It needs JDK 17, no Android SDK, and takes about 15 minutes for all 172 scenes (agents, machines, adding one by its code (found, not answering) or by hand, the code browser (repositories, files, a file, a comment, changes, a diff, history, search, comments waiting), quick commands (a machine's, a project's with one pinned, arguments, a command's menu, a run, its runs, an AI answer and one at work, a long log, a new one, none yet), a machine, a machine's health and cleanup, agent chats, pictures in a chat (what + offers, two screenshots in the message box, one marked up and one cropped, sent ones in the chat and one full size), the Coordinator, floating chats, the board and a task, the activity timeline (a task's, its failures, a command opened, an edit's diff, a jump to a failure, a review's verdict, an agent's at work), finished work's review cards (a passed one, a failed one, its files and a diff, approve anyway, send back, a pick on another machine, none waiting), the brief and when it comes, a machine's usage and limits (its providers, one out of its allowance, one whose reset passed, a reading that failed, the agents to start a task with, one whose key was refused), the terminal (and a password asked there), settings with its notifications and text sizes, TalkBack's actions on a card, the dialogs and sheets, and the three panes of a wide window, also across a rotation). CI renders them too and uploads them as the `herdr-screens-<run>` artifact. See [`tools/ui-preview/README.md`](tools/ui-preview/README.md) for how it works and how to add a scene, and [`AGENTS.md`](AGENTS.md) for how changes are reviewed.
 
 ## Layout
 

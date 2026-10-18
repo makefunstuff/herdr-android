@@ -27,6 +27,8 @@ dependencies {
 
     testImplementation(kotlin("test"))
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
+    // Reads the QR codes herdr-push pair draws, as a phone's scanner would.
+    testImplementation("com.google.zxing:core:3.5.3")
 }
 
 // The host-side watcher (host/herdr-push), the usage reader (host/herdr-usage) and the AI quick

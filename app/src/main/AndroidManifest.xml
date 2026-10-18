@@ -41,6 +41,9 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Herdr">
 
+        <!-- Pairing by QR code: Play services fetches its code scanner when the app is installed, not at the first scan. -->
+        <meta-data android:name="com.google.mlkit.vision.DEPENDENCIES" android:value="barcode_ui" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

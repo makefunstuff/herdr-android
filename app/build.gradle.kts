@@ -110,6 +110,8 @@ dependencies {
     // The fingerprint (or the phone's PIN) before what can't be undone, and the app lock; its prompt shows over a FragmentActivity.
     implementation("androidx.biometric:biometric:1.1.0")
     implementation("androidx.fragment:fragment-ktx:1.8.5")
+    // Pairing by QR code: the phone's own code scanner (Google Play services), which needs no camera permission.
+    implementation("com.google.android.gms:play-services-code-scanner:16.1.0")
     implementation("androidx.navigation:navigation-compose:2.8.5")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("androidx.lifecycle:lifecycle-process:2.8.7")

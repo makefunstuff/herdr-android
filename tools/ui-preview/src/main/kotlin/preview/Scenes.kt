@@ -143,7 +143,12 @@ fun scenes(): List<Scene> = listOf(
     // A machine without the work board: Health and Usage are its tiles.
     Scene("machine-no-board", route = Routes.machine(GPU)),
     Scene("machine-new", route = Routes.machine(DEVBOX), actions = { tapText("New") }),
+    // Add machine: scanning the code herdr-push pair shows (the phone's own scanner is a system screen; the stand-in
+    // reads studio's code), studio found on Tailscale, studio answering nowhere, and typing the address instead.
     Scene("add-machine", route = Routes.edit()),
+    Scene("pair-found", route = Routes.edit(), actions = { tapText("Point at the code"); settle() }),
+    Scene("pair-unreachable", route = Routes.edit(), setup = { reachable = emptyMap() }, actions = { tapText("Point at the code"); settle() }),
+    Scene("add-machine-typed", route = Routes.edit(), actions = { tapText("Type the address instead") }),
 
     // A machine's health: meters, the last hour, the leftovers of a finished task, the biggest processes.
     // Taller, to show the whole screen (scrolling never settles in the desktop harness).

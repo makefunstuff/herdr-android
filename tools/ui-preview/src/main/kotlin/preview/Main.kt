@@ -121,6 +121,9 @@ class SceneData {
     val images = HashMap<String, List<Pair<String, File>>>()
     /** The chats' and the terminal's text sizes (TextSizeStore), as saved before the app opens. */
     var textSizes: com.makefunstuff.herdr.data.TextSizeStore.Sizes? = null
+    /** What the phone's code scanner reads when Scan is tapped (`herdr-push pair`'s code), and the host key each address shows. */
+    var scanned: String? = Demo.PAIR_LINK
+    var reachable: Map<String, String> = Demo.pairReachable()
     fun host(id: String): FakeMachine = hosts.getValue(id)
 }
 
@@ -168,6 +171,8 @@ fun render(scene: Scene, dark: Boolean, file: File) {
     PreviewPhone.liveAllowed = data.liveAllowed
     PreviewPhone.quietMode = data.quietMode
     PreviewBubbles.allowed = data.bubblesAllowed
+    PreviewScanner.code = data.scanned
+    PreviewScanner.hostKeys = data.reachable
     PreviewUnlock.screenLock = data.screenLock
     PreviewUnlock.answer = data.unlockAnswer
     synchronized(PreviewUnlock.asked) { PreviewUnlock.asked.clear() }
