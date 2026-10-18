@@ -107,7 +107,10 @@ class AppContainer(app: Application) {
         java.io.File(app.filesDir, "images.json"), java.io.File(app.filesDir, "images"), java.io.File(app.cacheDir, "sent-images"),
     )
     val push = PushStore(app)
-    val inbox = Inbox(java.io.File(app.filesDir, "alerts.json"), AndroidAlerts(app))
+    /** Which actions ask for the fingerprint, and the app lock. */
+    val guard = com.makefunstuff.herdr.data.GuardStore(java.io.File(app.filesDir, "guard.json"), com.makefunstuff.herdr.guard.AndroidUnlock(app))
+    // With the app lock on, a locked phone shows its notifications without what they are about.
+    val inbox = Inbox(java.io.File(app.filesDir, "alerts.json"), AndroidAlerts(app, appLock = { guard.state.value.appLock }))
     val phone = AndroidPhone(app, push)
     val pushHosts = PushHosts(scope, hosts, machines, push, phone)
     val quietWork = QuietWork(scope, push.state, phone, inbox, foreground = { hosts.isForeground })
@@ -118,8 +121,6 @@ class AppContainer(app: Application) {
     val boards = com.makefunstuff.herdr.data.BoardLists(hosts, onRead = { id, tasks -> tally.tasks(id, tasks) })
     val seen = com.makefunstuff.herdr.data.SeenStore(java.io.File(app.filesDir, "seen.json"))
     val bubbles: Bubbles = AndroidBubbles(app)
-    /** Which actions ask for the fingerprint, and the app lock. */
-    val guard = com.makefunstuff.herdr.data.GuardStore(java.io.File(app.filesDir, "guard.json"), com.makefunstuff.herdr.guard.AndroidUnlock(app))
     val briefWork = BriefWork(
         scope, hosts, machines, BriefStore(java.io.File(app.filesDir, "brief.json")), AndroidBrief(app), AndroidVoice(app),
         quiet = { quietWork.check() },

@@ -93,11 +93,12 @@ object AgentInput {
      * agent still waits and its screen, read again now, asks that same question with that option
      * there. A notification's button and a card's Yes and No both answer through this.
      */
-    suspend fun choose(api: HerdrApi, paneId: String, question: String, index: Int, label: String) {
+    suspend fun choose(api: HerdrApi, paneId: String, question: String, index: Int, label: String, details: List<String>) {
         val agent = api.snapshot().agents.firstOrNull { it.paneId == paneId }
         if (agent?.agentStatus != AgentStatus.Blocked) throw IOException("It isn't waiting any more.")
         val prompt = BlockedPrompt.parse(api.readPane(paneId, source = "visible", lines = 80).text)
-        if (prompt == null || prompt.question != question || prompt.options.getOrNull(index)?.label != label) {
+        // The same question can ask about another command: what it shows of it ([details]) must match too.
+        if (prompt == null || prompt.question != question || prompt.details != details || prompt.options.getOrNull(index)?.label != label) {
             throw IOException("The question changed. Open the chat to answer it.")
         }
         keys(api, paneId, prompt.keysFor(index), named = true)

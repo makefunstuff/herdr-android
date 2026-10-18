@@ -108,21 +108,26 @@ data class BlockedPrompt(
     /** The keys the footer names besides the menu's own (Tab to amend, Esc to cancel), as buttons. */
     val hintKeys: List<HintKey> get() = hint?.let(::hintKeys).orEmpty()
 
-    /** Whether this is the same question, with the same choices: what a press checks before it presses. */
+    /**
+     * Whether this is the same question about the same thing, with the same choices: what a press checks
+     * before it presses. Claude asks "Do you want to proceed?" with the same options for every command, so
+     * the lines that say what it would do ([details]: the command, the file) count too.
+     */
     fun same(other: BlockedPrompt?): Boolean =
-        other != null && other.question == question && other.options.map { it.label } == options.map { it.label } && other.multiSelect == multiSelect
+        other != null && other.question == question && other.details == details &&
+            other.options.map { it.label } == options.map { it.label } && other.multiSelect == multiSelect
 
     companion object {
         private val YES = Regex("^(yes|allow|approve|proceed|accept|trust|continue|ok)\\b", RegexOption.IGNORE_CASE)
         private val NO = Regex("^(no|deny|reject|decline|cancel|don'?t|do not)\\b", RegexOption.IGNORE_CASE)
-        private val ALWAYS = Regex("don'?t ask again|\\balways\\b|for (this|the) session|\\bremember\\b", RegexOption.IGNORE_CASE)
+        private val ALWAYS = Regex("don'?t ask again|\\balways\\b|(for|during) (this|the) session|\\bremember\\b", RegexOption.IGNORE_CASE)
         private val TELL = Regex("\\btell\\b.*\\b(differently|instead)\\b|what to do", RegexOption.IGNORE_CASE)
         private val CUSTOM = Regex("^type something\\.?$", RegexOption.IGNORE_CASE)
         private val CHAT = Regex("^chat about this$", RegexOption.IGNORE_CASE)
         private val KEY_SUFFIX = Regex("\\s*\\((?:[a-z]|esc|tab|shift\\+tab)\\)$", RegexOption.IGNORE_CASE)
         private val DONT_ASK_FOR = Regex("don'?t ask again for (.+)$", RegexOption.IGNORE_CASE)
         private val ALWAYS_ALLOW = Regex("always allow (.+)$", RegexOption.IGNORE_CASE)
-        private val SESSION = Regex("for (this|the) session", RegexOption.IGNORE_CASE)
+        private val SESSION = Regex("(for|during) (this|the) session", RegexOption.IGNORE_CASE)
         private val SPACE_TOGGLES = Regex("\\b(space|␣)\\b[^·]*toggle", RegexOption.IGNORE_CASE)
         private val TICK = Regex("^(?:\\[([ xX✓✔])\\]|([☐☑☒]))\\s*(.*)$")
         /** Claude Code's question form: its footer, its question tabs and a single question's chip. */

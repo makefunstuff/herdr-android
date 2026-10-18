@@ -112,6 +112,8 @@ class AlertsTest {
         assertEquals("Yes", a.actions[0].optionLabel)
         assertEquals(2, a.actions[1].option)
         assertEquals("Do you want to proceed?", a.actions[1].question)
+        // What it would run must still be the same when the button is pressed.
+        assertTrue("touch b.txt" in a.actions[0].details, a.actions[0].details.toString())
         assertTrue(a.detail.endsWith("devbox · api › agents"))
         assertEquals("blocked#7", a.sig)
     }

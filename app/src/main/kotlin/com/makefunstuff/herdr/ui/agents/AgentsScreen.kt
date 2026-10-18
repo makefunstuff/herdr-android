@@ -1,5 +1,6 @@
 package com.makefunstuff.herdr.ui.agents
 
+import com.makefunstuff.herdr.core.chat.OptionRole
 import com.makefunstuff.herdr.core.guard.Guarded
 
 import android.net.Uri
@@ -155,14 +156,14 @@ fun AgentsScreen(
 
     val guard = com.makefunstuff.herdr.ui.common.LocalGuard.current
 
-    fun answer(q: Waiting.Question, prompt: BlockedPrompt, index: Int) {
+    fun press(q: Waiting.Question, prompt: BlockedPrompt, index: Int) {
         if (q.key in busy) return
         val label = prompt.options[index].label
         busy[q.key] = "Answering: $label"
         scope.launch {
             runCatching {
                 val session = container.hosts.session(q.machineId) ?: error("This machine isn't in the app any more")
-                AgentInput.choose(session.awaitApi(10_000), q.agent.agent.paneId, prompt.question, index, label)
+                AgentInput.choose(session.awaitApi(10_000), q.agent.agent.paneId, prompt.question, index, label, prompt.details)
                 session.refresh()
             }
                 .onSuccess {
@@ -173,6 +174,13 @@ fun AgentsScreen(
                 .onFailure { context.toast(it.message ?: "Couldn't answer") }
             busy.remove(q.key)
         }
+    }
+
+    /** An answer from the card; a permanent "always allow" asks for the fingerprint first, as on the chat's card and the notification. */
+    fun answer(q: Waiting.Question, prompt: BlockedPrompt, index: Int) {
+        if (prompt.role(index) == OptionRole.Always) {
+            guard.run(Guarded.AlwaysAllow, "${prompt.shortLabel(index)}?", prompt.details.firstOrNull { it.startsWith("$ ") } ?: prompt.question) { press(q, prompt, index) }
+        } else press(q, prompt, index)
     }
 
     fun say(r: Reply, text: String) {

@@ -18,7 +18,9 @@ data class PromptTag(val text: String, val risk: Risk) {
             r("\\bgit\\s+push\\b[^\\n]*(\\s--force\\b|\\s-f\\b|--force-with-lease|\\s\\+\\S)") to PromptTag("force-pushes", Risk.Danger),
             r("\\brm\\s+(-\\S+\\s+)*\\S|\\brmdir\\b|\\bgit\\s+clean\\b|\\bshred\\b|\\bfind\\b[^\\n]*\\s-delete\\b|\\bunlink\\s") to PromptTag("deletes files", Risk.Danger),
             r("\\bdrop\\s+(table|database|schema|index)\\b|\\btruncate\\s+(table\\s+)?\\w|\\bdelete\\s+from\\b|\\bdropdb\\b|\\bflushall\\b") to PromptTag("deletes data", Risk.Danger),
-            r("\\bgit\\s+(reset\\s+--hard|checkout\\s+--\\s|checkout\\s+\\.|restore\\s|stash\\s+(drop|clear)|branch\\s+-D)") to PromptTag("discards changes", Risk.Danger),
+            r("\\bgit\\s+(reset\\s+--hard|checkout\\s+--\\s|checkout\\s+\\.|restore\\s|stash\\s+(drop|clear))") to PromptTag("discards changes", Risk.Danger),
+            // -D deletes a branch with commits that aren't merged; -d (only a merged one) is safe, so this one minds the case.
+            Regex("\\bgit\\s+branch\\s+(-\\S*D\\b|--delete\\s+--force|-d\\s+-f\\b|-f\\s+-d\\b)") to PromptTag("discards changes", Risk.Danger),
             r("\\bterraform\\s+destroy\\b|\\bkubectl\\s+delete\\b|\\bhelm\\s+uninstall\\b|\\bdocker\\s+(rm|rmi|system\\s+prune|volume\\s+rm)\\b") to PromptTag("tears down", Risk.Danger),
             r("\\bmigrate\\b|db:migrate|\\b(run|runs|apply|applies)\\s+(the\\s+)?(new\\s+|pending\\s+)?migrations?\\b|\\balembic\\s+upgrade\\b|\\bprisma\\s+(migrate|db\\s+push)\\b|\\bflyway\\b|\\bliquibase\\b|\\bdbmate\\b") to PromptTag("runs a migration", Risk.Caution),
             r("\\bgit\\s+push\\b") to PromptTag("pushes", Risk.Caution),

@@ -103,6 +103,14 @@ class BlockedPromptTest {
         assertEquals(2, pi.denyIndex)
         val trust = assertNotNull(BlockedPrompt.parse(screen("claude-trust.txt")))
         assertEquals(listOf(OptionRole.No, OptionRole.Yes), trust.options.indices.map { trust.role(it) })
+        // Claude's edit permission: "during this session" is as permanent as "always" while the session lasts.
+        val edits = assertNotNull(BlockedPrompt.parse(" Edit file\n   src/a.kt\n\n Do you want to make this edit to a.kt?\n ❯ 1. Yes\n   2. Yes, allow all edits during this session (shift+tab)\n   3. No, and tell Claude what to do differently (esc)\n"))
+        assertEquals(listOf(OptionRole.Yes, OptionRole.Always, OptionRole.TellInstead), edits.options.indices.map { edits.role(it) })
+        assertEquals("Yes, for this session", edits.shortLabel(1))
+        // Two options, an always and a no: not a yes-or-no question, and the always is never the yes.
+        val alwaysOrNo = assertNotNull(BlockedPrompt.parse(" Allow it?\n\n→ Always allow\n  Deny\n"))
+        assertEquals(listOf(OptionRole.Always, OptionRole.No), alwaysOrNo.options.indices.map { alwaysOrNo.role(it) })
+        assertNull(alwaysOrNo.approveIndex)
     }
 
     @Test
@@ -126,6 +134,9 @@ class BlockedPromptTest {
         assertEquals(PromptTag("deletes files", PromptTag.Risk.Danger), tag(bash("rm -rf build/")))
         assertEquals("deletes data", tag(bash("psql -c 'DROP TABLE jobs'"))?.text)
         assertEquals("discards changes", tag(bash("git reset --hard HEAD~1"))?.text)
+        assertEquals(PromptTag("discards changes", PromptTag.Risk.Danger), tag(bash("git branch -D old")))
+        // -d deletes only a merged branch: just a command.
+        assertEquals(PromptTag("runs a command", PromptTag.Risk.Plain), tag(bash("git branch -d old")))
         assertEquals("installs packages", tag(bash("npm install left-pad"))?.text)
         assertEquals("runs a command", tag(bash("ls -la"))?.text)
         assertEquals("runs a command", tag(screen("claude-permission.txt"))?.text)
@@ -219,8 +230,11 @@ class BlockedPromptTest {
     @Test
     fun sameQuestion() {
         val a = assertNotNull(BlockedPrompt.parse(DEMO))
+        // The cursor moving is still the same question.
         assertTrue(a.same(BlockedPrompt.parse(DEMO.replace("❯ 1. Yes", "  1. Yes").replace("   2. Yes,", " ❯ 2. Yes,"))))
-        assertEquals(false, a.same(BlockedPrompt.parse(DEMO.replace("db:migrate", "db:seed").replace("Do you want to proceed?", "Do you want to seed?"))))
+        // Claude asks "Do you want to proceed?" with the same options for every command: another command is another question.
+        assertEquals(false, a.same(BlockedPrompt.parse(DEMO.replace("npm run db:migrate", "npm run db:reset --force"))))
+        assertEquals(false, a.same(BlockedPrompt.parse(DEMO.replace("Do you want to proceed?", "Do you want to seed?"))))
         assertEquals(false, a.same(null))
     }
 

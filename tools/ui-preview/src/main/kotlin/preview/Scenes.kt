@@ -76,6 +76,11 @@ fun scenes(): List<Scene> = listOf(
     }, actions = { tapText("Approve and merge") }),
     // The same merge on a phone with no screen lock: the app's own confirmation stands in for the fingerprint.
     Scene("agents-merge-confirm", setup = { home(); screenLock = false }, actions = { tapText("Approve and merge") }),
+    // A two-option menu with a permanent allow on a card: it carries the fingerprint, and asks before it presses.
+    Scene("agents-always-confirm", setup = {
+        home(); screenLock = false
+        host(DEVBOX).screens += API_AGENT to " Allow the extension to run git push?\n\n→ Always allow\n  Deny\n\n ↑↓ navigate · enter select\n"
+    }, actions = { tapText("Always allow") }),
     Scene("agents-filter", setup = { home() }, actions = { tapText("All machines") }),
     Scene("agents-seen", heightDp = 1500, setup = { home() }, actions = { tapText("Mark seen") }),
     Scene("agents-calm", setup = { host(DEVBOX).snapshot = Demo.devbox(apiStatus = "working"); host(DEVBOX).board = Demo.calmBoard() }),

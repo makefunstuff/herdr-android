@@ -57,6 +57,8 @@ data class AlertAction(
     val option: Int = -1,
     val optionLabel: String = "",
     val question: String = "",
+    /** [Type.Choose]: what the question showed of what it would do (the command), which must still be the same. */
+    val details: List<String> = emptyList(),
     /** [Type.Board]: the board command, a [BoardAction] name. */
     val board: String = "",
     /** The reply box's hint, for the reply types. */
@@ -170,7 +172,7 @@ object Alerts {
     private fun choices(prompt: BlockedPrompt?): List<AlertAction> {
         if (prompt == null) return emptyList()
         fun choose(i: Int, label: String) = AlertAction(
-            AlertAction.Type.Choose, label, option = i, optionLabel = prompt.options[i].label, question = prompt.question,
+            AlertAction.Type.Choose, label, option = i, optionLabel = prompt.options[i].label, question = prompt.question, details = prompt.details,
             // A permanent "don't ask again" changes what the agent may do for good.
             guard = if (prompt.role(i) == OptionRole.Always) Guarded.AlwaysAllow.key else "",
         )

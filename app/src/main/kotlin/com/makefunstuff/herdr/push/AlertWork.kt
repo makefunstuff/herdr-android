@@ -71,7 +71,7 @@ class AlertWork(
     private suspend fun act(s: HostSession, alert: Alert, action: AlertAction, text: String): String = when (action.type) {
         AlertAction.Type.Choose -> {
             // Only press the option the notification showed, on the question it showed.
-            AgentInput.choose(s.awaitApi(), alert.paneId, action.question, action.option, action.optionLabel)
+            AgentInput.choose(s.awaitApi(), alert.paneId, action.question, action.option, action.optionLabel, action.details)
             s.refresh()
             "Answered: ${action.optionLabel}"
         }

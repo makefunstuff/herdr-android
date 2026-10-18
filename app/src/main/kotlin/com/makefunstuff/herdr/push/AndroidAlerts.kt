@@ -24,8 +24,11 @@ import com.makefunstuff.herdr.core.push.LiveItems
 import com.makefunstuff.herdr.core.push.QuietSummary
 import kotlinx.serialization.json.Json
 
-/** [AlertSink] on Android: notifications with their buttons, on two channels. */
-class AndroidAlerts(private val context: Context) : AlertSink {
+/**
+ * [AlertSink] on Android: notifications with their buttons, on two channels. With the app lock on
+ * ([appLock]), a locked phone shows only that something needs you: no question, no command, no buttons.
+ */
+class AndroidAlerts(private val context: Context, private val appLock: () -> Boolean = { false }) : AlertSink {
     private val nm = NotificationManagerCompat.from(context)
 
     init {
@@ -101,6 +104,7 @@ class AndroidAlerts(private val context: Context) : AlertSink {
 
     private fun base(alert: Alert, quiet: Boolean): NotificationCompat.Builder =
         NotificationCompat.Builder(context, if (alert.kind == Alert.Kind.NeedsYou) NEEDS_YOU else FINISHED)
+            .apply { if (appLock()) setVisibility(NotificationCompat.VISIBILITY_PRIVATE).setPublicVersion(redacted(alert)) }
             .setSmallIcon(R.drawable.ic_notification)
             .setColor(0xFFF0A830.toInt())
             .setContentTitle(alert.title)
@@ -117,6 +121,14 @@ class AndroidAlerts(private val context: Context) : AlertSink {
         ) return
         runCatching { nm.notify(tag, ID, b.build()) }
     }
+
+    /** What a locked phone shows with the app lock on: the app's name and the kind of news, nothing of what it is about. */
+    private fun redacted(alert: Alert) = NotificationCompat.Builder(context, if (alert.kind == Alert.Kind.NeedsYou) NEEDS_YOU else FINISHED)
+        .setSmallIcon(R.drawable.ic_notification)
+        .setColor(0xFFF0A830.toInt())
+        .setContentTitle("Herdr")
+        .setContentText(if (alert.kind == Alert.Kind.NeedsYou) "Something needs you. Unlock to see it." else "Something finished. Unlock to see it.")
+        .build()
 
     /** A tap: the agent's chat, the task on the board (finished work: its review card), the machine's health, or a quick command's run. */
     private fun openIntent(alert: Alert): PendingIntent {
