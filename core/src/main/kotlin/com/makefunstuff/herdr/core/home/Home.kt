@@ -2,8 +2,10 @@ package com.makefunstuff.herdr.core.home
 
 import com.makefunstuff.herdr.core.api.AgentInfo
 import com.makefunstuff.herdr.core.api.AgentStatus
+import com.makefunstuff.herdr.core.board.BoardAction
 import com.makefunstuff.herdr.core.board.BoardStatus
 import com.makefunstuff.herdr.core.board.BoardTask
+import com.makefunstuff.herdr.core.host.HostState
 import com.makefunstuff.herdr.core.push.LiveItems
 
 /** An agent as the home list sees it: the machine it runs on, where in herdr, and its workspace's name. */
@@ -17,6 +19,14 @@ data class HomeAgent(
     val workspace: String = location.substringBefore(" › "),
 ) {
     val key: String get() = "$machineId/${agent.paneId}"
+
+    companion object {
+        /** Every agent on the machines' last snapshots, in the machines' order. */
+        fun of(hosts: List<HostState>): List<HomeAgent> = hosts.flatMap { s ->
+            val snap = s.snapshot ?: return@flatMap emptyList()
+            snap.agents.map { HomeAgent(s.machine.id, s.machine.label, it, snap.location(it.workspaceId, it.tabId), snap.workspace(it.workspaceId)?.label.orEmpty()) }
+        }
+    }
 
     /** Which of its finishes this is: herdr's completion_seq, or on an older herdr the state change that ended it. */
     val finish: Long get() = agent.completionSeq ?: agent.stateChangeSeq
@@ -115,6 +125,21 @@ data class Home(
             return boards.associate { b ->
                 b.machineId to b.tasks.filter { it.machine.isEmpty() || (it.id.substringAfter(':') to it.title) !in own }
             }
+        }
+
+        /**
+         * The answer a waiting task's card offers beside Open, in the card's words: approve and merge,
+         * fix (the review's findings, or a failure, sent back to its agent), approve a plan, reply to its
+         * question, carry on after a stop. Null for a pick among attempts, which needs the comparison.
+         */
+        fun answer(t: BoardTask): Pair<BoardAction, String>? = when (t.status) {
+            BoardStatus.Approval -> BoardAction.Approve to "Approve and merge"
+            BoardStatus.ReviewFailed -> BoardAction.Review to "Fix"
+            BoardStatus.Error -> if (t.stage == "approval") BoardAction.Fix to "Fix" else BoardAction.Retry to "Retry"
+            BoardStatus.PlanReady -> BoardAction.ApprovePlan to "Approve plan"
+            BoardStatus.Asks, BoardStatus.AsksOk, BoardStatus.NeedsLogin -> BoardAction.Tell to "Reply"
+            BoardStatus.Stopped -> BoardAction.Retry to "Continue"
+            else -> null
         }
 
         /** The marks to keep: [marks] with every finished agent in [home] marked seen now, and agents gone dropped. */

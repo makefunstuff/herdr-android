@@ -60,6 +60,8 @@ fun MachinesScreen(nav: NavController) {
         topBar = {
             HerdrTopBar("Machines") {
                 if (hosts.isNotEmpty()) BarIcon(HerdrIcons.Code, "Code on the machines", { nav.navigate(Routes.CODE) })
+                // Settings, used now and then, sit here rather than in the bottom bar.
+                BarIcon(HerdrIcons.Settings, "Settings", { nav.navigate(Routes.SETTINGS) { launchSingleTop = true } })
             }
         },
         floatingActionButton = {

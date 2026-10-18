@@ -41,6 +41,16 @@ private fun SceneData.sentPictures() {
     host(DEVBOX).pictures = Demo.appPictures()
 }
 
+/**
+ * The Agents screen's world: devbox's agents named for their board tasks (and one more at work on
+ * AND-6), gpu-box's board with a task waiting for a pick, and a profile it finished in the night.
+ */
+private fun SceneData.home() {
+    host(DEVBOX).snapshot = Demo.devbox(home = true)
+    host(GPU).snapshot = Demo.gpu(home = true)
+    host(GPU).board = Demo.gpuBoard()
+}
+
 /** Where a 540×1200 screenshot is drawn in the editor's [w]×[h] canvas: as large as fits, in the middle. */
 private fun screenshotIn(w: Float, h: Float): androidx.compose.ui.geometry.Rect {
     val scale = minOf(w / 540f, h / 1200f)
@@ -50,9 +60,16 @@ private fun screenshotIn(w: Float, h: Float): androidx.compose.ui.geometry.Rect 
 }
 
 fun scenes(): List<Scene> = listOf(
-    // Agents: every agent on every machine, the blocked one first.
-    Scene("agents"),
-    Scene("agent-actions", actions = { longPressText("Speed up /jobs") }),
+    // Agents: what needs you across the machines first, answerable on the card (an agent's question, a merge, a fix,
+    // a pick); the agents at work as one line with a bar, finished ones new until seen. The tall one shows all of it;
+    // then answering from the card, the machine filter, Mark seen, a calm morning, and the agent's long-press sheet.
+    Scene("agents", setup = { home() }),
+    Scene("agents-all", heightDp = 1500, setup = { home() }),
+    Scene("agents-reply", setup = { home() }, actions = { tapText("Reply") }),
+    Scene("agents-filter", setup = { home() }, actions = { tapText("All machines") }),
+    Scene("agents-seen", heightDp = 1500, setup = { home() }, actions = { tapText("Mark seen") }),
+    Scene("agents-calm", setup = { host(DEVBOX).snapshot = Demo.devbox(apiStatus = "working"); host(DEVBOX).board = Demo.calmBoard() }),
+    Scene("agent-actions", setup = { home() }, actions = { longPressText("Speed up /jobs") }),
     Scene("notifications", actions = { ctx ->
         // An agent finishes while the app is open, which the bell then lists.
         ctx.data.host(DEVBOX).snapshot = Demo.devbox(appStatus = "done")
@@ -130,6 +147,11 @@ fun scenes(): List<Scene> = listOf(
         setup = { shared = Demo.shared().let { s -> s.copy(files = s.files.map { f -> f.copy(path = Demo.sharedFile().path) }) } },
         actions = { tapText("mac-mini"); settle() },
     ),
+    // The Board tab: every machine's tasks in one list, grouped by machine; one machine; a task opened from it.
+    Scene("boards", route = Routes.BOARDS, setup = { home() }),
+    Scene("boards-tall", route = Routes.BOARDS, heightDp = 1500, setup = { home() }),
+    Scene("boards-gpu", route = Routes.BOARDS, setup = { home() }, actions = { tapText("gpu-box") }),
+    Scene("boards-task", route = Routes.BOARDS, setup = { home() }, actions = { tapText("Rewrite the install page") }),
     Scene("board", route = Routes.board(DEVBOX)),
     Scene("task", route = Routes.board(DEVBOX), actions = { tapText("Show when each machine last answered") }),
     Scene("task-review-failed", route = Routes.board(DEVBOX), actions = { tapText("Rewrite the install page") }),
@@ -270,10 +292,12 @@ fun scenes(): List<Scene> = listOf(
     // terminal, the board, side by side. A landscape tablet before anything is opened, then with a chat open
     // (tapped on the left, so it is chosen there); an open foldable with a terminal; the Coordinator in the
     // middle with a task open on the right.
-    Scene("wide-empty", widthDp = 1280, heightDp = 800),
-    Scene("wide", widthDp = 1280, heightDp = 800, actions = { tapText("Speed up /jobs") }),
+    Scene("wide-empty", widthDp = 1280, heightDp = 800, setup = { home() }),
+    Scene("wide", widthDp = 1280, heightDp = 800, setup = { home() }, actions = { tapText("Speed up /jobs") }),
+    // The Board tab in the middle: a task tapped there opens on the right.
+    Scene("wide-boards", widthDp = 1280, heightDp = 800, setup = { home() }, actions = { tapLabel("Board"); tapText("Add app screenshots to the README") }),
     Scene("wide-terminal", route = Routes.terminal(DEVBOX, APP_SHELL), widthDp = 840, heightDp = 940),
-    Scene("wide-task", widthDp = 1280, heightDp = 800, actions = { tapText("Coordinator"); tapText("Review passed. Ready to merge.") }),
+    Scene("wide-task", route = Routes.coordinator(DEVBOX), widthDp = 1280, heightDp = 800, setup = { home() }, actions = { tapText("Taking the Coordinator screenshot") }),
     // A board opened as its own screen on a phone, the window then made wide: a notification's link to one of its
     // tasks moves the board to the right, with that task open.
     Scene(
@@ -282,7 +306,7 @@ fun scenes(): List<Scene> = listOf(
         actions = { runOnUiThread { Links.open(Routes.board(DEVBOX, "herdr-android/9")) }; settle() },
     ),
     // Machines in the middle: the nav bar is under the list.
-    Scene("wide-machines", widthDp = 1280, heightDp = 800, actions = { tapLabel("Machines") }),
+    Scene("wide-machines", widthDp = 1280, heightDp = 800, setup = { home() }, actions = { tapLabel("Machines") }),
     // Rotating across the line keeps what is open as it was: a chat with its key row shown, turned from a phone
     // to a tablet's width and from the tablet back to the phone.
     Scene(
@@ -294,8 +318,8 @@ fun scenes(): List<Scene> = listOf(
         actions = { tapText("Speed up /jobs"); tapLabel("More"); tapText("Show keys") },
     ),
 
-    // Settings and the SSH key's dialogs.
-    Scene("settings", route = Routes.SETTINGS),
+    // Settings (a gear in the Machines bar) and the SSH key's dialogs.
+    Scene("settings", route = Routes.MACHINES, actions = { tapLabel("Settings") }),
     Scene("settings-new-key", route = Routes.SETTINGS, actions = { tapText("New key") }),
     Scene("key-setup", key = IdentityStore.State.Missing),
 

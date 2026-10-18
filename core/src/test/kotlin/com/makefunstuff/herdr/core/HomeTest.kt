@@ -4,6 +4,7 @@ import com.makefunstuff.herdr.core.api.AgentInfo
 import com.makefunstuff.herdr.core.api.ApiCaller
 import com.makefunstuff.herdr.core.api.ApiConnection
 import com.makefunstuff.herdr.core.api.HerdrApi
+import com.makefunstuff.herdr.core.board.BoardAction
 import com.makefunstuff.herdr.core.board.BoardStatus
 import com.makefunstuff.herdr.core.board.BoardTask
 import com.makefunstuff.herdr.core.board.BoardTasks
@@ -125,6 +126,17 @@ class HomeTest {
         assertEquals(listOf("herdr-android/10"), groups[0].todo.map { it.id })
         assertEquals(1, groups[0].done)
         assertEquals(listOf("gpu"), BoardGroup.of(listOf(board(working), board(failed, machine = "gpu")), machine = "gpu").map { it.machineId })
+    }
+
+    @Test
+    fun aWaitingTaskOffersItsAnswer() {
+        assertEquals(BoardAction.Approve to "Approve and merge", Home.answer(approve))
+        assertEquals(BoardAction.Review to "Fix", Home.answer(failed))
+        assertEquals(BoardAction.Tell to "Reply", Home.answer(asks))
+        val mergeFailed = task("""{"id":"a/1","title":"x","state":"blocked","stage":"approval","kind":"permission","mergeFailed":true}""")
+        assertEquals(BoardAction.Fix to "Fix", Home.answer(mergeFailed))
+        assertNull(Home.answer(task("""{"id":"a/2","title":"x","state":"blocked","stage":"pick","kind":"permission"}""")))
+        assertNull(Home.answer(working))
     }
 
     @Test

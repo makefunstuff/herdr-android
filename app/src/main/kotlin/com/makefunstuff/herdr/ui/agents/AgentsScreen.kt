@@ -1,82 +1,108 @@
 package com.makefunstuff.herdr.ui.agents
 
-import com.makefunstuff.herdr.ui.theme.Mono
-import androidx.compose.foundation.layout.Arrangement
+import android.net.Uri
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.ui.semantics.selected
-import androidx.compose.ui.semantics.semantics
-import androidx.navigation.NavBackStackEntry
-import androidx.navigation.compose.currentBackStackEntryAsState
-import android.net.Uri
-import com.makefunstuff.herdr.LocalPanes
-import androidx.compose.ui.Modifier
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.navigation.NavController
-import com.makefunstuff.herdr.Routes
-import com.makefunstuff.herdr.core.api.AgentStatus
-import com.makefunstuff.herdr.core.chat.BlockedPrompt
-import com.makefunstuff.herdr.data.AgentRow
-import com.makefunstuff.herdr.ui.board.BoardCard
-import com.makefunstuff.herdr.ui.board.CoordinatorCard
-import com.makefunstuff.herdr.ui.common.Pill
-import com.makefunstuff.herdr.ui.common.StatusDot
-import com.makefunstuff.herdr.ui.design.QuietCard
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.width
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavBackStackEntry
+import androidx.navigation.NavController
+import androidx.navigation.compose.currentBackStackEntryAsState
+import com.makefunstuff.herdr.LocalPanes
+import com.makefunstuff.herdr.Routes
+import com.makefunstuff.herdr.core.board.Approvals
+import com.makefunstuff.herdr.core.board.BoardAction
+import com.makefunstuff.herdr.core.chat.AgentInput
+import com.makefunstuff.herdr.core.chat.BlockedPrompt
+import com.makefunstuff.herdr.core.home.AgentRow
+import com.makefunstuff.herdr.core.home.Home
+import com.makefunstuff.herdr.core.home.HomeAgent
+import com.makefunstuff.herdr.core.home.Waiting
+import com.makefunstuff.herdr.ui.board.BoardPanel
+import com.makefunstuff.herdr.ui.board.PanelCancel
+import com.makefunstuff.herdr.ui.board.ReadBoards
+import com.makefunstuff.herdr.ui.board.rememberBoardProblems
+import com.makefunstuff.herdr.ui.board.rememberBoards
 import com.makefunstuff.herdr.ui.common.EmptyState
 import com.makefunstuff.herdr.ui.common.LocalContainer
+import com.makefunstuff.herdr.ui.common.MarkdownText
+import com.makefunstuff.herdr.ui.common.StatusDot
+import com.makefunstuff.herdr.ui.common.toast
 import com.makefunstuff.herdr.ui.design.BarIcon
-import com.makefunstuff.herdr.ui.design.AgentMark
-import com.makefunstuff.herdr.ui.design.StatusBadge
-import com.makefunstuff.herdr.ui.theme.CodeStyle
-import com.makefunstuff.herdr.ui.design.HerdrChip
+import com.makefunstuff.herdr.ui.design.ErrorMessage
+import com.makefunstuff.herdr.ui.design.HerdrFab
+import com.makefunstuff.herdr.ui.design.HerdrField
 import com.makefunstuff.herdr.ui.design.HerdrIcons
+import com.makefunstuff.herdr.ui.design.HerdrMenu
 import com.makefunstuff.herdr.ui.design.HerdrTopBar
+import com.makefunstuff.herdr.ui.design.MenuRow
 import com.makefunstuff.herdr.ui.design.PrimaryButton
+import com.makefunstuff.herdr.ui.design.QuietButton
 import com.makefunstuff.herdr.ui.design.SectionHeading
-import com.makefunstuff.herdr.ui.design.StateBlock
 import com.makefunstuff.herdr.ui.manage.AgentActionsSheet
 import com.makefunstuff.herdr.ui.manage.NoticeRow
 import com.makefunstuff.herdr.ui.manage.NoticesSheet
+import com.makefunstuff.herdr.ui.share.Ask
 import com.makefunstuff.herdr.ui.theme.Herdr
 import com.makefunstuff.herdr.ui.theme.Space
-import com.makefunstuff.herdr.ui.theme.color
-import com.makefunstuff.herdr.ui.theme.title
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.launch
 
-private val ORDER = listOf(AgentStatus.Blocked, AgentStatus.Done, AgentStatus.Working, AgentStatus.Idle, AgentStatus.Unknown)
+/** Rows a resting section shows before "more". */
+private const val FOLDED = 4
+
+/** A card as it stood when it was answered here: it stays hidden until this changes. */
+private fun sig(w: Waiting): String = when (w) {
+    is Waiting.Question -> "${w.agent.agent.stateChangeSeq}"
+    is Waiting.Task -> w.task.let { t -> listOf(t.state, t.stage, t.kind, t.msg, t.reviewRound, t.reviewPassed, t.approvalBlocked).joinToString("|") }
+}
+
+/** What is being said back from a card: an answer to an agent's question, or words for a task's agent. */
+private sealed interface Reply {
+    val item: Waiting
+    data class ToAgent(override val item: Waiting.Question) : Reply
+    data class ToTask(override val item: Waiting.Task) : Reply
+}
 
 /**
- * Every agent on every machine, the blocked ones first, under each machine's board and Coordinator.
- * On a wide window it is the left pane ([Panes]): what it opens shows beside it, chosen here.
- * [filterState] and [listState] come from above, so they stay as the list moves between the two layouts.
+ * The home screen: everything that waits for you, across machines, first, each card with its
+ * answers (Yes, No and Reply for a question; Approve and merge, Fix, Reply for a task); then the
+ * agents at work as one line each, those that finished (new until seen) and the rest. Ask opens
+ * the Coordinator. On a wide window it is the left pane ([com.makefunstuff.herdr.Panes]): what it
+ * opens shows beside it, chosen here. [filterState] and [listState] come from above, so they stay
+ * as the list moves between the two layouts.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AgentsScreen(
     nav: NavController,
@@ -85,19 +111,99 @@ fun AgentsScreen(
 ) {
     val container = LocalContainer.current
     val panes = LocalPanes.current
-    val agents by container.hosts.agents.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val hosts by container.hosts.hosts.collectAsStateWithLifecycle()
+    val seen by container.seen.marks.collectAsStateWithLifecycle()
+    val boards = rememberBoards()
+    val boardProblems = rememberBoardProblems()
+    val readNow = remember { Channel<Unit>(Channel.CONFLATED) }
+    ReadBoards(readNow)
     var filter by filterState
+    // A machine filter for one that's gone shows all.
+    if (filter != null && hosts.none { it.machine.id == filter }) filter = null
     // Beside a wide window's list: what is open in the middle, to show it chosen here.
     val entry by nav.currentBackStackEntryAsState()
     val inMiddle = if (panes.wide) entry?.let(::opened) else null
-    var menuAgent by remember { mutableStateOf<AgentRow?>(null) }
+    var menuAgent by remember { mutableStateOf<HomeAgent?>(null) }
     var showNotices by remember { mutableStateOf(false) }
-    val boards = hosts.filter { it.hasBoard }
+    var filterMenu by remember { mutableStateOf(false) }
+    var reply by remember { mutableStateOf<Reply?>(null) }
+    var refusal by remember { mutableStateOf<String?>(null) }
+    var allDone by rememberSaveable { mutableStateOf(false) }
+    var allIdle by rememberSaveable { mutableStateOf(false) }
+    // Cards answered here, by key, with how they stood; and the ones whose answer is on its way.
+    val handled = remember { mutableStateMapOf<String, String>() }
+    val busy = remember { mutableStateMapOf<String, String>() }
     val unread = hosts.sumOf { it.unreadNotices }
     val noticeRows = remember(hosts) {
         hosts.flatMap { h -> h.notices.map { NoticeRow(h.machine.id, h.machine.label, it) } }.sortedByDescending { it.notice.at }
     }
+    val agents = remember(hosts) { HomeAgent.of(hosts) }
+    val home = remember(agents, boards, seen, filter) {
+        Home.of(agents.filter { filter == null || it.machineId == filter }, boards.filter { filter == null || it.machineId == filter }, seen)
+    }
+    val needsYou = home.needsYou.filter { handled[it.key] != sig(it) }
+    val showMachine = hosts.size > 1 && filter == null
+    val anyBoard = hosts.any { it.hasBoard }
+
+    fun answer(q: Waiting.Question, prompt: BlockedPrompt, index: Int) {
+        if (q.key in busy) return
+        val label = prompt.options[index].label
+        busy[q.key] = "Answering: $label"
+        scope.launch {
+            runCatching {
+                val session = container.hosts.session(q.machineId) ?: error("This machine isn't in the app any more")
+                AgentInput.choose(session.awaitApi(10_000), q.agent.agent.paneId, prompt.question, index, label)
+                session.refresh()
+            }
+                .onSuccess { handled[q.key] = sig(q); context.toast("Answered: $label") }
+                .onFailure { context.toast(it.message ?: "Couldn't answer") }
+            busy.remove(q.key)
+        }
+    }
+
+    fun say(r: Reply, text: String) {
+        val w = r.item
+        busy[w.key] = "Sending"
+        scope.launch {
+            runCatching {
+                val session = container.hosts.session(w.machineId) ?: error("This machine isn't in the app any more")
+                when (r) {
+                    is Reply.ToAgent -> {
+                        AgentInput.send(session.awaitApi(10_000), r.item.agent.agent.paneId, text, named = true, blocked = true)
+                        session.refresh()
+                        "Sent: $text"
+                    }
+                    is Reply.ToTask -> session.awaitBoard().act(BoardAction.Tell, r.item.task.id, text).ifEmpty { "Sent: $text" }
+                }
+            }
+                .onSuccess { handled[w.key] = sig(w); context.toast(it) }
+                .onFailure { refusal = it.message ?: "Couldn't send that" }
+            busy.remove(w.key)
+            readNow.trySend(Unit)
+        }
+    }
+
+    fun act(w: Waiting.Task, action: BoardAction, label: String) {
+        if (w.key in busy) return
+        if (action == BoardAction.Tell) { reply = Reply.ToTask(w); return }
+        busy[w.key] = "$label · ${w.task.name}"
+        scope.launch {
+            runCatching { (container.hosts.session(w.machineId) ?: error("This machine isn't in the app any more")).awaitBoard().act(action, w.task.id) }
+                .onSuccess { handled[w.key] = sig(w); context.toast(it.ifEmpty { "Done" }) }
+                .onFailure { refusal = it.message ?: "The board refused" }
+            busy.remove(w.key)
+            readNow.trySend(Unit)
+        }
+    }
+
+    /** Finished work opens on its review card (what changed, the review, the checks); any other task on its board. */
+    fun openTask(w: Waiting.Task) {
+        if (Approvals.waits(w.task)) panes.open(nav, Routes.review(w.machineId, w.task.id)) else panes.openBoard(nav, w.machineId, w.task.id)
+    }
+
+    fun openAgent(a: HomeAgent) = panes.open(nav, Routes.agent(a.machineId, a.agent.paneId))
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -114,6 +220,10 @@ fun AgentsScreen(
                     badge = unread,
                 )
             }
+        },
+        floatingActionButton = {
+            // The Coordinator: the one used last, or the machine to ask on (AskScreen decides).
+            if (anyBoard) HerdrFab("Ask", "Ask the Coordinator", icon = HerdrIcons.MessagesSquare) { panes.open(nav, Routes.ask(Ask.COORDINATOR)) }
         },
     ) { padding ->
         when {
@@ -133,78 +243,116 @@ fun AgentsScreen(
                 icon = if (hosts.any { it.online }) HerdrIcons.Bot else HerdrIcons.Monitor,
             )
 
-            else -> {
-                val shown = agents.filter { filter == null || it.machine.id == filter }
-                val grouped = shown.groupBy { it.agent.agentStatus }
-                val shownBoards = boards.filter { filter == null || it.machine.id == filter }
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier.padding(padding),
-                    contentPadding = PaddingValues(bottom = Space.xl),
-                ) {
-                    if (hosts.size > 1) {
-                        item(key = "filters") {
-                            LazyRow(
-                                contentPadding = PaddingValues(horizontal = Space.screen),
-                                horizontalArrangement = Arrangement.spacedBy(Space.s),
-                            ) {
-                                item { HerdrChip("All machines", selected = filter == null, onClick = { filter = null }) }
-                                items(hosts, key = { it.machine.id }) { h ->
-                                    HerdrChip(h.machine.label, selected = filter == h.machine.id, onClick = { filter = h.machine.id })
-                                }
+            else -> LazyColumn(
+                state = listState,
+                modifier = Modifier.padding(padding),
+                // Room under the last row for the Ask button.
+                contentPadding = PaddingValues(bottom = 96.dp),
+            ) {
+                item(key = "machines") {
+                    MachinesLine(
+                        total = hosts.size, online = hosts.count { it.online },
+                        filter = hosts.firstOrNull { it.machine.id == filter }?.machine?.label,
+                        onFilter = if (hosts.size > 1) ({ filterMenu = true }) else null,
+                    ) {
+                        HerdrMenu(expanded = filterMenu, onDismissRequest = { filterMenu = false }, title = "Show") {
+                            MenuRow("All machines", HerdrIcons.Layers, { filter = null; filterMenu = false })
+                            hosts.forEach { h ->
+                                MenuRow(
+                                    h.machine.label + if (h.online) "" else " · offline",
+                                    if (h.machine.id == filter) HerdrIcons.Check else HerdrIcons.Monitor,
+                                    { filter = h.machine.id; filterMenu = false },
+                                )
                             }
                         }
                     }
-                    // The work board of each machine that has one, above its agents.
-                    items(shownBoards, key = { "board/${it.machine.id}" }) { h ->
-                        Column(Modifier.padding(horizontal = Space.screen, vertical = Space.xs), verticalArrangement = Arrangement.spacedBy(Space.s)) {
-                            BoardCard(h.machine.label, showMachine = hosts.size > 1, selected = panes.board == h.machine.id) {
-                                panes.openBoard(nav, h.machine.id)
-                            }
-                            CoordinatorCard(h.machine.label, showMachine = hosts.size > 1, selected = inMiddle == Routes.coordinator(h.machine.id)) {
-                                panes.open(nav, Routes.coordinator(h.machine.id))
-                            }
+                }
+                boardProblems.filter { (label, _) -> filter == null || hosts.any { it.machine.id == filter && it.machine.label == label } }.forEach { (label, p) ->
+                    item(key = "problem/$label") {
+                        ErrorMessage("$label's board: $p", Modifier.padding(horizontal = Space.screen, vertical = Space.xs), onRetry = { readNow.trySend(Unit) })
+                    }
+                }
+                item(key = "h-needs") {
+                    SectionHeading(
+                        if (needsYou.isEmpty()) "Needs you" else "Needs you · ${needsYou.size}",
+                        Modifier.padding(horizontal = Space.screen + Space.xs), top = Space.s,
+                        color = if (needsYou.isEmpty()) Herdr.colors.muted else Herdr.colors.red,
+                    )
+                }
+                if (needsYou.isEmpty()) {
+                    item(key = "none-waiting") {
+                        Row(Modifier.padding(horizontal = Space.screen + Space.xs, vertical = Space.xs), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(HerdrIcons.CircleCheck, null, tint = Herdr.colors.done, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(Space.s))
+                            Text("Nothing waits for you", style = MaterialTheme.typography.bodyMedium, color = Herdr.colors.muted)
                         }
                     }
-                    if (shown.isEmpty()) {
-                        item(key = "none") {
-                            StateBlock(HerdrIcons.Bot, "No agents here", "Nothing is running on this machine right now.", Modifier.padding(top = Space.xl))
-                        }
-                    }
-                    for (status in ORDER) {
-                        val rows = grouped[status].orEmpty().sortedByDescending { it.agent.stateChangeSeq }
-                        if (rows.isEmpty()) continue
-                        item(key = "h-$status") {
-                            SectionHeading(
-                                "${status.title()} · ${rows.size}",
-                                Modifier.padding(horizontal = Space.screen + Space.xs),
-                                top = Space.m,
-                            )
-                        }
-                        items(rows, key = { "${it.machine.id}/${it.agent.paneId}" }) { row ->
-                            AgentCard(
-                                row,
-                                showMachine = hosts.size > 1,
-                                selected = inMiddle == "${row.machine.id}/${row.agent.paneId}",
-                                onOpen = { panes.open(nav, Routes.agent(row.machine.id, row.agent.paneId)) },
-                                onMenu = { menuAgent = row },
+                }
+                items(needsYou, key = { it.key }) { w ->
+                    when (w) {
+                        is Waiting.Question -> QuestionCard(
+                            w, showMachine, selected = inMiddle == w.agent.key, busy = busy[w.key],
+                            onOpen = { openAgent(w.agent) }, onMenu = { menuAgent = w.agent },
+                            onChoose = { prompt, i -> answer(w, prompt, i) },
+                            onReply = { reply = Reply.ToAgent(w) },
+                        )
+                        is Waiting.Task -> {
+                            val a = Home.answer(w.task)
+                            TaskCard(
+                                w, showMachine,
+                                selected = inMiddle == "review/${w.machineId}/${w.task.id}",
+                                busy = busy[w.key], answer = a,
+                                onOpen = { openTask(w) },
+                                onAnswer = { a?.let { (action, label) -> act(w, action, label) } },
                             )
                         }
                     }
                 }
+                section("Working", home.working, showAll = true, onMore = {}, inMiddle, showMachine, ::openAgent) { menuAgent = it }
+                section(
+                    "Done", home.done, showAll = allDone, onMore = { allDone = !allDone }, inMiddle, showMachine, ::openAgent,
+                    fresh = home.fresh,
+                    onSeen = { container.seen.set(Home.seenAll(seen, home, agents)) },
+                ) { menuAgent = it }
+                section("Idle", home.idle, showAll = allIdle, onMore = { allIdle = !allIdle }, inMiddle, showMachine, ::openAgent) { menuAgent = it }
             }
         }
     }
 
-    menuAgent?.let { row ->
-        container.hosts.session(row.machine.id)?.let { session ->
+    menuAgent?.let { a ->
+        container.hosts.session(a.machineId)?.let { session ->
             AgentActionsSheet(
                 session = session,
-                agent = row.agent,
-                paneLabel = row.agent.paneId,
+                agent = a.agent,
+                paneLabel = a.agent.paneId,
                 onDismiss = { menuAgent = null },
-                onTerminal = { menuAgent = null; panes.open(nav, Routes.terminal(row.machine.id, row.agent.paneId)) },
+                onTerminal = { menuAgent = null; panes.open(nav, Routes.terminal(a.machineId, a.agent.paneId)) },
             )
+        }
+    }
+    reply?.let { r ->
+        var text by remember(r) { mutableStateOf("") }
+        val dismiss = { reply = null }
+        BoardPanel(
+            when (r) {
+                is Reply.ToAgent -> "Answer ${r.item.task?.name ?: r.item.agent.agent.displayName}"
+                is Reply.ToTask -> "Tell ${r.item.task.name}'s agent"
+            },
+            onDismiss = dismiss,
+            buttons = {
+                PanelCancel(dismiss)
+                PrimaryButton("Send", enabled = text.isNotBlank()) { reply = null; say(r, text.trim()) }
+            },
+        ) {
+            (r as? Reply.ToAgent)?.let { q -> rememberAsked(q.item.agent)?.question }?.let {
+                Text(it, style = MaterialTheme.typography.bodyMedium, color = Herdr.colors.muted, maxLines = 3, overflow = TextOverflow.Ellipsis)
+            }
+            HerdrField(text, { text = it }, modifier = Modifier.fillMaxWidth(), minLines = 3, placeholder = { Text("Your answer") })
+        }
+    }
+    refusal?.let { r ->
+        BoardPanel("That didn't go through", onDismiss = { refusal = null }, accent = Herdr.colors.red, buttons = { PrimaryButton("OK") { refusal = null } }) {
+            MarkdownText(r)
         }
     }
     if (showNotices) {
@@ -218,84 +366,77 @@ fun AgentsScreen(
     }
 }
 
-/** What the middle of a wide window shows, as the list names it: `machine/pane` for an agent's chat or terminal, else the route. */
-private fun opened(entry: NavBackStackEntry): String? {
-    val args = entry.arguments
-    return when (entry.destination.route) {
-        Routes.AGENT, Routes.TERMINAL -> "${args?.getString("mid")}/${Uri.decode(args?.getString("pane").orEmpty())}"
-        Routes.COORDINATOR -> Routes.coordinator(args?.getString("mid").orEmpty())
-        else -> null
+/** A section of one-line agents under its heading; a long resting one folds after [FOLDED] rows. */
+private fun LazyListScope.section(
+    title: String,
+    rows: List<AgentRow>,
+    showAll: Boolean,
+    onMore: () -> Unit,
+    inMiddle: String?,
+    showMachine: Boolean,
+    onOpen: (HomeAgent) -> Unit,
+    fresh: Int = 0,
+    onSeen: (() -> Unit)? = null,
+    onMenu: (HomeAgent) -> Unit,
+) {
+    if (rows.isEmpty()) return
+    item(key = "h-$title") {
+        SectionHeading(
+            "$title · ${rows.size}" + if (fresh > 0) " · $fresh new" else "",
+            Modifier.padding(start = Space.screen + Space.xs, end = Space.s), top = Space.l,
+            trailing = if (fresh > 0 && onSeen != null) ({ QuietButton(onClick = onSeen, color = Herdr.colors.accent) { Text("Mark seen") } }) else null,
+        )
     }
-}
-
-/** One agent as a card: status dot, agent and what it works on, a status pill, where it runs, and for one that waits on you, its question. */
-@Composable
-private fun AgentCard(row: AgentRow, showMachine: Boolean, selected: Boolean, onOpen: () -> Unit, onMenu: () -> Unit) {
-    val agent = row.agent
-    val status = agent.agentStatus
-    val preview = rememberLastLine(row)
-    val c = Herdr.colors
-    QuietCard(
-        Modifier.padding(horizontal = Space.screen, vertical = Space.xs).semantics { this.selected = selected },
-        padded = true, onClick = onOpen, onLongClick = onMenu, onClickLabel = "Open chat",
-        // Open beside the list: the chosen row's neutral fill (DESIGN.md: selection is never amber).
-        color = if (selected) c.hover else c.card, edge = if (selected) c.lineStrong else c.line,
-    ) {
-        // The web UI's agent row: the agent's brand mark in the leading cell, the title, how it is at the right.
-        Row(verticalAlignment = Alignment.Top) {
-            AgentMark(agent.agent ?: agent.displayName, Modifier.padding(top = 1.dp))
-            Spacer(Modifier.width(Space.m))
-            Column(Modifier.weight(1f)) {
-                Text(
-                    agent.subtitle ?: agent.displayName,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = c.strong,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    (if (agent.subtitle != null) "${agent.displayName} · " else "") +
-                        (if (showMachine) "${row.machine.label} › " else "") + row.location,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = c.muted,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(top = Space.xxs),
-                )
-            }
-            if (status != AgentStatus.Unknown) {
-                Spacer(Modifier.width(Space.s))
-                StatusBadge(if (status == AgentStatus.Blocked) "needs you" else agent.statusLabel, status.color())
-            }
-        }
-        if (status == AgentStatus.Blocked && preview != null) {
+    val shown = if (showAll || rows.size <= FOLDED + 1) rows else rows.take(FOLDED)
+    items(shown, key = { "${title}/${it.agent.key}" }) { row ->
+        AgentLine(row, showMachine, selected = inMiddle == row.agent.key, onOpen = { onOpen(row.agent) }, onMenu = { onMenu(row.agent) })
+    }
+    if (rows.size > FOLDED + 1) {
+        item(key = "more-$title") {
             Text(
-                preview,
-                style = CodeStyle.copy(fontSize = MaterialTheme.typography.bodySmall.fontSize, lineHeight = MaterialTheme.typography.bodySmall.lineHeight),
-                color = c.red,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(start = 34.dp, top = Space.s),
+                if (showAll) "Show fewer" else "${rows.size - FOLDED} more",
+                style = MaterialTheme.typography.labelLarge, color = Herdr.colors.accent,
+                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(onClick = onMore).padding(horizontal = Space.screen + Space.xs, vertical = Space.m),
             )
         }
     }
 }
 
-/** For blocked agents, the most recent non-empty screen lines, so you can see what it's asking. */
+/** One line for the machines: how many are online, and which one the list shows (a menu to choose). */
 @Composable
-private fun rememberLastLine(row: AgentRow): String? {
-    if (row.agent.agentStatus != AgentStatus.Blocked) return null
-    val container = LocalContainer.current
-    val cache = remember { mutableStateMapOf<String, String>() }
-    val key = "${row.machine.id}/${row.agent.paneId}/${row.agent.stateChangeSeq}"
-    LaunchedEffect(key) {
-        val session = container.hosts.session(row.machine.id) ?: return@LaunchedEffect
-        runCatching {
-            val text = session.awaitApi(5_000).readPane(row.agent.paneId, source = "visible", lines = 40).text
-            cache[key] = BlockedPrompt.parse(text)?.question ?: PromptGuess.question(text) ?: return@runCatching
+private fun MachinesLine(total: Int, online: Int, filter: String?, onFilter: (() -> Unit)?, menu: @Composable () -> Unit) {
+    val c = Herdr.colors
+    Row(
+        Modifier.fillMaxWidth().padding(start = Space.screen + Space.xs, end = Space.s).heightIn(min = 48.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        StatusDot(if (online > 0) c.done else c.idle)
+        Spacer(Modifier.width(Space.s))
+        Text(
+            when {
+                total == 1 -> if (online == 1) "1 machine · online" else "1 machine · offline"
+                else -> "$total machines · $online online"
+            },
+            style = MaterialTheme.typography.bodyMedium, color = c.muted, modifier = Modifier.weight(1f), maxLines = 1,
+        )
+        if (onFilter != null) Box {
+            QuietButton(onClick = onFilter) {
+                Text(filter ?: "All machines", maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(end = Space.xs))
+                Icon(HerdrIcons.ChevronDown, "Choose the machine", Modifier.size(18.dp))
+            }
+            menu()
         }
     }
-    return cache[key]
+}
+
+/** What the middle of a wide window shows, as the list names it: `machine/pane` for an agent's chat or terminal, else the route. */
+private fun opened(entry: NavBackStackEntry): String? {
+    val args = entry.arguments
+    return when (entry.destination.route) {
+        Routes.AGENT, Routes.TERMINAL -> "${args?.getString("mid")}/${Uri.decode(args?.getString("pane").orEmpty())}"
+        Routes.REVIEW -> "review/${args?.getString("mid")?.let(Uri::decode)}/${args?.getString("task")?.let(Uri::decode)}"
+        else -> null
+    }
 }
 
 /** Picks the line most likely to be the agent's question from the bottom of its screen. */

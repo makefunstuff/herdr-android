@@ -111,6 +111,9 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
 
     // The chat is open: its notification has done its job.
     LaunchedEffect(machineId, paneId) { container.inbox.dismiss(Alerts.agentTag(machineId, paneId)) }
+    // A finish shown here is seen: the Agents screen no longer lists it as new.
+    val finished = agent?.takeIf { it.agentStatus == AgentStatus.Done }?.let { it.completionSeq ?: it.stateChangeSeq }
+    LaunchedEffect(machineId, paneId, finished) { finished?.let { container.seen.mark(machineId, paneId, it) } }
 
     val chat = remember(session, paneId) { AgentChat(session, paneId, scope) }
     DisposableEffect(chat) {
