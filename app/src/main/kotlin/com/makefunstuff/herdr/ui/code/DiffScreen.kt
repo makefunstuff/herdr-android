@@ -94,7 +94,7 @@ fun DiffScreen(nav: NavController, spot: CodeSpot, src: String, path: String) {
     val at = files.indexOfFirst { it.path == path || it.oldPath == path }
     val f = files.getOrNull(at)
     val language = remember(path) { Syntax.language(path) }
-    val rows = remember(f, language) { f?.let { rows(it, language) }.orEmpty() }
+    val rows = remember(f, language) { f?.let { diffRows(it, language) }.orEmpty() }
     var chosen by remember(path) { mutableStateOf<IntRange?>(null) }
     var anchor by remember(path) { mutableStateOf<Int?>(null) }
     var commenting by remember { mutableStateOf(false) }
@@ -182,7 +182,7 @@ fun DiffScreen(nav: NavController, spot: CodeSpot, src: String, path: String) {
 }
 
 /** A diff's lines as rows: each hunk under its heading, the code's state carried from line to line within it. */
-private fun rows(f: FileDiff, language: Language?): List<CodeRow> = buildList {
+internal fun diffRows(f: FileDiff, language: Language?): List<CodeRow> = buildList {
     f.hunks.forEachIndexed { hi, h ->
         val where = h.newStart.takeIf { it > 0 }?.let { "Line $it" } ?: "Old line ${h.oldStart}"
         add(CodeRow("h$hi", if (h.section.isNotEmpty()) "$where · ${h.section}" else where, emptyList(), CodeRow.Kind.Hunk))

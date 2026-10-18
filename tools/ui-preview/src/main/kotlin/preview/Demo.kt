@@ -209,6 +209,15 @@ object Demo {
                 SITE_SESSION to resource("codex-site.jsonl"),
             ),
             board = FakeBoard(),
+            // AND-9's timeline: its agent's session (Claude Code) and its reviewer's (codex), with their times, and the board's record of it.
+            // The app agent's own timeline (from its chat) is that session while it still works.
+            activity = mapOf(
+                "/home/demo/.claude/projects/-home-demo-src-herdr-android-9/$APP_SESSION.jsonl" to resource("activity/claude-and9.jsonl"),
+                APP_SESSION to resource("activity/claude-and9-live.jsonl"),
+                "0199a3d0-9e8f-7a10-b2c3-d4e5f6a7b8c9" to resource("activity/codex-and9-review.jsonl"),
+            ),
+            records = mapOf("herdr-android/9" to resource("activity/task-herdr-android-9.json")),
+            said = mapOf("herdr-android/9" to resource("activity/said-herdr-android-9.jsonl")),
             workspaceTokens = mapOf("w1" to mapOf("branch" to "work/9-last-answered", "pr" to "#9")),
             journal = devboxJournal(),
             code = FakeCode(),

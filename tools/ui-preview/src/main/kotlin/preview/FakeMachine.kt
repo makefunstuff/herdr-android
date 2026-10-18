@@ -54,6 +54,11 @@ class FakeMachine(
     var screens: Map<String, String> = emptyMap(),
     /** Agent session id → transcript (JSON lines). */
     var transcripts: Map<String, String> = emptyMap(),
+    /** Agent sessions as the activity timeline reads them (with their times), by the path or id asked for; else [transcripts]. */
+    var activity: Map<String, String> = emptyMap(),
+    /** The board's record of a task (`task.json`) and what it typed to its agents (`said-by.jsonl`), by task id. */
+    var records: Map<String, String> = emptyMap(),
+    var said: Map<String, String> = emptyMap(),
     /** The work board's data, or null when herdr-projects isn't installed there. */
     var board: FakeBoard? = null,
     /** Integration metadata per workspace (`workspace.get`'s tokens). */
@@ -92,6 +97,10 @@ class FakeMachine(
             // herdr-push: only its journal is asked for in the previews; without one it isn't installed.
             "herdr-push" in command && "journal" in w -> journal?.let { ok(it.toString() + "\n") } ?: CommandResult(126, "", "")
             "command -v herdr-projects" in command -> board?.let { ok(BOARD_PATH + "\n") } ?: CommandResult(127, "", "")
+            // The board's record of a task, for its timeline (ActivityCommands.record).
+            "herdr-activity-record" in command -> Shell.words(w.last()).last().let { task ->
+                ok("@@herdr-activity task\n" + records[task].orEmpty() + "\n@@herdr-activity said\n" + said[task].orEmpty() + "\n@@herdr-activity end\n")
+            }
             BOARD_PATH in command -> board?.run(command) ?: CommandResult(127, "", "herdr-projects: not found")
             w.containsAll(listOf("machine", "list", "--json")) -> ok("""{"machines":[]}""")
             "--version" in w -> ok("herdr $version\n")
@@ -122,6 +131,25 @@ class FakeMachine(
                     out.print(text.trimEnd() + "\n")
                 }
                 out.flush()
+            }
+            // The activity timeline's sessions (ActivityCommands.sessions): bytes, follow, then agent, kind, value each.
+            "herdr-activity" in w -> {
+                val args = w.drop(w.indexOf("herdr-activity") + 1)
+                val follow = args.getOrNull(1) == "1"
+                stream(keepOpen = follow) { _, out ->
+                    var live: String? = null
+                    args.drop(2).chunked(3).filter { it.size == 3 }.forEach { (agent, _, value) ->
+                        val text = activity[value] ?: transcripts[value]
+                        if (text == null) out.println("@@herdr-activity missing $agent $value") else {
+                            out.println("@@herdr-activity session $agent ${text.toByteArray().size} $value")
+                            out.print(text.trimEnd() + "\n")
+                            live = value
+                        }
+                    }
+                    out.println("@@herdr-activity done")
+                    if (follow && live != null) out.println("@@herdr-activity live $live")
+                    out.flush()
+                }
             }
             w.containsAll(listOf("terminal", "session", "control")) -> stream { _, out ->
                 val pane = w[w.indexOf("control") + 1]
@@ -199,7 +227,7 @@ class ApiError(val code: String, override val message: String) : Exception(messa
  * A process on the fake machine: [body] reads its stdin and writes its stdout on a thread of its
  * own, and the stream then stays open, as a remote tail or terminal does, until the app closes it.
  */
-private fun stream(body: (BufferedReader, PrintStream) -> Unit): RemoteProcess {
+private fun stream(keepOpen: Boolean = true, body: (BufferedReader, PrintStream) -> Unit): RemoteProcess {
     val toApp = Pipe()
     val fromApp = Pipe()
     val out = PrintStream(toApp.output, false, Charsets.UTF_8)
@@ -209,7 +237,7 @@ private fun stream(body: (BufferedReader, PrintStream) -> Unit): RemoteProcess {
             body(reader, out)
             out.flush()
             // Keep the stream open while the app holds it.
-            while (reader.readLine() != null) Unit
+            if (keepOpen) while (reader.readLine() != null) Unit
         }
         toApp.close()
     }

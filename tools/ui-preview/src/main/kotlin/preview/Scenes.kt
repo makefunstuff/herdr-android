@@ -152,6 +152,27 @@ fun scenes(): List<Scene> = listOf(
     // bubbles not yet allowed for the app, and the bubble's own window (an agent's chat, the Coordinator), which
     // has no back arrow and opens the chat in the app instead.
     Scene("chat-float", route = Routes.agent(DEVBOX, APP_AGENT), actions = { tapLabel("More") }),
+
+    // The activity timeline: a board task's (every session its agents had, and the board's events), and one agent's, live.
+    Scene("activity", route = Routes.activity(DEVBOX, task = "herdr-android/9", name = "AND-9"), heightDp = 2400),
+    Scene("activity-failures", route = Routes.activity(DEVBOX, task = "herdr-android/9", name = "AND-9"), heightDp = 1100, actions = { tapText("Failures") }),
+    Scene("activity-open", route = Routes.activity(DEVBOX, task = "herdr-android/9", name = "AND-9"), heightDp = 1500, actions = {
+        tapText("Commands")
+        tapText("Run the core tests")
+    }),
+    Scene("activity-diff", route = Routes.activity(DEVBOX, task = "herdr-android/9", name = "AND-9"), actions = {
+        tapText("Edits")
+        tapText("core/src/main/kotlin/demo/herdr/core/host/HostSession.kt")
+    }),
+    Scene("activity-review", route = Routes.activity(DEVBOX, task = "herdr-android/9", name = "AND-9"), heightDp = 2700, actions = {
+        tapText("Review round 1 passed")
+    }),
+    // A jump to a failure the Edits filter hides: the filter gives way and the failed step shows.
+    Scene("activity-jump", route = Routes.activity(DEVBOX, task = "herdr-android/9", name = "AND-9"), actions = {
+        tapText("Edits")
+        tapText("Jump to a failure")
+    }),
+    Scene("activity-agent", route = Routes.activity(DEVBOX, pane = APP_AGENT), heightDp = 1600),
     Scene(
         "float-off", route = Routes.coordinator(DEVBOX), setup = { bubblesAllowed = false },
         actions = { tapLabel("Float over other apps") },

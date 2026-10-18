@@ -218,6 +218,8 @@ fun TaskDetailScreen(
     onCode: ((TaskDetails) -> Unit)? = null,
     /** Opens the quick commands of the task's worktree. */
     onQuick: ((TaskDetails) -> Unit)? = null,
+    /** Opens the timeline of what its agents did. */
+    onActivity: (() -> Unit)? = null,
 ) {
     BackHandler(enabled = backEnabled, onBack = onBack)
     val owner = LocalLifecycleOwner.current
@@ -238,7 +240,7 @@ fun TaskDetailScreen(
             }
         }
     }
-    TaskDetailContent(t, details, problem, busy, onBack, onAction, onPick, onMore, onCode, onQuick)
+    TaskDetailContent(t, details, problem, busy, onBack, onAction, onPick, onMore, onCode, onQuick, onActivity)
 }
 
 /** The screen itself, from data alone: what [TaskDetailScreen] draws once it has read `details`. */
@@ -255,6 +257,7 @@ fun TaskDetailContent(
     onMore: () -> Unit,
     onCode: ((TaskDetails) -> Unit)? = null,
     onQuick: ((TaskDetails) -> Unit)? = null,
+    onActivity: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val primary = BoardActions.primary(t)
@@ -349,6 +352,22 @@ fun TaskDetailContent(
                 if (d.plan.isNotEmpty()) Section("Plan", startOpen = t.status == BoardStatus.PlanReady) { MarkdownText(d.plan, style = MaterialTheme.typography.bodyMedium) }
                 if (d.reviews.isNotEmpty()) Section("Reviews · ${d.reviews.size}", startOpen = true) {
                     d.reviews.asReversed().forEachIndexed { i, r -> ReviewView(r, startOpen = i == 0) }
+                }
+                if (onActivity != null && t.status != BoardStatus.Todo) Section("Activity", startOpen = true) {
+                    QuietCard(onClick = onActivity, onClickLabel = "Follow what its agents did", padded = true) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(HerdrIcons.Activity, null, tint = Herdr.colors.muted, modifier = Modifier.size(20.dp))
+                            Column(Modifier.weight(1f).padding(start = Space.m)) {
+                                Text("Activity timeline", style = MaterialTheme.typography.labelLarge, color = Herdr.colors.accent)
+                                Text(
+                                    if (t.status == BoardStatus.Working || t.status == BoardStatus.Reviewing) "Live: each step its agents take, as they take it"
+                                    else "Each step its agents took: commands, edits, tests, reviews",
+                                    style = MaterialTheme.typography.bodySmall, color = Herdr.colors.muted, maxLines = 2,
+                                )
+                            }
+                            Icon(HerdrIcons.ChevronRight, null, tint = Herdr.colors.faint, modifier = Modifier.size(20.dp))
+                        }
+                    }
                 }
                 if (d.worktree.isNotEmpty() && onCode != null) Section("Code", startOpen = true) {
                     QuietCard(onClick = { onCode(d) }, onClickLabel = "Read the task's code and changes", padded = true) {

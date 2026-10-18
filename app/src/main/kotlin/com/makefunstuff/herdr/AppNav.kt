@@ -47,6 +47,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.makefunstuff.herdr.core.api.AgentStatus
 import com.makefunstuff.herdr.data.IdentityStore
+import com.makefunstuff.herdr.ui.activity.ActivityScreen
 import com.makefunstuff.herdr.ui.admin.AdminScreen
 import com.makefunstuff.herdr.ui.agents.AgentScreen
 import com.makefunstuff.herdr.ui.agents.AgentsScreen
@@ -141,6 +142,8 @@ object Routes {
     const val CODE_DIFF = "code/{mid}/diff?${CodeSpot.ARGS}&src={src}&file={file}"
     const val CODE_COMMIT = "code/{mid}/commit?${CodeSpot.ARGS}&sha={sha}"
     const val CODE_NOTES = "code/{mid}/notes?${CodeSpot.ARGS}"
+    /** What an agent did, as a timeline: a board task's (its key as [name]), or one agent's (its pane). */
+    const val ACTIVITY = "activity/{mid}?task={task}&name={name}&pane={pane}"
     /** A machine's quick-command runs, with one open ([quickRuns]'s run, from its notification). */
     const val QUICK = "quick/{mid}?run={run}"
 
@@ -165,6 +168,9 @@ object Routes {
         "code/${spot.machine}/diff?${spot.query()}&src=${Uri.encode(src)}&file=${Uri.encode(file)}"
     fun codeCommit(spot: CodeSpot, sha: String) = "code/${spot.machine}/commit?${spot.query()}&sha=$sha"
     fun codeNotes(spot: CodeSpot) = "code/${spot.machine}/notes?${spot.query()}"
+    fun activity(mid: String, task: String? = null, name: String? = null, pane: String? = null) =
+        "activity/$mid" + listOfNotNull(task?.let { "task=" + Uri.encode(it) }, name?.let { "name=" + Uri.encode(it) }, pane?.let { "pane=" + Uri.encode(it) })
+            .joinToString("&").let { if (it.isEmpty()) "" else "?$it" }
     fun quickRuns(mid: String, run: String? = null) = if (run == null) "quick/$mid" else "quick/$mid?run=${Uri.encode(run)}"
     fun worktrees(mid: String, workspaceId: String? = null) =
         if (workspaceId == null) "worktrees/$mid" else "worktrees/$mid?ws=${Uri.encode(workspaceId)}"
@@ -311,6 +317,14 @@ internal fun NavGraphBuilder.screens(nav: NavHostController, agents: @Composable
     composable(Routes.CODE_NOTES) { NotesScreen(nav, it.codeSpot()) }
     composable(Routes.QUICK) {
         com.makefunstuff.herdr.ui.quick.QuickRunsScreen(nav, it.arguments?.getString("mid").orEmpty(), it.arguments?.getString("run")?.let(Uri::decode)?.ifEmpty { null })
+    }
+    composable(Routes.ACTIVITY) {
+        ActivityScreen(
+            nav, it.arguments?.getString("mid").orEmpty(),
+            taskId = it.arguments?.getString("task")?.let(Uri::decode)?.ifEmpty { null },
+            taskName = it.arguments?.getString("name")?.let(Uri::decode)?.ifEmpty { null },
+            paneId = it.arguments?.getString("pane")?.let(Uri::decode)?.ifEmpty { null },
+        )
     }
     composable(Routes.COORDINATOR) { CoordinatorScreen(nav, it.arguments?.getString("mid").orEmpty()) }
     composable(Routes.TERMINAL) {
