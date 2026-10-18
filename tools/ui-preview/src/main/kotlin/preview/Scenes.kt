@@ -108,6 +108,12 @@ fun scenes(): List<Scene> = listOf(
     Scene("agent-actions", setup = { home() }, actions = { longPressText("Speed up /jobs") }),
     // A one-shot watch from the long-press sheet: tell me once it finishes.
     Scene("agent-watch", setup = { home() }, actions = { longPressText("Speed up /jobs"); tapText("Notify me when it finishes") }),
+    // TalkBack: everything behind a long press offered as actions on the card or row (read from the app's semantics,
+    // drawn as TalkBack's Actions menu): a question's answers first, then its terminal, why this state, mute, the sheet;
+    // a row's triage; a board card's actions. One carried out: why this state.
+    Scene("agent-talkback", setup = { home() }, actions = { talkback("Speed up /jobs") }),
+    Scene("agent-line-talkback", heightDp = 1500, setup = { home() }, actions = { talkback("Profile the data loader") }),
+    Scene("agent-why", setup = { home(); host(DEVBOX).on("agent.explain") { Demo.explain() } }, actions = { talkbackDo("Speed up /jobs", "Why this state?") }),
     // In a chat, another agent starts asking: one line drops from the top (never for the chat that is open).
     Scene("pill", route = Routes.agent(DEVBOX, APP_AGENT), setup = { host(DEVBOX).snapshot = Demo.devbox(apiStatus = "working") }, actions = { ctx ->
         ctx.data.host(DEVBOX).snapshot = Demo.devbox()
@@ -212,6 +218,8 @@ fun scenes(): List<Scene> = listOf(
     Scene("chat-files", route = Routes.agent(DEVBOX, APP_AGENT), actions = { type("Look at @mach") }),
     Scene("chat-model", route = Routes.agent(DEVBOX, APP_AGENT), actions = { tapLabel("Model Opus 5.5, context 62% full") }),
     Scene("quick-replies", route = Routes.COMPOSER, setup = { replies() }),
+    // The chats' own text size (Settings → Text size), larger than the phone's.
+    Scene("chat-large-text", route = Routes.agent(DEVBOX, APP_AGENT), setup = { textSizes = com.makefunstuff.herdr.data.TextSizeStore.Sizes(chat = 1.3f) }),
 
     // Pictures for an agent: what the attach button offers, two screenshots in the composer (copied to devbox,
     // each with its ×), one opened to mark up (an arrow, a highlight, a ring drawn round), one being cropped;
@@ -294,6 +302,7 @@ fun scenes(): List<Scene> = listOf(
     Scene("task", route = Routes.board(DEVBOX), actions = { tapText("Show when each machine last answered") }),
     Scene("task-review-failed", route = Routes.board(DEVBOX), actions = { tapText("Rewrite the install page") }),
     Scene("task-actions", route = Routes.board(DEVBOX), actions = { longPressText("Rewrite the install page") }),
+    Scene("task-talkback", route = Routes.board(DEVBOX), actions = { talkback("Rewrite the install page") }),
     // A task at work offers watches: tell me once its checks pass, once it's done.
     Scene("task-watch", route = Routes.board(DEVBOX), heightDp = 1000, actions = { longPressText("Add app screenshots to the README") }),
     Scene("board-add", route = Routes.board(DEVBOX), actions = { tapLabel("Add a task") }),
@@ -427,6 +436,9 @@ fun scenes(): List<Scene> = listOf(
 
     // A pane as a live terminal.
     Scene("terminal", route = Routes.terminal(DEVBOX, APP_SHELL)),
+    // sudo asks: a masked field over the keys; its own text size.
+    Scene("terminal-password", route = Routes.terminal(DEVBOX, APP_SHELL), setup = { host(DEVBOX).screens += APP_SHELL to Demo.shellAsking() }),
+    Scene("terminal-large-text", route = Routes.terminal(DEVBOX, APP_SHELL), setup = { textSizes = com.makefunstuff.herdr.data.TextSizeStore.Sizes(terminal = 15f) }),
 
     // A window 840 dp wide or more (a tablet, an open foldable, a large window): the agents list, the chat or
     // terminal, the board, side by side. A landscape tablet before anything is opened, then with a chat open
@@ -460,6 +472,8 @@ fun scenes(): List<Scene> = listOf(
 
     // Settings (a gear in the Machines bar) and the SSH key's dialogs.
     Scene("settings", route = Routes.MACHINES, actions = { tapLabel("Settings") }),
+    // Text size: the chats' and the terminal's, each its own.
+    Scene("settings-text", route = Routes.SETTINGS, heightDp = 1300, setup = { textSizes = com.makefunstuff.herdr.data.TextSizeStore.Sizes(chat = 1.3f, terminal = 14f) }),
     Scene("settings-new-key", route = Routes.SETTINGS, actions = { tapText("New key") }),
     Scene("key-setup", key = IdentityStore.State.Missing),
     // The fingerprint before what can't be undone, and the app lock: its settings (one action turned off, the lock

@@ -307,8 +307,10 @@ fun CoordinatorScreen(nav: NavController, machineId: String) {
             if (!typing && tasks != null && state.online && state.boardPath != null) {
                 BoardStrip(remember(tasks) { BoardGlance.of(tasks) }) { panes.openBoard(nav, machineId) }
             }
+            val sizes by container.textSizes.state.collectAsStateWithLifecycle()
             ChatSurface(
                 Modifier.weight(1f).fillMaxWidth(),
+                textScale = sizes.chat,
                 composer = {
                     Column {
                     // The asks are for a Coordinator that is there and an empty message box.

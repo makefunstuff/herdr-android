@@ -1,5 +1,8 @@
 package com.makefunstuff.herdr.ui.board
 
+import com.makefunstuff.herdr.ui.design.approves
+import androidx.compose.ui.platform.LocalView
+import com.makefunstuff.herdr.ui.design.confirmTap
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -155,6 +158,7 @@ fun ReviewScreen(nav: NavController, startMachine: String? = null, startTask: St
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val guard = LocalGuard.current
+    val view = LocalView.current
     val owner = LocalLifecycleOwner.current
     val hosts by container.hosts.hosts.collectAsStateWithLifecycle()
     val boards = hosts.filter { it.hasBoard }
@@ -229,6 +233,7 @@ fun ReviewScreen(nav: NavController, startMachine: String? = null, startTask: St
         if (busy != null) return
         val session = container.hosts.session(item.machineId) ?: return
         busy = "${action.label.removeSuffix("…")} · ${item.task.name}"
+        if (action.approves) view.confirmTap()
         scope.launch {
             runCatching { session.awaitBoard().act(action, item.task.id, text, letter) }
                 .onSuccess { context.toast(it.ifEmpty { "Done" }); handled[item.key] = sig(item.task) }

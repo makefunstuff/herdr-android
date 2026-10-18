@@ -79,8 +79,11 @@ class TriageActions(
         CustomAccessibilityAction("Mark seen") { seen(row); true }.takeIf { row.new },
         CustomAccessibilityAction(if (row.pinned) "Unpin" else "Pin to the top") { pin(row); true },
         CustomAccessibilityAction(if (row.snooze != null) "Stop snoozing" else "Snooze") { snooze(row); true },
-        CustomAccessibilityAction(if (row.muted) "Unmute notifications" else "Mute notifications") { mute(row); true },
+        muteAction(row),
     )
+
+    /** Muting it alone, as a question's card offers it (it has no other triage). */
+    fun muteAction(row: AgentRow) = CustomAccessibilityAction(if (row.muted) "Unmute notifications" else "Mute notifications") { mute(row); true }
 }
 
 /** The actions on the home list, kept in the phone's stores, with a toast for each. */

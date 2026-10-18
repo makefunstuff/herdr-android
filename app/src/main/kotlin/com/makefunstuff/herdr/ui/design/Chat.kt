@@ -1,7 +1,5 @@
 package com.makefunstuff.herdr.ui.design
 
-import android.os.Build
-import android.view.HapticFeedbackConstants
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -161,7 +159,7 @@ fun ChatComposer(
     fun send() {
         if (!canSend) return
         // A light confirmation under the thumb, as a keyboard's own send key gives.
-        view.performHapticFeedback(if (Build.VERSION.SDK_INT >= 30) HapticFeedbackConstants.CONFIRM else HapticFeedbackConstants.KEYBOARD_TAP)
+        view.confirmTap()
         onSend()
     }
 
@@ -391,19 +389,24 @@ fun typingInShortWindow(): Boolean = WindowInsets.isImeVisible && LocalConfigura
  * the [composer] floats over its end, so the transcript's last lines fade behind the card. The
  * [transcript] gets the composer's measured height to leave free under its last line (as bottom
  * content padding), so the newest message is never under the card, and a reversed list stays at
- * its end while the box grows or the keyboard opens.
+ * its end while the box grows or the keyboard opens. [textScale] is the chats' own text size over
+ * the phone's (Settings → Text size), after the phone's own font scaling ([withTextScale]): the
+ * messages and the composer grow with it, the bars don't.
  */
 @Composable
 fun ChatSurface(
     modifier: Modifier = Modifier,
+    textScale: Float = 1f,
     composer: @Composable () -> Unit,
     transcript: @Composable BoxScope.(bottom: Dp) -> Unit,
 ) {
     var height by remember { mutableIntStateOf(0) }
     val density = LocalDensity.current
-    Box(modifier) {
-        transcript(with(density) { height.toDp() })
-        Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().onSizeChanged { height = it.height }) { composer() }
+    CompositionLocalProvider(LocalDensity provides density.withTextScale(textScale)) {
+        Box(modifier) {
+            transcript(with(density) { height.toDp() })
+            Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().onSizeChanged { height = it.height }) { composer() }
+        }
     }
 }
 

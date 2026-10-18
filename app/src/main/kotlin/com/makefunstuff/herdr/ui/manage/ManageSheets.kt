@@ -1,5 +1,6 @@
 package com.makefunstuff.herdr.ui.manage
 
+import com.makefunstuff.herdr.core.board.BoardTask
 import androidx.compose.material3.RadioButtonDefaults
 import com.makefunstuff.herdr.ui.design.SheetTitle
 import com.makefunstuff.herdr.ui.design.MenuSection
@@ -548,6 +549,8 @@ fun AgentActionsSheet(
     onActivity: (() -> Unit)? = null,
     /** The Agents list's triage of it: mark seen, pin, snooze, mute. */
     triage: (@Composable () -> Unit)? = null,
+    /** The board task it works on, which names it in the title. */
+    task: BoardTask? = null,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -557,7 +560,8 @@ fun AgentActionsSheet(
     var explain by remember { mutableStateOf(false) }
     val label = agent?.let { it.name?.takeIf { n -> n.isNotBlank() } ?: it.displayName } ?: paneLabel
 
-    ManageSheet(label, agent?.let { "${it.statusLabel} · ${it.agent ?: "terminal"}" } ?: "No agent in this pane", onDismiss) {
+    val (title, subtitle) = agentTitle(agent, paneLabel, task)
+    ManageSheet(title, subtitle, onDismiss) {
         if (target != null) {
             ManageRow("Rename agent", icon = HerdrIcons.Pencil, chevron = true) { rename = true }
             ManageRow("Focus in herdr", icon = HerdrIcons.Focus) {
@@ -606,6 +610,27 @@ fun AgentActionsSheet(
 }
 
 /**
+ * An agent's sheet named as the Agents list names it: the title is its task's (or what herdr says
+ * it does, or its name), the line under it the task's key, the agent (its own name, then its kind
+ * when it has one of its own, not the board's) and its state: "Speed up /jobs" over "AND-12 · claude · blocked".
+ */
+fun agentTitle(agent: AgentInfo?, paneLabel: String, task: BoardTask?): Pair<String, String> {
+    if (agent == null) return paneLabel to "No agent in this pane"
+    val kind = agent.agent?.takeIf { it.isNotBlank() }
+    // Its own name, unless that is its kind or the one the board gave it after the task (sw-api-server-3).
+    val named = agent.name?.takeIf { n ->
+        n.isNotBlank() && n != kind && (task == null || !com.makefunstuff.herdr.core.push.LiveItems.belongs(n, "", task.id, task.name))
+    }
+    val who = when {
+        named != null && kind != null -> "$named ($kind)"
+        else -> named ?: agent.displayName
+    }
+    val title = task?.title?.takeIf { it.isNotBlank() } ?: agent.subtitle?.takeIf { it != who && it != named } ?: who
+    val subtitle = listOfNotNull(task?.name?.takeIf { it.isNotBlank() }, who.takeIf { it != title }, agent.statusLabel.takeIf { it.isNotBlank() })
+    return title to subtitle.distinct().joinToString(" · ")
+}
+
+/**
  * "Notify me when it finishes": a one-shot watch on a working (or asking) agent, set and taken back
  * here; it fires once, as a notification, and removes itself.
  */
@@ -648,8 +673,9 @@ private fun AgentDetailRows(agent: AgentInfo?) {
     agent?.subtitle?.takeIf { it.isNotBlank() }?.let { ManageRow("Doing", detail = it) }
 }
 
+/** "Why this state?": what herdr read on the agent's screen to call it working, blocked or done. */
 @Composable
-private fun ExplainSheet(session: HostSession, target: String, onDismiss: () -> Unit) {
+fun ExplainSheet(session: HostSession, target: String, onDismiss: () -> Unit) {
     var summary by remember { mutableStateOf<String?>(null) }
     var extra by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
     var error by remember { mutableStateOf<String?>(null) }

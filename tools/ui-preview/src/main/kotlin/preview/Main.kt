@@ -119,6 +119,8 @@ class SceneData {
     var composer: com.makefunstuff.herdr.data.ComposerStore.State? = null
     /** Pictures waiting in a chat's composer, by DraftStore key: each a name and the picture it is (made smaller as the app does). */
     val images = HashMap<String, List<Pair<String, File>>>()
+    /** The chats' and the terminal's text sizes (TextSizeStore), as saved before the app opens. */
+    var textSizes: com.makefunstuff.herdr.data.TextSizeStore.Sizes? = null
     fun host(id: String): FakeMachine = hosts.getValue(id)
 }
 
@@ -171,11 +173,13 @@ fun render(scene: Scene, dark: Boolean, file: File) {
     synchronized(PreviewUnlock.asked) { PreviewUnlock.asked.clear() }
     data.looked.forEach { (key, at) -> com.makefunstuff.herdr.data.LookedStore(context.filesDir.resolve("looked.json")).mark(key.substringBefore('/'), key.substringAfter('/'), at) }
     data.composer?.let { context.filesDir.resolve("composer.json").writeText(Json.encodeToString(com.makefunstuff.herdr.data.ComposerStore.State.serializer(), it)) }
+    data.textSizes?.let { context.filesDir.resolve("text-sizes.json").writeText(Json.encodeToString(com.makefunstuff.herdr.data.TextSizeStore.Sizes.serializer(), it)) }
     data.guard?.let { context.filesDir.resolve("guard.json").writeText(Json.encodeToString(com.makefunstuff.herdr.data.GuardState.serializer(), it)) }
     if (data.held.isNotEmpty()) context.filesDir.resolve("held.json").writeText(Json.encodeToString(ListSerializer(Alert.serializer()), data.held))
     IdentityStore.initial = scene.key
     FakeMachines.machines = data.hosts
     Toasts.dismiss()
+    TalkBack.shown = null
     val container = AppContainer(context)
     data.shared?.let { container.shares.share(it) }
     data.notes.forEach { container.code.add(it) }
@@ -218,6 +222,7 @@ fun render(scene: Scene, dark: Boolean, file: File) {
                     Box(Modifier.size(size.value)) {
                         val chat = scene.bubble
                         if (chat != null) BubbleRoot(container, chat, dark = dark, nav = nav) else HerdrRoot(container, dark = dark, nav = nav)
+                        TalkBackOverlay(dark)
                     }
                 }
             }

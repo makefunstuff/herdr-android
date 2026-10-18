@@ -68,6 +68,8 @@ class AppContainer(app: Context) {
     val looked = com.makefunstuff.herdr.data.LookedStore(java.io.File(app.filesDir, "looked.json"))
     /** The messages held while an agent worked, and the quick replies over its composer. */
     val composer = com.makefunstuff.herdr.data.ComposerStore(java.io.File(app.filesDir, "composer.json"))
+    /** The chats' and the terminal's text sizes. */
+    val textSizes = com.makefunstuff.herdr.data.TextSizeStore(java.io.File(app.filesDir, "text-sizes.json"))
     /** The clock the screens read (a turn's "Working for 3m", the away card): the demo's fixed time. */
     val clock: () -> Long = { Demo.NOW }
     val bubbles: Bubbles = PreviewBubbles
