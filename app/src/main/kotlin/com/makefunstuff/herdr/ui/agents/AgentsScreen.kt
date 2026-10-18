@@ -224,7 +224,7 @@ fun AgentsScreen(
         topBar = {
             HerdrTopBar("Agents") {
                 // The tightest limit across the machines, a tap from their usage.
-                com.makefunstuff.herdr.ui.usage.UsageChip(nav)
+                com.makefunstuff.herdr.ui.usage.UsageChip(nav, compact = panes.wide)
                 BarIcon(HerdrIcons.Newspaper, "Brief: what happened while you were away", { panes.open(nav, Routes.BRIEF) })
                 BarIcon(
                     HerdrIcons.Bell, "Notifications",

@@ -498,9 +498,10 @@ private fun summary(providers: List<ProviderUsage>?, now: Long, zone: ZoneId): S
 /**
  * The glance in the top bar: the tightest limit across the machines ("Claude 82% · resets 17:00"),
  * amber near it and red when out. A tap opens that machine's usage page. Nothing while no limit is known.
+ * [compact] leaves the reset out ("Claude 82%"), for a narrow pane where the screen's title needs the room.
  */
 @Composable
-fun UsageChip(nav: NavController) {
+fun UsageChip(nav: NavController, compact: Boolean = false) {
     val container = LocalContainer.current
     val store = container.usage
     val latest by store.latest.collectAsStateWithLifecycle()
@@ -511,6 +512,7 @@ fun UsageChip(nav: NavController) {
     val c = Herdr.colors
     val color = if (tight.level >= 80) limitColor(tight.limit.percent) else c.muted
     val words = UsageRules.glance(tight, store.nowSeconds(), store.zone())
+    val shown = if (compact) words.substringBefore(" · ") else words
     Row(
         Modifier.widthIn(max = 188.dp).heightIn(min = 32.dp).clip(HerdrShapes.Pill)
             .background(if (tight.level >= 80) c.tint(color) else c.card)
@@ -522,6 +524,6 @@ fun UsageChip(nav: NavController) {
     ) {
         Icon(HerdrIcons.Gauge, null, tint = color, modifier = Modifier.size(14.dp))
         Spacer(Modifier.width(6.dp))
-        Text(words, style = MaterialTheme.typography.labelMedium, color = if (tight.level >= 80) color else c.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(shown, style = MaterialTheme.typography.labelMedium, color = if (tight.level >= 80) color else c.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
