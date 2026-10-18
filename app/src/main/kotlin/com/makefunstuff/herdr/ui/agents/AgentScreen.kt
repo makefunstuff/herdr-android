@@ -62,6 +62,13 @@ import com.makefunstuff.herdr.core.push.Alerts
 import com.makefunstuff.herdr.core.chat.ChatItem
 import com.makefunstuff.herdr.core.chat.AwaySummary
 import com.makefunstuff.herdr.core.chat.ChatTurns
+import com.makefunstuff.herdr.core.chat.AgentCommand
+import com.makefunstuff.herdr.core.chat.AgentCommands
+import com.makefunstuff.herdr.core.chat.Completions
+import com.makefunstuff.herdr.core.chat.Held
+import com.makefunstuff.herdr.core.chat.HeldMessage
+import com.makefunstuff.herdr.core.chat.ModelPill
+import com.makefunstuff.herdr.core.usage.UsageRules
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.rememberUpdatedState
@@ -159,6 +166,25 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
     val attach = rememberAttacher(session, onAttached = { path -> draft = Attachments.withMention(draft, path) }, onImage = tray::add)
     var attachMenu by remember { mutableStateOf(false) }
 
+    // What was sent while it worked waits above the composer; the quick replies; the model's details.
+    val chatKey = DraftStore.agent(machineId, paneId)
+    val composerState by container.composer.state.collectAsStateWithLifecycle()
+    val held = composerState.held[chatKey].orEmpty()
+    val replies = composerState.replies
+    var heldSending by remember { mutableStateOf(false) }
+    var heldOpen by remember { mutableStateOf(false) }
+    var modelSheet by remember { mutableStateOf(false) }
+    val kind = agent?.agent?.takeIf { it.isNotBlank() }
+    val pill = remember(agent?.tokens, state.use) { ModelPill.of(agent?.tokens.orEmpty(), state.use) }
+    // Its folder, for `@` files; its own `/` commands. Read over SSH the first time each is asked for.
+    val cwd = (agent?.cwd ?: pane?.foregroundCwd ?: pane?.cwd)?.ifBlank { null }
+    var commands by remember(machineId, kind, cwd) { mutableStateOf<List<AgentCommand>?>(null) }
+    var files by remember(machineId, cwd) { mutableStateOf<List<String>?>(null) }
+    // Why a list couldn't be read: it isn't asked for again while the chat is open.
+    var commandsFailed by remember(machineId, kind, cwd) { mutableStateOf<String?>(null) }
+    var filesFailed by remember(machineId, cwd) { mutableStateOf<String?>(null) }
+    val lister = remember(session) { AgentCommands.Client { command, timeout -> session.awaitConnection().run(command, timeout) } }
+
     // The clock the turns are timed by: ticking each second while the agent works.
     var now by remember { mutableLongStateOf(container.clock()) }
     LaunchedEffect(status) {
@@ -243,15 +269,25 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
         }
     }
 
-    fun send() {
-        val typed = draft
-        val pictures = tray.images
+    /** Sends what is typed, or a quick [reply] (the draft and its pictures stay as they are). */
+    fun send(reply: String? = null) {
+        val typed = reply ?: draft
+        val pictures = if (reply == null) tray.images else emptyList()
         // The pictures are named in front of what you typed.
-        val text = tray.message(typed)
-        if (text.isEmpty() || sending || tray.waiting) return
-        sending = true
+        val text = if (reply == null) tray.message(typed) else reply
+        if (text.isEmpty() || sending || (reply == null && tray.waiting)) return
         // You wrote: what happened while you were away is behind you.
         awayHidden = true
+        // While it works, the words wait above the composer rather than land in the middle of its turn.
+        if (Held.holds(status, named = agent != null)) {
+            container.composer.hold(chatKey, text, container.clock())
+            if (reply == null) {
+                draft = DraftStore.afterSend(draft, typed)
+                tray.sent(pictures)
+            }
+            return
+        }
+        sending = true
         val blocked = status == AgentStatus.Blocked
         // What the words answer: "No, tell it…" (the no, then the words as the next prompt), the question's own
         // "Type something." row, or (after Amend, or for a question with neither) typed into its screen.
@@ -270,8 +306,10 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
                     else -> AgentInput.send(api, paneId, text, named = agent != null, blocked = blocked)
                 }
             }.onSuccess {
-                draft = DraftStore.afterSend(draft, typed)
-                tray.sent(pictures)
+                if (reply == null) {
+                    draft = DraftStore.afterSend(draft, typed)
+                    tray.sent(pictures)
+                }
                 telling = null
                 amending = false
             }.onFailure {
@@ -279,6 +317,25 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
                 context.toast(it.message ?: "Couldn't send")
             }
             sending = false
+            session.refresh()
+        }
+    }
+
+    /** A held message, now: sent as typed then (Claude Code and Codex take words mid-turn as their next). */
+    fun sendHeld(m: HeldMessage) {
+        if (heldSending || sending || !Held.canSend(status, false)) return
+        heldSending = true
+        awayHidden = true
+        chat.addPending(m.text)
+        scope.launch { listState.animateScrollToItem(0) }
+        scope.launch {
+            runCatching { AgentInput.send(session.awaitApi(), paneId, m.text, named = agent != null, blocked = false) }
+                .onSuccess { container.composer.drop(chatKey, m.id) }
+                .onFailure {
+                    chat.dropPending(m.text)
+                    context.toast(it.message ?: "Couldn't send")
+                }
+            heldSending = false
             session.refresh()
         }
     }
@@ -335,6 +392,8 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
     }?.takeIf { !awayHidden && state.source == AgentChat.Source.Transcript }
 
     val imeUp = WindowInsets.isImeVisible
+    // The quick replies, when on: for an empty box, while the agent isn't asking something.
+    val chips = replies.on && replies.shown.isNotEmpty() && agent != null && draft.isEmpty() && tray.isEmpty && status != AgentStatus.Blocked && !typing
     val guardState by container.guard.state.collectAsStateWithLifecycle()
     Scaffold(
         containerColor = Herdr.colors.ground,
@@ -394,14 +453,43 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
                         },
                         leading = {
                             ComposerIconButton(HerdrIcons.Plus, "Attach files", enabled = !attach.uploading, onClick = { attachMenu = true })
+                            pill?.let { ModelPillButton(it) { modelSheet = true } }
                         },
                         attachments = { ComposerTray(tray) },
                         attached = !tray.isEmpty,
                         stop = if (status == AgentStatus.Working) ({ keys(listOf("esc")) }) else null,
                         floating = true,
                         focusRequester = composerFocus,
-                        above = if (showKeys || status == AgentStatus.Blocked) ({
+                        completion = if (agent != null && status != AgentStatus.Blocked) ({ query, accept ->
+                            Completion(
+                                query, kind, cwd, commands, files, if (query.kind == Completions.Kind.Command) commandsFailed else filesFailed,
+                                load = {
+                                    scope.launch {
+                                        if (query.kind == Completions.Kind.Command) {
+                                            runCatching { commands = lister.commands(kind.orEmpty(), cwd.orEmpty()) }
+                                                .onFailure { commandsFailed = it.message ?: "Couldn't read the machine" }
+                                        } else if (cwd != null) {
+                                            runCatching { files = lister.files(cwd) }
+                                                .onFailure { filesFailed = it.message ?: "Couldn't read the machine" }
+                                        }
+                                    }
+                                },
+                                onPick = { accept(it.insert) },
+                            )
+                        }) else null,
+                        above = if (showKeys || status == AgentStatus.Blocked || held.isNotEmpty() || chips) ({
                             Column(verticalArrangement = Arrangement.spacedBy(Space.s)) {
+                                if (held.isNotEmpty()) {
+                                    HeldList(
+                                        held, status, kind ?: name,
+                                        canSend = Held.canSend(status, heldSending || sending),
+                                        onSendNow = ::sendHeld,
+                                        onDiscard = { container.composer.drop(chatKey, it.id) },
+                                        // While it asks something, the question comes first: the rows fold into their caption.
+                                        folded = status == AgentStatus.Blocked && !heldOpen,
+                                        onUnfold = { heldOpen = true },
+                                    )
+                                }
                                 if (status == AgentStatus.Blocked) {
                                     // Docked over the composer, so it can't scroll away; folded to a line while you write.
                                     val fold = telling != null || (imeUp && !cardOpen)
@@ -421,6 +509,10 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
                                     }
                                 }
                                 if (showKeys) KeyRow(onKeys = ::keys)
+                                if (chips) QuickReplyRow(
+                                    replies.shown, onReply = { send(it) },
+                                    onEdit = if (inBubble) null else ({ nav.navigate(Routes.COMPOSER) }),
+                                )
                             }
                         }) else null,
                     )
@@ -492,6 +584,18 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
         )
     }
     quick?.let { place -> QuickSheets(nav, place, onDismiss = { quick = null }) }
+    if (modelSheet) pill?.let { p ->
+        val latest by container.usage.latest.collectAsStateWithLifecycle()
+        val left = kind?.let { UsageRules.leftFor(it, latest[machineId]?.report, container.usage.nowSeconds(), container.usage.zone()) }
+        ModelSheet(
+            p, agent = listOfNotNull(kind ?: name, host.machine.label).joinToString(" on "),
+            stateLabel = agent?.stateLabels?.get(agent.agentStatusRaw)?.takeIf { it != agent.agentStatusRaw },
+            reported = agent?.tokens.orEmpty().filterKeys { it != "model" && it != "context" },
+            limit = left?.let { "${it.provider.name}: ${it.words}" },
+            onUsage = if (inBubble) null else ({ modelSheet = false; nav.navigate(Routes.usage(machineId)) }),
+            onDismiss = { modelSheet = false },
+        )
+    }
     if (attachMenu) AttachMenu(attach, tray, online = host.online, onDismiss = { attachMenu = false })
 }
 
@@ -554,5 +658,55 @@ private fun KeyRow(onKeys: (List<String>) -> Unit) {
             "Enter" to "enter", "Esc" to "esc", "↑" to "up", "↓" to "down", "Tab" to "tab", "⇧Tab" to "shift+tab",
             "1" to "1", "2" to "2", "3" to "3", "y" to "y", "n" to "n", "Ctrl+C" to "ctrl+c",
         ).forEach { (label, key) -> KeyButton(label) { onKeys(listOf(key)) } }
+    }
+}
+
+/**
+ * The menu for the word being completed: the agent's commands for `/`, its folder's files for `@`.
+ * Each list is read once ([load]) and then filtered on the phone as you type.
+ */
+@Composable
+private fun Completion(
+    query: Completions.Query,
+    kind: String?,
+    cwd: String?,
+    commands: List<AgentCommand>?,
+    files: List<String>?,
+    failed: String?,
+    load: () -> Unit,
+    onPick: (CompletionRow) -> Unit,
+) {
+    when (query.kind) {
+        Completions.Kind.Command -> {
+            val known = AgentCommands.knows(kind)
+            LaunchedEffect(known, commands == null) { if (known && commands == null && failed == null) load() }
+            // The built-in ones at once, the machine's own when they come.
+            val all = commands ?: AgentCommands.builtins(kind)
+            val rows = commandRows(Completions.commands(all, query.text))
+            CompletionMenu(
+                "${kind ?: "Agent"} commands", rows,
+                note = when {
+                    !known -> "The app doesn't know ${kind ?: "this agent"}'s commands"
+                    rows.isEmpty() -> "No command matches /${query.text}"
+                    else -> null
+                },
+                onPick = onPick,
+            )
+        }
+        Completions.Kind.File -> {
+            LaunchedEffect(cwd, files == null) { if (cwd != null && files == null && failed == null) load() }
+            val rows = fileRows(Completions.files(files.orEmpty(), query.text, limit = 30))
+            CompletionMenu(
+                "Files in ${cwd?.substringAfterLast('/') ?: "its folder"}", rows,
+                note = when {
+                    cwd == null -> "Its folder isn't known"
+                    failed != null && files == null -> failed
+                    files == null -> "Listing the files…"
+                    rows.isEmpty() -> "No file matches ${query.text}"
+                    else -> null
+                },
+                onPick = onPick,
+            )
+        }
     }
 }

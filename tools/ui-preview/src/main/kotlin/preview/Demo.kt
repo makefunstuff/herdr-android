@@ -269,6 +269,7 @@ object Demo {
             code = FakeCode(),
             quick = FakeQuick(),
             usage = FakeUsage(),
+            agentCommands = AGENT_COMMANDS,
         ),
         GPU to FakeMachine(
             GPU,
@@ -286,6 +287,12 @@ object Demo {
         ),
         MINI to FakeMachine(MINI, refuse = ConnectError.Auth(null)),
     )
+
+    /** The own commands and skills on devbox, as `herdr-agent-commands` prints them: herdr-android's `/ship`, and a skill of the person's. */
+    private val AGENT_COMMANDS = listOf(
+        "@@herdr-command\tproject\tcommand\tship\n---\ndescription: Run the checks, commit and open a pull request\n---\nRun ./gradlew check, then commit and open a PR.\n",
+        "@@herdr-command\tskill\tskill\tscreen-previews\n---\nname: screen-previews\ndescription: Render the changed screens and look at them\n---\n",
+    ).joinToString("\n")
 
     const val APP_SESSION = "3f6c2a1e-8b7d-4c2a-9e51-0a1b2c3d4e5f"
     private const val API_SESSION = "9d2e4b7a-1c3f-4e6a-8b90-5f4e3d2c1b0a"

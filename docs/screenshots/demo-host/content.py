@@ -33,11 +33,13 @@ def iso(t):
 class Claude:
     """Rows of a Claude Code session; each row `after` seconds past the one before, from `start`."""
 
-    def __init__(self, start, cwd):
+    def __init__(self, start, cwd, context=(0, 0)):
         self.rows = []
         self.n = 0
         self.t = at(start)
         self.cwd = cwd
+        # The context each answer filled: the first answer's, then more by a step each (the model pill reads the last).
+        self.context, self.step = context
 
     def _id(self):
         self.n += 1
@@ -50,19 +52,27 @@ class Claude:
     def user(self, text, after=0):
         self._row({"type": "user", "uuid": self._id(), "message": {"role": "user", "content": text}}, after)
 
+    def _answer(self, content):
+        """An answer as Claude Code records it: the model, what the request filled, the effort it ran at."""
+        used = self.context
+        self.context += self.step
+        usage = {"input_tokens": 4, "cache_creation_input_tokens": 1200, "cache_read_input_tokens": used - 1204, "output_tokens": 310}
+        return {"type": "assistant", "uuid": self._id(), "effort": "high", "message": {"role": "assistant", "model": "claude-opus-5-5", "content": content, "usage": usage}}
+
     def say(self, text, after=0):
-        self._row({"type": "assistant", "uuid": self._id(), "message": {"role": "assistant", "content": [{"type": "text", "text": text}]}}, after)
+        self._row(self._answer([{"type": "text", "text": text}]), after)
 
     def tool(self, name, inp, result=None, error=False, after=0, took=0.2):
         tid = "toolu_" + self._id()[-8:]
-        self._row({"type": "assistant", "uuid": self._id(), "message": {"role": "assistant", "content": [{"type": "tool_use", "id": tid, "name": name, "input": inp}]}}, after)
+        self._row(self._answer([{"type": "tool_use", "id": tid, "name": name, "input": inp}]), after)
         if result is not None:
             self._row({"type": "user", "uuid": self._id(), "message": {"role": "user", "content": [{"type": "tool_result", "tool_use_id": tid, "content": result, "is_error": error}]}}, took)
 
 
 def claude_app():
     # The first ask took 2m 36s; the second came 38 minutes later and is still at work at 07:42.
-    c = Claude("2026-10-17T06:58:10", HOME + "/src/herdr-android")
+    # Its context ends at 124k of Opus's 200k: "Opus 5.5 · 62%".
+    c = Claude("2026-10-17T06:58:10", HOME + "/src/herdr-android", context=(106_000, 2_000))
     p = HOME + "/src/herdr-android/app/src/main/kotlin/com/makefunstuff/herdr/ui/machines/MachinesScreen.kt"
     c.user("The Machines list only refreshes when the app is reopened. Add pull-to-refresh that reconnects every machine, and keep the last known state on screen while it does.")
     c.say("I'll look at how the Machines screen gets its state first.", after=6)
@@ -87,7 +97,7 @@ def claude_app():
 
 
 def claude_api():
-    c = Claude("2026-10-17T07:31:05", HOME + "/src/api-server")
+    c = Claude("2026-10-17T07:31:05", HOME + "/src/api-server", context=(21_000, 3_000))
     c.user("The /jobs endpoint takes 4 s on the big tenant. Find out why and fix it.")
     c.tool("Bash", {"command": "psql -c 'EXPLAIN ANALYZE SELECT * FROM jobs ORDER BY created_at DESC LIMIT 50'", "description": "Explain the slow jobs query"}, "Seq Scan on jobs  (cost=0.00..48211.20 rows=1201480)\nExecution Time: 3912.448 ms", after=9, took=4.1)
     c.say("It's a sequential scan over 1.2 M rows: `jobs` has no index on `created_at`. I wrote a migration that adds one concurrently, so the table stays writable.", after=21)
@@ -114,6 +124,11 @@ def codex_site():
     item({"type": "FileChange", "id": "f1", "changes": {"content/docs/install.md": {"type": "update", "unified_diff": "@@ -1,4 +1,9 @@\n # Install\n-Download the archive for your platform and unpack it.\n+\n+```sh\n+curl -fsSL https://example.com/install.sh | sh\n+```\n \n-## Install\n+## Manual install\n+\n+## Updating\n"}}, "status": "completed"}, after=48)
     item({"type": "CommandExecution", "id": "c2", "command": ["bash", "-lc", "npm run check-links"], "aggregated_output": "Checked 38 links, 0 broken", "exit_code": 0, "status": "completed"}, after=21)
     item({"type": "AgentMessage", "id": "a2", "content": [{"type": "text", "text": "Done. The page now opens with the installer one-liner, then *Manual install* and *Updating*. All 38 links resolve."}]}, after=12)
+    # The model it ran at, and what its last request filled of the window Codex states.
+    rows.insert(0, {"timestamp": rows[0]["timestamp"], "type": "turn_context", "payload": {"cwd": HOME + "/src/website", "model": "gpt-5.5", "effort": "medium"}})
+    rows.append({"timestamp": rows[-1]["timestamp"], "type": "event_msg", "payload": {"type": "token_count", "info": {
+        "last_token_usage": {"input_tokens": 51_000, "cached_input_tokens": 44_800, "output_tokens": 800, "total_tokens": 51_800},
+        "model_context_window": 258_400}}})
     return rows
 
 

@@ -41,6 +41,11 @@ class FakeCode(
 
     private fun ok(out: String) = CommandResult(0, out, "")
 
+    /** The files in [dir] one a line, as the composer's `@` list reads them (AgentCommands.filesCommand); null outside every checkout. */
+    fun filesIn(dir: String): String? = find(expand(dir))?.let { co ->
+        (co.recording?.let { Demo.resource("code/$it.files") } ?: "README.md\u0000").split('\u0000').filter { it.isNotEmpty() }.joinToString("") { "$it\n" }
+    }
+
     private fun expand(p: String) = when {
         p == "~" -> home
         p.startsWith("~/") -> home + p.removePrefix("~")
