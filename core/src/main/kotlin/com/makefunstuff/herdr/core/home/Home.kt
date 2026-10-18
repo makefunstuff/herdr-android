@@ -54,24 +54,37 @@ sealed interface Waiting {
     }
 }
 
-/** An agent on the list below Needs you: its board task when it has one; [new] for a finish not looked at yet. */
-data class AgentRow(val agent: HomeAgent, val task: BoardTask?, val new: Boolean = false)
+/**
+ * An agent on the list below Needs you: its board task when it has one; [new] for a finish not looked
+ * at yet; how the phone triaged it: [pinned], [snooze] (while it holds), [muted].
+ */
+data class AgentRow(
+    val agent: HomeAgent,
+    val task: BoardTask?,
+    val new: Boolean = false,
+    val pinned: Boolean = false,
+    val snooze: Snooze? = null,
+    val muted: Boolean = false,
+)
 
 /**
  * The Agents screen's list, across machines: what waits for you first (blocked agents and board
  * tasks waiting for a yes, a fix or an answer, an agent and its task shown once), then the agents
- * at work, the ones that finished (those not looked at yet first), and the rest.
+ * pinned, the agents at work, the ones that finished and weren't looked at yet, the rest (a finish
+ * seen is at rest), and those snoozed. A question always shows in Needs you, pinned, snoozed or not.
  */
 data class Home(
     val needsYou: List<Waiting> = emptyList(),
+    val pinned: List<AgentRow> = emptyList(),
     val working: List<AgentRow> = emptyList(),
     val done: List<AgentRow> = emptyList(),
     val idle: List<AgentRow> = emptyList(),
+    val snoozed: List<AgentRow> = emptyList(),
 ) {
-    /** Finished and not looked at: herdr still says `done`, and the phone hasn't opened it since. */
-    val fresh: Int get() = done.count { it.new }
+    /** Finished and not looked at: herdr still says `done`, and the phone hasn't opened it since (pinned ones too). */
+    val fresh: Int get() = done.count { it.new } + pinned.count { it.new }
 
-    val isEmpty: Boolean get() = needsYou.isEmpty() && working.isEmpty() && done.isEmpty() && idle.isEmpty()
+    val isEmpty: Boolean get() = needsYou.isEmpty() && pinned.isEmpty() && working.isEmpty() && done.isEmpty() && idle.isEmpty() && snoozed.isEmpty()
 
     companion object {
         /** The order tasks wait in: ready to merge first, then what failed, plans and choices, questions, the rest. */
@@ -82,9 +95,16 @@ data class Home(
 
         /**
          * The list from every machine's [agents] (in the machines' order) and [boards]. [seen] holds,
-         * by [HomeAgent.key], the finish the phone last showed of an agent ([HomeAgent.finish]).
+         * by [HomeAgent.key], the finish the phone last showed of an agent ([HomeAgent.finish]);
+         * [triage] what is pinned, snoozed (as it stands at [now]) and muted.
          */
-        fun of(agents: List<HomeAgent>, boards: List<HomeBoard>, seen: Map<String, Long> = emptyMap()): Home {
+        fun of(
+            agents: List<HomeAgent>,
+            boards: List<HomeBoard>,
+            seen: Map<String, Long> = emptyMap(),
+            triage: Triage = Triage(),
+            now: Long = 0,
+        ): Home {
             val tasks = own(boards)
             // Each agent's task: one of its own machine's board, by the names herdr-projects gives them.
             val taskOf = agents.associate { a ->
@@ -106,13 +126,23 @@ data class Home(
             // An agent whose task waits is that task's card; it isn't listed again below.
             val inCards = waiting.mapNotNull { it.agent?.key }.toSet()
             val rest = agents.filter { it.agent.agentStatus != AgentStatus.Blocked && it.key !in inCards }
-            fun row(a: HomeAgent) = AgentRow(a, taskOf[a.key], new = a.agent.agentStatus == AgentStatus.Done && seen[a.key] != a.finish)
+            fun isNew(a: HomeAgent) = a.agent.agentStatus == AgentStatus.Done && seen[a.key] != a.finish
+            fun row(a: HomeAgent) = AgentRow(
+                a, taskOf[a.key], new = isNew(a), pinned = triage.pinned(a.key), snooze = triage.snoozeOf(a, now), muted = a.key in triage.muted,
+            )
             val bySeq = compareByDescending<HomeAgent> { it.agent.stateChangeSeq }
+            // Pinned stay on top in the order pinned; snoozed wait at the bottom; the rest by their state.
+            val pinned = triage.pins.mapNotNull { k -> rest.firstOrNull { it.key == k } }
+            val snoozed = rest.filter { it.key !in triage.pins && triage.snoozeOf(it, now) != null }.sortedWith(bySeq)
+            val listed = rest.filter { it !in pinned && it !in snoozed }
             return Home(
                 needsYou = questions.sortedWith(bySeq).map { Waiting.Question(it, taskOf[it.key]) } + waiting,
-                working = rest.filter { it.agent.agentStatus == AgentStatus.Working }.sortedWith(bySeq).map(::row),
-                done = rest.filter { it.agent.agentStatus == AgentStatus.Done }.sortedWith(bySeq).map(::row).sortedByDescending { it.new },
-                idle = rest.filter { it.agent.agentStatus == AgentStatus.Idle || it.agent.agentStatus == AgentStatus.Unknown }.sortedWith(bySeq).map(::row),
+                pinned = pinned.map(::row),
+                working = listed.filter { it.agent.agentStatus == AgentStatus.Working }.sortedWith(bySeq).map(::row),
+                done = listed.filter(::isNew).sortedWith(bySeq).map(::row),
+                idle = listed.filter { it.agent.agentStatus == AgentStatus.Idle || it.agent.agentStatus == AgentStatus.Unknown || it.agent.agentStatus == AgentStatus.Done && !isNew(it) }
+                    .sortedWith(bySeq).map(::row),
+                snoozed = snoozed.map(::row),
             )
         }
 
@@ -142,9 +172,9 @@ data class Home(
             else -> null
         }
 
-        /** The marks to keep: [marks] with every finished agent in [home] marked seen now, and agents gone dropped. */
+        /** The marks to keep: [marks] with every finished agent in [home] (pinned ones too) marked seen now, and agents gone dropped. */
         fun seenAll(marks: Map<String, Long>, home: Home, agents: List<HomeAgent>): Map<String, Long> =
-            keep(marks + home.done.associate { it.agent.key to it.agent.finish }, agents)
+            keep(marks + (home.done + home.pinned.filter { it.new }).associate { it.agent.key to it.agent.finish }, agents)
 
         /** [marks] for the agents still there, so the store doesn't grow with every pane that ever finished. */
         fun keep(marks: Map<String, Long>, agents: List<HomeAgent>): Map<String, Long> {

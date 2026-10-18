@@ -57,6 +57,8 @@ class LiveWork(
     private val store: PushStore,
     private val sink: LiveSink,
     private val quiet: QuietWork? = null,
+    /** The agents muted on the phone, by `machine/pane`: no Live Update for them either. */
+    private val muted: kotlinx.coroutines.flow.Flow<Set<String>>? = null,
 ) {
     private val tracker = LiveTracker()
     @Volatile private var adopted = false
@@ -71,6 +73,7 @@ class LiveWork(
     private val on: Boolean get() = store.state.value.let { it.on && it.live }
 
     fun start() {
+        muted?.let { m -> scope.launch { m.distinctUntilChanged().collect { apply(tracker.mute(it)) } } }
         quiet?.let { q ->
             scope.launch { q.reason.map { it != null }.distinctUntilChanged().collect { if (it) hush() else wake() } }
         }

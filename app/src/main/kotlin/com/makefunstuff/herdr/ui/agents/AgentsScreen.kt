@@ -29,6 +29,7 @@ import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -71,6 +72,7 @@ import com.makefunstuff.herdr.ui.design.HerdrIcons
 import com.makefunstuff.herdr.ui.design.HerdrMenu
 import com.makefunstuff.herdr.ui.design.HerdrTopBar
 import com.makefunstuff.herdr.ui.design.MenuRow
+import com.makefunstuff.herdr.ui.design.Notice
 import com.makefunstuff.herdr.ui.design.PrimaryButton
 import com.makefunstuff.herdr.ui.design.QuietButton
 import com.makefunstuff.herdr.ui.design.SectionHeading
@@ -81,6 +83,7 @@ import com.makefunstuff.herdr.ui.share.Ask
 import com.makefunstuff.herdr.ui.theme.Herdr
 import com.makefunstuff.herdr.ui.theme.Space
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /** Rows a resting section shows before "more". */
@@ -105,7 +108,8 @@ private data class Refusal(val words: String, val review: Waiting.Task? = null)
 /**
  * The home screen: everything that waits for you, across machines, first, each card with its
  * answers (Yes, No and Reply for a question; Approve and merge, Fix, Reply for a task); then the
- * agents at work as one line each, those that finished (new until seen) and the rest. Ask opens
+ * agents pinned, those at work as one line each, those that finished (until seen), the rest, and
+ * those snoozed. A row swipes: right marks it seen, left shows Pin, Snooze and Mute. Ask opens
  * the Coordinator. On a wide window it is the left pane ([com.makefunstuff.herdr.Panes]): what it
  * opens shows beside it, chosen here. [filterState] and [listState] come from above, so they stay
  * as the list moves between the two layouts.
@@ -122,6 +126,14 @@ fun AgentsScreen(
     val scope = rememberCoroutineScope()
     val hosts by container.hosts.hosts.collectAsStateWithLifecycle()
     val seen by container.seen.marks.collectAsStateWithLifecycle()
+    val triage by container.triage.state.collectAsStateWithLifecycle()
+    // Snoozes for a time end on their own: the list looks again every half minute.
+    val now by produceState(container.triage.now()) {
+        while (true) {
+            delay(30_000)
+            value = container.triage.now()
+        }
+    }
     val boards = rememberBoards()
     val boardProblems = rememberBoardProblems()
     val readNow = remember { Channel<Unit>(Channel.CONFLATED) }
@@ -133,12 +145,17 @@ fun AgentsScreen(
     val entry by nav.currentBackStackEntryAsState()
     val inMiddle = if (panes.wide) entry?.let(::opened) else null
     var menuAgent by remember { mutableStateOf<HomeAgent?>(null) }
+    var snoozing by remember { mutableStateOf<HomeAgent?>(null) }
+    // The row swiped open on the left (Pin, Snooze, Mute), by agent key: one at a time.
+    var swiped by remember { mutableStateOf<String?>(null) }
+    val triageActions = rememberTriageActions { snoozing = it }
     var showNotices by remember { mutableStateOf(false) }
     var filterMenu by remember { mutableStateOf(false) }
     var reply by remember { mutableStateOf<Reply?>(null) }
     var refusal by remember { mutableStateOf<Refusal?>(null) }
     var allDone by rememberSaveable { mutableStateOf(false) }
     var allIdle by rememberSaveable { mutableStateOf(false) }
+    var allSnoozed by rememberSaveable { mutableStateOf(false) }
     // Cards answered here, by key, with how they stood; and the ones whose answer is on its way.
     val handled = remember { mutableStateMapOf<String, String>() }
     val busy = remember { mutableStateMapOf<String, String>() }
@@ -147,8 +164,8 @@ fun AgentsScreen(
         hosts.flatMap { h -> h.notices.map { NoticeRow(h.machine.id, h.machine.label, it) } }.sortedByDescending { it.notice.at }
     }
     val agents = remember(hosts) { HomeAgent.of(hosts) }
-    val home = remember(agents, boards, seen, filter) {
-        Home.of(agents.filter { filter == null || it.machineId == filter }, boards.filter { filter == null || it.machineId == filter }, seen)
+    val home = remember(agents, boards, seen, filter, triage, now) {
+        Home.of(agents.filter { filter == null || it.machineId == filter }, boards.filter { filter == null || it.machineId == filter }, seen, triage, now)
     }
     val needsYou = home.needsYou.filter { handled[it.key] != sig(it) }
     val showMachine = hosts.size > 1 && filter == null
@@ -344,13 +361,28 @@ fun AgentsScreen(
                         }
                     }
                 }
-                section("Working", home.working, showAll = true, onMore = {}, inMiddle, showMachine, ::openAgent) { menuAgent = it }
+                val lines = Lines(
+                    inMiddle, showMachine, triageActions, swiped, { swiped = it },
+                    snoozed = { r -> r.snooze?.label(now, container.triage.zone()) }, onOpen = ::openAgent, onMenu = { menuAgent = it },
+                )
+                section("Pinned", "Pinned · ${home.pinned.size}", home.pinned, showAll = true, onMore = {}, lines)
+                section("Working", "Working · ${home.working.size}", home.working, showAll = true, onMore = {}, lines)
+                // Done holds the finishes not looked at yet: Mark all seen empties it (they rest with the idle ones).
                 section(
-                    "Done", home.done, showAll = allDone, onMore = { allDone = !allDone }, inMiddle, showMachine, ::openAgent,
-                    fresh = home.fresh,
-                    onSeen = { container.seen.set(Home.seenAll(seen, home, agents)) },
-                ) { menuAgent = it }
-                section("Idle", home.idle, showAll = allIdle, onMore = { allIdle = !allIdle }, inMiddle, showMachine, ::openAgent) { menuAgent = it }
+                    "Done", "Done · ${home.done.size} new", home.done, showAll = allDone, onMore = { allDone = !allDone }, lines,
+                    onSeen = if (home.fresh > 0) ({ container.seen.set(Home.seenAll(seen, home, agents)) }) else null,
+                )
+                section("Idle", "Idle · ${home.idle.size}", home.idle, showAll = allIdle, onMore = { allIdle = !allIdle }, lines)
+                section("Snoozed", "Snoozed · ${home.snoozed.size}", home.snoozed, showAll = allSnoozed, onMore = { allSnoozed = !allSnoozed }, lines)
+                if (!triage.used && (home.working.size + home.done.size + home.idle.size) > 0) {
+                    item(key = "triage-hint") {
+                        Notice(
+                            "Swipe right: seen. Swipe left: pin, snooze until it changes or a time, mute its notifications. " +
+                                "The same are in the long-press sheet and TalkBack's actions.",
+                            Modifier.padding(horizontal = Space.screen, vertical = Space.l),
+                        )
+                    }
+                }
             }
         }
     }
@@ -363,9 +395,11 @@ fun AgentsScreen(
                 paneLabel = a.agent.paneId,
                 onDismiss = { menuAgent = null },
                 onTerminal = { menuAgent = null; panes.open(nav, Routes.terminal(a.machineId, a.agent.paneId)) },
+                triage = { TriageRows(a, onSnooze = { menuAgent = null; snoozing = a }) },
             )
         }
     }
+    snoozing?.let { a -> SnoozeSheet(a, onDismiss = { snoozing = null }) }
     reply?.let { r ->
         var text by remember(r) { mutableStateOf("") }
         val dismiss = { reply = null }
@@ -414,30 +448,47 @@ fun AgentsScreen(
     }
 }
 
-/** A section of one-line agents under its heading; a long resting one folds after [FOLDED] rows. */
+/** What every one-line agent on the list shares: what is open beside it, its swipes, its taps. */
+private class Lines(
+    val inMiddle: String?,
+    val showMachine: Boolean,
+    val actions: TriageActions,
+    /** The row swiped open on the left, by agent key. */
+    val swiped: String?,
+    val onSwiped: (String?) -> Unit,
+    val snoozed: (AgentRow) -> String?,
+    val onOpen: (HomeAgent) -> Unit,
+    val onMenu: (HomeAgent) -> Unit,
+)
+
+/** A section of one-line agents under its [heading]; a long resting one folds after [FOLDED] rows. [onSeen]: Mark all seen. */
 private fun LazyListScope.section(
     title: String,
+    heading: String,
     rows: List<AgentRow>,
     showAll: Boolean,
     onMore: () -> Unit,
-    inMiddle: String?,
-    showMachine: Boolean,
-    onOpen: (HomeAgent) -> Unit,
-    fresh: Int = 0,
+    lines: Lines,
     onSeen: (() -> Unit)? = null,
-    onMenu: (HomeAgent) -> Unit,
 ) {
     if (rows.isEmpty()) return
     item(key = "h-$title") {
         SectionHeading(
-            "$title · ${rows.size}" + if (fresh > 0) " · $fresh new" else "",
+            heading,
             Modifier.padding(start = Space.screen + Space.xs, end = Space.s), top = Space.l,
-            trailing = if (fresh > 0 && onSeen != null) ({ QuietButton(onClick = onSeen, color = Herdr.colors.accent) { Text("Mark seen") } }) else null,
+            trailing = if (onSeen != null) ({ QuietButton(onClick = onSeen, color = Herdr.colors.accent) { Text("Mark all seen") } }) else null,
         )
     }
     val shown = if (showAll || rows.size <= FOLDED + 1) rows else rows.take(FOLDED)
     items(shown, key = { "${title}/${it.agent.key}" }) { row ->
-        AgentLine(row, showMachine, selected = inMiddle == row.agent.key, onOpen = { onOpen(row.agent) }, onMenu = { onMenu(row.agent) })
+        val key = row.agent.key
+        SwipeRow(row, lines.actions, open = lines.swiped == key, onOpen = { lines.onSwiped(if (it) key else null) }) {
+            AgentLine(
+                row, lines.showMachine, selected = lines.inMiddle == key,
+                onOpen = { lines.onOpen(row.agent) }, onMenu = { lines.onMenu(row.agent) },
+                snoozed = lines.snoozed(row), actions = lines.actions.accessibility(row),
+            )
+        }
     }
     if (rows.size > FOLDED + 1) {
         item(key = "more-$title") {

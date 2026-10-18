@@ -126,6 +126,14 @@ object Demo {
     private fun machine(id: String, label: String, host: String = label, port: Int = 22, user: String = "demo", via: String? = null) =
         Machine(id = id, label = label, host = host, port = port, user = user, viaMachineId = via, hostKey = FakeMachine(id).fingerprint)
 
+    /** The Agents list triaged: gpu-box's eval pinned and muted, AND-6's agent snoozed for three hours. */
+    fun triage() = com.makefunstuff.herdr.core.home.Triage(
+        pins = listOf("$GPU/w1:p1"),
+        snoozes = mapOf("$DEVBOX/w4:p1" to com.makefunstuff.herdr.core.home.Snooze(until = NOW + 3 * 3_600_000L)),
+        muted = setOf("$GPU/w1:p1"),
+        used = true,
+    )
+
     /** Notifications on: devbox and gpu-box send, ci-runner is left out, mac-mini has no python3. */
     fun push(): PushState {
         val endpoint = "https://ntfy.sh/upDemoTopic?up=1"
