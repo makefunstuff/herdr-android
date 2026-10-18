@@ -91,6 +91,12 @@ fun AlertRulesScreen(nav: NavHostController) {
                     detail = "A review or a check failed, a task or a quick command went wrong. Comes through quiet hours.",
                     checked = r.wentWrong,
                 ) { on -> change { it.copy(wentWrong = on) } }
+                RowDivider(inset = 0.dp)
+                SwitchRow(
+                    "Limits",
+                    detail = "An AI provider at 80% or 95% of a limit or out of it, a task handed to another agent because of one. Waits through quiet hours.",
+                    checked = r.limits,
+                ) { on -> change { it.copy(limits = on) } }
             }
 
             SectionHeading("While you're at a computer")

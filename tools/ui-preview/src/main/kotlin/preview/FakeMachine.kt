@@ -68,6 +68,8 @@ class FakeMachine(
     var refuse: ConnectError? = null,
     /** What the health probe reads there (RAM, disks, processes, worktrees). */
     var health: FakeHealth = FakeHealth(),
+    /** Its AI providers, as herdr-usage reads them there; null answers no usage command. */
+    var usage: FakeUsage? = null,
     /** herdr-push's journal there (`herdr-push journal`, for the brief); null where herdr-push isn't installed. */
     var journal: JsonObject? = null,
     /** Its repositories, for the code browser; null answers no code command. */
@@ -89,6 +91,7 @@ class FakeMachine(
         code?.run(command)?.let { return it }
         quick?.run(command)?.let { return it }
         health.run(command)?.let { return it }
+        usage?.run(command)?.let { return it }
         val w = Shell.words(command)
         return when {
             "pgrep" in command -> ok("server\t/home/demo/.local/bin/herdr\therdr $version\n")

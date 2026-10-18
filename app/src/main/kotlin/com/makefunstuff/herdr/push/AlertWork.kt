@@ -11,8 +11,11 @@ import com.makefunstuff.herdr.core.push.Alert
 import com.makefunstuff.herdr.core.push.AlertAction
 import com.makefunstuff.herdr.core.push.Alerts
 import com.makefunstuff.herdr.core.push.HerdrPush
+import com.makefunstuff.herdr.core.push.PushEvent
 import com.makefunstuff.herdr.core.push.PushLook
 import com.makefunstuff.herdr.core.push.PushMessages
+import com.makefunstuff.herdr.core.usage.HerdrUsage
+import com.makefunstuff.herdr.core.usage.UsageRules
 import com.makefunstuff.herdr.data.HostManager
 import com.makefunstuff.herdr.data.MachineStore
 import com.makefunstuff.herdr.data.quick
@@ -36,6 +39,7 @@ class AlertWork(
     private val tally: TallyStore,
     private val quick: com.makefunstuff.herdr.data.QuickStore,
     private val watches: WatchWork,
+    private val usage: com.makefunstuff.herdr.data.UsageStore,
 ) {
     private val rules get() = store.state.value.rules
 
@@ -57,6 +61,8 @@ class AlertWork(
         msg.presence?.let { quiet.presence.record(machineId, label, it, minOf(now, msg.at * 1000).takeIf { msg.at > 0 } ?: now) }
         inbox.apply(changes, quiet = quiet.silent(now), hold = quiet.check(now), rules = rules)
         watches.events(machineId, label, msg.events)
+        // A limit's warning carries its reading: the glance and the widget show it at once.
+        msg.events.filterIsInstance<PushEvent.Usage>().forEach { usage.putLimit(machineId, it.provider, it.limit, msg.at) }
         return true
     }
 
@@ -146,6 +152,23 @@ class AlertWork(
         runCatching { HealthClient { cmd, timeout -> conn.run(cmd, timeout) }.sample() }.getOrNull()?.let { sample ->
             val report = HealthReport.of(sample, ProcLabels.label(sample, null, snapshot)) ?: return@let
             inbox.apply(listOf(Alerts.health(machineId, s.machine.label, report)), quiet = quiet.silent(), hold = quiet.check(), rules = rules)
+        }
+        // Providers near or at a limit (where herdr-push runs, it told already: shown once per mark and window).
+        runCatching {
+            HerdrUsage.Client({ cmd, t -> conn.run(cmd, t) }, { cmd, input, t -> conn.runWithInput(cmd, input.byteInputStream(), t) }, s.machine.label).limits()
+        }.getOrNull()?.let { r ->
+            // The limits as they are now, for the glance and the status widget while the app is closed.
+            usage.putLimits(machineId, r)
+            val now = usage.nowSeconds()
+            val changes = r.providers.filter { !it.stale && it.error.isEmpty() }.flatMap { p ->
+                p.limits.mapNotNull { l ->
+                    val level = UsageRules.level(l.percent)
+                    // Under the marks a warning comes down only after its window, or well under them for a rolling one (UsageRules.CLEAR).
+                    if (level == 0 && l.resets == null && l.percent >= UsageRules.CLEAR) null
+                    else Alerts.usage(machineId, s.machine.label, PushEvent.Usage(p.id, p.name, l, level), now)
+                }
+            }
+            if (changes.isNotEmpty()) inbox.apply(changes, quiet = quiet.silent(), hold = quiet.check(), rules = rules)
         }
         // AI quick commands that ended (where herdr-push runs, it told already: shown once). Only the last hours' are news.
         runCatching { s.quick().runs(20) }.getOrNull()?.let { list ->

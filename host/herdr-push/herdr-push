@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# version: 6
+# version: 7
 """herdr-push: tells your phone when a herdr agent or a work board task needs you.
 
 It runs on the machine with herdr, watches its agents (`herdr api snapshot`) and, where the board
@@ -15,6 +15,10 @@ subscribed (Herdr for Android sets this up over SSH) when:
     when it has room again. It also keeps the last hour of RAM and CPU readings for the app's chart.
   - an AI quick command that the app started there ends (done, failed, or at its limit), with the
     start of its answer;
+  - an AI provider the machine uses passes 80% or 95% of a limit, or runs out (Claude Code's and
+    Codex's 5-hour and weekly limits, an API key's limit, as herdr-usage reads them where the app put
+    it), and when the limit is reset; and when the board's fallback takes a task over from one agent
+    to another because of a limit ("codex took over from claude: out of allowance until 17:00");
   - a task or an agent a phone watches ("tell me when API-3's checks pass") changes, for that phone.
 
 Each push says whether someone is at this machine: how long ago someone typed in a herdr client here
@@ -63,7 +67,7 @@ import urllib.parse
 import urllib.request
 import zlib
 
-VERSION = "6"
+VERSION = "7"
 NAME = "herdr-push"
 
 HOME = os.path.expanduser("~")
@@ -121,6 +125,18 @@ QUICK_DIR = os.environ.get("HERDR_PUSH_QUICK") or os.path.join(
     os.environ.get("XDG_STATE_HOME") or os.path.join(HOME, ".local", "state"), "herdr-android", "quick")
 QUICK_ENDED = ("done", "failed", "stopped", "limit")
 QUICK_FRESH = 3600
+
+# Usage: every USAGE_EVERY seconds (0: never) the providers' limits, from herdr-usage (host/herdr-usage,
+# which the app puts in ~/.local/share/herdr-usage). The marks are the app's (core/…/usage/UsageRules.kt):
+# near a limit from 80%, almost out from 95%, out at 100%; each told once per window, and the
+# warning comes down when the window is over.
+USAGE_EVERY = float(os.environ.get("HERDR_PUSH_USAGE_EVERY", "300"))
+USAGE_CLEAR = 70.0  # a rolling window's warning comes down under this (UsageRules.CLEAR)
+USAGE_SCRIPT = os.environ.get("HERDR_PUSH_USAGE") or os.path.join(HOME, ".local", "share", "herdr-usage", "herdr-usage")
+# A hand-over is told when the board gave this reason (its words: "out of allowance until 17:00"),
+# not when an agent ran out of room in its context, and only while it's news.
+LIMIT_WHY = re.compile(r"allowance|quota|rate.?limit|usage limit|credits?\b|balance|spend", re.I)
+TAKEOVER_FRESH = 1800
 
 SKIP_MOUNTS = ("/boot", "/dev", "/proc", "/sys", "/run", "/snap", "/var/lib/docker", "/var/snap", "/System/Volumes/",
                "/private/var/vm", "/Volumes/Recovery")
@@ -680,6 +696,109 @@ def health_look(st, now):
     return None
 
 
+# ---- usage and limits ----------------------------------------------------------------------------
+
+def usage_level(percent):
+    try:
+        p = float(percent)
+    except (TypeError, ValueError):
+        return 0
+    return 100 if p >= 100 else 95 if p >= 95 else 80 if p >= 80 else 0
+
+
+def usage_look(st, now):
+    """Every USAGE_EVERY seconds: the limits that passed a mark (or are back under them), as events."""
+    if USAGE_EVERY <= 0 or now - float(st.get("at") or 0) < USAGE_EVERY or not os.path.exists(USAGE_SCRIPT):
+        return []
+    st["at"] = now
+    try:
+        r = subprocess.run([sys.executable, USAGE_SCRIPT, "limits"], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                           stderr=subprocess.DEVNULL, timeout=120)
+        lines = [l for l in r.stdout.decode("utf-8", "replace").splitlines() if l.strip().startswith("{")]
+        out = json.loads(lines[-1]) if lines else {}
+    except Exception as e:  # noqa: BLE001
+        log("usage:", e)
+        return []
+    if not out.get("ok"):
+        if out.get("msg"):
+            log("usage:", out["msg"])
+        return []
+    levels = st.setdefault("levels", {})
+    events = []
+    for p in out.get("providers") or []:
+        if not isinstance(p, dict) or not p.get("id") or p.get("stale"):
+            continue
+        for lim in p.get("limits") or []:
+            if not isinstance(lim, dict):
+                continue
+            key = "%s\t%s" % (p["id"], lim.get("id"))
+            percent = float(lim.get("percent") or 0)
+            resets = lim.get("resets") or 0
+            # A reading from before its own reset time (a cached one): that window is over, it starts afresh.
+            if resets and now >= resets:
+                percent, resets = 0.0, 0
+            level = usage_level(percent)
+            before = levels.get(key) or {}
+            told = before.get("level", 0)
+            # The window told about is over: it reset at another time now, or its reset time passed.
+            # A rolling one (no reset time) is over once well under the marks (USAGE_CLEAR), so a limit
+            # hovering around 80% isn't told again and again.
+            ended = (resets and before.get("resets") and before.get("resets") != resets) \
+                or (before.get("resets") and now >= before["resets"]) \
+                or (not resets and not before.get("resets") and percent < USAGE_CLEAR)
+            if ended and told:
+                told = 0
+                if level == 0:
+                    events.append({"type": "usage", "provider": p["id"], "name": p.get("name") or p["id"], "limit": lim, "level": 0})
+            if level > told:
+                events.append({"type": "usage", "provider": p["id"], "name": p.get("name") or p["id"], "limit": lim, "level": level})
+                told = level
+            levels[key] = {"level": told, "resets": resets}
+    return events
+
+
+def board_data(board):
+    """The board's data folder: its launcher lives in `<data>/bin`."""
+    if board and board.replace(os.sep, "/").endswith("/data/bin/herdr-projects"):
+        return os.path.dirname(os.path.dirname(board))
+    return os.path.join(HOME, ".herdr-projects", "data")
+
+
+def takeover_events(board, tasks, seen, first, now):
+    """Tasks the board's fallback handed to another agent because of a limit, since the last look."""
+    data = board_data(board)
+    events = []
+    keep = {}
+    for key, t in tasks:
+        tid = str(t.get("id", ""))
+        if not tid or ":" in tid or t.get("archivedAt"):
+            continue
+        path = os.path.join(data, "tasks", tid, "task.json")
+        try:
+            m = os.path.getmtime(path)
+        except OSError:
+            continue
+        rec = seen.get(tid) or {}
+        if rec.get("m") == m:
+            keep[tid] = rec
+            continue
+        doc = read_json(path, {})
+        hand = [h for h in (doc.get("handovers") or []) if isinstance(h, dict)] if isinstance(doc, dict) else []
+        newest = max([float(h.get("at") or 0) for h in hand] or [0])
+        if not first:
+            new = [h for h in hand if float(h.get("at") or 0) > float(rec.get("at") or 0)
+                   and now * 1000 - float(h.get("at") or 0) < TAKEOVER_FRESH * 1000 and LIMIT_WHY.search(str(h.get("why") or ""))]
+            if new:
+                h = new[-1]
+                events.append({"type": "takeover", "key": key, "task": {"id": tid, "title": _short(t.get("title") or "", 120)},
+                               "role": h.get("role") or "", "from": str(h.get("from") or ""), "to": str(h.get("to") or ""),
+                               "why": _short(str(h.get("why") or ""), 160), "at": int(float(h.get("at") or 0))})
+        keep[tid] = {"m": m, "at": max(newest, float(rec.get("at") or 0))}
+    seen.clear()
+    seen.update(keep)
+    return events
+
+
 # ---- quick commands ------------------------------------------------------------------------------
 
 def quick_look(st, now):
@@ -962,6 +1081,8 @@ def shows(event):
         return False
     if event.get("type") == "health":
         return bool(event.get("low"))
+    if event.get("type") == "usage":
+        return bool(event.get("level"))
     return True
 
 
@@ -1061,6 +1182,11 @@ def tick(state, n, dry_run=False, now=None):
                 told = task_events(listed, st.setdefault("tasks", {}), first)
                 events += told
                 events += watch_task_events(listed, st.setdefault("watch_tasks", {}), watch_tasks, {e["task"]["id"] for e in told})
+                try:
+                    learn = "handovers" not in st or first
+                    events += takeover_events(src.board, listed, st.setdefault("handovers", {}), learn, now)
+                except Exception as e:  # noqa: BLE001 - a nicety next to the tasks
+                    log("hand-overs:", e)
                 learn = "tasks" not in jst or first
                 noted += journal_tasks(listed, jst.setdefault("tasks", {}), learn, now)
                 if live:
@@ -1102,6 +1228,17 @@ def tick(state, n, dry_run=False, now=None):
                 record = state.setdefault("phones", {}).setdefault(sub["id"], {})
                 if not dry_run and not gone(record, sub):
                     send(sub, [ev], record, here)
+        try:
+            usage = usage_look(state.setdefault("usage", {}), now)
+        except Exception as e:  # noqa: BLE001 - a nicety next to the agents
+            log("usage:", e)
+            usage = []
+        if usage:
+            sent["@usage"] = usage
+            for sub in subs:
+                record = state.setdefault("phones", {}).setdefault(sub["id"], {})
+                if not dry_run and not gone(record, sub):
+                    send(sub, usage, record, here)
         try:
             quick = quick_look(state.setdefault("quick", {}), now)
         except Exception as e:  # noqa: BLE001 - a nicety next to the agents

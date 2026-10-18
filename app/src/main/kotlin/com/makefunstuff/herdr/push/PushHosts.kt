@@ -2,6 +2,7 @@ package com.makefunstuff.herdr.push
 
 import com.makefunstuff.herdr.core.host.HostSession
 import com.makefunstuff.herdr.core.push.HerdrPush
+import com.makefunstuff.herdr.core.usage.HerdrUsage
 import com.makefunstuff.herdr.data.HostManager
 import com.makefunstuff.herdr.data.MachineStore
 import kotlinx.coroutines.CancellationException
@@ -94,6 +95,11 @@ class PushHosts(
             }
         }
         client.install()
+        // herdr-usage beside it: herdr-push reads the providers' limits with it, to warn near one.
+        runCatching {
+            HerdrUsage.Client({ cmd, t -> conn.run(cmd, t) }, { cmd, input, t -> conn.runWithInput(cmd, input.byteInputStream(), t) }, session.machine.label)
+                .install()
+        }
         session.checkBoard()
         val host = session.state.value
         val sub = HerdrPush.subscription(

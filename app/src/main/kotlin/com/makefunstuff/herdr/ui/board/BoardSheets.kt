@@ -579,11 +579,13 @@ fun BoardDialogs(
     onConfirm: (Pending.Confirm) -> Unit,
     onAnyway: (Pending.Anyway) -> Unit,
     onSaved: () -> Unit,
+    onStart: (Pending.Start, String?) -> Unit = { _, _ -> },
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     when (pending) {
         null -> {}
+        is Pending.Start -> StartAgentPanel(pending.task, session, onDismiss) { agent -> onStart(pending, agent) }
         is Pending.Words -> {
             var text by remember { mutableStateOf("") }
             BoardPanel(
@@ -696,6 +698,7 @@ fun BoardDialogs(
                 HerdrField(desc, { desc = it }, label = "Description (Markdown)", minLines = 3, modifier = Modifier.fillMaxWidth())
                 SwitchRow("Research only", "A report instead of code changes", research) { research = it }
                 SwitchRow("Start an agent now", null, start) { start = it }
+                if (start) DefaultAgentLine(session)
             }
         }
     }
