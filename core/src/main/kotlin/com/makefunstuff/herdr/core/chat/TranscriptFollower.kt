@@ -26,10 +26,11 @@ object TranscriptFollower {
     private const val MISSING = "@@missing"
     private const val FILE = "@@file "
 
-    // $1 kind (path|id), $2 value, $3 agent kind, $4 bytes. The trailing `cat` waits for the app to
-    // close the channel, then stops tail, so no tail outlives the chat screen.
-    private val SCRIPT = """
-        kind="${'$'}1"; value="${'$'}2"; agent="${'$'}3"; bytes="${'$'}4"; f=""
+    /**
+     * Sets `f` to the transcript of the session in `kind` (path|id), `value` and `agent`, or leaves it
+     * empty; the chat search ([ChatSearch]) finds its files the same way.
+     */
+    internal val FIND = """
         if [ "${'$'}kind" = path ]; then
           f="${'$'}value"
           case "${'$'}f" in "~/"*) f="${'$'}HOME/${'$'}{f#\~/}" ;; esac
@@ -41,6 +42,13 @@ object TranscriptFollower {
             omp) for c in "${'$'}HOME"/.omp/agent/sessions/*/*_"${'$'}value".jsonl; do [ -f "${'$'}c" ] && f="${'$'}c" && break; done ;;
           esac
         fi
+    """.trimIndent()
+
+    // $1 kind (path|id), $2 value, $3 agent kind, $4 bytes. The trailing `cat` waits for the app to
+    // close the channel, then stops tail, so no tail outlives the chat screen.
+    private val SCRIPT = """
+        kind="${'$'}1"; value="${'$'}2"; agent="${'$'}3"; bytes="${'$'}4"; f=""
+    """.trimIndent() + "\n" + FIND + "\n" + """
         if [ -z "${'$'}f" ] || [ ! -f "${'$'}f" ]; then echo "$MISSING"; exit 0; fi
         size=${'$'}(wc -c < "${'$'}f" | tr -d ' ')
         echo "$FILE${'$'}size ${'$'}f"

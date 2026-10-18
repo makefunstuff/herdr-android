@@ -56,6 +56,14 @@ class Panes(
 
     /** Opens a [Links] route (a notification, the tile, a widget): a board's task on the right, the rest as [open]. */
     fun link(nav: NavController, route: String) {
+        // The Agents screen (the launcher's Needs you): back to it, not another one on top.
+        if (route == Routes.AGENTS) {
+            nav.navigate(route) {
+                popUpTo(nav.graph.findStartDestination().id) { saveState = false }
+                launchSingleTop = true
+            }
+            return
+        }
         if (!wide) return nav.navigate(route) { launchSingleTop = true }
         val board = Routes.boardOf(route) ?: return open(nav, route)
         openBoard(nav, board.first, board.second)

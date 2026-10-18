@@ -80,6 +80,14 @@ class FakeMachine(
     var pictures: Map<String, java.io.File> = emptyMap(),
     /** What `herdr-agent-commands` prints there (AgentCommands.listCommand): the person's and the projects' own commands and skills. */
     var agentCommands: String = "",
+    /** The agents whose programs are there, as `integration.list` reports them (Start work and the New sheet offer these). */
+    var installed: List<String> = listOf("claude", "codex", "pi", "opencode"),
+    /** Its folders for the folder browser (Folder.command), by path: `R name` for a Git repository, `D name` for a folder. */
+    var folders: Map<String, List<String>> = mapOf(
+        HOME to listOf("D Downloads", "D notes", "D src"),
+        "$HOME/src" to listOf("R api-server", "R herdr-android", "D scratch", "R website"),
+        "$HOME/src/scratch" to listOf("R upload-flake", "D notes"),
+    ),
 ) {
     val fingerprint = "SHA256:" + Base64.getEncoder().withoutPadding().encodeToString(id.toByteArray()).padEnd(43, 'A')
     private val overrides = HashMap<String, (JsonObject) -> JsonElement>()
@@ -90,6 +98,30 @@ class FakeMachine(
     // ---- shell commands -------------------------------------------------------------------------
 
     fun run(command: String): CommandResult {
+        Shell.words(command).let { w ->
+            // Words in the chats (ChatSearch.command): the transcripts' lines that hold them, under each chat's mark.
+            val chat = w.indexOf("herdr-chat-search")
+            if (chat >= 0) {
+                val q = w[chat + 1]
+                val out = StringBuilder()
+                w.drop(chat + 2).chunked(4).filter { it.size == 4 }.forEach { (pane, _, value, _) ->
+                    val text = transcripts[value] ?: return@forEach
+                    out.append(com.makefunstuff.herdr.core.chat.ChatSearch.MARK).append(pane).append('\n')
+                    text.lines().filter { it.contains(q, ignoreCase = true) }.takeLast(12).forEach { out.append(it).append('\n') }
+                }
+                return ok(out.toString())
+            }
+            // The agents' programs on the PATH (StartWork.probeCommand): the ones installed there.
+            if (command.contains("herdr-agent-kinds")) return ok(installed.joinToString("") { "@@herdr-kind $it\n" })
+            // The folder browser (Folder.command): where it is, then its folders.
+            val folder = w.indexOf("herdr-folder")
+            if (folder >= 0) {
+                val asked = w.getOrNull(folder + 1)?.let { if (it == "~") HOME else if (it.startsWith("~/")) HOME + it.drop(1) else it } ?: HOME
+                val path = asked.trimEnd('/').ifEmpty { "/" }
+                val list = folders[path] ?: return CommandResult(3, "", "")
+                return ok("@@herdr-folder $path\n" + list.joinToString("") { "$it\n" })
+            }
+        }
         code?.run(command)?.let { return it }
         quick?.run(command)?.let { return it }
         health.run(command)?.let { return it }
@@ -231,7 +263,7 @@ class FakeMachine(
             "plugin.list" -> obj("plugins" to JsonArray(emptyList()))
             "plugin.action.list" -> obj("actions" to JsonArray(emptyList()))
             "plugin.log.list" -> obj("logs" to JsonArray(emptyList()))
-            "integration.list" -> obj("integrations" to JsonArray(emptyList()))
+            "integration.list" -> obj("integrations" to JsonArray(installed.map { obj("target" to it, "label" to it, "command" to it, "available" to true, "state" to "current") }))
             "server.agent_manifests" -> obj("manifests" to JsonArray(emptyList()))
             else -> if (method.startsWith("pane.") || method.startsWith("tab.") || method.startsWith("workspace.") ||
                 method.startsWith("agent.")
@@ -243,6 +275,7 @@ class FakeMachine(
 
     companion object {
         const val BOARD_PATH = "/home/demo/.herdr-projects/data/bin/herdr-projects"
+        const val HOME = "/home/demo"
     }
 }
 

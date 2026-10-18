@@ -73,6 +73,8 @@ class AppContainer(app: Context) {
     /** The clock the screens read (a turn's "Working for 3m", the away card): the demo's fixed time. */
     val clock: () -> Long = { Demo.NOW }
     val bubbles: Bubbles = PreviewBubbles
+    val shortcuts: com.makefunstuff.herdr.share.Shortcuts = com.makefunstuff.herdr.share.NoShortcuts
+    val starts = com.makefunstuff.herdr.data.StartStore(java.io.File(app.filesDir, "starts.json"))
     val guard = com.makefunstuff.herdr.data.GuardStore(java.io.File(app.filesDir, "guard.json"), preview.PreviewUnlock)
     // The brief at the demo's fixed time, on UTC, so it reads the same every run.
     val briefWork = BriefWork(

@@ -82,22 +82,11 @@ class AndroidBubbles(private val context: Context) : Bubbles {
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) return Floated.NotificationsOff
         val allowed = bubblesAllowed(chat)
-        val icon = icon(chat, title)
+        val icon = chatIcon(context, chat, title)
         val name = if (machine.isEmpty()) title else "$title · $machine"
-        val person = Person.Builder().setName(name).setKey(chat.id).setIcon(icon).setBot(true).build()
-        val open = Intent(context, MainActivity::class.java).setAction(Intent.ACTION_VIEW).putExtras(openExtras(chat))
-        ShortcutManagerCompat.pushDynamicShortcut(
-            context,
-            ShortcutInfoCompat.Builder(context, chat.id)
-                .setShortLabel(title)
-                .setLongLabel(name)
-                .setIcon(icon)
-                .setPerson(person)
-                .setLongLived(true)
-                .setLocusId(LocusIdCompat(chat.id))
-                .setIntent(open)
-                .build(),
-        )
+        val person = person(chat, name, icon)
+        val open = openIntent(context, chat)
+        ShortcutManagerCompat.pushDynamicShortcut(context, chatShortcut(context, chat, title, machine))
         // A bubble's intent must be mutable: Android adds to it as it opens the bubble.
         val bubble = PendingIntent.getActivity(
             context, chat.id.hashCode(),
@@ -157,47 +146,6 @@ class AndroidBubbles(private val context: Context) : Bubbles {
         runCatching { context.startActivity(intent) }
     }
 
-    /** What makes MainActivity open [chat]: as a tapped notification does. */
-    private fun openExtras(chat: BubbleChat) = android.os.Bundle().apply {
-        putString(MainActivity.OPEN_MACHINE, chat.machineId)
-        when (chat) {
-            is BubbleChat.Agent -> putString(MainActivity.OPEN_PANE, chat.paneId)
-            is BubbleChat.Coordinator -> putBoolean(MainActivity.OPEN_COORDINATOR, true)
-        }
-    }
-
-    /**
-     * The bubble's face, an adaptive bitmap: the Coordinator's icon, or the agent's initial, in graphite on
-     * the app's amber. Only the middle two thirds show, as a circle.
-     */
-    private fun icon(chat: BubbleChat, title: String): IconCompat {
-        val px = (ICON_DP * context.resources.displayMetrics.density).toInt()
-        val bitmap = Bitmap.createBitmap(px, px, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(bitmap)
-        canvas.drawColor(AMBER)
-        val ink = GRAPHITE
-        when (chat) {
-            is BubbleChat.Coordinator -> ContextCompat.getDrawable(context, R.drawable.ic_coordinator)?.mutate()?.let { d ->
-                val side = px * 40 / ICON_DP
-                val at = (px - side) / 2
-                d.setTint(ink)
-                d.setBounds(at, at, at + side, at + side)
-                d.draw(canvas)
-            }
-            is BubbleChat.Agent -> {
-                val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color = ink
-                    textSize = px * 0.4f
-                    textAlign = Paint.Align.CENTER
-                    typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-                }
-                val letter = title.trim().firstOrNull { it.isLetterOrDigit() }?.uppercase() ?: "?"
-                canvas.drawText(letter, px / 2f, px / 2f - (paint.descent() + paint.ascent()) / 2, paint)
-            }
-        }
-        return IconCompat.createWithAdaptiveBitmap(bitmap)
-    }
-
     companion object {
         const val CHANNEL = "floating"
         /** Opens a chat in the app from its bubble. */
@@ -213,5 +161,77 @@ class AndroidBubbles(private val context: Context) : Bubbles {
 
         fun chatOf(uri: Uri?): BubbleChat? =
             uri?.takeIf { it.scheme == "herdr" && it.host == "bubble" }?.lastPathSegment?.let(BubbleChat::parse)
+
+        /** What makes MainActivity open [chat]: as a tapped notification does. */
+        private fun openExtras(chat: BubbleChat) = android.os.Bundle().apply {
+            putString(MainActivity.OPEN_MACHINE, chat.machineId)
+            when (chat) {
+                is BubbleChat.Agent -> putString(MainActivity.OPEN_PANE, chat.paneId)
+                is BubbleChat.Coordinator -> putBoolean(MainActivity.OPEN_COORDINATOR, true)
+            }
+        }
+
+        private fun openIntent(context: Context, chat: BubbleChat) =
+            Intent(context, MainActivity::class.java).setAction(Intent.ACTION_VIEW).putExtras(openExtras(chat))
+
+        private fun person(chat: BubbleChat, name: String, icon: IconCompat) =
+            Person.Builder().setName(name).setKey(chat.id).setIcon(icon).setBot(true).build()
+
+        /**
+         * [chat]'s long-lived shortcut, named [title] on [machine]: the conversation its bubble belongs to,
+         * and the launcher's shortcut to it among the recent agents ([rank] places it there).
+         */
+        fun chatShortcut(context: Context, chat: BubbleChat, title: String, machine: String, rank: Int = 0): ShortcutInfoCompat {
+            val icon = chatIcon(context, chat, title)
+            val name = if (machine.isEmpty()) title else "$title · $machine"
+            return ShortcutInfoCompat.Builder(context, chat.id)
+                .setShortLabel(title)
+                .setLongLabel(name)
+                .setIcon(icon)
+                .setPerson(person(chat, name, icon))
+                .setLongLived(true)
+                .setLocusId(LocusIdCompat(chat.id))
+                .setIntent(openIntent(context, chat))
+                .setRank(rank)
+                .build()
+        }
+
+        /**
+         * A chat's face, an adaptive bitmap: the Coordinator's icon, or the agent's initial, in graphite on
+         * the app's amber. Only the middle two thirds show, as a circle.
+         */
+        fun chatIcon(context: Context, chat: BubbleChat, title: String): IconCompat = when (chat) {
+            is BubbleChat.Coordinator -> glyphIcon(context, R.drawable.ic_coordinator)
+            is BubbleChat.Agent -> face(context) { canvas, px ->
+                val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = GRAPHITE
+                    textSize = px * 0.4f
+                    textAlign = Paint.Align.CENTER
+                    typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                }
+                val letter = title.trim().firstOrNull { it.isLetterOrDigit() }?.uppercase() ?: "?"
+                canvas.drawText(letter, px / 2f, px / 2f - (paint.descent() + paint.ascent()) / 2, paint)
+            }
+        }
+
+        /** One of the app's line icons ([drawable]) in graphite on the amber face, as the shortcuts and bubbles show it. */
+        fun glyphIcon(context: Context, drawable: Int): IconCompat = face(context) { canvas, px ->
+            ContextCompat.getDrawable(context, drawable)?.mutate()?.let { d ->
+                val side = px * 40 / ICON_DP
+                val at = (px - side) / 2
+                d.setTint(GRAPHITE)
+                d.setBounds(at, at, at + side, at + side)
+                d.draw(canvas)
+            }
+        }
+
+        private fun face(context: Context, draw: (Canvas, Int) -> Unit): IconCompat {
+            val px = (ICON_DP * context.resources.displayMetrics.density).toInt()
+            val bitmap = Bitmap.createBitmap(px, px, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(bitmap)
+            canvas.drawColor(AMBER)
+            draw(canvas, px)
+            return IconCompat.createWithAdaptiveBitmap(bitmap)
+        }
     }
 }

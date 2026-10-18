@@ -90,6 +90,19 @@ class HerdrApp : Application() {
                 container.usage.latest,
             ) { _, _, _ -> }.collect { Widgets.update(this@HerdrApp) }
         }
+        // The launcher's shortcuts say how many things need you, and which Coordinator they open.
+        container.scope.launch {
+            combine(container.tally.counts, container.shares.last, container.machines.machines) { c, last, list ->
+                c.needYou to last?.let { id -> list.firstOrNull { it.id == id }?.label }
+            }.distinctUntilChanged().collect { (need, label) -> container.shortcuts.update(need, label) }
+        }
+        container.scope.launch {
+            container.machines.machines.collect { list ->
+                val ids = list.map { it.id }.toSet()
+                container.shortcuts.keep(ids)
+                container.starts.keep(ids)
+            }
+        }
     }
 }
 
@@ -138,6 +151,10 @@ class AppContainer(app: Application) {
     /** The clock the screens read (a turn's "Working for 3m", the away card). */
     val clock: () -> Long = System::currentTimeMillis
     val bubbles: Bubbles = AndroidBubbles(app)
+    /** The launcher's shortcuts: Needs you, the Coordinator, Start work, the agents opened last. */
+    val shortcuts: com.makefunstuff.herdr.share.Shortcuts = com.makefunstuff.herdr.share.AndroidShortcuts(app)
+    /** The folders work was started in from the phone, and how it was started last. */
+    val starts = com.makefunstuff.herdr.data.StartStore(java.io.File(app.filesDir, "starts.json"))
     val briefWork = BriefWork(
         scope, hosts, machines, BriefStore(java.io.File(app.filesDir, "brief.json")), AndroidBrief(app), AndroidVoice(app),
         quiet = { quietWork.check() },
