@@ -1,5 +1,6 @@
 package com.makefunstuff.herdr.core.chat
 
+import com.makefunstuff.herdr.core.activity.ActivityLog
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -18,12 +19,19 @@ abstract class Transcript {
     private val entries = LinkedHashMap<String, ChatItem>()
     private var version = 0L
 
-    /** Changes each time the items change, so a follower knows when to publish. */
-    val revision: Long get() = version
+    /**
+     * The same lines read as timed turns, when set: the chat's turn headers, times and edit counts
+     * come from it, by the ids both readers give a tool call or a message.
+     */
+    var activity: ActivityLog? = null
+
+    /** Changes each time the items (or the [activity]) change, so a follower knows when to publish. */
+    val revision: Long get() = version + (activity?.revision ?: 0)
 
     fun items(): List<ChatItem> = entries.values.toList()
 
     fun feed(line: String) {
+        activity?.feed(line)
         if (line.isBlank() || line[0] != '{') return
         val obj = runCatching { TranscriptJson.parseToJsonElement(line).jsonObject }.getOrNull() ?: return
         runCatching { read(obj) }
