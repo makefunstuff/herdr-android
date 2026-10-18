@@ -10,8 +10,9 @@ import java.time.Instant
  * they are. One command per machine finds each agent's transcript as the chat does
  * ([TranscriptFollower.FIND]) and prints its newest lines holding the words, which the agent's own
  * reader then turns into what was said. Only what was said counts, not tool calls or their output.
- * Words are matched in the file as written, so ones the transcript stores escaped (quotes, some
- * non-ASCII) may not be found.
+ * As in the rest of the search, every word has to be in it, anywhere: the machine looks for the
+ * longest word, and what it finds is kept when it holds the others too. Words are matched in the
+ * file as written, so ones the transcript stores escaped (quotes, some non-ASCII) may not be found.
  */
 object ChatSearch {
     const val MARK = "@@herdr-chat "
@@ -23,7 +24,7 @@ object ChatSearch {
     /** Fewer letters than this find too much to be worth the trip to the machines. */
     const val MIN_QUERY = 3
 
-    // $1 the words, then pane, kind, value and agent for each chat.
+    // $1 the word looked for, then pane, kind, value and agent for each chat.
     private val SCRIPT = """
         q="${'$'}1"; shift
         while [ ${'$'}# -ge 4 ]; do
@@ -44,9 +45,9 @@ object ChatSearch {
 
     /** The command for [chats] on one machine; null when there is nothing to look in. */
     fun command(query: String, chats: List<Chat>): String? {
-        val q = query.trim()
+        val q = words(query).maxByOrNull { it.length } ?: return null
         val readable = chats.filter { Transcript.forAgent(it.session.agent) != null && it.session.value.isNotEmpty() }
-        if (q.length < MIN_QUERY || readable.isEmpty()) return null
+        if (query.trim().length < MIN_QUERY || readable.isEmpty()) return null
         val args = readable.flatMap { listOf(it.paneId, it.session.kind, it.session.value, it.session.agent) }
         return "sh -c ${quote(SCRIPT)} herdr-chat-search " + (listOf(q) + args).joinToString(" ") { quote(it) }
     }
@@ -56,8 +57,8 @@ object ChatSearch {
      * them. [agents] gives each pane's agent kind, whose reader understands its lines.
      */
     fun parse(stdout: String, query: String, agents: Map<String, String>, perChat: Int = 2): List<Hit> {
-        val q = query.trim().lowercase()
-        if (q.isEmpty()) return emptyList()
+        val words = words(query)
+        if (words.isEmpty()) return emptyList()
         val out = ArrayList<Hit>()
         var pane: String? = null
         val lines = ArrayList<String>()
@@ -79,9 +80,9 @@ object ChatSearch {
                         else -> null
                     }
                 }
-                .filter { (_, text, _) -> !isInjected(text) && text.lowercase().contains(q) }
+                .filter { (_, text, _) -> !isInjected(text) && text.lowercase().let { t -> words.all { it in t } } }
                 .take(perChat)
-                .forEach { (you, text, id) -> out += Hit(p, you, snippet(text, q), times[id]) }
+                .forEach { (you, text, id) -> out += Hit(p, you, snippet(text, words.first()), times[id]) }
         }
         for (line in stdout.lines()) {
             if (line.startsWith(MARK)) {
@@ -93,6 +94,9 @@ object ChatSearch {
         flush()
         return out
     }
+
+    /** The query's words, in lower case, as the rest of the search splits them. */
+    private fun words(query: String): List<String> = query.lowercase().split(SPACES).filter { it.isNotEmpty() }
 
     /** About [width] characters of [text] around the first [query], on one line, cut at words, with … where it was cut. */
     fun snippet(text: String, query: String, width: Int = 90): String {

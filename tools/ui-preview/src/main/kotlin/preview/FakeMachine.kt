@@ -111,6 +111,8 @@ class FakeMachine(
                 }
                 return ok(out.toString())
             }
+            // The agents' programs on the PATH (StartWork.probeCommand): the ones installed there.
+            if (command.contains("herdr-agent-kinds")) return ok(installed.joinToString("") { "@@herdr-kind $it\n" })
             // The folder browser (Folder.command): where it is, then its folders.
             val folder = w.indexOf("herdr-folder")
             if (folder >= 0) {

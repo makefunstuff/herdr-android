@@ -46,10 +46,8 @@ fun NewSheet(session: HostSession, snap: SessionSnapshot, onDismiss: () -> Unit)
     val scope = rememberCoroutineScope()
     var mode by remember { mutableStateOf(0) }
     var workspaceId by remember { mutableStateOf(snap.workspaces.firstOrNull { it.focused }?.workspaceId ?: snap.workspaces.firstOrNull()?.workspaceId) }
-    // The agents installed there, as herdr finds their programs; the usual list when it can't say.
-    val kinds by produceState(StartWork.KINDS, session.machine.id) {
-        runCatching { StartWork.installed(session.awaitApi(10_000).integrations()) }.getOrNull()?.takeIf { it.isNotEmpty() }?.let { value = it }
-    }
+    // The agents installed there, as herdr's integrations and the machine's programs say; the usual list until then.
+    val kinds by produceState(StartWork.KINDS, session.machine.id) { value = StartWork.installedOn(session) }
     var picked by remember { mutableStateOf<String?>(null) }
     val kind = picked?.takeIf { it in kinds } ?: kinds.first()
     var name by remember { mutableStateOf("") }

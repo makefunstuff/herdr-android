@@ -104,11 +104,11 @@ fun StartWorkScreen(nav: NavController, machineId: String? = null, text: String 
     // A folder named as one of the board's repos is that repo: shown once, by the name the board knows.
     val places = if (board) repos + recent.filter { StartWork.folderName(it) !in repos } else recent
     val place = folder?.takeIf { it.isNotEmpty() } ?: places.firstOrNull()
-    // The agents installed there, as herdr finds their programs; the usual list when it can't say.
+    // The agents installed there, as herdr's integrations and the machine's programs say; the usual list when it can't say.
     val kinds by produceState<List<String>?>(null, mid, board) {
         value = null
         if (session == null || board) return@produceState
-        value = runCatching { StartWork.installed(session.awaitApi(10_000).integrations()) }.getOrNull()?.ifEmpty { null } ?: StartWork.KINDS
+        value = StartWork.installedOn(session)
     }
     val agent = kind?.takeIf { kinds?.contains(it) == true } ?: mid?.let { starts.kinds[it] }?.takeIf { kinds?.contains(it) == true } ?: kinds?.firstOrNull()
 

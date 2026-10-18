@@ -172,6 +172,33 @@ class ChatSearchTest {
     }
 
     @Test
+    fun eachWordCountsOnItsOwnAsInTheRestOfTheSearch() {
+        val dir = Files.createTempDirectory("chats")
+        try {
+            val file = dir.resolve("app.jsonl").toFile().apply {
+                writeText(
+                    """{"type": "user", "uuid": "u1", "message": {"role": "user", "content": "Look into the flaky upload test on CI"}}""" + "\n" +
+                        """{"type": "assistant", "uuid": "u2", "message": {"role": "assistant", "content": [{"type": "text", "text": "The test is flaky only on slow disks."}]}}""" + "\n" +
+                        """{"type": "assistant", "uuid": "u3", "message": {"role": "assistant", "content": [{"type": "text", "text": "One more test run, all green."}]}}""" + "\n",
+                )
+            }
+            fun hits(q: String): List<ChatSearch.Hit> {
+                val command = ChatSearch.command(q, listOf(ChatSearch.Chat("w1:p1", AgentSessionRef(agent = "claude", kind = "path", value = file.path))))!!
+                val p = ProcessBuilder("sh", "-c", command).redirectErrorStream(true).start()
+                val out = p.inputStream.bufferedReader().readText()
+                assertTrue(p.waitFor(10, TimeUnit.SECONDS))
+                return ChatSearch.parse(out, q, mapOf("w1:p1" to "claude"), perChat = 5)
+            }
+            // Not next to each other, and in either order; a line without both doesn't count.
+            assertEquals(listOf(false, true), hits("flaky test").map { it.you })
+            assertEquals(listOf(true), hits("upload  FLAKY").map { it.you })
+            assertTrue(hits("flaky green").isEmpty())
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
     fun aShortQueryOrAChatItCantReadAsksNothing() {
         val chat = ChatSearch.Chat("w1:p1", AgentSessionRef(agent = "claude", kind = "id", value = "abc"))
         assertNull(ChatSearch.command("jo", listOf(chat)))
@@ -196,7 +223,10 @@ class StartWorkTest {
         assertEquals("Add a last answered line" to "", StartWork.task("  Add a last answered line  "))
         val long = "Add a “last answered 2 min ago” line to each machine card, and a test for it, and make the widget show it too"
         val (title, desc) = StartWork.task(long)
-        assertTrue(title.length <= StartWork.TITLE + 1 && title.endsWith("…"), title)
+        // Within the board's own limit, … and all, so the board takes it as it is.
+        assertTrue(title.length <= 60 && title.endsWith("…"), title)
+        assertEquals("Add a “last answered 2 min ago” line to each machine card…", title)
+        assertEquals(StartWork.TITLE, StartWork.task("x".repeat(80)).first.length)
         assertEquals(long, desc)
         assertEquals("Fix login" to "Fix login\nIt fails on the second try", StartWork.task("Fix login\nIt fails on the second try"))
     }
@@ -218,6 +248,29 @@ class StartWorkTest {
             IntegrationInfo("claude", available = true, state = "current"),
         )
         assertEquals(listOf("claude", "codex", "grok", "agy"), StartWork.installed(list))
+    }
+
+    @Test
+    fun theMachineIsAskedForTheAgentsHerdrHasNoIntegrationFor() {
+        // herdr's integrations know claude and codex; gemini and amp are found as programs on the PATH.
+        val bin = Files.createTempDirectory("bin").toFile()
+        try {
+            for (exe in listOf("gemini", "amp", "cursor-agent", "claude")) java.io.File(bin, exe).apply { writeText("#!/bin/sh\n"); setExecutable(true) }
+            val args = StartWork.STARTABLE.flatMap { (k, exe) -> listOf(k, exe) }
+            val p = ProcessBuilder(listOf("sh", "-c", StartWork.probeScript(), "herdr-agent-kinds") + args)
+                .redirectErrorStream(true).apply { environment()["PATH"] = bin.path }.start()
+            val out = p.inputStream.bufferedReader().readText()
+            assertTrue(p.waitFor(10, TimeUnit.SECONDS))
+            val found = StartWork.probed(out)
+            assertEquals(setOf("gemini", "amp", "cursor", "claude"), found.toSet())
+            val integrations = listOf(IntegrationInfo("claude", available = true), IntegrationInfo("codex", available = true), IntegrationInfo("antigravity_cli", available = true))
+            assertEquals(listOf("claude", "codex", "gemini", "amp", "cursor", "agy"), StartWork.installed(integrations, found))
+            // What the machine is asked runs the same script in a login shell.
+            val command = StartWork.probeCommand()
+            assertTrue(command.contains("-lc") && command.contains("herdr-agent-kinds") && command.contains("'gemini'"), command)
+        } finally {
+            bin.deleteRecursively()
+        }
     }
 
     @Test
