@@ -40,8 +40,8 @@ import com.makefunstuff.herdr.ui.theme.Space
 import kotlin.math.roundToInt
 
 /**
- * The chats' and the terminal's text sizes in Settings, each its own and apart from the phone's
- * font size: a − and a + for each, and a line of each as it will read.
+ * The chats' and the terminal's text sizes in Settings, each its own, on top of the phone's font
+ * size: a − and a + for each, and a line of each as it will read.
  */
 @Composable
 fun TextSizeCard() {
@@ -53,7 +53,7 @@ fun TextSizeCard() {
     Column(verticalArrangement = Arrangement.spacedBy(Space.m)) {
         Text("Text size", style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
         Text(
-            "Apart from the phone's font size, and from each other. Pinching the terminal changes its size too.",
+            "Each its own, on top of the phone's font size. Pinching the terminal changes its size too.",
             style = MaterialTheme.typography.bodySmall,
             color = c.muted,
         )

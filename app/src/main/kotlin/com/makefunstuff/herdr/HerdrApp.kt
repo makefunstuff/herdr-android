@@ -132,7 +132,7 @@ class AppContainer(app: Application) {
     /** The messages held while an agent worked, and the quick replies over its composer. */
     val composer = com.makefunstuff.herdr.data.ComposerStore(java.io.File(app.filesDir, "composer.json"))
     /** The chats' and the terminal's text sizes (the terminal's from before taken from its old setting). */
-    val textSizes = com.makefunstuff.herdr.data.TextSizeStore(java.io.File(app.filesDir, "text-sizes.json")) {
+    val textSizes = com.makefunstuff.herdr.data.TextSizeStore(java.io.File(app.filesDir, "text-sizes.json"), scope) {
         app.getSharedPreferences("terminal", Context.MODE_PRIVATE).takeIf { it.contains("font_sp") }?.getFloat("font_sp", 11f)
     }
     /** The clock the screens read (a turn's "Working for 3m", the away card). */

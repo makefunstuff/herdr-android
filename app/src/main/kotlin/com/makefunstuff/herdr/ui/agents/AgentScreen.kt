@@ -2,7 +2,6 @@ package com.makefunstuff.herdr.ui.agents
 
 import com.makefunstuff.herdr.core.home.Home
 import com.makefunstuff.herdr.core.home.HomeAgent
-import com.makefunstuff.herdr.ui.common.PasswordCard
 import com.makefunstuff.herdr.ui.design.confirmTap
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -225,10 +224,6 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
     var amending by remember { mutableStateOf(false) }
     var cardOpen by remember { mutableStateOf(false) }
     val prompt = state.prompt
-    // A command it runs asks for a password: a masked field over the composer, put away until it asks anew.
-    var passwordAway by remember(paneId) { mutableStateOf<String?>(null) }
-    LaunchedEffect(state.password) { if (state.password == null) passwordAway = null }
-    val password = state.password?.takeIf { it != passwordAway }
     // A new question (or none): what was begun for the last one is over.
     LaunchedEffect(prompt?.question, status) {
         if (status != AgentStatus.Blocked || telling?.prompt?.same(prompt) == false) telling = null
@@ -485,25 +480,8 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
                                 onPick = { accept(it.insert) },
                             )
                         }) else null,
-                        above = if (password != null || showKeys || status == AgentStatus.Blocked || held.isNotEmpty() || chips) ({
+                        above = if (showKeys || status == AgentStatus.Blocked || held.isNotEmpty() || chips) ({
                             Column(verticalArrangement = Arrangement.spacedBy(Space.s)) {
-                                if (password != null) {
-                                    PasswordCard(
-                                        password,
-                                        // Typed into the pane as it stands, never as a message: no transcript, no draft.
-                                        onSend = { secret ->
-                                            view.confirmTap()
-                                            scope.launch {
-                                                runCatching {
-                                                    val api = session.awaitApi()
-                                                    api.sendText(paneId, secret)
-                                                    api.sendKeys(paneId, listOf("enter"))
-                                                }.onFailure { context.toast(it.message ?: "Couldn't send it") }
-                                            }
-                                        },
-                                        onDismiss = { passwordAway = password },
-                                    )
-                                }
                                 if (held.isNotEmpty()) {
                                     HeldList(
                                         held, status, kind ?: name,

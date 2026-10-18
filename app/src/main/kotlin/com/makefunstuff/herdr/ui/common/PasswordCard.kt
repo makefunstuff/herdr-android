@@ -20,7 +20,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -29,8 +28,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
@@ -52,19 +49,18 @@ import com.makefunstuff.herdr.ui.theme.Radius
 import com.makefunstuff.herdr.ui.theme.Space
 
 /**
- * A pane that asks for a password ([com.makefunstuff.herdr.core.chat.PasswordPrompt]): the line
- * that asks, a masked field (dots, the keyboard's password mode, so it neither shows nor learns
- * it; the eye shows it), and Send, which types it with Enter. What is typed stays in this card
- * only: no draft, no history. X puts it away until the pane asks again. [focus] takes the
- * keyboard at once (the terminal, where you just typed the command that asks).
+ * A terminal that asks for a password ([com.makefunstuff.herdr.core.chat.PasswordPrompt]): the
+ * line that asks, a masked field (dots, the keyboard's password mode, so it neither shows nor
+ * learns it; the eye shows it), and Send, which types it with Enter. What is typed stays in this
+ * card only: no draft, no history. X puts it away until the terminal asks again. It never takes
+ * the keyboard by itself: a tap on the field does, so what you type goes on into the terminal
+ * if the card was wrong.
  */
 @Composable
-fun PasswordCard(asks: String, onSend: (String) -> Unit, onDismiss: () -> Unit, modifier: Modifier = Modifier, focus: Boolean = false) {
+fun PasswordCard(asks: String, onSend: (String) -> Unit, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
     val c = Herdr.colors
     var text by remember(asks) { mutableStateOf("") }
     var shown by remember(asks) { mutableStateOf(false) }
-    val focusRequester = remember { FocusRequester() }
-    LaunchedEffect(asks, focus) { if (focus) runCatching { focusRequester.requestFocus() } }
     fun send() {
         if (text.isEmpty()) return
         val secret = text
@@ -98,7 +94,7 @@ fun PasswordCard(asks: String, onSend: (String) -> Unit, onDismiss: () -> Unit, 
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false, imeAction = ImeAction.Send),
                     keyboardActions = KeyboardActions(onSend = { send() }),
                     trailingIcon = { RoundIcon(if (shown) HerdrIcons.EyeOff else HerdrIcons.Eye, if (shown) "Hide the password" else "Show the password") { shown = !shown } },
-                    modifier = Modifier.weight(1f).focusRequester(focusRequester),
+                    modifier = Modifier.weight(1f),
                 )
                 PrimaryButton("Send", enabled = text.isNotEmpty()) { send() }
             }

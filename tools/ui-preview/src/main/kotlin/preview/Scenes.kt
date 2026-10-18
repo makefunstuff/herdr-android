@@ -213,10 +213,6 @@ fun scenes(): List<Scene> = listOf(
     Scene("chat-files", route = Routes.agent(DEVBOX, APP_AGENT), actions = { type("Look at @mach") }),
     Scene("chat-model", route = Routes.agent(DEVBOX, APP_AGENT), actions = { tapLabel("Model Opus 5.5, context 62% full") }),
     Scene("quick-replies", route = Routes.COMPOSER, setup = { replies() }),
-    // A command the agent runs asks for a password: a masked field over the composer, typed into its pane with Enter.
-    Scene("chat-password", route = Routes.agent(DEVBOX, APP_AGENT), setup = {
-        host(DEVBOX).screens += APP_AGENT to "● Bash(sudo systemctl restart herdr-push)\n  ⎿  Running…\n\n[sudo] password for demo: "
-    }, actions = { type("hunter2") }),
     // The chats' own text size (Settings → Text size), larger than the phone's.
     Scene("chat-large-text", route = Routes.agent(DEVBOX, APP_AGENT), setup = { textSizes = com.makefunstuff.herdr.data.TextSizeStore.Sizes(chat = 1.3f) }),
 

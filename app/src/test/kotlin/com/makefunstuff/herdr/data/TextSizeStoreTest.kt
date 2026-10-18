@@ -36,4 +36,16 @@ class TextSizeStoreTest {
         // Saved now: what came before is no longer read.
         assertEquals(13.5f, TextSizeStore(file) { 9f }.state.value.terminal)
     }
+
+    @Test fun aPinchSavesOffTheCallersThreadTheLatestOnly() {
+        val file = file()
+        val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default)
+        val store = TextSizeStore(file, scope)
+        (0..40).forEach { store.setTerminal(8f + it * 0.1f) }
+        assertEquals(12f, store.state.value.terminal, 0.001f)
+        val until = System.currentTimeMillis() + 5_000
+        while (System.currentTimeMillis() < until && kotlin.math.abs(TextSizeStore(file).state.value.terminal - 12f) > 0.001f) Thread.sleep(20)
+        assertEquals(12f, TextSizeStore(file).state.value.terminal, 0.001f)
+        scope.coroutineContext[kotlinx.coroutines.Job]?.cancel()
+    }
 }

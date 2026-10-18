@@ -35,10 +35,15 @@ class PasswordPromptTest {
         ).forEach { assertNull(PasswordPrompt.ask(it), it) }
     }
 
-    @Test fun readsTheScreensLastLine() {
-        assertEquals("[sudo] password for jpl:", PasswordPrompt.find("$ sudo pacman -Syu\n[sudo] password for jpl: \n\n   \n"))
-        // Answered: the prompt went on, and the screen's last line is something else.
-        assertNull(PasswordPrompt.find("$ sudo pacman -Syu\n[sudo] password for jpl:\n:: Synchronizing package databases...\n"))
-        assertNull(PasswordPrompt.find(""))
+    @Test fun yourOwnTypingAsksNothing() {
+        // A command line, or a TUI's input box, that happens to end in "password:".
+        listOf(
+            "demo@devbox:~$ echo Password:",
+            "> remember the staging db password:",
+            "root@box:/# grep -n PIN:",
+            "❯ what is the wifi passphrase:",
+        ).forEach { assertNull(PasswordPrompt.ask(it), it) }
+        // The prompt's own text may hold such a mark: only what stands before the word counts.
+        assertEquals("[sudo] password for demo:", PasswordPrompt.ask("[sudo] password for demo:"))
     }
 }

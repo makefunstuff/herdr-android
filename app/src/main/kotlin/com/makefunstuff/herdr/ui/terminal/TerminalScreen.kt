@@ -472,7 +472,6 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
                     asks,
                     onSend = { stream?.send(it + Keys.ENTER); hostView.confirmTap() },
                     onDismiss = { putAway = asks },
-                    focus = true,
                     modifier = Modifier.padding(horizontal = Space.s, vertical = Space.xs),
                 )
             }

@@ -1,6 +1,10 @@
 package com.makefunstuff.herdr.data
 
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -9,19 +13,23 @@ import kotlinx.serialization.json.Json
 import java.io.File
 
 /**
- * The chats' and the terminal's text sizes, each its own and apart from the phone's: [Sizes.chat]
+ * The chats' and the terminal's text sizes, each its own, on top of the phone's font scale: [Sizes.chat]
  * scales a chat's messages and composer over the phone's font size (an agent's chat, the
  * Coordinator, a bubble), [Sizes.terminal] is the terminal's font in sp (pinching the terminal
  * sets it too). Kept through restarts; [terminalBefore] is the terminal's size from before there
- * was this store, taken the first time.
+ * was this store, taken the first time. With [saveOn] the file is written there, off the caller's
+ * thread, the latest sizes only: a pinch changes the terminal's size many times a second.
  */
-class TextSizeStore(private val file: File, terminalBefore: () -> Float? = { null }) {
+class TextSizeStore(private val file: File, saveOn: CoroutineScope? = null, terminalBefore: () -> Float? = { null }) {
     @Serializable
     data class Sizes(val chat: Float = 1f, val terminal: Float = TERMINAL_DEFAULT)
 
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val _state = MutableStateFlow(load() ?: Sizes(terminal = terminalBefore()?.let(::terminalIn) ?: TERMINAL_DEFAULT))
     val state: StateFlow<Sizes> = _state.asStateFlow()
+    private val saves = saveOn?.let { scope ->
+        Channel<Sizes>(Channel.CONFLATED).also { ch -> scope.launch(Dispatchers.IO) { for (sizes in ch) save(sizes) } }
+    }
 
     /** The chats' scale, one of [CHAT_STEPS]. */
     fun setChat(scale: Float) = change { it.copy(chat = CHAT_STEPS.minBy { s -> kotlin.math.abs(s - scale) }) }
@@ -35,6 +43,10 @@ class TextSizeStore(private val file: File, terminalBefore: () -> Float? = { nul
         _state.update(f)
         val next = _state.value
         if (next == before) return
+        if (saves != null) saves.trySend(next) else save(next)
+    }
+
+    private fun save(next: Sizes) {
         runCatching {
             file.parentFile?.mkdirs()
             val tmp = File(file.parentFile, "${file.name}.tmp")
