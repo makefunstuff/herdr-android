@@ -10,4 +10,5 @@
     <color name="widget_accent">#FFF0A830</color>
     <color name="widget_blocked">#FFFF7B70</color>
     <color name="widget_working">#FF6CB8D6</color>
+    <color name="widget_notice">#FFE8C55C</color>
 </resources>

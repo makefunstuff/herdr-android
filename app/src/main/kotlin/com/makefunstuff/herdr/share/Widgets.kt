@@ -14,6 +14,7 @@ import com.makefunstuff.herdr.HerdrApp
 import com.makefunstuff.herdr.MainActivity
 import com.makefunstuff.herdr.R
 import com.makefunstuff.herdr.core.push.Counts
+import com.makefunstuff.herdr.core.usage.UsageRules
 import com.makefunstuff.herdr.ui.share.Ask
 import java.util.Date
 
@@ -44,7 +45,10 @@ object Widgets {
             manager.updateAppWidget(asks, ask(context, label))
         }
         val statuses = manager.getAppWidgetIds(ComponentName(context, StatusWidget::class.java))
-        if (statuses.isNotEmpty()) manager.updateAppWidget(statuses, status(context, container.tally.counts.value))
+        if (statuses.isNotEmpty()) {
+            val usage = UsageRules.tightest(container.usage.reports().filterKeys { container.machines.get(it) != null })
+            manager.updateAppWidget(statuses, status(context, container.tally.counts.value, usage, container.usage.nowSeconds()))
+        }
     }
 
     private fun ask(context: Context, machine: String?) = RemoteViews(context.packageName, R.layout.widget_ask).apply {
@@ -53,7 +57,16 @@ object Widgets {
         setOnClickPendingIntent(R.id.widget_root, open(context, Ask.COORDINATOR))
     }
 
-    private fun status(context: Context, c: Counts) = RemoteViews(context.packageName, R.layout.widget_status).apply {
+    private fun status(context: Context, c: Counts, usage: UsageRules.Tight?, now: Long) = RemoteViews(context.packageName, R.layout.widget_status).apply {
+        // The tightest limit, in the colour of how close it is (one of three texts shows).
+        val words = usage?.let { UsageRules.glance(it, now) }
+        val level = usage?.level ?: 0
+        setTextViewText(R.id.widget_usage, words.orEmpty())
+        setTextViewText(R.id.widget_usage_near, words.orEmpty())
+        setTextViewText(R.id.widget_usage_out, words.orEmpty())
+        setViewVisibility(R.id.widget_usage, if (words != null && level < 80) View.VISIBLE else View.GONE)
+        setViewVisibility(R.id.widget_usage_near, if (words != null && level in 80..99) View.VISIBLE else View.GONE)
+        setViewVisibility(R.id.widget_usage_out, if (words != null && level >= 100) View.VISIBLE else View.GONE)
         // Each count is in its colour when there is any, and dim at nought.
         setViewVisibility(R.id.widget_counts, if (c.known) View.VISIBLE else View.GONE)
         setTextViewText(R.id.widget_need, c.needYou.toString())
@@ -71,7 +84,10 @@ object Widgets {
             ).joinToString(" · ")
         }
         setTextViewText(R.id.widget_detail, detail)
-        setContentDescription(R.id.widget_root, if (c.known) "${c.words}, $detail. Opens the board." else detail)
+        // A one-cell widget has room for two lines: the limit takes the second when there is one.
+        setViewVisibility(R.id.widget_detail, if (words != null) View.GONE else View.VISIBLE)
+        val limit = words?.let { " Tightest limit: $it." }.orEmpty()
+        setContentDescription(R.id.widget_root, if (c.known) "${c.words}, $detail.$limit Opens the board." else detail + limit)
         setOnClickPendingIntent(R.id.widget_root, open(context, Ask.BOARD))
     }
 

@@ -175,6 +175,10 @@ fun render(scene: Scene, dark: Boolean, file: File) {
             if (states.size == data.machines.size && states.all { it.status != HostStatus.Connecting && it.status != HostStatus.Stopped }) break
             Thread.sleep(20)
         }
+        // The machines' usage, as the app keeps it from its last reading (read at the demo's time, so never stale).
+        data.hosts.forEach { (id, m) ->
+            if (m.usage != null) container.hosts.session(id)?.let { s -> kotlinx.coroutines.runBlocking { container.usage.read(s) } }
+        }
         // The window is as big as the scene ever gets; the app is drawn in its top left corner at the scene's size.
         val size = mutableStateOf(DpSize(scene.widthDp.dp, scene.heightDp.dp))
         val w = (maxOf(scene.widthDp, scene.resize?.first ?: 0) * SCALE).toInt()
@@ -242,6 +246,9 @@ private fun ComposeUiTest.node(matcher: SemanticsMatcher) = onAllNodes(matcher, 
 
 /** Taps the first element showing [text] (exactly, or as its start when it is longer). */
 fun ComposeUiTest.tapText(text: String) { tap(node(hasText(text, substring = true))) }
+
+/** Taps the first element showing exactly [text] (a button, where a longer line also starts with its words). */
+fun ComposeUiTest.tapExact(text: String) { tap(node(hasText(text, substring = false))) }
 
 /** Taps the first element whose content description (an icon button's label) is [label]. */
 fun ComposeUiTest.tapLabel(label: String) { tap(node(hasContentDescription(label))) }

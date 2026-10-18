@@ -1,0 +1,1053 @@
+#!/usr/bin/env python3
+# version: 1
+"""herdr-usage: what the AI providers a machine uses have left, read on that machine.
+
+Herdr for Android copies it to a machine over SSH and runs it there, so the phone sees each
+provider's limits without any key leaving the machine. It reads:
+
+  - Claude Code (subscription): the 5-hour session and weekly limits, from Anthropic's usage API with
+    Claude Code's own login (~/.claude/.credentials.json, or the macOS keychain).
+  - Codex (subscription): its 5-hour and weekly limits, from ChatGPT's usage API with Codex's own
+    login (~/.codex/auth.json); else the newest limits Codex wrote in its sessions.
+  - API accounts whose keys are already on the machine (the environment, pi's and opencode's auth
+    files): DeepSeek's balance, OpenRouter's spend and limit, Anthropic's costs (with an admin key),
+    OpenCode Go's key and its limits estimated from what this machine's agents spent.
+  - Local models (llama.cpp, Ollama, LM Studio …, from pi's models.json): whether they answer.
+  - What the agents used, per day, board task and agent, from their own session records (Claude
+    Code, Codex, pi, omp, opencode) over the last week.
+
+Nothing is changed and no login is renewed: an expired one says so (its tool renews it when it runs).
+Readings are cached (~/.cache/herdr-usage): the providers are asked at most every few minutes, and the
+session records are read on from where the last look stopped.
+
+  herdr-usage read [--fresh]     everything, as one JSON line
+  herdr-usage limits [--fresh]   the limits alone (what herdr-push warns about)
+  herdr-usage version
+
+Python 3.6 or newer alone, no packages. See host/herdr-usage/README.md in the herdr-android repo.
+"""
+
+import base64
+import json
+import os
+import re
+import sqlite3
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+
+VERSION = "1"
+
+HOME = os.path.expanduser("~")
+CACHE = os.path.join(os.environ.get("XDG_CACHE_HOME") or os.path.join(HOME, ".cache"), "herdr-usage")
+CLAUDE_DIR = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.join(HOME, ".claude")
+CODEX_DIR = os.environ.get("CODEX_HOME") or os.path.join(HOME, ".codex")
+PI_DIR = os.environ.get("PI_CODING_AGENT_DIR") or os.path.join(HOME, ".pi", "agent")
+OMP_DIR = os.path.join(HOME, ".omp", "agent")
+OPENCODE_DATA = os.path.join(os.environ.get("XDG_DATA_HOME") or os.path.join(HOME, ".local", "share"), "opencode")
+BOARD_DATA = os.environ.get("HERDR_PROJECTS_DATA") or os.path.join(HOME, ".herdr-projects", "data")
+
+# Tests point every provider at one local server: https://api.deepseek.com/x → <base>/api.deepseek.com/x.
+API_BASE = os.environ.get("HERDR_USAGE_API", "").rstrip("/")
+# How long a provider's answer is kept before it is asked again (seconds); --fresh asks at once
+# (but not twice within FRESH_MIN: a pull to refresh shouldn't hammer a usage API).
+LIVE_TTL = float(os.environ.get("HERDR_USAGE_TTL", "240"))
+FRESH_MIN = min(20, LIVE_TTL)
+# The days the chart shows, and how long a pass over the session records may take before it stops
+# and goes on from there the next time.
+DAYS = 7
+SCAN_BUDGET = float(os.environ.get("HERDR_USAGE_BUDGET", "40"))
+TOP = 5
+
+# OpenCode Go's limits (opencode.ai/docs/go): dollars of use in a rolling 5 hours, a week, a month.
+OPENCODE_GO_LIMITS = (("5h", "5-hour", 5 * 3600, 12.0), ("week", "Weekly", 7 * 86400, 30.0), ("month", "Monthly", 30 * 86400, 60.0))
+
+
+def now():
+    return time.time()
+
+
+# ---- files and the cache -------------------------------------------------------------------------
+
+def read_json(path, default=None):
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return default
+
+
+def write_json(path, value):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = "%s.%d.tmp" % (path, os.getpid())
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(value, f, separators=(",", ":"))
+    os.chmod(tmp, 0o600)
+    os.replace(tmp, path)
+
+
+def day_of(ts):
+    """The machine's local date of an epoch time: the chart's days are the machine's."""
+    return time.strftime("%Y-%m-%d", time.localtime(ts))
+
+
+def iso_time(s):
+    """`2026-10-18T08:59:59.93+00:00` or `…Z` → epoch seconds; None when it isn't one."""
+    if not isinstance(s, str) or len(s) < 19:
+        return None
+    try:
+        base = time.strptime(s[:19], "%Y-%m-%dT%H:%M:%S")
+    except ValueError:
+        return None
+    import calendar
+    t = calendar.timegm(base)
+    rest = s[19:]
+    m = re.match(r"(\.\d+)?(Z|[+-]\d\d:?\d\d)?$", rest)
+    if m and m.group(2) and m.group(2) != "Z":
+        sign = 1 if m.group(2)[0] == "+" else -1
+        hh, mm = int(m.group(2)[1:3]), int(m.group(2)[-2:])
+        t -= sign * (hh * 3600 + mm * 60)
+    if m and m.group(1):
+        t += float(m.group(1))
+    return t
+
+
+# ---- asking a provider ---------------------------------------------------------------------------
+
+class HttpError(Exception):
+    def __init__(self, code, body):
+        super().__init__("HTTP %d" % code)
+        self.code = code
+        self.body = body
+
+
+def get(url, headers, timeout=12, local=False):
+    if API_BASE and not local:
+        p = urllib.parse.urlsplit(url)
+        url = "%s/%s%s%s" % (API_BASE, p.netloc, p.path, "?" + p.query if p.query else "")
+    req = urllib.request.Request(url, headers=dict(headers, **{"User-Agent": "herdr-usage/" + VERSION, "Accept": "application/json"}))
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return json.loads(r.read().decode("utf-8", "replace") or "null")
+    except urllib.error.HTTPError as e:
+        try:
+            body = e.read().decode("utf-8", "replace")[:600]
+        except Exception:  # noqa: BLE001
+            body = ""
+        raise HttpError(e.code, body) from None
+
+
+def why(e):
+    """A provider's refusal in a few words."""
+    if isinstance(e, HttpError):
+        msg = ""
+        try:
+            o = json.loads(e.body)
+            err = o.get("error") if isinstance(o, dict) else None
+            msg = (err.get("message") if isinstance(err, dict) else err) or o.get("message") or o.get("detail") or ""
+        except (ValueError, AttributeError):
+            pass
+        if e.code in (401, 403):
+            return "the key or login was refused" + (": " + str(msg)[:160] if msg else "")
+        if e.code == 429:
+            return "the provider asks to wait (too many usage reads)"
+        return "HTTP %d%s" % (e.code, (": " + str(msg)[:160]) if msg else "")
+    if isinstance(e, urllib.error.URLError):
+        return "couldn't reach it (%s)" % (getattr(e, "reason", e),)
+    return str(e)[:200] or e.__class__.__name__
+
+
+# ---- keys already on the machine -----------------------------------------------------------------
+
+def resolve(value):
+    """pi's way of writing a key: `!command` (its output), an environment variable's name, or the key."""
+    if not isinstance(value, str) or not value:
+        return ""
+    if value.startswith("!"):
+        try:
+            r = subprocess.run(value[1:], shell=True, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                               stderr=subprocess.DEVNULL, timeout=8)
+            return r.stdout.decode("utf-8", "replace").strip() if r.returncode == 0 else ""
+        except Exception:  # noqa: BLE001
+            return ""
+    if re.fullmatch(r"[A-Z][A-Z0-9_]*", value):
+        return os.environ.get(value, "")
+    return value
+
+
+def pi_auth():
+    """pi's (and omp's) providers: their keys, as pi reads them."""
+    out = {}
+    for d in (PI_DIR,):
+        a = read_json(os.path.join(d, "auth.json"), {})
+        if isinstance(a, dict):
+            for name, v in a.items():
+                if isinstance(v, dict) and name not in out:
+                    out[name] = v
+    return out
+
+
+def pi_models():
+    """pi's own providers (models.json): their base URLs, to tell the local ones."""
+    m = read_json(os.path.join(PI_DIR, "models.json"), {})
+    p = m.get("providers") if isinstance(m, dict) else None
+    return p if isinstance(p, dict) else {}
+
+
+def opencode_auth():
+    a = read_json(os.path.join(OPENCODE_DATA, "auth.json"), {})
+    return a if isinstance(a, dict) else {}
+
+
+def key_for(names, env=(), auth=None, oc=None):
+    """The first key found for a provider: the environment, then pi's auth, then opencode's."""
+    for e in env:
+        if os.environ.get(e):
+            return os.environ[e], "$" + e
+    auth = pi_auth() if auth is None else auth
+    for n in names:
+        v = auth.get(n)
+        if isinstance(v, dict):
+            k = resolve(v.get("key") or v.get("access") or "")
+            if k:
+                return k, "pi"
+    oc = opencode_auth() if oc is None else oc
+    for n in names:
+        v = oc.get(n)
+        if isinstance(v, dict):
+            k = resolve(v.get("key") or "")
+            if k:
+                return k, "opencode"
+    return "", ""
+
+
+LOCAL_NAMES = ("llama", "ollama", "lmstudio", "lm-studio", "vllm", "local", "mlx", "koboldcpp", "jan")
+
+
+def local_url(url):
+    host = (urllib.parse.urlsplit(url or "").hostname or "").lower()
+    if not host:
+        return False
+    return (host in ("localhost", "::1") or host.startswith("127.") or host.startswith("10.") or host.startswith("192.168.")
+            or re.match(r"172\.(1[6-9]|2\d|3[01])\.", host) is not None or host.endswith(".local") or host.endswith(".lan")
+            or re.match(r"100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.", host) is not None)
+
+
+def local_providers():
+    """pi's providers that run on this machine or the local network: name → base URL."""
+    out = {}
+    for name, p in pi_models().items():
+        url = p.get("baseUrl") if isinstance(p, dict) else ""
+        if local_url(url) or any(n in name.lower() for n in LOCAL_NAMES):
+            out[name] = url or ""
+    return out
+
+
+# ---- which provider a harness's model call went to -----------------------------------------------
+
+def anthropic_is_subscription(auth=None):
+    """Whether pi's `anthropic` provider is a Claude subscription (an OAuth login) rather than an API key."""
+    auth = pi_auth() if auth is None else auth
+    v = auth.get("anthropic")
+    if not isinstance(v, dict):
+        return False
+    if v.get("type") == "oauth":
+        return True
+    k = resolve(v.get("key") or "")
+    return k.startswith("sk-ant-oat")
+
+
+class Providers:
+    """Maps (harness, provider) to the card it counts on."""
+
+    def __init__(self):
+        self.auth = pi_auth()
+        self.local = local_providers()
+        self.anthropic_sub = anthropic_is_subscription(self.auth)
+
+    def of(self, harness, provider):
+        p = (provider or "").lower()
+        if harness == "claude":
+            return "claude"
+        if harness == "codex":
+            return "codex"
+        if p == "anthropic":
+            return "claude" if self.anthropic_sub else "anthropic"
+        if p in ("openai-codex", "codex", "chatgpt"):
+            return "codex"
+        if p.startswith("opencode-go"):
+            return "opencode-go"
+        if p in self.local or any(n in p for n in LOCAL_NAMES):
+            return "local:" + (provider or "local")
+        return p or "unknown"
+
+
+# ---- board tasks and agents ----------------------------------------------------------------------
+
+WORKTREE = re.compile(r"/\.herdr/worktrees/([^/]+)/work-(\d+)-")
+
+
+def task_of(cwd):
+    """The board task a session worked for, from where it ran: `<repo>/<n>`, `@coordinator`, or ''."""
+    if not cwd:
+        return ""
+    m = WORKTREE.search(cwd)
+    if m:
+        return "%s/%s" % (m.group(1), m.group(2))
+    if "/.herdr-projects/data/coordinator" in cwd:
+        return "@coordinator"
+    return ""
+
+
+def agent_label(harness, model):
+    m = (model or "").strip()
+    return "%s · %s" % (harness, m) if m else harness
+
+
+# ---- reading the session records -----------------------------------------------------------------
+
+class Tally:
+    """What the agents used: per (day, provider, task, agent), [tokens, cost, calls]."""
+
+    def __init__(self, rows=None):
+        self.rows = rows if isinstance(rows, dict) else {}
+
+    def add(self, ts, provider, task, agent, tokens, cost):
+        if tokens <= 0 and cost <= 0:
+            return
+        k = "\t".join((day_of(ts), provider, task, agent))
+        r = self.rows.setdefault(k, [0, 0.0, 0])
+        r[0] += int(tokens)
+        r[1] += float(cost or 0)
+        r[2] += 1
+
+
+def files_under(root, since, suffix=".jsonl"):
+    out = []
+    for d, _, names in os.walk(root):
+        for n in names:
+            if not n.endswith(suffix):
+                continue
+            p = os.path.join(d, n)
+            try:
+                st = os.stat(p)
+            except OSError:
+                continue
+            if st.st_mtime >= since:
+                out.append((p, st.st_size, st.st_mtime))
+    return out
+
+
+def num(v):
+    return v if isinstance(v, (int, float)) and not isinstance(v, bool) else 0
+
+
+class Scanner:
+    """Reads the harnesses' session files from where it stopped last time (they only grow)."""
+
+    def __init__(self, cache, providers, since, deadline):
+        self.cache = cache  # path → {"size", "offset", "state", "rows"}
+        self.providers = providers
+        self.since = since
+        self.deadline = deadline
+        self.partial = False
+        self.codex_limits = None  # the newest rate limits a Codex session wrote: (ts, payload)
+
+    def file(self, path, size, kind):
+        c = self.cache.get(path)
+        if not isinstance(c, dict) or c.get("kind") != kind or c.get("size", 0) > size:
+            c = {"kind": kind, "size": 0, "offset": 0, "state": {}, "rows": {}}
+        if c["offset"] < size:
+            if now() > self.deadline:
+                self.partial = True
+            else:
+                tally = Tally(c["rows"])
+                try:
+                    with open(path, "rb") as f:
+                        f.seek(c["offset"])
+                        data = f.read()
+                except OSError:
+                    data = b""
+                # Only whole lines: one still being written is read next time.
+                end = data.rfind(b"\n") + 1
+                state = c.get("state") or {}
+                for raw in data[:end].splitlines():
+                    getattr(self, kind)(raw, state, tally)
+                c["offset"] += end
+                c["state"] = state
+                c["rows"] = tally.rows
+        c["size"] = size
+        self.cache[path] = c
+        return c
+
+    # Claude Code: ~/.claude/projects/<folder>/<session>.jsonl, one line per content block of a reply,
+    # each with the reply's usage: counted once per message id.
+    def claude(self, raw, st, tally):
+        if b'"usage"' not in raw or b'"assistant"' not in raw:
+            return
+        try:
+            o = json.loads(raw)
+        except ValueError:
+            return
+        msg = o.get("message") if isinstance(o, dict) else None
+        if not isinstance(msg, dict) or not isinstance(msg.get("usage"), dict):
+            return
+        mid = msg.get("id") or o.get("requestId") or ""
+        seen = st.setdefault("seen", [])
+        if mid and mid in seen:
+            return
+        if mid:
+            seen.append(mid)
+            del seen[:-40]
+        if o.get("cwd"):
+            st["cwd"] = o["cwd"]
+        ts = iso_time(o.get("timestamp")) or 0
+        if ts < self.since:
+            return
+        u = msg["usage"]
+        model = msg.get("model") or ""
+        if model.startswith("<"):
+            return
+        tokens = num(u.get("input_tokens")) + num(u.get("output_tokens")) + num(u.get("cache_creation_input_tokens"))
+        tally.add(ts, "claude", task_of(st.get("cwd")), agent_label("claude", model), tokens, 0)
+
+    # Codex: ~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl; token_count events carry the session's
+    # running total (counted by its growth) and the rate limits as Codex last heard them.
+    def codex(self, raw, st, tally):
+        if b'"session_meta"' in raw or b'"turn_context"' in raw:
+            try:
+                p = json.loads(raw).get("payload") or {}
+            except (ValueError, AttributeError):
+                return
+            if p.get("cwd"):
+                st["cwd"] = p["cwd"]
+            if p.get("model"):
+                st["model"] = p["model"]
+            return
+        if b'"token_count"' not in raw:
+            return
+        try:
+            o = json.loads(raw)
+        except ValueError:
+            return
+        p = o.get("payload") or {}
+        ts = iso_time(o.get("timestamp")) or 0
+        rl = p.get("rate_limits")
+        if isinstance(rl, dict) and (rl.get("primary") or rl.get("secondary")):
+            st["limits"] = [ts, rl]
+        info = p.get("info")
+        total = info.get("total_token_usage") if isinstance(info, dict) else None
+        if not isinstance(total, dict):
+            return
+        fresh = num(total.get("input_tokens")) - num(total.get("cached_input_tokens")) + num(total.get("output_tokens"))
+        grew = fresh - st.get("total", 0)
+        st["total"] = fresh
+        if grew > 0 and ts >= self.since:
+            tally.add(ts, "codex", task_of(st.get("cwd")), agent_label("codex", st.get("model")), grew, 0)
+
+    # pi and omp: ~/.pi/agent/sessions/<folder>/<session>.jsonl; each reply names its provider and
+    # model, with its usage and what it cost.
+    def pi(self, raw, st, tally, harness="pi"):
+        if b'"cwd"' in raw and b'"session"' in raw:
+            try:
+                o = json.loads(raw)
+                if o.get("type") == "session" and o.get("cwd"):
+                    st["cwd"] = o["cwd"]
+            except (ValueError, AttributeError):
+                pass
+            return
+        if b'"usage"' not in raw or b'"provider"' not in raw:
+            return
+        try:
+            o = json.loads(raw)
+        except ValueError:
+            return
+        m = o.get("message") if isinstance(o.get("message"), dict) else o
+        u = m.get("usage")
+        if not isinstance(u, dict):
+            return
+        ts = iso_time(o.get("timestamp")) or (num(m.get("timestamp")) / 1000.0) or 0
+        if ts < self.since:
+            return
+        provider = m.get("provider") or ""
+        tokens = num(u.get("input")) + num(u.get("output")) + num(u.get("cacheWrite"))
+        cost = u.get("cost")
+        cost = num(cost.get("total")) if isinstance(cost, dict) else num(cost)
+        tally.add(ts, self.providers.of(harness, provider), task_of(st.get("cwd")),
+                  agent_label(harness, m.get("model") or ""), tokens, cost)
+
+    def omp(self, raw, st, tally):
+        self.pi(raw, st, tally, harness="omp")
+
+    def run(self):
+        week = self.since
+        jobs = []
+        for p, size, _ in files_under(os.path.join(CLAUDE_DIR, "projects"), week):
+            jobs.append((p, size, "claude"))
+        for p, size, _ in files_under(os.path.join(CODEX_DIR, "sessions"), week):
+            jobs.append((p, size, "codex"))
+        for p, size, _ in files_under(os.path.join(PI_DIR, "sessions"), week):
+            jobs.append((p, size, "pi"))
+        for p, size, _ in files_under(os.path.join(OMP_DIR, "sessions"), week):
+            jobs.append((p, size, "omp"))
+        # The newest first: when time runs out, what is left is the oldest.
+        jobs.sort(key=lambda j: -os.path.getmtime(j[0]) if os.path.exists(j[0]) else 0)
+        keep = {}
+        tally = Tally({})
+        for path, size, kind in jobs:
+            c = self.file(path, size, kind)
+            keep[path] = c
+            for k, r in c["rows"].items():
+                if k.split("\t", 1)[0] >= day_of(self.since):
+                    t = tally.rows.setdefault(k, [0, 0.0, 0])
+                    t[0] += r[0]
+                    t[1] += r[1]
+                    t[2] += r[2]
+            lim = (c.get("state") or {}).get("limits")
+            if kind == "codex" and lim and (self.codex_limits is None or lim[0] > self.codex_limits[0]):
+                self.codex_limits = lim
+        self.opencode(tally)
+        # Files not seen any more (older than the week, or gone) leave the cache.
+        self.cache.clear()
+        self.cache.update(keep)
+        return tally
+
+    def opencode(self, tally):
+        """opencode keeps its messages in a SQLite database: read it as it stands (it's small)."""
+        db = os.path.join(OPENCODE_DATA, "opencode.db")
+        if not os.path.exists(db):
+            return
+        try:
+            con = sqlite3.connect("file:%s?mode=ro" % urllib.parse.quote(db), uri=True, timeout=2)
+            rows = con.execute("select time_created, data from message where time_created >= ?", (int(self.since * 1000),)).fetchall()
+            con.close()
+        except sqlite3.Error:
+            return
+        for created, data in rows:
+            try:
+                d = json.loads(data)
+            except (ValueError, TypeError):
+                continue
+            if d.get("role") != "assistant":
+                continue
+            t = d.get("tokens") or {}
+            cache = t.get("cache") or {}
+            tokens = num(t.get("input")) + num(t.get("output")) + num(cache.get("write"))
+            cwd = (d.get("path") or {}).get("cwd") or ""
+            tally.add(num(created) / 1000.0, self.providers.of("opencode", d.get("providerID") or ""), task_of(cwd),
+                      agent_label("opencode", d.get("modelID") or ""), tokens, num(d.get("cost")))
+
+
+# ---- the live readings ---------------------------------------------------------------------------
+
+def limit(lid, name, percent, resets=None, window=None, estimated=False):
+    out = {"id": lid, "name": name, "percent": round(float(percent), 1)}
+    if resets:
+        out["resets"] = int(resets)
+    if window:
+        out["window"] = int(window)
+    if estimated:
+        out["estimated"] = True
+    return out
+
+
+def window_name(seconds):
+    if not seconds:
+        return "Limit"
+    if seconds == 18000:
+        return "5-hour session"
+    if seconds == 604800:
+        return "Weekly"
+    if seconds % 86400 == 0:
+        return "%d-day" % (seconds // 86400)
+    return "%d-hour" % max(1, round(seconds / 3600))
+
+
+def claude_login():
+    """Claude Code's own login: its credentials file, or the macOS keychain."""
+    creds = read_json(os.path.join(CLAUDE_DIR, ".credentials.json"))
+    if not isinstance(creds, dict) and sys.platform == "darwin":
+        try:
+            r = subprocess.run(["security", "find-generic-password", "-s", "Claude Code-credentials", "-w"],
+                               stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=8)
+            creds = json.loads(r.stdout.decode("utf-8", "replace")) if r.returncode == 0 else None
+        except Exception:  # noqa: BLE001
+            creds = None
+    o = creds.get("claudeAiOauth") if isinstance(creds, dict) else None
+    return o if isinstance(o, dict) and o.get("accessToken") else None
+
+
+PLANS = {"max": "Max", "pro": "Pro", "team": "Team", "enterprise": "Enterprise", "free": "Free"}
+
+
+def claude_plan(login):
+    sub = PLANS.get(str(login.get("subscriptionType") or "").lower(), str(login.get("subscriptionType") or "").title())
+    m = re.search(r"(\d+)x", str(login.get("rateLimitTier") or ""))
+    return ("%s %sx" % (sub, m.group(1)) if m and sub else sub) or ""
+
+
+def read_claude():
+    login = claude_login()
+    if login is None:
+        return None
+    p = {"id": "claude", "name": "Claude Code", "kind": "subscription", "plan": claude_plan(login),
+         "source": "Anthropic's usage API, with Claude Code's login"}
+    exp = num(login.get("expiresAt")) / 1000.0
+    if exp and exp < now():
+        p["error"] = "Claude Code's login has expired; it renews the next time Claude Code runs"
+        return p
+    o = get("https://api.anthropic.com/api/oauth/usage", {
+        "Authorization": "Bearer " + login["accessToken"], "anthropic-beta": "oauth-2025-04-20"})
+    p["limits"] = claude_limits(o)
+    return p
+
+
+def claude_limits(o):
+    out = []
+    names = {"session": ("session", "5-hour session"), "weekly_all": ("weekly", "Weekly")}
+    for lim in o.get("limits") or []:
+        if not isinstance(lim, dict) or lim.get("percent") is None:
+            continue
+        kind = lim.get("kind") or ""
+        lid, name = names.get(kind, (kind, "Weekly" if lim.get("group") == "weekly" else kind.replace("_", " ").capitalize()))
+        scope = lim.get("scope") or {}
+        model = ((scope.get("model") or {}).get("display_name") or "") if isinstance(scope, dict) else ""
+        if kind == "weekly_scoped" and model:
+            lid, name = "weekly-" + model.lower(), "Weekly · " + model
+        out.append(limit(lid, name, lim["percent"], iso_time(lim.get("resets_at")), 18000 if lid == "session" else 604800))
+    if out:
+        return out
+    for key, lid, name, win in (("five_hour", "session", "5-hour session", 18000), ("seven_day", "weekly", "Weekly", 604800),
+                                ("seven_day_opus", "weekly-opus", "Weekly · Opus", 604800),
+                                ("seven_day_sonnet", "weekly-sonnet", "Weekly · Sonnet", 604800)):
+        v = o.get(key)
+        if isinstance(v, dict) and v.get("utilization") is not None:
+            out.append(limit(lid, name, v["utilization"], iso_time(v.get("resets_at")), win))
+    return out
+
+
+def jwt_exp(token):
+    try:
+        part = token.split(".")[1]
+        part += "=" * (-len(part) % 4)
+        return num(json.loads(base64.urlsafe_b64decode(part)).get("exp"))
+    except Exception:  # noqa: BLE001
+        return 0
+
+
+def codex_windows(rl, from_session=False):
+    """Codex's rate limits, as its usage API (`rate_limit`) or its sessions (`rate_limits`) give them."""
+    out = []
+    pairs = (("primary_window", "primary"), ("secondary_window", "secondary"))
+    for api_key, session_key in pairs:
+        w = rl.get(session_key if from_session else api_key)
+        if not isinstance(w, dict) or w.get("used_percent") is None:
+            continue
+        secs = num(w.get("limit_window_seconds")) or num(w.get("window_minutes")) * 60
+        lid = "session" if secs == 18000 else "weekly" if secs == 604800 else session_key
+        out.append(limit(lid, window_name(secs), w["used_percent"], num(w.get("reset_at")) or num(w.get("resets_at")) or None, secs))
+    return out
+
+
+def read_codex(session_limits):
+    auth = read_json(os.path.join(CODEX_DIR, "auth.json"))
+    if not isinstance(auth, dict):
+        return None
+    tokens = auth.get("tokens") or {}
+    p = {"id": "codex", "name": "Codex", "kind": "subscription", "source": "ChatGPT's usage API, with Codex's login"}
+    if auth.get("auth_mode") == "apikey" or (auth.get("OPENAI_API_KEY") and not tokens):
+        p.update(kind="api", name="Codex (OpenAI API)", source="what Codex's sessions used; OpenAI has no balance API for a key")
+        return p
+    token = tokens.get("access_token") or ""
+    fallback = None
+    if session_limits:
+        ts, rl = session_limits
+        fallback = codex_windows(rl, from_session=True)
+        if rl.get("plan_type"):
+            p["plan"] = str(rl["plan_type"]).title()
+    try:
+        if not token:
+            raise ValueError("Codex isn't logged in to ChatGPT")
+        if jwt_exp(token) and jwt_exp(token) < now():
+            raise ValueError("Codex's login has expired; it renews the next time Codex runs")
+        headers = {"Authorization": "Bearer " + token}
+        if tokens.get("account_id"):
+            headers["ChatGPT-Account-Id"] = tokens["account_id"]
+        o = get("https://chatgpt.com/backend-api/wham/usage", headers)
+        p["limits"] = codex_windows(o.get("rate_limit") or {})
+        if o.get("plan_type"):
+            p["plan"] = str(o["plan_type"]).title()
+        credits = o.get("credits") or {}
+        if credits.get("has_credits") and credits.get("balance") not in (None, "0"):
+            p["spend"] = {"currency": "credits", "balance": float(credits["balance"])}
+    except Exception as e:  # noqa: BLE001
+        if fallback:
+            p["limits"] = fallback
+            p["source"] = "the newest limits Codex wrote in its sessions"
+            p["readAt"] = int(session_limits[0])
+            p["note"] = "Codex's usage API: " + why(e)
+        else:
+            raise
+    return p
+
+
+def read_deepseek(key):
+    o = get("https://api.deepseek.com/user/balance", {"Authorization": "Bearer " + key})
+    infos = [i for i in (o.get("balance_infos") or []) if isinstance(i, dict)]
+    usd = next((i for i in infos if i.get("currency") == "USD"), infos[0] if infos else None)
+    spend = {}
+    if usd:
+        spend = {"currency": usd.get("currency") or "USD", "balance": float(usd.get("total_balance") or 0)}
+    p = {"spend": spend, "source": "DeepSeek's balance API"}
+    if o.get("is_available") is False:
+        p["error"] = "DeepSeek says the balance is used up"
+    return p
+
+
+def read_openrouter(key):
+    o = (get("https://openrouter.ai/api/v1/key", {"Authorization": "Bearer " + key}) or {}).get("data") or {}
+    spend = {"currency": "USD", "today": num(o.get("usage_daily")), "month": num(o.get("usage_monthly")), "week": num(o.get("usage_weekly"))}
+    p = {"spend": spend, "source": "OpenRouter's key API"}
+    limits = []
+    lim, left = o.get("limit"), o.get("limit_remaining")
+    if isinstance(lim, (int, float)) and lim > 0 and isinstance(left, (int, float)):
+        reset = (o.get("limit_reset") or "").lower()
+        eff = o.get("effective_budget") or {}
+        spend["limit"] = float(lim)
+        spend["left"] = float(left)
+        limits.append(limit("key", {"daily": "Key, daily", "weekly": "Key, weekly", "monthly": "Key, monthly"}.get(reset, "Key limit"),
+                            (lim - left) * 100.0 / lim, iso_time(eff.get("resets_at"))))
+    for b in o.get("budgets") or []:
+        if isinstance(b, dict) and b.get("scope") == "workspace_default_key" and num(b.get("limit_usd")) > 0:
+            limits.append(limit("budget", "Monthly budget" if b.get("reset_interval") == "monthly" else "Budget",
+                                num(b.get("spend_usd")) * 100.0 / num(b.get("limit_usd")), iso_time(b.get("resets_at"))))
+    p["limits"] = limits
+    try:
+        c = (get("https://openrouter.ai/api/v1/credits", {"Authorization": "Bearer " + key}) or {}).get("data") or {}
+        if isinstance(c.get("total_credits"), (int, float)):
+            spend["balance"] = round(num(c["total_credits"]) - num(c.get("total_usage")), 4)
+    except Exception:  # noqa: BLE001 - only a management key may read the account's credits
+        pass
+    return p
+
+
+def read_anthropic(key, admin):
+    """An Anthropic API account: its costs need an admin key; a plain key has no usage API."""
+    if not admin:
+        return {"source": "what this machine's agents spent (an admin key, ANTHROPIC_ADMIN_KEY, reads the account's costs)"}
+    t = time.gmtime()
+    month = "%04d-%02d-01T00:00:00Z" % (t.tm_year, t.tm_mon)
+    total, today, page = 0.0, 0.0, None
+    for _ in range(5):
+        q = "starting_at=%s&bucket_width=1d&limit=31" % month + ("&page=" + urllib.parse.quote(page) if page else "")
+        o = get("https://api.anthropic.com/v1/organizations/cost_report?" + q, {"x-api-key": admin, "anthropic-version": "2023-06-01"})
+        for bucket in o.get("data") or []:
+            cents = sum(float(r.get("amount") or 0) for r in bucket.get("results") or [] if isinstance(r, dict))
+            total += cents / 100.0
+            if str(bucket.get("starting_at", ""))[:10] == time.strftime("%Y-%m-%d", time.gmtime()):
+                today += cents / 100.0
+        page = o.get("next_page")
+        if not o.get("has_more") or not page:
+            break
+    return {"spend": {"currency": "USD", "today": round(today, 4), "month": round(total, 4)}, "source": "Anthropic's cost report (admin key)"}
+
+
+def read_opencode_go(key):
+    """OpenCode Go has no usage API: the key is checked, the limits are estimated (see estimate_go)."""
+    p = {"source": "OpenCode Go's key; its limits estimated from what this machine's agents spent"}
+    try:
+        o = get("https://opencode.ai/zen/go/v1/usage", {"Authorization": "Bearer " + key})
+        lims = []
+        for lid, name, win, cap in OPENCODE_GO_LIMITS:
+            for k in (lid, {"5h": "rolling", "week": "weekly", "month": "monthly"}[lid]):
+                v = o.get(k) or o.get(k + "Usage") if isinstance(o, dict) else None
+                if isinstance(v, dict) and (v.get("percent") is not None or v.get("used_percent") is not None):
+                    lims.append(limit(lid, name, v.get("percent", v.get("used_percent")), iso_time(v.get("resets_at")) or num(v.get("reset_at")) or None, win))
+                    break
+        if lims:
+            p["limits"] = lims
+            p["source"] = "OpenCode Go's usage API"
+        return p
+    except HttpError as e:
+        if e.code in (401, 403):
+            code = ""
+            try:
+                code = (json.loads(e.body).get("error") or {}).get("code") or ""
+            except (ValueError, AttributeError):
+                pass
+            p["error"] = "The OpenCode Go key has expired: make a new one in the OpenCode console" if "expired" in code else "The OpenCode Go key was refused"
+        return p
+    except Exception:  # noqa: BLE001 - offline: the estimate still holds
+        return p
+
+
+def estimate_go(rows_by_time):
+    """OpenCode Go's limits from what this machine spent on it: dollars in each rolling window."""
+    out = []
+    t = now()
+    for lid, name, win, cap in OPENCODE_GO_LIMITS:
+        spent = sum(c for ts, c in rows_by_time if t - ts <= win)
+        out.append(limit(lid, name + " (est.)", spent * 100.0 / cap, None, win, estimated=True))
+    return out
+
+
+def probe_local(url):
+    """A local model server: whether it answers, and what it serves."""
+    if not url:
+        return {"note": "Local, no limit"}
+    base = url.rstrip("/")
+    for path in ("/models", "/v1/models"):
+        try:
+            o = get(base + path, {}, timeout=3, local=True)
+            ids = [m.get("id") for m in (o.get("data") or o.get("models") or []) if isinstance(m, dict) and m.get("id")]
+            return {"running": True, "models": ids[:4]}
+        except HttpError:
+            continue
+        except Exception:  # noqa: BLE001
+            return {"running": False}
+    return {"running": True}
+
+
+NAMES = {"claude": "Claude Code", "codex": "Codex", "anthropic": "Anthropic API", "deepseek": "DeepSeek", "openrouter": "OpenRouter", "opencode-go": "OpenCode Go",
+         "opencode": "OpenCode Zen", "openai": "OpenAI API", "google": "Google AI", "xai": "xAI", "mistral": "Mistral",
+         "groq": "Groq", "zai": "Z.ai", "moonshot": "Moonshot"}
+
+
+def live(fresh):
+    """Every provider's live reading, cached for LIVE_TTL seconds (a failure keeps the last good one)."""
+    path = os.path.join(CACHE, "live.json")
+    cache = read_json(path, {}) or {}
+    t = now()
+    providers = Providers()
+    auth = providers.auth
+    oc = opencode_auth()
+    scan_limits = read_json(os.path.join(CACHE, "codex-limits.json"))
+    out = []
+
+    def cached(pid, fn):
+        c = cache.get(pid)
+        age = t - num((c or {}).get("at"))
+        if c and (age < LIVE_TTL or (fresh and age < FRESH_MIN)) and not c.get("failed"):
+            return c["p"]
+        try:
+            p = fn()
+            if p is not None:
+                p.setdefault("readAt", int(t))
+            cache[pid] = {"at": t, "p": p}
+            return p
+        except Exception as e:  # noqa: BLE001
+            old = (c or {}).get("p") or (c or {}).get("last")
+            if old:
+                old = dict(old, stale=True, note="Couldn't read it now: " + why(e))
+            cache[pid] = {"at": t, "p": old, "failed": True, "last": (c or {}).get("p") or (c or {}).get("last")}
+            if (c or {}).get("failed") and age < LIVE_TTL / 4 and c.get("p"):
+                return c["p"]
+            return old if old else {"id": pid, "error": why(e)}
+
+    c = cached("claude", read_claude)
+    if c:
+        out.append(c)
+    c = cached("codex", lambda: read_codex(scan_limits))
+    if c:
+        out.append(c)
+
+    k, src = key_for(["deepseek"], ["DEEPSEEK_API_KEY"], auth, oc)
+    if k:
+        out.append(dict(cached("deepseek", lambda: read_deepseek(k)), id="deepseek", name="DeepSeek", kind="api", key=src))
+    k, src = key_for(["openrouter"], ["OPENROUTER_API_KEY"], auth, oc)
+    if k:
+        out.append(dict(cached("openrouter", lambda: read_openrouter(k)), id="openrouter", name="OpenRouter", kind="api", key=src))
+    admin = os.environ.get("ANTHROPIC_ADMIN_KEY", "")
+    k, src = key_for(["anthropic"], ["ANTHROPIC_API_KEY"], auth, oc)
+    if admin or (k and not k.startswith("sk-ant-oat") and not providers.anthropic_sub):
+        out.append(dict(cached("anthropic", lambda: read_anthropic(k, admin)), id="anthropic", name="Anthropic API", kind="api",
+                        key="$ANTHROPIC_ADMIN_KEY" if admin else src))
+    k, src = key_for(["opencode-go", "opencode-go-claude"], ["OPENCODE_GO_API_KEY"], auth, oc)
+    if k:
+        out.append(dict(cached("opencode-go", lambda: read_opencode_go(k)), id="opencode-go", name="OpenCode Go", kind="api", key=src))
+    k, src = key_for(["opencode"], ["OPENCODE_API_KEY"], auth, oc)
+    if k:
+        out.append({"id": "opencode", "name": "OpenCode Zen", "kind": "api", "key": src,
+                    "source": "what this machine's agents spent (OpenCode Zen has no balance API)"})
+    for name, url in sorted(providers.local.items()):
+        pid = "local:" + name
+        p = cached(pid, lambda u=url: dict(probe_local(u), readAt=int(t)))
+        out.append(dict(p or {}, id=pid, name=name, kind="local", url=url, source="pi's models.json"))
+    try:
+        write_json(path, cache)
+    except OSError:
+        pass
+    return out, providers
+
+
+def merge(live_list, tally, providers, partial):
+    """The cards: each live reading with what the agents used of it this week."""
+    by = {p["id"]: p for p in live_list if isinstance(p, dict) and p.get("id")}
+    order = [p["id"] for p in live_list if isinstance(p, dict) and p.get("id")]
+    today = day_of(now())
+    days = [day_of(now() - (DAYS - 1 - i) * 86400) for i in range(DAYS)]
+    use = {}
+    for k, r in tally.rows.items():
+        day, pid, task, agent = k.split("\t")
+        if pid not in by:
+            if pid.startswith("local:"):
+                by[pid] = {"id": pid, "name": pid[6:], "kind": "local", "source": "what this machine's agents ran"}
+            elif pid in ("unknown", ""):
+                continue
+            else:
+                by[pid] = {"id": pid, "name": NAMES.get(pid, pid), "kind": "api", "source": "what this machine's agents spent"}
+            order.append(pid)
+        u = use.setdefault(pid, {"days": {}, "tasks": {}, "agents": {}})
+        d = u["days"].setdefault(day, [0, 0.0])
+        d[0] += r[0]
+        d[1] += r[1]
+        if day in days:
+            if task:
+                x = u["tasks"].setdefault(task, [0, 0.0])
+                x[0] += r[0]
+                x[1] += r[1]
+            x = u["agents"].setdefault(agent, [0, 0.0])
+            x[0] += r[0]
+            x[1] += r[1]
+    titles = {}
+    out = []
+    for pid in order:
+        p = dict(by[pid])
+        p.setdefault("name", NAMES.get(pid, pid[6:] if pid.startswith("local:") else pid))
+        p.setdefault("kind", "subscription" if pid in ("claude", "codex") else "local" if pid.startswith("local:") else "api")
+        u = use.get(pid, {"days": {}, "tasks": {}, "agents": {}})
+        p["days"] = [{"day": d, "tokens": u["days"].get(d, [0, 0])[0], "cost": round(u["days"].get(d, [0, 0])[1], 4)} for d in days]
+        p["tasks"] = [dict(id=t, title=titles.setdefault(t, task_title(t)), tokens=v[0], cost=round(v[1], 4))
+                      for t, v in sorted(u["tasks"].items(), key=lambda kv: (-kv[1][0], -kv[1][1]))[:TOP]]
+        p["agents"] = [dict(name=a, tokens=v[0], cost=round(v[1], 4))
+                       for a, v in sorted(u["agents"].items(), key=lambda kv: (-kv[1][0], -kv[1][1]))[:TOP]]
+        if p.get("kind") == "api":
+            spend = dict(p.get("spend") or {})
+            spend.setdefault("currency", "USD")
+            month = time.strftime("%Y-%m", time.localtime())
+            if "today" not in spend:
+                spend["today"] = round(u["days"].get(today, [0, 0])[1], 4)
+                spend["estimated"] = True
+            if "month" not in spend:
+                spend["month"] = round(sum(v[1] for d, v in u["days"].items() if d.startswith(month)), 4)
+                spend["estimated"] = True
+            p["spend"] = spend
+        if pid == "opencode-go" and not p.get("limits"):
+            p["limits"] = estimate_go(go_spend(tally))
+        p["match"] = matches(pid, providers)
+        out.append(p)
+    return out
+
+
+def go_spend(tally):
+    """OpenCode Go's spend by time: the day's middle stands for the day's rows (the tally keeps days)."""
+    out = []
+    t = now()
+    for k, r in tally.rows.items():
+        day, pid = k.split("\t")[:2]
+        if pid != "opencode-go":
+            continue
+        try:
+            ts = time.mktime(time.strptime(day, "%Y-%m-%d")) + 12 * 3600
+        except ValueError:
+            continue
+        out.append((min(ts, t), r[1]))
+    return out
+
+
+def matches(pid, providers):
+    """The board's agent names (`claude/opus`, `pi/deepseek/…`) that run on this provider: how the app ties them."""
+    if pid == "claude":
+        m = ["claude"]
+        if providers.anthropic_sub:
+            m += ["pi/anthropic", "omp/anthropic", "opencode/anthropic"]
+        return m
+    if pid == "codex":
+        return ["codex", "pi/openai-codex", "omp/openai-codex", "opencode/openai"]
+    if pid == "opencode-go":
+        return ["pi/opencode-go", "omp/opencode-go", "opencode/opencode-go"]
+    if pid.startswith("local:"):
+        n = pid[6:]
+        return ["pi/" + n, "omp/" + n, "opencode/" + n]
+    return ["pi/" + pid, "omp/" + pid, "opencode/" + pid]
+
+
+def task_title(tid):
+    if tid == "@coordinator":
+        return "The Coordinator"
+    t = read_json(os.path.join(BOARD_DATA, "tasks", tid, "task.json"), {})
+    return (t or {}).get("title") or ""
+
+
+def scan(full=True):
+    path = os.path.join(CACHE, "scan.json")
+    cache = read_json(path, {}) or {}
+    if cache.get("v") != 1:
+        cache = {"v": 1, "files": {}}
+    since = time.mktime(time.strptime(day_of(now() - (DAYS - 1) * 86400), "%Y-%m-%d"))
+    month = time.mktime(time.strptime(time.strftime("%Y-%m-01", time.localtime()), "%Y-%m-%d"))
+    s = Scanner(cache["files"], Providers(), min(since, month) if full else since, now() + SCAN_BUDGET)
+    tally = s.run()
+    try:
+        write_json(path, cache)
+        if s.codex_limits:
+            write_json(os.path.join(CACHE, "codex-limits.json"), s.codex_limits)
+    except OSError:
+        pass
+    return tally, s.partial
+
+
+def read(fresh):
+    tally, partial = scan()
+    lst, providers = live(fresh)
+    out = {"ok": True, "v": 1, "version": VERSION, "at": int(now()), "today": day_of(now()),
+           "providers": merge(lst, tally, providers, partial)}
+    if partial:
+        out["partial"] = True
+    try:
+        write_json(os.path.join(CACHE, "last.json"), out)
+    except OSError:
+        pass
+    return out
+
+
+def limits(fresh):
+    """The limits alone, for herdr-push's warnings: the live readings, and OpenCode Go's estimate from the last read."""
+    lst, _ = live(fresh)
+    last = read_json(os.path.join(CACHE, "last.json"), {}) or {}
+    est = {p["id"]: p.get("limits") for p in last.get("providers") or [] if isinstance(p, dict) and p.get("id") == "opencode-go"}
+    out = []
+    for p in lst:
+        if not isinstance(p, dict):
+            continue
+        lims = p.get("limits") or est.get(p.get("id")) or []
+        x = {k: p[k] for k in ("id", "name", "kind", "plan", "error", "stale", "readAt") if k in p}
+        x["limits"] = lims
+        out.append(x)
+    return {"ok": True, "v": 1, "version": VERSION, "at": int(now()), "providers": out}
+
+
+def main(argv):
+    cmd = argv[1] if len(argv) > 1 else "read"
+    fresh = "--fresh" in argv
+    try:
+        if cmd == "read":
+            out = read(fresh)
+        elif cmd == "limits":
+            out = limits(fresh)
+        elif cmd == "version":
+            out = {"ok": True, "version": VERSION}
+        else:
+            out = {"ok": False, "msg": "unknown command: %s (read, limits, version)" % cmd}
+    except Exception as e:  # noqa: BLE001
+        out = {"ok": False, "msg": "%s: %s" % (e.__class__.__name__, e)}
+    out.setdefault("version", VERSION)
+    sys.stdout.write(json.dumps(out, separators=(",", ":")) + "\n")
+    return 0 if out.get("ok") else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

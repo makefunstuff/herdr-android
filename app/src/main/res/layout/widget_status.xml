@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   The status widget: how many need you (red when any) and how many work (blue when any), across the
-  machines, and when that was last known. Each count has a coloured and a dim text and shows one, so
+  machines, and when that was last known; under them the tightest AI limit, when one is known. Each count has a coloured and a dim text and shows one, so
   the colours come from the resources and follow the phone's light or dark theme.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
@@ -56,6 +56,22 @@
             style="@style/HerdrWidgetCountWords"
             android:text="working" />
     </LinearLayout>
+
+    <!-- The tightest AI limit across the machines ("Claude 82% · resets 17:00"): dim, amber near it, red when out. -->
+    <TextView
+        android:id="@+id/widget_usage"
+        style="@style/HerdrWidgetUsage"
+        android:textColor="@color/widget_muted" />
+
+    <TextView
+        android:id="@+id/widget_usage_near"
+        style="@style/HerdrWidgetUsage"
+        android:textColor="@color/widget_notice" />
+
+    <TextView
+        android:id="@+id/widget_usage_out"
+        style="@style/HerdrWidgetUsage"
+        android:textColor="@color/widget_blocked" />
 
     <TextView
         android:id="@+id/widget_detail"

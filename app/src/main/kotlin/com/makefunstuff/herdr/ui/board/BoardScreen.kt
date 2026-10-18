@@ -114,6 +114,8 @@ sealed interface Pending {
     data class Anyway(val task: BoardTask) : Pending
     data class Edit(val task: BoardTask) : Pending
     data object Add : Pending
+    /** Starting an agent on a task: which one, with what each has left. */
+    data class Start(val task: BoardTask) : Pending
 }
 
 /**
@@ -184,6 +186,18 @@ fun BoardScreen(nav: NavController, machineId: String, openTask: String? = null,
         }
     }
 
+    fun start(task: BoardTask, agent: String?) {
+        if (busy != null) return
+        busy = "${BoardAction.Delegate.label} · ${task.name}"
+        scope.launch {
+            runCatching { session.awaitBoard().delegate(task.id, agent) }
+                .onSuccess { context.toast(it.ifEmpty { "Started" }) }
+                .onFailure { refusal = it.message ?: "The board refused" }
+            busy = null
+            readNow.trySend(Unit)
+        }
+    }
+
     fun perform(task: BoardTask, action: BoardAction, text: String = "", letter: String = "") {
         if (busy != null) return
         busy = "${action.label.removeSuffix("…")} · ${task.name}"
@@ -201,6 +215,7 @@ fun BoardScreen(nav: NavController, machineId: String, openTask: String? = null,
         pending = when {
             action == BoardAction.Tell || action == BoardAction.SendPlanBack -> Pending.Words(task, action)
             action == BoardAction.ApproveAnyway -> Pending.Anyway(task)
+            action == BoardAction.Delegate && task.machine.isEmpty() -> Pending.Start(task)
             busy != null -> null
             action.destructive -> Pending.Confirm(task, action)
             else -> { perform(task, action); null }
@@ -360,6 +375,7 @@ fun BoardScreen(nav: NavController, machineId: String, openTask: String? = null,
         onConfirm = { p -> pending = null; perform(p.task, p.action, letter = p.letter) },
         onAnyway = { p -> pending = null; perform(p.task, BoardAction.ApproveAnyway) },
         onSaved = { pending = null; readNow.trySend(Unit) },
+        onStart = { p, agent -> pending = null; start(p.task, agent) },
     )
     }
 }

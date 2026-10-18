@@ -173,6 +173,7 @@ fun MachineScreen(nav: NavController, machineId: String) {
                     MenuRow("Quick command runs", HerdrIcons.History, { menu = false; nav.navigate(Routes.quickRuns(machineId)) })
                     MenuRow("Worktrees", HerdrIcons.FolderGit2, { menu = false; nav.navigate(Routes.worktrees(machineId)) })
                     MenuRow("Health and cleanup", HerdrIcons.Activity, { menu = false; nav.navigate(Routes.health(machineId)) })
+                    MenuRow("Usage and limits", HerdrIcons.Gauge, { menu = false; nav.navigate(Routes.usage(machineId)) })
                     MenuRow("Edit machine", HerdrIcons.Pencil, { menu = false; nav.navigate(Routes.edit(machineId)) })
                 }
             }
@@ -196,6 +197,7 @@ fun MachineScreen(nav: NavController, machineId: String) {
                 item(key = "coordinator") { CoordinatorCard(state.machine.label, showMachine = false) { nav.navigate(Routes.coordinator(machineId)) } }
             }
             if (state.online) item(key = "health") { HealthCard(session) { nav.navigate(Routes.health(machineId)) } }
+            if (state.online) item(key = "usage") { com.makefunstuff.herdr.ui.usage.UsageCard(session) { nav.navigate(Routes.usage(machineId)) } }
             if (snap.workspaces.isEmpty()) {
                 item { Text("No workspaces yet. Tap New to create one.", color = Herdr.colors.muted, style = MaterialTheme.typography.bodyMedium) }
             }

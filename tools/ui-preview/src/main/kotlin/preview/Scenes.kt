@@ -104,6 +104,18 @@ fun scenes(): List<Scene> = listOf(
         tapText("Android emulator · Pixel_8")
     }),
 
+    // A machine's AI providers: Claude Code near its 5-hour limit, Codex, the API accounts, a local model;
+    // each with its 7-day chart and the tasks and agents that used it most. Taller, to show every card.
+    Scene("usage", route = Routes.usage(DEVBOX), heightDp = 3400),
+    // Out of the 5-hour allowance: red, with when it comes back.
+    Scene("usage-out", route = Routes.usage(DEVBOX), setup = { host(DEVBOX).usage!!.claudeSession = 100.0 }),
+    // Reading failed and nothing kept: why, with a retry.
+    Scene("usage-error", route = Routes.usage(DEVBOX), setup = {
+        host(DEVBOX).usage!!.refuse = "Reading usage needs python3 on devbox, and it isn't installed"
+    }),
+    // Starting an agent on a task: its own agent and its fallbacks, each with what it has left.
+    Scene("usage-start", route = Routes.board(DEVBOX, "herdr-android/10"), actions = { tapExact("Start an agent") }),
+
     // An agent's chat: its transcript, a blocked agent's question, a Codex transcript.
     Scene("chat", route = Routes.agent(DEVBOX, APP_AGENT)),
     Scene("chat-blocked", route = Routes.agent(DEVBOX, API_AGENT)),

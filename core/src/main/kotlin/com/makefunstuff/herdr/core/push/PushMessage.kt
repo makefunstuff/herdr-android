@@ -7,9 +7,12 @@ import com.makefunstuff.herdr.core.board.BoardTasks
 import com.makefunstuff.herdr.core.health.Disk
 import com.makefunstuff.herdr.core.health.HealthReport
 import com.makefunstuff.herdr.core.health.Memory
+import com.makefunstuff.herdr.core.usage.UsageLimit
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.longOrNull
 
@@ -36,6 +39,23 @@ sealed interface PushEvent {
      * with the start of its answer ([text]) or why it failed ([error]).
      */
     data class Quick(val id: String, val name: String, val state: String, val text: String = "", val error: String = "", val cwd: String = "") : PushEvent
+
+    /**
+     * A provider's [limit] passed a mark ([level] 80, 95 or 100), or (level 0) is back under them after
+     * a reset: herdr-usage's readings, as herdr-push watches them.
+     */
+    data class Usage(val provider: String, val name: String, val limit: UsageLimit, val level: Int) : PushEvent
+
+    /**
+     * The board's fallback took a task over from one agent to another because of a limit ([why], in the
+     * board's words: "out of allowance until 17:00"). [role]: `worker` or `reviewer`; [at] the board's time, ms.
+     */
+    data class Takeover(
+        val taskId: String, val key: String, val title: String, val role: String,
+        val from: String, val to: String, val why: String, val at: Long,
+    ) : PushEvent {
+        val name: String get() = key.ifEmpty { taskId }
+    }
 }
 
 /** A working agent; [since] is when it started working (the machine's clock, seconds; 0 unknown). [workspace]: its workspace's label. */
@@ -98,6 +118,20 @@ object PushMessages {
         "health" -> PushEvent.Health(health(e))
         "quick" -> e.str("id").takeIf { it.isNotEmpty() }?.let {
             PushEvent.Quick(it, e.str("name").ifEmpty { it }, e.str("state"), e.str("text"), e.str("error"), e.str("cwd"))
+        }
+        "usage" -> (e["limit"] as? JsonObject)?.let { l ->
+            val percent = (l["percent"] as? JsonPrimitive)?.takeIf { !it.isString }?.doubleOrNull ?: return@let null
+            val limit = UsageLimit(
+                id = l.str("id"), name = l.str("name").ifEmpty { l.str("id") }, percent = percent,
+                resets = l.long("resets").takeIf { it > 0 }, window = l.long("window").takeIf { it > 0 },
+                estimated = (l["estimated"] as? JsonPrimitive)?.booleanOrNull == true,
+            )
+            e.str("provider").takeIf { it.isNotEmpty() }?.let { PushEvent.Usage(it, e.str("name").ifEmpty { it }, limit, e.long("level").toInt()) }
+        }
+        "takeover" -> (e["task"] as? JsonObject)?.let { t ->
+            t.str("id").takeIf { it.isNotEmpty() }?.let {
+                PushEvent.Takeover(it, e.str("key"), t.str("title"), e.str("role"), e.str("from"), e.str("to"), e.str("why"), e.long("at"))
+            }
         }
         else -> null
     }

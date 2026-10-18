@@ -125,6 +125,7 @@ class AndroidAlerts(private val context: Context) : AlertSink {
             .putExtra(MainActivity.OPEN_TASK, alert.taskId)
             .putExtra(MainActivity.OPEN_REVIEW, alert.review)
             .putExtra(MainActivity.OPEN_HEALTH, alert.health)
+            .putExtra(MainActivity.OPEN_USAGE, alert.usage)
             .putExtra(MainActivity.OPEN_QUICK, alert.quickRun)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         return PendingIntent.getActivity(context, alert.tag.hashCode(), intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)

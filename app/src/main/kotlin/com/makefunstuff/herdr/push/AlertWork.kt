@@ -10,8 +10,11 @@ import com.makefunstuff.herdr.core.host.HostSession
 import com.makefunstuff.herdr.core.push.Alert
 import com.makefunstuff.herdr.core.push.AlertAction
 import com.makefunstuff.herdr.core.push.Alerts
+import com.makefunstuff.herdr.core.push.PushEvent
 import com.makefunstuff.herdr.core.push.PushLook
 import com.makefunstuff.herdr.core.push.PushMessages
+import com.makefunstuff.herdr.core.usage.HerdrUsage
+import com.makefunstuff.herdr.core.usage.UsageRules
 import com.makefunstuff.herdr.data.HostManager
 import com.makefunstuff.herdr.data.MachineStore
 import com.makefunstuff.herdr.data.quick
@@ -34,6 +37,7 @@ class AlertWork(
     private val quiet: QuietWork,
     private val tally: TallyStore,
     private val quick: com.makefunstuff.herdr.data.QuickStore,
+    private val usage: com.makefunstuff.herdr.data.UsageStore,
 ) {
     /** A push from a push app: opened with the machine's key and shown. False when it isn't one of ours. */
     fun received(text: String, now: Long = System.currentTimeMillis()): Boolean {
@@ -136,6 +140,16 @@ class AlertWork(
         runCatching { HealthClient { cmd, timeout -> conn.run(cmd, timeout) }.sample() }.getOrNull()?.let { sample ->
             val report = HealthReport.of(sample, ProcLabels.label(sample, null, snapshot)) ?: return@let
             inbox.apply(listOf(Alerts.health(machineId, s.machine.label, report)), quiet = hosts.isForeground, hold = quiet.check())
+        }
+        // Providers near or at a limit (where herdr-push runs, it told already: shown once per mark and window).
+        runCatching {
+            HerdrUsage.Client({ cmd, t -> conn.run(cmd, t) }, { cmd, input, t -> conn.runWithInput(cmd, input.byteInputStream(), t) }, s.machine.label).limits()
+        }.getOrNull()?.let { r ->
+            val now = usage.nowSeconds()
+            val changes = r.providers.filter { !it.stale }.flatMap { p ->
+                p.limits.map { l -> Alerts.usage(machineId, s.machine.label, PushEvent.Usage(p.id, p.name, l, UsageRules.level(l.percent)), now) }
+            }
+            if (changes.isNotEmpty()) inbox.apply(changes, quiet = hosts.isForeground, hold = quiet.check())
         }
         // AI quick commands that ended (where herdr-push runs, it told already: shown once). Only the last hours' are news.
         runCatching { s.quick().runs(20) }.getOrNull()?.let { list ->
