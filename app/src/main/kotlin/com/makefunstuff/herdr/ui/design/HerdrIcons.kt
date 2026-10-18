@@ -53,6 +53,7 @@ object HerdrIcons {
     val CirclePlus: ImageVector by lazy { lucide("CirclePlus", "M2 12a10 10 0 1 0 20 0a10 10 0 1 0 -20 0", "M8 12h8", "M12 8v8") }
     val CircleStop: ImageVector by lazy { lucide("CircleStop", "M2 12a10 10 0 1 0 20 0a10 10 0 1 0 -20 0", "M10 9h4a1 1 0 0 1 1 1v4a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1v-4a1 1 0 0 1 1 -1Z") }
     val CircleX: ImageVector by lazy { lucide("CircleX", "M2 12a10 10 0 1 0 20 0a10 10 0 1 0 -20 0", "m15 9-6 6", "m9 9 6 6") }
+    val ClipboardPaste: ImageVector by lazy { lucide("ClipboardPaste", "M11 14h10", "M16 4h2a2 2 0 0 1 2 2v1.344", "m17 18 4-4-4-4", "M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 1.793-1.113", "M9 2h6a1 1 0 0 1 1 1v2a1 1 0 0 1 -1 1h-6a1 1 0 0 1 -1 -1v-2a1 1 0 0 1 1 -1Z") }
     val ClipboardList: ImageVector by lazy { lucide("ClipboardList", "M9 2h6a1 1 0 0 1 1 1v2a1 1 0 0 1 -1 1h-6a1 1 0 0 1 -1 -1v-2a1 1 0 0 1 1 -1Z", "M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2", "M12 11h4", "M12 16h4", "M8 11h.01", "M8 16h.01") }
     val Clock: ImageVector by lazy { lucide("Clock", "M2 12a10 10 0 1 0 20 0a10 10 0 1 0 -20 0", "M12 6v6l4 2") }
     val Cloud: ImageVector by lazy { lucide("Cloud", "M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z") }
@@ -136,12 +137,14 @@ object HerdrIcons {
     val Plus: ImageVector by lazy { lucide("Plus", "M5 12h14", "M12 5v14") }
     val Power: ImageVector by lazy { lucide("Power", "M12 2v10", "M18.4 6.6a9 9 0 1 1-12.77.04") }
     val Puzzle: ImageVector by lazy { lucide("Puzzle", "M15.39 4.39a1 1 0 0 0 1.68-.474 2.5 2.5 0 1 1 3.014 3.015 1 1 0 0 0-.474 1.68l1.683 1.682a2.414 2.414 0 0 1 0 3.414L19.61 15.39a1 1 0 0 1-1.68-.474 2.5 2.5 0 1 0-3.014 3.015 1 1 0 0 1 .474 1.68l-1.683 1.682a2.414 2.414 0 0 1-3.414 0L8.61 19.61a1 1 0 0 0-1.68.474 2.5 2.5 0 1 1-3.014-3.015 1 1 0 0 0 .474-1.68l-1.683-1.682a2.414 2.414 0 0 1 0-3.414L4.39 8.61a1 1 0 0 1 1.68.474 2.5 2.5 0 1 0 3.014-3.015 1 1 0 0 1-.474-1.68l1.683-1.682a2.414 2.414 0 0 1 3.414 0z") }
+    val QrCode: ImageVector by lazy { lucide("QrCode", "M4 3h3a1 1 0 0 1 1 1v3a1 1 0 0 1 -1 1h-3a1 1 0 0 1 -1 -1v-3a1 1 0 0 1 1 -1Z", "M17 3h3a1 1 0 0 1 1 1v3a1 1 0 0 1 -1 1h-3a1 1 0 0 1 -1 -1v-3a1 1 0 0 1 1 -1Z", "M4 16h3a1 1 0 0 1 1 1v3a1 1 0 0 1 -1 1h-3a1 1 0 0 1 -1 -1v-3a1 1 0 0 1 1 -1Z", "M21 16h-3a2 2 0 0 0-2 2v3", "M21 21v.01", "M12 7v3a2 2 0 0 1-2 2H7", "M3 12h.01", "M12 3h.01", "M12 16v.01", "M16 12h1", "M21 12v.01", "M12 21v-1") }
     val RefreshCcw: ImageVector by lazy { lucide("RefreshCcw", "M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8", "M3 3v5h5", "M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16", "M16 16h5v5") }
     val RefreshCw: ImageVector by lazy { lucide("RefreshCw", "M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8", "M21 3v5h-5", "M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16", "M8 16H3v5") }
     val Reply: ImageVector by lazy { lucide("Reply", "M20 18v-2a4 4 0 0 0-4-4H4", "M9 17l-5-5 5-5") }
     val Rocket: ImageVector by lazy { lucide("Rocket", "M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5", "M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09", "M9 12a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.4 22.4 0 0 1-4 2z", "M9 12H4s.55-3.03 2-4c1.62-1.08 5 .05 5 .05") }
     val RotateCcw: ImageVector by lazy { lucide("RotateCcw", "M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8", "M3 3v5h5") }
     val RotateCw: ImageVector by lazy { lucide("RotateCw", "M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8", "M21 3v5h-5") }
+    val ScanQrCode: ImageVector by lazy { lucide("ScanQrCode", "M17 12v4a1 1 0 0 1-1 1h-4", "M17 3h2a2 2 0 0 1 2 2v2", "M17 8V7", "M21 17v2a2 2 0 0 1-2 2h-2", "M3 7V5a2 2 0 0 1 2-2h2", "M7 17h.01", "M7 21H5a2 2 0 0 1-2-2v-2", "M8 7h3a1 1 0 0 1 1 1v3a1 1 0 0 1 -1 1h-3a1 1 0 0 1 -1 -1v-3a1 1 0 0 1 1 -1Z") }
     val ScanSearch: ImageVector by lazy { lucide("ScanSearch", "M3 7V5a2 2 0 0 1 2-2h2", "M17 3h2a2 2 0 0 1 2 2v2", "M21 17v2a2 2 0 0 1-2 2h-2", "M7 21H5a2 2 0 0 1-2-2v-2", "M9 12a3 3 0 1 0 6 0a3 3 0 1 0 -6 0", "m16 16-1.9-1.9") }
     val Scissors: ImageVector by lazy { lucide("Scissors", "M3 6a3 3 0 1 0 6 0a3 3 0 1 0 -6 0", "M8.12 8.12 12 12", "M20 4 8.12 15.88", "M3 18a3 3 0 1 0 6 0a3 3 0 1 0 -6 0", "M14.8 14.8 20 20") }
     val Search: ImageVector by lazy { lucide("Search", "m21 21-4.34-4.34", "M3 11a8 8 0 1 0 16 0a8 8 0 1 0 -16 0") }
@@ -219,6 +222,7 @@ object HerdrIcons {
             "circleplus" to { CirclePlus },
             "circlestop" to { CircleStop },
             "circlex" to { CircleX },
+            "clipboardpaste" to { ClipboardPaste },
             "clipboardlist" to { ClipboardList },
             "clock" to { Clock },
             "cloud" to { Cloud },
@@ -293,11 +297,13 @@ object HerdrIcons {
             "plus" to { Plus },
             "power" to { Power },
             "puzzle" to { Puzzle },
+            "qrcode" to { QrCode },
             "refreshccw" to { RefreshCcw },
             "refreshcw" to { RefreshCw },
             "rocket" to { Rocket },
             "rotateccw" to { RotateCcw },
             "rotatecw" to { RotateCw },
+            "scanqrcode" to { ScanQrCode },
             "scansearch" to { ScanSearch },
             "scissors" to { Scissors },
             "search" to { Search },
