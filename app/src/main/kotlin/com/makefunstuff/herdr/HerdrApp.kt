@@ -122,6 +122,10 @@ class AppContainer(app: Application) {
     /** Every board's list as last read, and which finished agents the phone has shown: the Agents screen's and the Board tab's. */
     val boards = com.makefunstuff.herdr.data.BoardLists(hosts, onRead = { id, tasks -> tally.tasks(id, tasks) })
     val seen = com.makefunstuff.herdr.data.SeenStore(java.io.File(app.filesDir, "seen.json"))
+    /** When each agent's chat was last on screen, for its "While you were away" card. */
+    val looked = com.makefunstuff.herdr.data.LookedStore(java.io.File(app.filesDir, "looked.json"))
+    /** The clock the screens read (a turn's "Working for 3m", the away card). */
+    val clock: () -> Long = System::currentTimeMillis
     val bubbles: Bubbles = AndroidBubbles(app)
     val briefWork = BriefWork(
         scope, hosts, machines, BriefStore(java.io.File(app.filesDir, "brief.json")), AndroidBrief(app), AndroidVoice(app),

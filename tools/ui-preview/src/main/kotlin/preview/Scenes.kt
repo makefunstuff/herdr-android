@@ -136,6 +136,22 @@ fun scenes(): List<Scene> = listOf(
     Scene("prompt-question", route = Routes.agent(DEVBOX, API_AGENT), setup = { host(DEVBOX).screens += API_AGENT to Demo.resource("screen-claude-question.txt") }),
     Scene("prompt-checks", route = Routes.agent(DEVBOX, API_AGENT), setup = { host(DEVBOX).screens += API_AGENT to Demo.resource("screen-claude-checks.txt") }),
     Scene("chat-codex", route = Routes.agent(DEVBOX, SITE_AGENT)),
+    // Chats you can skim: a settled turn opened from its "Worked for" header; a turn done with a failed test run on
+    // the way, counted in red on its folded header; back after 44 minutes away, what happened since in three lines;
+    // scrolled up while the agent wrote two more messages, the pill that counts them.
+    Scene("chat-turn-open", route = Routes.agent(DEVBOX, APP_AGENT), actions = { tapText("Worked for 2m 36s") }),
+    Scene("chat-done", route = Routes.agent(DEVBOX, APP_AGENT), setup = {
+        host(DEVBOX).snapshot = Demo.devbox(appStatus = "done")
+        host(DEVBOX).transcripts = host(DEVBOX).transcripts + (Demo.APP_SESSION to Demo.appTranscriptDone())
+    }),
+    Scene("chat-away", route = Routes.agent(DEVBOX, APP_AGENT), setup = { looked = mapOf("$DEVBOX/$APP_AGENT" to Demo.NOW - 44 * 60_000) }),
+    Scene("chat-new-messages", route = Routes.agent(DEVBOX, APP_AGENT), setup = {
+        host(DEVBOX).transcripts = host(DEVBOX).transcripts + (Demo.APP_SESSION to Demo.appTranscriptDone())
+    }, actions = { ctx ->
+        scrollTo(4)
+        ctx.data.host(DEVBOX).append(Demo.APP_SESSION, Demo.APP_NEXT)
+        settle()
+    }),
 
     // Pictures for an agent: what the attach button offers, two screenshots in the composer (copied to devbox,
     // each with its ×), one opened to mark up (an arrow, a highlight, a ring drawn round), one being cropped;

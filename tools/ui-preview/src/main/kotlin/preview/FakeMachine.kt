@@ -119,16 +119,33 @@ class FakeMachine(
 
     // ---- streams ----------------------------------------------------------------------------------
 
+    /** Lines written to transcripts while the app follows them, by session id ([append]). */
+    private val later = java.util.concurrent.ConcurrentHashMap<String, java.util.concurrent.LinkedBlockingQueue<String>>()
+
+    /** The agent writes [lines] to [session]'s transcript now: a chat following it reads them as they come. */
+    fun append(session: String, lines: String) {
+        transcripts = transcripts + (session to (transcripts[session].orEmpty().trimEnd() + "\n" + lines.trimEnd() + "\n"))
+        later.getOrPut(session) { java.util.concurrent.LinkedBlockingQueue() }.put(lines.trimEnd() + "\n")
+    }
+
     fun start(command: String): RemoteProcess {
         val w = Shell.words(command)
         return when {
             "@@missing" in command -> stream { _, out ->
                 // TranscriptFollower: kind, value, agent, bytes after "follow".
                 val args = w.drop(w.indexOf("follow") + 1)
-                val text = transcripts[args.getOrNull(1)]
+                val session = args.getOrNull(1).orEmpty()
+                val text = transcripts[session]
                 if (text == null) out.println("@@missing") else {
                     out.println("@@file ${text.toByteArray().size} /home/demo/transcript.jsonl")
                     out.print(text.trimEnd() + "\n")
+                    out.flush()
+                    // As tail -F does: what the agent writes next, until the app closes the stream.
+                    val queue = later.getOrPut(session) { java.util.concurrent.LinkedBlockingQueue() }
+                    while (true) {
+                        out.print(queue.take())
+                        out.flush()
+                    }
                 }
                 out.flush()
             }

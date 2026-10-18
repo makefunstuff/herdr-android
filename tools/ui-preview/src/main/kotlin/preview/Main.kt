@@ -29,6 +29,7 @@ import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.runDesktopComposeUiTest
@@ -110,6 +111,8 @@ class SceneData {
     var codeView: com.makefunstuff.herdr.data.CodeView? = null
     /** Quick commands pinned, per machine (`Project:Run unit tests`). */
     var quickPins: Map<String, List<String>> = emptyMap()
+    /** When each agent's chat was last on screen (LookedStore), by `<machine>/<pane>`: its "While you were away" card counts from it. */
+    var looked: Map<String, Long> = emptyMap()
     /** Pictures waiting in a chat's composer, by DraftStore key: each a name and the picture it is (made smaller as the app does). */
     val images = HashMap<String, List<Pair<String, File>>>()
     fun host(id: String): FakeMachine = hosts.getValue(id)
@@ -161,6 +164,7 @@ fun render(scene: Scene, dark: Boolean, file: File) {
     PreviewUnlock.screenLock = data.screenLock
     PreviewUnlock.answer = data.unlockAnswer
     synchronized(PreviewUnlock.asked) { PreviewUnlock.asked.clear() }
+    data.looked.forEach { (key, at) -> com.makefunstuff.herdr.data.LookedStore(context.filesDir.resolve("looked.json")).mark(key.substringBefore('/'), key.substringAfter('/'), at) }
     data.guard?.let { context.filesDir.resolve("guard.json").writeText(Json.encodeToString(com.makefunstuff.herdr.data.GuardState.serializer(), it)) }
     if (data.held.isNotEmpty()) context.filesDir.resolve("held.json").writeText(Json.encodeToString(ListSerializer(Alert.serializer()), data.held))
     IdentityStore.initial = scene.key
@@ -277,6 +281,12 @@ fun ComposeUiTest.drag(label: String, vararg points: Pair<Float, Float>, within:
         at.zipWithNext().forEach { (a, b) -> for (i in 1..8) moveTo(a + (b - a) * (i / 8f), delayMillis = 16) }
         up()
     }
+    settle()
+}
+
+/** Scrolls the first scrollable list to its item [index] at once (in a chat, which runs bottom up, 0 is the newest). */
+fun ComposeUiTest.scrollTo(index: Int) {
+    runOnUiThread { node(androidx.compose.ui.test.hasScrollToIndexAction()).performScrollToIndex(index) }
     settle()
 }
 

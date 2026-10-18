@@ -60,6 +60,17 @@ import com.makefunstuff.herdr.core.chat.AgentChat
 import com.makefunstuff.herdr.core.chat.AgentInput
 import com.makefunstuff.herdr.core.push.Alerts
 import com.makefunstuff.herdr.core.chat.ChatItem
+import com.makefunstuff.herdr.core.chat.AwaySummary
+import com.makefunstuff.herdr.core.chat.ChatTurns
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.lifecycle.compose.LifecycleStartEffect
+import kotlinx.coroutines.delay
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import com.makefunstuff.herdr.ui.common.EmptyState
 import com.makefunstuff.herdr.ui.common.LocalContainer
 import com.makefunstuff.herdr.ui.common.toast
@@ -148,6 +159,26 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
     val attach = rememberAttacher(session, onAttached = { path -> draft = Attachments.withMention(draft, path) }, onImage = tray::add)
     var attachMenu by remember { mutableStateOf(false) }
 
+    // The clock the turns are timed by: ticking each second while the agent works.
+    var now by remember { mutableLongStateOf(container.clock()) }
+    LaunchedEffect(status) {
+        now = container.clock()
+        while (status == AgentStatus.Working) {
+            delay(1_000)
+            now = container.clock()
+        }
+    }
+    // When the chat was last on screen, read each time it comes back; written when it goes.
+    var since by remember { mutableLongStateOf(container.looked.at(machineId, paneId)) }
+    var back by remember { mutableLongStateOf(container.clock()) }
+    var awayHidden by remember { mutableStateOf(false) }
+    LifecycleStartEffect(machineId, paneId) {
+        since = container.looked.at(machineId, paneId)
+        back = container.clock()
+        awayHidden = false
+        onStopOrDispose { container.looked.mark(machineId, paneId, container.clock()) }
+    }
+
     fun keys(k: List<String>) {
         scope.launch {
             runCatching { AgentInput.keys(session.awaitApi(), paneId, k, named = agent != null) }.onFailure { context.toast(it.message ?: "Couldn't send keys") }
@@ -219,6 +250,8 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
         val text = tray.message(typed)
         if (text.isEmpty() || sending || tray.waiting) return
         sending = true
+        // You wrote: what happened while you were away is behind you.
+        awayHidden = true
         val blocked = status == AgentStatus.Blocked
         // What the words answer: "No, tell it…" (the no, then the words as the next prompt), the question's own
         // "Type something." row, or (after Amend, or for a question with neither) typed into its screen.
@@ -250,11 +283,23 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
         }
     }
 
-    val rows = remember(state.items, state.pending, state.source, state.screen, state.truncated) {
+    // Turns folded or opened by hand stay as they were left, also once the turn settles.
+    val opened = remember(machineId, paneId) { mutableStateMapOf<String, Boolean>() }
+    val zone = remember { container.briefWork.zone() }
+    val turns = remember(state.items, state.turns) { ChatTurns.of(state.items, state.turns) }
+    val steps = remember(state.turns) { ChatTurns.Steps(state.turns) }
+    // The newest turn runs while the agent works or asks; not once a message was sent over it and the transcript hasn't shown it yet.
+    val live = when {
+        state.pending.isNotEmpty() -> null
+        status == AgentStatus.Working -> ChatRow.Live.Working
+        status == AgentStatus.Blocked -> ChatRow.Live.Blocked
+        else -> null
+    }
+    val rows = remember(turns, steps, live, opened.toMap(), now, state.pending, state.source, state.screen, state.truncated) {
         buildList {
             if (state.truncated) add(ChatRow.Info("truncated", "Earlier messages aren't loaded"))
             when (state.source) {
-                AgentChat.Source.Transcript -> addAll(chatRows(state.items))
+                AgentChat.Source.Transcript -> addAll(chatRows(turns, steps, live, opened, now) { at -> clock(at, now, zone) })
                 AgentChat.Source.Screen -> {
                     add(ChatRow.Info("screen-note", "No transcript for this agent, so this is its screen"))
                     // TUIs pad with blank rows; one blank line is enough on a phone.
@@ -266,13 +311,25 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
             state.pending.forEachIndexed { i, p -> add(ChatRow.User(ChatItem.User("$i", p.text), pending = true)) }
         }
     }
-    val atBottom by remember { derivedStateOf { listState.firstVisibleItemIndex <= 1 } }
+    val liveHead = rows.any { it is ChatRow.Head && it.live != null }
+    val typing = typingInShortWindow()
+    // The newest turn's header says it works; with the strip hidden for the keyboard and no such header, a line under the chat does.
+    val workingLine = status == AgentStatus.Working && typing && !liveHead
+    val atBottom by remember(workingLine) { derivedStateOf { listState.firstVisibleItemIndex <= if (workingLine) 1 else 0 } }
     // Stay pinned to the newest message unless the reader scrolled up.
     LaunchedEffect(rows.lastOrNull()?.key, rows.size, status) {
         if (atBottom) listState.animateScrollToItem(0)
     }
+    // Scrolled up: what was there then, so what came in since is counted as new.
+    val currentRows by rememberUpdatedState(rows)
+    var shown by remember { mutableStateOf<Set<String>?>(null) }
+    LaunchedEffect(atBottom) { shown = if (atBottom) null else currentRows.map { it.key }.toSet() }
+    val fresh = shown?.let { keys -> rows.count { it.isMessage && it.key !in keys } } ?: 0
+    // What happened since the chat was last on screen, until hidden or until you write.
+    val away = remember(state.turns, since, back, live) {
+        AwaySummary.of(state.turns, since, back, live != null)
+    }?.takeIf { !awayHidden && state.source == AgentChat.Source.Transcript }
 
-    val typing = typingInShortWindow()
     val imeUp = WindowInsets.isImeVisible
     val guardState by container.guard.state.collectAsStateWithLifecycle()
     Scaffold(
@@ -294,7 +351,19 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
     ) { padding ->
         // The top bar's inset comes from the scaffold; the bottom follows the keyboard or the nav bar.
         Column(Modifier.padding(top = padding.calculateTopPadding()).fillMaxSize().imePadding().navigationBarsPadding()) {
-            if (!typing) StatusStrip(status, agent?.statusLabel, activity, online = host.online)
+            if (!typing) {
+                // The newest turn's time and what it is at: one Working line, the turn's header in the chat being the other half.
+                val running = state.turns.lastOrNull()?.takeIf { live == ChatRow.Live.Working }
+                StatusStrip(
+                    status, agent?.statusLabel,
+                    listOfNotNull(
+                        running?.at?.takeIf { it in 1 until now }?.let { minutes(now - it) },
+                        ChatTurns.doing(running) ?: activity,
+                    ).joinToString(" · ").ifEmpty { null },
+                    online = host.online,
+                )
+            }
+            away?.let { a -> AwayCard(a, onHide = { awayHidden = true }, modifier = Modifier.padding(horizontal = Space.screen).padding(top = Space.s)) }
             ChatSurface(
                 Modifier.weight(1f).fillMaxWidth(),
                 composer = {
@@ -372,12 +441,18 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
                         verticalArrangement = Arrangement.spacedBy(Space.m, Alignment.Bottom),
                         modifier = Modifier.fillMaxSize(),
                     ) {
-                        // The newest entry: what the agent is doing (its question is docked over the composer).
-                        if (status == AgentStatus.Working) item(key = "working") { WorkingLine(activity) }
-                        items(rows.asReversed(), key = { it.key }) { ChatRowView(it) }
+                        if (workingLine) item(key = "working") { WorkingLine(activity) }
+                        items(rows.asReversed(), key = { it.key }) { row ->
+                            ChatRowView(row, onToggle = { head -> opened[head.turn] = !head.open })
+                        }
                     } }
                 }
-                if (!atBottom) {
+                if (!atBottom && fresh > 0) {
+                    // What came in while you read further up, counted.
+                    Box(Modifier.align(Alignment.BottomCenter).padding(bottom = bottom + Space.xs)) {
+                        NewMessagesPill(fresh) { scope.launch { listState.animateScrollToItem(0) } }
+                    }
+                } else if (!atBottom) {
                     Box(Modifier.align(Alignment.BottomEnd).padding(end = Space.m, bottom = bottom + Space.xs)) {
                         RoundAction(HerdrIcons.ArrowDown, "Newest", primary = false) { scope.launch { listState.animateScrollToItem(0) } }
                     }
@@ -421,6 +496,19 @@ private fun command(p: BlockedPrompt): String =
     p.details.firstOrNull { it.startsWith("$ ") }
         ?: p.details.getOrNull(1)?.takeIf { p.details[0].split(' ').size <= 3 }
         ?: p.question
+
+/** When a turn started: `10:05` today, `Oct 16, 09:12` before, on the phone's clock. */
+private fun clock(at: Long, now: Long, zone: ZoneId): String {
+    val day = Instant.ofEpochMilli(at).atZone(zone).toLocalDate() != Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
+    return DateTimeFormatter.ofPattern(if (day) "MMM d, HH:mm" else "HH:mm", Locale.getDefault()).withZone(zone).format(Instant.ofEpochMilli(at))
+}
+
+/** `40s`, `3m`, `1h 5m`: how long the newest turn has been at work, for the strip. */
+private fun minutes(ms: Long): String = when {
+    ms < 60_000 -> "${ms / 1000}s"
+    ms < 3_600_000 -> "${ms / 60_000}m"
+    else -> "${ms / 3_600_000}h ${(ms / 60_000) % 60}m"
+}
 
 /** "No, tell it…" being written: the option to press once the words go, on this question. */
 private class Telling(val prompt: BlockedPrompt, val index: Int)
