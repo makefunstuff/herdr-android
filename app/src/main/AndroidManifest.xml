@@ -15,6 +15,12 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- Live Updates (Android 16): running tasks and agents as promoted notifications with a status bar chip. -->
     <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
+    <!-- "Latest screenshot" in the chat composer: finding the newest picture in the Screenshots folder.
+         Asked for only when that is tapped (on Android 14, leave for only some photos is enough); the
+         gallery and the camera need no permission. -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
 
     <!-- Push apps (UnifiedPush distributors such as ntfy) that give the app an address for its machines. -->
     <queries>
@@ -88,6 +94,14 @@
                 <data android:mimeType="text/plain" />
             </intent-filter>
         </activity>
+        <!-- The file the camera app writes a photo for the chat composer into. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" />
+        </provider>
         <!-- The Quick Settings tile that opens the Coordinator chat. -->
         <service
             android:name=".share.CoordinatorTile"

@@ -24,6 +24,31 @@ import preview.Demo.SITE_AGENT
 private val TASK_CODE = CodeSpot(DEVBOX, FakeCode.TASK, task = "herdr-android/9", taskName = "AND-9", pane = APP_AGENT)
 private const val CARD = "app/src/main/kotlin/demo/herdr/ui/machines/MachineCard.kt"
 
+private const val SHOT_1 = "Screenshot_20261018_101204.png"
+
+/** Two screenshots waiting in the app agent's composer, with words for them. */
+private fun SceneData.pictures() {
+    images[com.makefunstuff.herdr.data.DraftStore.agent(DEVBOX, APP_AGENT)] = listOf(
+        SHOT_1 to Demo.picture("board"),
+        "Screenshot_20261018_101230.png" to Demo.picture("board-light"),
+    )
+    drafts[com.makefunstuff.herdr.data.DraftStore.agent(DEVBOX, APP_AGENT)] = "The Board card jumps when a machine reconnects. Keep it where it was?"
+}
+
+/** The app agent's conversation after two screenshots were sent to it, which devbox still has. */
+private fun SceneData.sentPictures() {
+    host(DEVBOX).transcripts = host(DEVBOX).transcripts + (Demo.APP_SESSION to Demo.appTranscriptWithPictures())
+    host(DEVBOX).pictures = Demo.appPictures()
+}
+
+/** Where a 540×1200 screenshot is drawn in the editor's [w]×[h] canvas: as large as fits, in the middle. */
+private fun screenshotIn(w: Float, h: Float): androidx.compose.ui.geometry.Rect {
+    val scale = minOf(w / 540f, h / 1200f)
+    val sw = 540f * scale
+    val sh = 1200f * scale
+    return androidx.compose.ui.geometry.Rect((w - sw) / 2, (h - sh) / 2, (w + sw) / 2, (h + sh) / 2)
+}
+
 fun scenes(): List<Scene> = listOf(
     // Agents: every agent on every machine, the blocked one first.
     Scene("agents"),
@@ -58,6 +83,35 @@ fun scenes(): List<Scene> = listOf(
     Scene("chat", route = Routes.agent(DEVBOX, APP_AGENT)),
     Scene("chat-blocked", route = Routes.agent(DEVBOX, API_AGENT)),
     Scene("chat-codex", route = Routes.agent(DEVBOX, SITE_AGENT)),
+
+    // Pictures for an agent: what the attach button offers, two screenshots in the composer (copied to devbox,
+    // each with its ×), one opened to mark up (an arrow, a highlight, a ring drawn round), one being cropped;
+    // then the message sent with them, as thumbnails in the chat, and one shown full size.
+    Scene("attach-menu", route = Routes.agent(DEVBOX, APP_AGENT), actions = { tapLabel("Attach files") }),
+    Scene("chat-pictures", route = Routes.agent(DEVBOX, APP_AGENT), setup = { pictures() }),
+    Scene("picture-markup", route = Routes.agent(DEVBOX, APP_AGENT), setup = { pictures() }, actions = {
+        tapLabel("Picture 1 of 2, $SHOT_1")
+        tapText("Arrow")
+        drag("The picture", 0.85f to 0.62f, 0.55f to 0.42f, within = ::screenshotIn)
+        tapText("Highlight")
+        drag("The picture", 0.06f to 0.335f, 0.6f to 0.335f, within = ::screenshotIn)
+        tapText("Draw")
+        drag(
+            "The picture", 0.5f to 0.2f, 0.85f to 0.22f, 0.95f to 0.28f, 0.85f to 0.34f, 0.5f to 0.35f, 0.08f to 0.33f,
+            0.04f to 0.27f, 0.12f to 0.21f, 0.52f to 0.19f, within = ::screenshotIn,
+        )
+    }),
+    Scene("picture-crop", route = Routes.agent(DEVBOX, APP_AGENT), setup = { pictures() }, actions = {
+        tapLabel("Picture 1 of 2, $SHOT_1")
+        tapText("Crop")
+        // The top left corner down and in, the bottom edge up: the cards around the Board card are kept.
+        drag("The picture", 0.01f to 0.01f, 0.05f to 0.13f, within = ::screenshotIn)
+        drag("The picture", 0.5f to 0.99f, 0.5f to 0.55f, within = ::screenshotIn)
+    }),
+    Scene("chat-sent-pictures", route = Routes.agent(DEVBOX, APP_AGENT), setup = { sentPictures() }),
+    Scene("picture-view", route = Routes.agent(DEVBOX, APP_AGENT), setup = { sentPictures() }, actions = {
+        tapLabel("Picture 2 of 2, Screenshot_20261018_101230.png")
+    }),
 
     // The work board and its Coordinator.
     Scene("coordinator", route = Routes.coordinator(DEVBOX)),

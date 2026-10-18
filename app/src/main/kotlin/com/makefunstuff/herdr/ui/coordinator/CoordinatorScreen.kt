@@ -68,6 +68,16 @@ import com.makefunstuff.herdr.ui.design.typingInShortWindow
 import com.makefunstuff.herdr.ui.design.ComposerToggle
 import com.makefunstuff.herdr.ui.design.ComposerIconButton
 import com.makefunstuff.herdr.ui.common.rememberAttacher
+import com.makefunstuff.herdr.core.host.Images
+import com.makefunstuff.herdr.ui.images.AttachMenu
+import com.makefunstuff.herdr.ui.images.ChatImages
+import com.makefunstuff.herdr.ui.images.ComposerTray
+import com.makefunstuff.herdr.ui.images.ImageCodec
+import com.makefunstuff.herdr.ui.images.ImageTray
+import com.makefunstuff.herdr.ui.images.LocalChatImages
+import com.makefunstuff.herdr.ui.images.MessageImages
+import com.makefunstuff.herdr.ui.images.rememberImageTray
+import androidx.compose.runtime.CompositionLocalProvider
 import com.makefunstuff.herdr.core.host.Attachments
 import com.makefunstuff.herdr.ui.common.rememberDraft
 import com.makefunstuff.herdr.data.DraftStore
@@ -77,6 +87,7 @@ import com.makefunstuff.herdr.ui.design.HerdrTopBar
 import com.makefunstuff.herdr.ui.design.LoadingState
 import com.makefunstuff.herdr.ui.design.QuietButton
 import com.makefunstuff.herdr.ui.design.StateBlock
+import com.makefunstuff.herdr.ui.design.Toasts
 import com.makefunstuff.herdr.ui.theme.Herdr
 import com.makefunstuff.herdr.ui.theme.Space
 import com.makefunstuff.herdr.ui.theme.color
@@ -118,22 +129,31 @@ fun CoordinatorScreen(nav: NavController, machineId: String) {
     var draft by rememberDraft(DraftStore.coordinator(machineId))
     /** The board's Tab for the next message: what the Coordinator adds from it gets an agent at once. */
     var startAgents by rememberSaveable { mutableStateOf(false) }
+    // Pictures for the Coordinator wait in the composer (and are copied to its machine) until the message goes.
+    val tray = rememberImageTray(DraftStore.coordinator(machineId), machineId, session, state.online)
     // A file for the Coordinator: copied to the board's machine, then named at the start of the draft.
-    val attach = rememberAttacher(session) { path -> draft = Attachments.withMention(draft, path) }
-    // Files shared to the app for this Coordinator (a screenshot, a log): copied over as attached ones, once connected.
+    val attach = rememberAttacher(session, onAttached = { path -> draft = Attachments.withMention(draft, path) }, onImage = tray::add)
+    var attachMenu by remember { mutableStateOf(false) }
+    // Files shared to the app for this Coordinator (a screenshot, a log): a picture goes to the composer's
+    // pictures at once, any other file is copied over as an attached one once connected.
     var copyingShared by remember { mutableStateOf(false) }
     val sharedWaiting by remember(machineId) { container.shares.files(machineId) }.collectAsStateWithLifecycle(emptyList())
     LaunchedEffect(machineId) { container.shares.used(machineId) }
     LaunchedEffect(machineId, state.online) {
-        if (!state.online) return@LaunchedEffect
+        val online = state.online
         container.shares.files(machineId).collect { files ->
             for (f in files) {
+                if (!online && !Images.isImage(f.name)) continue
                 copyingShared = true
                 try {
                     // Android may have cleared the app's cache while the share waited.
                     if (!java.io.File(f.path).exists()) throw java.io.IOException("${f.name} was no longer on the phone, so it wasn't attached. Share it again.")
-                    val path = withContext(Dispatchers.IO) { java.io.File(f.path).inputStream().use { session.upload(f.name, it) } }
-                    draft = Attachments.withMention(draft, path)
+                    if (!sharePicture(f, tray, container.images)) {
+                        // Not a picture the phone can read after all: it goes as a file.
+                        if (!online) continue
+                        val path = withContext(Dispatchers.IO) { java.io.File(f.path).inputStream().use { session.upload(f.name, it) } }
+                        draft = Attachments.withMention(draft, path)
+                    }
                 } catch (e: CancellationException) {
                     copyingShared = false
                     throw e
@@ -146,11 +166,12 @@ fun CoordinatorScreen(nav: NavController, machineId: String) {
         }
     }
     val uploading = attach.uploading || copyingShared
-    /** Shared files that wait for this machine to connect, said where the chat shows what is going on. */
-    val waitNote = if (state.online || sharedWaiting.isEmpty()) null else {
-        val one = sharedWaiting.singleOrNull()
+    /** Shared files (not pictures, which wait in the composer) that wait for this machine to connect, said where the chat shows what is going on. */
+    val filesWaiting = sharedWaiting.filterNot { Images.isImage(it.name) }
+    val waitNote = if (state.online || filesWaiting.isEmpty()) null else {
+        val one = filesWaiting.singleOrNull()
         if (one != null) "${one.name} waits to be copied to ${state.machine.label}, and is attached to your message once it connects."
-        else "${sharedWaiting.size} shared files wait to be copied to ${state.machine.label}, and are attached to your message once it connects."
+        else "${filesWaiting.size} shared files wait to be copied to ${state.machine.label}, and are attached to your message once it connects."
     }
     val readNow = remember { Channel<Unit>(Channel.CONFLATED) }
     val list = rememberLazyListState()
@@ -205,8 +226,10 @@ fun CoordinatorScreen(nav: NavController, machineId: String) {
 
     fun send(delegate: Boolean) {
         val typed = draft
-        val text = typed.trim()
-        if (text.isEmpty() || sending) return
+        val pictures = tray.images
+        // The pictures are named in front of what you typed.
+        val text = tray.message(typed)
+        if (text.isEmpty() || sending || tray.waiting) return
         sending = true
         // Counted before the send, so a read that comes in while it runs can't be missed.
         val before = SentMatch.count(text, talk.filter { it.you }.map { it.text })
@@ -217,6 +240,7 @@ fun CoordinatorScreen(nav: NavController, machineId: String) {
             runCatching { session.awaitBoard().send(text, delegate) }
                 .onSuccess { msg ->
                     draft = DraftStore.afterSend(draft, typed)
+                    tray.sent(pictures)
                     startAgents = false
                     // With no Coordinator set up there, the board files the words as a task instead.
                     if (!tracked) context.toast(msg.ifEmpty { "Sent" })
@@ -262,13 +286,15 @@ fun CoordinatorScreen(nav: NavController, machineId: String) {
                         onStartAgents = { startAgents = it },
                         status = when {
                             sending -> "Sending…"
-                            uploading -> "Uploading file…"
                             !state.online -> "Not connected"
+                            uploading -> "Uploading file…"
+                            tray.waiting -> "Copying pictures…"
                             else -> null
                         },
                         onSend = ::send,
-                        onAttach = attach.pick,
+                        onAttach = { attachMenu = true },
                         uploading = uploading,
+                        tray = tray,
                     )
                 },
             ) { bottom ->
@@ -286,7 +312,7 @@ fun CoordinatorScreen(nav: NavController, machineId: String) {
                     !loaded -> Box(Modifier.fillMaxSize().padding(bottom = bottom), contentAlignment = Alignment.Center) {
                         LoadingState("Reading the board")
                     }
-                    else -> LazyColumn(
+                    else -> CompositionLocalProvider(LocalChatImages provides ChatImages(machineId, session, container.images, state.online)) { LazyColumn(
                         state = list,
                         // Newest at the bottom, as the agent's chat: it stays at its end when the keyboard opens
                         // or the message box grows.
@@ -325,11 +351,23 @@ fun CoordinatorScreen(nav: NavController, machineId: String) {
                             val last = lines.lastIndex
                             itemsIndexed(lines.asReversed(), key = { i, l -> "${last - i}/${l.you}" }) { _, line -> Bubble(line) }
                         }
-                    }
+                    } }
                 }
             }
         }
     }
+    if (attachMenu) AttachMenu(attach, tray, online = state.online, onDismiss = { attachMenu = false })
+}
+
+/**
+ * A shared file that is a picture, made smaller into [tray]: true when it is there now (or the
+ * message was full, which says so), false when the phone can't read it as a picture.
+ */
+private suspend fun sharePicture(f: com.makefunstuff.herdr.core.share.SharedFile, tray: ImageTray, store: com.makefunstuff.herdr.data.ImageStore): Boolean {
+    if (!Images.isImage(f.name)) return false
+    val ready = withContext(Dispatchers.IO) { ImageCodec.prepare(java.io.File(f.path), null, f.name, store) } ?: return false
+    if (!tray.add(ready)) Toasts.show("A message takes at most ${com.makefunstuff.herdr.data.ImageStore.MAX_IMAGES} pictures, so ${f.name} was left out")
+    return true
 }
 
 private fun stateWords(v: CoordinatorView): String = when {
@@ -355,6 +393,8 @@ private fun ChatEmpty(icon: ImageVector, title: String, body: String) {
 @Composable
 private fun Bubble(line: ChatLine) {
     val mine = line.you
+    // The pictures your message names show as pictures, over its words.
+    val split = remember(line.text, mine) { if (mine) Images.split(line.text) else Images.Split(emptyList(), line.text) }
     val c = Herdr.colors
     val scheme = MaterialTheme.colorScheme
     Row(Modifier.fillMaxWidth().padding(start = if (mine) 48.dp else 0.dp, end = if (mine) 0.dp else 32.dp), horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start) {
@@ -366,11 +406,10 @@ private fun Bubble(line: ChatLine) {
                 border = if (mine && c.bubbleBorder.alpha > 0f) androidx.compose.foundation.BorderStroke(1.dp, c.bubbleBorder) else null,
                 modifier = Modifier.alpha(if (line.pending) 0.72f else 1f),
             ) {
-                MarkdownText(
-                    line.text,
-                    Modifier.padding(horizontal = if (mine) Space.l else Space.xs, vertical = if (mine) Space.m else Space.xs),
-                    style = MaterialTheme.typography.bodyLarge,
-                )
+                Column(Modifier.padding(horizontal = if (mine) Space.l else Space.xs, vertical = if (mine) Space.m else Space.xs)) {
+                    if (split.paths.isNotEmpty()) MessageImages(split.paths, Modifier.padding(bottom = if (split.text.isEmpty()) 0.dp else Space.s))
+                    if (split.text.isNotEmpty()) MarkdownText(split.text, style = MaterialTheme.typography.bodyLarge)
+                }
             }
             if (line.pending) {
                 Row(
@@ -452,6 +491,7 @@ internal fun CoordinatorComposer(
     status: String? = null,
     onAttach: (() -> Unit)? = null,
     uploading: Boolean = false,
+    tray: ImageTray? = null,
 ) {
     ChatComposer(
         draft = draft,
@@ -462,7 +502,9 @@ internal fun CoordinatorComposer(
         sending = sending,
         status = status,
         sendLabel = if (startAgents) "Send and start agents" else "Send",
-        holdSend = uploading,
+        holdSend = uploading || tray?.waiting == true,
+        attachments = tray?.let { t -> { ComposerTray(t) } },
+        attached = tray?.isEmpty == false,
         floating = true,
         leading = onAttach?.let { pick ->
             { ComposerIconButton(HerdrIcons.Plus, "Attach files", enabled = enabled && !uploading, onClick = pick) }

@@ -69,6 +69,8 @@ class FakeMachine(
     var code: FakeCode? = null,
     /** Its quick commands and their runs; null answers no quick-command command. */
     var quick: FakeQuick? = null,
+    /** Pictures on it by their path there (the files they are), for a chat that reads one back (`Images.fetchCommand`). */
+    var pictures: Map<String, java.io.File> = emptyMap(),
 ) {
     val fingerprint = "SHA256:" + Base64.getEncoder().withoutPadding().encodeToString(id.toByteArray()).padEnd(43, 'A')
     private val overrides = HashMap<String, (JsonObject) -> JsonElement>()
@@ -94,6 +96,10 @@ class FakeMachine(
             w.containsAll(listOf("machine", "list", "--json")) -> ok("""{"machines":[]}""")
             "--version" in w -> ok("herdr $version\n")
             w.containsAll(listOf("channel", "show")) -> ok("stable\n")
+            // A picture a message names, read back to show it (HostSession.fetchImage): as base64, or not there.
+            command.startsWith("f=") && "base64 <" in command ->
+                pictures[Shell.words(command.substringBefore(" && ")).first().removePrefix("f=")]
+                    ?.let { ok(Base64.getMimeEncoder().encodeToString(it.readBytes()) + "\n") } ?: CommandResult(1, "", "")
             // An attached file (HostSession.upload): taken, and its path there printed, under a fixed stamp.
             "herdr-android/uploads/" in command -> ok("/home/demo/.cache/herdr-android/uploads/20261017-091204-3f2a/" + Shell.words(command.substringAfterLast("\"/")).first())
             else -> ok("")

@@ -102,7 +102,9 @@ val ReplyBubbleShape = RoundedCornerShape(12.dp)
  * scrolling inside. Under it ONE row of controls: [leading] on the left (both chats put the
  * attach button there, [ComposerIconButton] with Lucide `Plus`), then on the right the [status]
  * text, [trailing] (the Coordinator's "Start agents") and the one round Send/Stop button.
- * [holdSend] keeps Send off without touching the text (a file still being copied).
+ * [holdSend] keeps Send off without touching the text (a file still being copied). [attachments]
+ * goes inside the card over the message box (the pictures going with the message); with
+ * [attached], Send works with no words typed.
  *
  * Send is the amber circle with an up arrow, faded and off while the draft is empty; Stop (while
  * the agent works, nothing is typed and the screen can [stop] it) is the same circle in strong text
@@ -132,6 +134,8 @@ fun ChatComposer(
     above: (@Composable () -> Unit)? = null,
     leading: (@Composable RowScope.() -> Unit)? = null,
     trailing: (@Composable RowScope.() -> Unit)? = null,
+    attachments: (@Composable () -> Unit)? = null,
+    attached: Boolean = false,
 ) {
     val c = Herdr.colors
     val view = LocalView.current
@@ -139,8 +143,8 @@ fun ChatComposer(
     val focused by focus.collectIsFocusedAsState()
     val focusRequester = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
-    val canSend = enabled && !sending && !holdSend && draft.isNotBlank()
-    val showStop = stop != null && draft.isBlank() && !sending
+    val canSend = enabled && !sending && !holdSend && (draft.isNotBlank() || attached)
+    val showStop = stop != null && draft.isBlank() && !attached && !sending
     val card = RoundedCornerShape(Radius.xxl)
     val fade = Space.xxl
 
@@ -196,6 +200,7 @@ fun ChatComposer(
                         }
                     },
             ) {
+                attachments?.invoke()
                 CompositionLocalProvider(LocalTextSelectionColors provides TextSelectionColors(c.accent, c.accent.copy(alpha = 0.32f))) {
                     BasicTextField(
                         value = value,
