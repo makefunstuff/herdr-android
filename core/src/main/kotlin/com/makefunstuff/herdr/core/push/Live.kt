@@ -216,13 +216,29 @@ data class LiveChanges(val post: List<LiveItem> = emptyList(), val cancel: List<
 /**
  * Which Live Updates are up. Each machine tells what runs there, its agents and its tasks apart (a
  * push, or what the app sees itself), and each list replaces the one before. An agent working on a
- * board task that is up is left out: the task stands for it.
+ * board task that is up is left out: the task stands for it. So is an agent muted on the phone
+ * ([mute]): no notification of any kind from it.
  */
 class LiveTracker {
     private val parts = LinkedHashMap<String, List<LiveItem>>()
     private val shown = LinkedHashMap<String, LiveItem>()
     /** Live Updates already up when the tracker started (the app was restarted): down once their list leaves them out. */
     private val leftover = HashSet<String>()
+    /** The Live Update tags of the agents muted. */
+    private var muted: Set<String> = emptySet()
+
+    private fun muted(i: LiveItem) = i.tag in muted
+
+    /** The agents muted now, by `machine/pane`: theirs come down, and come back up once unmuted. */
+    @Synchronized
+    fun mute(keys: Set<String>): LiveChanges {
+        val tags = keys.map { LiveItems.agentTag(it.substringBeforeLast('/'), it.substringAfterLast('/')) }.toSet()
+        if (tags == muted) return LiveChanges()
+        muted = tags
+        val gone = leftover.filter { it in tags }
+        leftover.removeAll(gone.toSet())
+        return diff(null, gone)
+    }
 
     @Synchronized
     fun adopt(tags: Collection<String>) {
@@ -238,7 +254,8 @@ class LiveTracker {
         val key = LiveItems.prefix(machineId, kind)
         val before = parts[key].orEmpty().associateBy { it.tag }
         parts[key] = items.map { keepSince(it, before[it.tag] ?: shown[it.tag]) }
-        val tags = items.map { it.tag }.toSet()
+        // A muted agent up from before comes down too.
+        val tags = items.filterNot(::muted).map { it.tag }.toSet()
         val gone = leftover.filter { it.startsWith(key) && it !in tags }
         leftover.removeAll(gone.toSet() + tags)
         return diff(if (refresh) key else null, gone)
@@ -281,6 +298,7 @@ class LiveTracker {
         val next = LinkedHashMap<String, LiveItem>()
         for (i in all) {
             if (i.kind == LiveItem.Kind.Agent && tasks.any { LiveItems.belongs(i, it) }) continue
+            if (muted(i)) continue
             next[i.tag] = i
         }
         val post = next.values.filter { shown[it.tag] != it || (refresh != null && it.tag.startsWith(refresh)) }

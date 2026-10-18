@@ -226,6 +226,7 @@ fun TriageRows(agent: HomeAgent, onSnooze: () -> Unit) {
     val new = agent.agent.agentStatus == com.makefunstuff.herdr.core.api.AgentStatus.Done && seen[key] != agent.finish
     if (new) ManageRow("Mark seen", icon = HerdrIcons.CheckCheck, detail = "It leaves the Done list") {
         container.seen.mark(agent.machineId, agent.agent.paneId, agent.finish)
+        container.triage.change { it.copy(used = true) }
         context.toast("Marked seen")
     }
     val pinned = triage.pinned(key)

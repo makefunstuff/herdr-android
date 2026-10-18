@@ -28,6 +28,7 @@ import preview.PreviewPhone
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.cancel
 
 class AppContainer(app: Context) {
@@ -51,7 +52,7 @@ class AppContainer(app: Context) {
     val phone = PreviewPhone
     val pushHosts = PushHosts(scope, hosts, machines, push, phone)
     val quietWork = QuietWork(scope, push.state, phone, inbox, foreground = { hosts.isForeground })
-    val liveWork = LiveWork(scope, hosts, machines, push, PreviewLive, quietWork)
+    val liveWork = LiveWork(scope, hosts, machines, push, PreviewLive, quietWork, muted = triage.state.map { it.muted })
     val tally = TallyStore(java.io.File(app.filesDir, "tally.json"), machines)
     /** One-shot watches set from the long-press sheets. */
     val watchWork = com.makefunstuff.herdr.push.WatchWork(push, inbox, quietWork)

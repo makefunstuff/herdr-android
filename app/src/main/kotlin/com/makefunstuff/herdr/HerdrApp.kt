@@ -108,7 +108,7 @@ class AppContainer(app: Application) {
     val phone = AndroidPhone(app, push)
     val pushHosts = PushHosts(scope, hosts, machines, push, phone)
     val quietWork = QuietWork(scope, push.state, phone, inbox, foreground = { hosts.isForeground })
-    val liveWork = LiveWork(scope, hosts, machines, push, AndroidLive(app), quietWork)
+    val liveWork = LiveWork(scope, hosts, machines, push, AndroidLive(app), quietWork, muted = triage.state.map { it.muted })
     val tally = TallyStore(java.io.File(app.filesDir, "tally.json"), machines)
     /** One-shot watches set from the long-press sheets. */
     val watchWork = com.makefunstuff.herdr.push.WatchWork(push, inbox, quietWork)

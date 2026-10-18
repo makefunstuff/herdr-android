@@ -34,16 +34,24 @@ data class Snooze(val until: Long? = null, val seq: Long = 0) {
         private val HM = DateTimeFormatter.ofPattern("HH:mm", Locale.ROOT)
         private val DAY = DateTimeFormatter.ofPattern("EEE", Locale.ENGLISH)
 
-        /** The snoozes the sheet offers at [now]: until it changes, for an hour, for three, until the next morning at nine. */
+        /**
+         * The snoozes the sheet offers at [now]: until it changes, for an hour, for three, until the next
+         * morning at nine (this morning's, in the small hours: at 01:00 "tomorrow" is still the night before).
+         */
         fun choices(a: HomeAgent, now: Long, zone: ZoneId): List<Pair<String, Snooze>> {
-            val morning = Instant.ofEpochMilli(now).atZone(zone).toLocalDate().plusDays(1).atTime(LocalTime.of(9, 0)).atZone(zone)
+            val here = Instant.ofEpochMilli(now).atZone(zone)
+            val day = if (here.hour < NIGHT_ENDS) here.toLocalDate() else here.toLocalDate().plusDays(1)
+            val morning = Snooze(until = day.atTime(LocalTime.of(9, 0)).atZone(zone).toInstant().toEpochMilli())
             return listOf(
                 "Until it changes" to Snooze(seq = a.agent.stateChangeSeq),
                 "For an hour" to Snooze(until = now + HOUR),
                 "For 3 hours" to Snooze(until = now + 3 * HOUR),
-                "Until tomorrow ${morning.format(HM)}" to Snooze(until = morning.toInstant().toEpochMilli()),
+                morning.label(now, zone).replaceFirstChar { it.uppercase() } to morning,
             )
         }
+
+        /** Before this hour it is still the night: the next morning is today's. */
+        private const val NIGHT_ENDS = 5
 
         private const val HOUR = 3_600_000L
     }

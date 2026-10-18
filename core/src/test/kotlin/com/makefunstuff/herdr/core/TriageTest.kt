@@ -83,6 +83,17 @@ class TriageTest {
     }
 
     @Test
+    fun inTheSmallHoursTheMorningIsTodays() {
+        val night = LocalDateTime.of(2026, 10, 18, 1, 0).toInstant(ZoneOffset.UTC).toEpochMilli()
+        val (label, s) = Snooze.choices(eval, night, ZoneOffset.UTC).last()
+        assertEquals("Until 09:00", label)
+        assertEquals(night + 8 * 3_600_000L, s.until)
+        // From five on, it is the next day's.
+        val early = LocalDateTime.of(2026, 10, 18, 6, 0).toInstant(ZoneOffset.UTC).toEpochMilli()
+        assertEquals("Until tomorrow 09:00", Snooze.choices(eval, early, ZoneOffset.UTC).last().first)
+    }
+
+    @Test
     fun pinAndSnoozeExcludeEachOther() {
         val t = Triage().pin(eval.key).snooze(eval.key, Snooze(seq = 3))
         assertFalse(t.pinned(eval.key))
