@@ -144,6 +144,14 @@ class ChatSearchTest {
     @Test
     fun findsWhatWasSaidInTheChatsOnTheMachine() {
         val dir = Files.createTempDirectory("chats")
+        try {
+            search(dir)
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    private fun search(dir: java.nio.file.Path) {
         val file = dir.resolve("api.jsonl").toFile().apply { writeText(transcript + "\n") }
         val command = ChatSearch.command(
             "JOBS",
@@ -239,6 +247,17 @@ class StartWorkTest {
     @Test
     fun theFolderBrowserListsFoldersWithTheRepositoriesFirst() {
         val home = Files.createTempDirectory("home").toFile()
+        try {
+            browse(home)
+        } finally {
+            home.deleteRecursively()
+        }
+        assertEquals("/", Folder("/home", emptyList()).parent)
+        assertNull(Folder("/", emptyList()).parent)
+        assertEquals("/home/demo", Folder("/home", emptyList()).child("demo"))
+    }
+
+    private fun browse(home: java.io.File) {
         java.io.File(home, "notes").mkdirs()
         java.io.File(home, "src/api-server/.git").mkdirs()
         java.io.File(home, ".cache").mkdirs()
@@ -258,9 +277,6 @@ class StartWorkTest {
         assertEquals(java.io.File(top.path).canonicalPath, java.io.File(src.parent!!).canonicalPath)
         assertTrue(list("~/src/api-server")!!.folders.isEmpty())
         assertNull(list("/no/such/folder"))
-        assertEquals("/", Folder("/home", emptyList()).parent)
-        assertNull(Folder("/", emptyList()).parent)
-        assertEquals("/home/demo", Folder("/home", emptyList()).child("demo"))
     }
 
     /** herdr as an agent launch sees it: the calls made, in order. */

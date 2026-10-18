@@ -8,7 +8,15 @@ import java.nio.file.Files
 
 class StartStoreTest {
     @Test fun remembersTheFoldersAndHowWorkWasStartedAcrossARestart() {
-        val file = Files.createTempDirectory("starts").resolve("starts.json").toFile()
+        val dir = Files.createTempDirectory("starts").toFile()
+        try {
+            check(java.io.File(dir, "starts.json"))
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
+
+    private fun check(file: java.io.File) {
         val store = StartStore(file)
         store.started("devbox", "/home/demo/src/api-server/", board = true, startNow = false)
         store.started("devbox", "/home/demo/notes", board = false, startNow = true, kind = "codex")
