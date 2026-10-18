@@ -104,6 +104,13 @@ object Demo {
         tasks = kotlinx.serialization.json.JsonArray(keep.map { tasks[it] })
     }
 
+    /** devbox's board on a calm morning: nothing waits for you, the rest at work or to do. */
+    fun calmBoard() = FakeBoard().apply {
+        val keep = tasks.indices.filter { i -> (tasks[i] as kotlinx.serialization.json.JsonObject)["state"]?.toString()?.trim('"') != "blocked" }
+        plain = plain.lines().filter { it.isNotBlank() }.filterIndexed { i, _ -> i in keep }.joinToString("") { it + "\n" }
+        tasks = kotlinx.serialization.json.JsonArray(keep.map { tasks[it] })
+    }
+
     fun resource(path: String): String =
         Demo::class.java.classLoader.getResourceAsStream("demo/$path")?.readBytes()?.toString(Charsets.UTF_8)
             ?: error("missing demo resource $path")
@@ -225,10 +232,7 @@ object Demo {
         ),
         GPU to FakeMachine(
             GPU,
-            snapshot = snapshot(
-                Ws("w1", "llm-eval", "/home/demo/llm-eval", listOf(Pane("w1:p1", agent = Agent("codex", "working", EVAL_SESSION, "Long-context eval on ckpt-0612")))),
-                Ws("w2", "notebooks", "/home/demo/notebooks", listOf(Pane("w2:p1", label = "shell"))),
-            ),
+            snapshot = gpu(),
             screens = mapOf("w1:p1" to resource("screen-codex-eval.txt")),
             transcripts = mapOf(EVAL_SESSION to resource("codex-eval.jsonl")),
             journal = gpuJournal(),
@@ -248,20 +252,53 @@ object Demo {
     private const val SITE_SESSION = "0199a3b2-7c41-7e10-9a2b-3c4d5e6f7a8b"
     private const val EVAL_SESSION = "0199a3c4-1d2e-7f30-8a4b-5c6d7e8f9a0b"
 
-    fun devbox(appStatus: String = "working"): JsonObject = snapshot(
-        Ws(
-            "w1", "herdr-android", "/home/demo/src/herdr-android",
-            listOf(
-                Pane(APP_AGENT, agent = Agent("claude", appStatus, APP_SESSION, "Show when each machine last answered")),
-                Pane(APP_SHELL, label = "shell"),
+    /**
+     * devbox's session. [home]: as herdr-projects runs its agents, each named for its task (`sw-<repo>-<n>`),
+     * so the Agents screen ties them to the board's tasks; and one more, at work on AND-6 in the
+     * workspace the board opened for it.
+     */
+    fun devbox(appStatus: String = "working", home: Boolean = false, apiStatus: String = "blocked"): JsonObject = snapshot(
+        *listOfNotNull(
+            Ws(
+                "w1", "herdr-android", "/home/demo/src/herdr-android",
+                listOf(
+                    Pane(APP_AGENT, agent = Agent("claude", appStatus, APP_SESSION, "Show when each machine last answered", name = "sw-herdr-android-9".takeIf { home })),
+                    Pane(APP_SHELL, label = "shell"),
+                ),
+                repo = "herdr-android",
             ),
-            repo = "herdr-android",
-        ),
-        Ws("w2", "api-server", "/home/demo/src/api-server", listOf(Pane(API_AGENT, agent = Agent("claude", "blocked", API_SESSION, "Speed up /jobs on large tables"))), repo = "api-server"),
-        Ws("w3", "website", "/home/demo/src/website", listOf(Pane(SITE_AGENT, agent = Agent("codex", "done", SITE_SESSION, "Rewrite the install page"))), repo = "website"),
+            Ws("w2", "api-server", "/home/demo/src/api-server", listOf(Pane(API_AGENT, agent = Agent("claude", apiStatus, API_SESSION, "Speed up /jobs on large tables", name = "sw-api-server-3".takeIf { home }, seq = 41))), repo = "api-server"),
+            Ws("w3", "website", "/home/demo/src/website", listOf(Pane(SITE_AGENT, agent = Agent("codex", "done", SITE_SESSION, "Rewrite the install page", name = "sw-website-4".takeIf { home }, seq = 37, completion = 37))), repo = "website"),
+            if (home) Ws(
+                "w4", "AND-6 Add app screenshots to the README", "/home/demo/.herdr/worktrees/herdr-android/work-6-screenshots",
+                listOf(Pane("w4:p1", agent = Agent("claude", "working", "4b1d2e3f-5a6b-4c7d-8e9f-0a1b2c3d4e5f", "Take the README screenshots", name = "sw-herdr-android-6", seq = 44))),
+            ) else null,
+        ).toTypedArray(),
     )
 
-    class Agent(val kind: String, val status: String, val session: String, val title: String)
+    /**
+     * gpu-box's session: the eval at work, and with [home] the data loader's profile it finished in the
+     * night (not looked at since), and an idle shell agent.
+     */
+    fun gpu(home: Boolean = false): JsonObject = snapshot(
+        Ws("w1", "llm-eval", "/home/demo/llm-eval", listOf(Pane("w1:p1", agent = Agent("codex", "working", EVAL_SESSION, "Long-context eval on ckpt-0612")))),
+        Ws(
+            "w2", "notebooks", "/home/demo/notebooks",
+            listOf(
+                if (home) Pane("w2:p1", agent = Agent("codex", "done", "0199a3c5-2e3f-7a40-9b5c-6d7e8f9a0b1c", "Profile the data loader", seq = 12, completion = 12))
+                else Pane("w2:p1", label = "shell"),
+            ),
+        ),
+    )
+
+    class Agent(
+        val kind: String, val status: String, val session: String, val title: String,
+        /** herdr's agent name: the kind, unless herdr-projects named it for its task. */
+        val name: String? = null,
+        val seq: Long = 1,
+        /** The finish herdr last saw ([com.makefunstuff.herdr.core.api.AgentInfo.completionSeq]). */
+        val completion: Long? = null,
+    )
     class Pane(val id: String, val label: String? = null, val agent: Agent? = null)
     class Ws(val id: String, val label: String, val cwd: String, val panes: List<Pane>, val repo: String? = null)
 
@@ -307,9 +344,9 @@ object Demo {
                 ws.panes.mapNotNull { p ->
                     val a = p.agent ?: return@mapNotNull null
                     obj(
-                        "terminal_id" to "t-${p.id}", "name" to a.kind, "agent" to a.kind, "display_agent" to a.kind, "title" to a.title,
+                        "terminal_id" to "t-${p.id}", "name" to (a.name ?: a.kind), "agent" to a.kind, "display_agent" to a.kind, "title" to a.title,
                         "agent_status" to a.status, "workspace_id" to ws.id, "tab_id" to "${ws.id}:t1", "pane_id" to p.id,
-                        "state_change_seq" to 1, "cwd" to ws.cwd,
+                        "state_change_seq" to a.seq, "completion_seq" to a.completion, "cwd" to ws.cwd,
                         "agent_session" to obj("agent" to a.kind, "kind" to "id", "value" to a.session, "source" to "herdr:${a.kind}"),
                     )
                 }

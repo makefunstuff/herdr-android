@@ -154,7 +154,7 @@ fun BoardPanel(
 }
 
 @Composable
-private fun PanelCancel(onDismiss: () -> Unit) = QuietButton(onClick = onDismiss) { Text("Cancel") }
+internal fun PanelCancel(onDismiss: () -> Unit) = QuietButton(onClick = onDismiss) { Text("Cancel") }
 
 /** What a task's "More" offers: every action that fits, as rows with icons; finished work also its review card. */
 @Composable

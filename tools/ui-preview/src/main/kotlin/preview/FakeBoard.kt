@@ -17,6 +17,8 @@ class FakeBoard(
     var plain: String = Demo.resource("board/list.txt"),
     /** `remote list`: the Coordinator and its conversation. */
     var remote: JsonObject = Json.parseToJsonElement(Demo.resource("board/remote-list.json")).jsonObject,
+    /** Commands the board refuses (`approve` without `--anyway`, say), with the reason it prints. */
+    var refuse: Map<String, String> = emptyMap(),
 ) {
     fun run(command: String): CommandResult {
         // sh -c LOGIN sh '<what the login shell runs>'
@@ -25,17 +27,22 @@ class FakeBoard(
         val facts = inner.indexOf("herdr-board-facts")
         if (facts >= 0) return CommandResult(0, facts(inner[facts + 2]), "")
         val out = StringBuilder()
+        var status = 0
         var segment = ArrayList<String>()
         for (w in inner + ";") {
             if (w != ";") { segment += w; continue }
             val at = segment.indexOf(FakeMachine.BOARD_PATH)
             when {
-                at >= 0 -> out.append(cli(segment.drop(at + 1)))
+                at >= 0 -> {
+                    val args = segment.drop(at + 1)
+                    val no = refuse[args.firstOrNull()]?.takeIf { "--anyway" !in args }
+                    if (no != null) { out.append(no).append('\n'); status = 1 } else out.append(cli(args))
+                }
                 segment.firstOrNull() == "echo" -> out.append(segment.drop(1).joinToString(" ")).append('\n')
             }
             segment = ArrayList()
         }
-        return CommandResult(0, out.toString(), "")
+        return CommandResult(status, out.toString(), "")
     }
 
     private fun cli(args: List<String>): String = when {

@@ -4,7 +4,7 @@ A native Android client for [herdr](https://herdr.dev) hosts: see your agents ac
 
 <table>
   <tr>
-    <td align="center" width="25%"><img src="docs/screenshots/agents.webp" alt="Agents list" width="200"><br><sub><b>Agents</b>: every agent on every machine, the blocked ones first</sub></td>
+    <td align="center" width="25%"><img src="docs/screenshots/agents.webp" alt="Agents list" width="200"><br><sub><b>Agents</b>: what needs you on every machine first, answerable on the card</sub></td>
     <td align="center" width="25%"><img src="docs/screenshots/chat.webp" alt="An agent's chat" width="200"><br><sub><b>Agent chat</b>: the agent's own transcript, with tool calls folded</sub></td>
     <td align="center" width="25%"><img src="docs/screenshots/blocked.webp" alt="A blocked agent asking for approval" width="200"><br><sub><b>Needs you</b>: answer a blocked agent with one tap</sub></td>
     <td align="center" width="25%"><img src="docs/screenshots/coordinator.webp" alt="Coordinator chat" width="200"><br><sub><b>Coordinator</b>: talk to the work board</sub></td>
@@ -62,7 +62,7 @@ Without these secrets, and for local builds, the APK is signed with the normal d
 
 ## Setting up a machine
 
-1. Open **Settings** and copy the app's public key.
+1. Open **Settings** (the gear in the Machines bar) and copy the app's public key.
 2. Add it to `~/.ssh/authorized_keys` on the machine running herdr.
 3. In **Machines**, tap **Add machine** and enter `user@host[:port]`. The app pins the host key on first connect.
 
@@ -71,6 +71,15 @@ Machines reachable only through another one can use it as a jump host ("Connect 
 ## How it talks to herdr
 
 The app opens an SSH connection and reaches herdr's socket API through `direct-streamlocal` (falling back to `herdr remote-api-bridge`). herdr answers one request per socket connection, so each call opens a fresh channel; `events.subscribe` keeps one channel open for live updates. Terminals use `herdr terminal session control`.
+
+## Needs you, first
+
+The **Agents** screen opens with one **Needs you** list across every machine: agents asking a question, and work board tasks waiting for you (ready to approve, review failed, plan ready, pick one, asks you, stopped, went wrong). An agent and the task it works on show once, as one card (the app ties them by the names herdr-projects gives its agents and workspaces). Each card carries its answers:
+
+- a question: **Yes** and **No** (or the menu's two choices), and **Reply**. Like a notification's buttons, Yes and No read the agent's screen again first and press nothing if the question changed; a longer menu opens in the chat.
+- a task: **Approve and merge**, **Fix** (the review's findings or the failure sent back to its agent), **Approve plan**, **Reply** or **Continue**, and **Open**: finished work opens on its review card (below), the rest on its board.
+
+Below it, the agents at work are one line each, with a thin bar (their task's progress when the board knows it). Finished ones are **new** until you open their chat on the phone, press **Mark seen**, or look at their pane in herdr itself (herdr then says idle; the app reads its `completion_seq` to tell one finish from the next). One line on top says how many machines are online and filters the list to one. **Ask** opens the Coordinator: the one used last, or it asks which machine. The tabs are **Agents**, **Board** and **Machines**, each badge counting what waits for you; Settings is the gear in the Machines bar. The boards are read every 15 seconds while the list is in front (every 10 on the Board tab).
 
 ## Managing from the phone
 
@@ -182,7 +191,7 @@ Placeholders: `{{args}}` (what was typed; added at the end when the prompt has n
 
 ## The work board
 
-Next to the Coordinator chat, a machine with herdr-projects gets a **Board** screen: the task list as the board shows it (short key such as `AND-7`, title, status in the board's colours, agent, the "doing now" line, progress and minutes left, `[research]` marks, PR links), with **Needs you** (approvals, plans, pick one, errors, questions) first. Search runs the board's `--query`; chips filter by repo and machine; the menu shows archived tasks. Tap a task for its details (failure and next step, reviews with findings and severity, handovers, plan, attempts, PR and report links, limits and usage); long-press for its actions: start, tell, stop, retry, fix, review, finish, approve (and approve anyway, which shows the failure and asks for a tick), approve or send back a plan, pick an attempt, archive/restore, clear, edit title/description. **+** adds a task. It reads `herdr-projects list --json` and `details <id>` and runs the board's own CLI commands over the app's SSH connection, every few seconds while the screen is in front and not at all when backgrounded; a refused command shows the board's own reason.
+The **Board** tab shows every machine's work board in one list, grouped by machine (what needs you, then what is at work and what is to do), with a chip per machine; a task opens on its machine's board, a machine's heading opens that whole board. Next to the Coordinator chat, a machine with herdr-projects gets its own **Board** screen: the task list as the board shows it (short key such as `AND-7`, title, status in the board's colours, agent, the "doing now" line, progress and minutes left, `[research]` marks, PR links), with **Needs you** (approvals, plans, pick one, errors, questions) first. Search runs the board's `--query`; chips filter by repo and machine; the menu shows archived tasks. Tap a task for its details (failure and next step, reviews with findings and severity, handovers, plan, attempts, PR and report links, limits and usage); long-press for its actions: start, tell, stop, retry, fix, review, finish, approve (and approve anyway, which shows the failure and asks for a tick), approve or send back a plan, pick an attempt, archive/restore, clear, edit title/description. **+** adds a task. It reads `herdr-projects list --json` and `details <id>` and runs the board's own CLI commands over the app's SSH connection, every few seconds while the screen is in front and not at all when backgrounded; a refused command shows the board's own reason.
 
 ### Finished work, one card at a time
 
@@ -239,7 +248,7 @@ Android lets an app's chats bubble only once you allow it. The first time, the a
 
 ## Big screens
 
-On a window 840 dp wide or wider (a tablet, an open foldable, a large window or desktop windowing), the app shows three panes side by side, like Puggie: the agents list (with Agents, Machines and Settings under it), then what you opened from it (an agent's chat, a terminal, the Coordinator, a machine, Settings), then the work board. What is open in the middle is marked in the list, and opening another agent replaces it instead of piling up; Back closes it, and then a task open on the board. A board opened from a notification, the widget or a Board card shows on the right, with its task open (a board still open in the middle, from before the window grew, moves there); with several machines that have a board, their Board cards choose which. A narrower window keeps the phone layout. Rotating or resizing across the line keeps what is open as it was: the chat, its draft and scroll, the board's search, filters and open task (kept while a narrow window hides the board, and back when it is wide again).
+On a window 840 dp wide or wider (a tablet, an open foldable, a large window or desktop windowing), the app shows three panes side by side, like Puggie: the agents list (with Agents, Board and Machines under it), then what you opened from it (an agent's chat, a review card, a terminal, the Coordinator, the Board tab, a machine, Settings), then a machine's work board. What is open in the middle is marked in the list, and opening another agent replaces it instead of piling up; Back closes it, and then a task open on the board. A board opened from a notification, the widget, the Board tab or a machine's Board card shows on the right, with its task open (a board still open in the middle, from before the window grew, moves there). A narrower window keeps the phone layout. Rotating or resizing across the line keeps what is open as it was: the chat, its draft and scroll, the board's search, filters and open task (kept while a narrow window hides the board, and back when it is wide again).
 
 ## Screen previews
 

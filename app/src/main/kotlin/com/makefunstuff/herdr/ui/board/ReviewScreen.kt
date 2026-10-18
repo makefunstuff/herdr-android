@@ -190,7 +190,7 @@ fun ReviewScreen(nav: NavController, startMachine: String? = null, startTask: St
                         }
                     }.awaitAll()
                 }
-                read.forEach { (id, r) -> r.getOrNull()?.let { container.tally.tasks(id, it) } }
+                read.forEach { (id, r) -> r.getOrNull()?.let { container.tally.tasks(id, it); container.boards.put(id, it) } }
                 lists = lists.filterKeys { it in online } + read.mapNotNull { (id, r) -> r.getOrNull()?.let { id to it } }
                 problems = read.mapNotNull { (id, r) -> r.exceptionOrNull()?.let { id to (it.message ?: "Couldn't read the board") } }.toMap()
                 loaded = true
