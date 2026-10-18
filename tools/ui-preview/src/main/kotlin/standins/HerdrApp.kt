@@ -70,6 +70,8 @@ class AppContainer(app: Context) {
     val composer = com.makefunstuff.herdr.data.ComposerStore(java.io.File(app.filesDir, "composer.json"))
     /** The chats' and the terminal's text sizes. */
     val textSizes = com.makefunstuff.herdr.data.TextSizeStore(java.io.File(app.filesDir, "text-sizes.json"))
+    /** The terminal's key bar and whether it keeps the screen on. */
+    val keyBar = com.makefunstuff.herdr.data.KeyBarStore(java.io.File(app.filesDir, "key-bar.json"))
     /** The clock the screens read (a turn's "Working for 3m", the away card): the demo's fixed time. */
     val clock: () -> Long = { Demo.NOW }
     val bubbles: Bubbles = PreviewBubbles

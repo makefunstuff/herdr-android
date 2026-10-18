@@ -93,7 +93,8 @@ class TerminalView(context: Context) : View(context) {
 
     fun startSelection(cell: CellPoint) {
         selecting = true
-        selection = cell to cell
+        // A scene can't drag across the grid: it gives the selection to show ([preview.PreviewTerminal]).
+        selection = preview.PreviewTerminal.selection ?: (cell to cell)
     }
 
     fun clearSelection() {
@@ -117,8 +118,7 @@ class TerminalView(context: Context) : View(context) {
                 synchronized(emu.lock) {
                     canvas.save()
                     canvas.translate(pad, pad)
-                    drawSelection(canvas, emu)
-                    painter.paint(emu, Surface(canvas), cellW, cellH, baseline)
+                    painter.paint(emu, Surface(canvas), cellW, cellH, baseline) { drawSelection(canvas, emu) }
                     canvas.restore()
                 }
             }

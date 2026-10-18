@@ -173,6 +173,8 @@ object Routes {
     const val ACTIVITY = "activity/{mid}?task={task}&name={name}&pane={pane}"
     /** A machine's quick-command runs, with one open ([quickRuns]'s run, from its notification). */
     const val QUICK = "quick/{mid}?run={run}"
+    /** A workspace's dev servers, one open in the in-app browser through SSH ([port] first when given). */
+    const val PREVIEW = "preview/{mid}?ws={ws}&port={port}"
 
     fun machine(id: String) = "machine/$id"
     fun edit(id: String? = null) = if (id == null) "edit" else "edit?id=$id"
@@ -200,6 +202,8 @@ object Routes {
     fun activity(mid: String, task: String? = null, name: String? = null, pane: String? = null) =
         "activity/$mid" + listOfNotNull(task?.let { "task=" + Uri.encode(it) }, name?.let { "name=" + Uri.encode(it) }, pane?.let { "pane=" + Uri.encode(it) })
             .joinToString("&").let { if (it.isEmpty()) "" else "?$it" }
+    fun preview(mid: String, workspaceId: String, port: Int? = null) =
+        "preview/$mid?ws=${Uri.encode(workspaceId)}" + (port?.let { "&port=$it" } ?: "")
     fun search(mid: String? = null, q: String? = null) =
         "search" + listOfNotNull(mid?.let { "mid=" + Uri.encode(it) }, q?.let { "q=" + Uri.encode(it) }).joinToString("&").let { if (it.isEmpty()) "" else "?$it" }
     fun start(mid: String? = null, text: String? = null) =
@@ -386,6 +390,12 @@ internal fun NavGraphBuilder.screens(nav: NavHostController, agents: @Composable
         )
     }
     composable(Routes.COORDINATOR) { CoordinatorScreen(nav, it.arguments?.getString("mid").orEmpty()) }
+    composable(Routes.PREVIEW) {
+        com.makefunstuff.herdr.ui.preview.DevServerScreen(
+            nav, it.arguments?.getString("mid").orEmpty(), it.arguments?.getString("ws")?.let(Uri::decode).orEmpty(),
+            startPort = it.arguments?.getString("port")?.toIntOrNull(),
+        )
+    }
     composable(Routes.SEARCH) {
         com.makefunstuff.herdr.ui.search.SearchScreen(
             nav, it.arguments?.getString("mid")?.let(Uri::decode)?.ifEmpty { null }, it.arguments?.getString("q")?.let(Uri::decode).orEmpty(),

@@ -64,10 +64,22 @@ class TerminalPalette(
  */
 class TerminalPainter(var palette: TerminalPalette = TerminalPalette.Default) {
 
-    /** Caller holds [TerminalEmulator.lock]. */
-    fun paint(emu: TerminalEmulator, canvas: TerminalCanvas, cellW: Float, cellH: Float, baseline: Float, showCursor: Boolean = true) {
+    /**
+     * Caller holds [TerminalEmulator.lock]. [underText] draws on the grid's ground before the cells
+     * (a selection's fill), so the text stays on top of it.
+     */
+    fun paint(
+        emu: TerminalEmulator,
+        canvas: TerminalCanvas,
+        cellW: Float,
+        cellH: Float,
+        baseline: Float,
+        showCursor: Boolean = true,
+        underText: (() -> Unit)? = null,
+    ) {
         val p = palette
         canvas.fillRect(0f, 0f, px(emu.cols * cellW), px(emu.rows * cellH), p.background)
+        underText?.invoke()
         for (y in 0 until emu.rows) {
             val row = emu.row(y)
             val top = px(y * cellH)

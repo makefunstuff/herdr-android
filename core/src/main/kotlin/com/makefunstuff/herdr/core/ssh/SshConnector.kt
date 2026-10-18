@@ -108,6 +108,21 @@ class MachineConnection internal constructor(
 
     internal fun openTunnel(host: String, port: Int) = client.newDirectConnection(host, port)
 
+    /** A TCP connection to [host]:[port] as the machine sees it (`direct-tcpip`, what `ssh -L` uses). */
+    fun openTcp(host: String, port: Int): Duplex {
+        val channel = client.newDirectConnection(host, port)
+        return object : Duplex {
+            override val input: InputStream = channel.inputStream
+            override val output: OutputStream = channel.outputStream
+            override fun close() {
+                runCatching { channel.close() }
+            }
+        }
+    }
+
+    /** Forwards a port of the phone to [host]:[port] on the machine; see [PortForward]. */
+    fun forward(host: String, port: Int): PortForward = PortForward(host, port) { h, p -> openTcp(h, p) }
+
     /**
      * Opens a connection to a Unix socket on the host (OpenSSH `direct-streamlocal`), the same
      * as `ssh -L local.sock:/remote.sock`.

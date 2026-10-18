@@ -71,6 +71,11 @@ import com.makefunstuff.herdr.core.api.ScrollbackSearch
 import com.makefunstuff.herdr.core.api.TextPoint
 import com.makefunstuff.herdr.core.api.urlAt
 import com.makefunstuff.herdr.core.terminal.Keys
+import com.makefunstuff.herdr.core.terminal.BarKey
+import com.makefunstuff.herdr.core.terminal.Sticky
+import com.makefunstuff.herdr.core.terminal.TerminalQuote
+import com.makefunstuff.herdr.core.api.AgentInfo
+import com.makefunstuff.herdr.data.DraftStore
 import com.makefunstuff.herdr.core.terminal.TerminalEmulator
 import com.makefunstuff.herdr.core.terminal.TerminalStream
 import com.makefunstuff.herdr.ui.common.EmptyState
@@ -101,14 +106,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 private const val SILENT_MS = 15_000L
-
-private val EXTRA_KEYS = listOf(
-    "esc" to Keys.ESC, "tab" to Keys.TAB, "↑" to Keys.UP, "↓" to Keys.DOWN, "←" to Keys.LEFT, "→" to Keys.RIGHT,
-    "⏎" to Keys.ENTER, "⇧tab" to Keys.SHIFT_TAB, "|" to "|", "/" to "/", "-" to "-", "~" to "~",
-    "home" to Keys.HOME, "end" to Keys.END, "pgup" to Keys.PAGE_UP, "pgdn" to Keys.PAGE_DOWN,
-)
 
 private val NO_REVISION: StateFlow<Long> = MutableStateFlow(0L)
 private val NO_STATUS: StateFlow<TerminalStream.Status> = MutableStateFlow(TerminalStream.Status.Opening)
@@ -143,8 +144,11 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
     var stream by remember { mutableStateOf<TerminalStream?>(null) }
     var generation by remember { mutableIntStateOf(0) }
     var view by remember { mutableStateOf<TerminalView?>(null) }
-    var ctrl by remember { mutableStateOf(false) }
-    var alt by remember { mutableStateOf(false) }
+    // The key bar: its keys and settings (kept), the sticky modifiers, and which page shows.
+    val bar by container.keyBar.state.collectAsStateWithLifecycle()
+    var sticky by remember { mutableStateOf(Sticky()) }
+    var fnPage by remember { mutableStateOf(false) }
+    var editKeys by remember { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
     var failure by remember { mutableStateOf<String?>(null) }
 
@@ -155,6 +159,8 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
     var searching by remember(paneId) { mutableStateOf(false) }
     var search by remember(paneId) { mutableStateOf<ScrollbackSearch?>(null) }
     var selecting by remember(paneId) { mutableStateOf(false) }
+    // Selected text on its way to an agent's chat, while the sheet asks which one.
+    var quoting by remember(paneId) { mutableStateOf<String?>(null) }
     var resizeOpen by remember { mutableStateOf(false) }
     val searchFocus = remember { FocusRequester() }
 
@@ -216,9 +222,9 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
     val hostView = androidx.compose.ui.platform.LocalView.current
     LaunchedEffect(asks) { if (asks == null) putAway = null }
     LaunchedEffect(stream, view) { view?.emulator = stream?.emulator }
-    LaunchedEffect(ctrl, alt, view) {
-        view?.ctrlSticky = ctrl
-        view?.altSticky = alt
+    LaunchedEffect(sticky, view) {
+        view?.ctrlSticky = sticky.ctrl.on
+        view?.altSticky = sticky.alt.on
     }
     LaunchedEffect(finding) { if (finding) searchFocus.requestFocus() }
     DisposableEffect(Unit) { onDispose { stream?.close() } }
@@ -233,11 +239,17 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
         }
     }
 
-    fun send(text: String) {
-        val out = Keys.withModifiers(text, ctrl, alt)
-        ctrl = false
-        alt = false
-        stream?.send(out)
+    /** A key of the bar: sent with the sticky modifiers, or the bar's own (a modifier, the F-keys, the keyboard). */
+    fun press(key: BarKey) {
+        when (key) {
+            is BarKey.Send -> {
+                stream?.send(key.bytes(sticky.mods))
+                sticky = sticky.used()
+            }
+            is BarKey.Modifier -> sticky = sticky.tapped(key.which)
+            BarKey.FKeys -> fnPage = !fnPage
+            BarKey.Keyboard -> view?.showKeyboard()
+        }
     }
 
     fun plain(e: Throwable) = e.message ?: "That didn't work"
@@ -267,8 +279,11 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
         }
     }
 
-    /** Copies the selected cells, using herdr's own selection so wrapped lines come out right. */
-    fun copySelection() {
+    /**
+     * The selected cells' text, read with herdr's own selection so wrapped lines come out right, to
+     * [use]; then the selection ends.
+     */
+    fun withSelection(use: (String) -> Unit) {
         val (anchor, cursor) = view?.selection ?: return
         scope.launch {
             try {
@@ -279,13 +294,43 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
                     TextPoint(scroll.absoluteRow(anchor.row), anchor.col),
                     TextPoint(scroll.absoluteRow(cursor.row), cursor.col),
                 )
-                if (text.isBlank()) context.toast("Nothing selected") else context.copyToClipboard("terminal", text)
+                // Back on the main thread: [use] may open another screen.
+                if (text.isBlank()) context.toast("Nothing selected") else withContext(Dispatchers.Main) { use(text) }
             } catch (e: Throwable) {
                 context.toast(plain(e))
             }
             view?.clearSelection()
             selecting = false
         }
+    }
+
+    fun copySelection() = withSelection { context.copyToClipboard("terminal", it) }
+
+    /** Where a quote says it came from: the pane, and the machine. */
+    val quoteFrom = "${pane?.displayName ?: paneId} on ${session.machine.label}"
+    val targets = ChatTargets.of(snapshot, pane?.workspaceId)
+
+    /** [quote] at the end of [agent]'s message box, and its chat open. */
+    fun quoteTo(agent: AgentInfo, quote: String) {
+        container.drafts.add(DraftStore.agent(machineId, agent.paneId), quote)
+        nav.navigate(Routes.agent(machineId, agent.paneId))
+    }
+
+    /** "Quote in chat": in the workspace's agent's message box, or the one picked when there are several. */
+    fun quoteSelection() = withSelection { text ->
+        val quote = TerminalQuote.of(text, quoteFrom)
+        val only = targets.only
+        when {
+            targets.all.isEmpty() -> context.toast("No agent runs on ${session.machine.label}")
+            only != null -> quoteTo(only, quote)
+            else -> quoting = quote
+        }
+    }
+
+    /** "Send to Coordinator": in the machine's Coordinator chat's message box. */
+    fun sendToCoordinator() = withSelection { text ->
+        container.drafts.add(DraftStore.coordinator(machineId), TerminalQuote.of(text, quoteFrom))
+        nav.navigate(Routes.coordinator(machineId))
     }
 
     fun openLink(url: String) {
@@ -342,6 +387,7 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
                 },
                 onBack = { nav.popBackStack() },
             ) {
+                BarIcon(HerdrIcons.Sun, "Keep screen on", { container.keyBar.setKeepScreenOn(!bar.keepScreenOn) }, selected = bar.keepScreenOn)
                 if (!finding) BarIcon(HerdrIcons.Search, "Find", { finding = true })
                 BarIcon(HerdrIcons.Ellipsis, "More", { menu = true })
                 HerdrMenu(expanded = menu, onDismissRequest = { menu = false }, title = pane?.displayName ?: paneId, subtitle = session.machine.label) {
@@ -350,11 +396,16 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
                         menu = false
                         view?.startSelection(CellPoint(0, 0))
                         selecting = true
-                        context.toast("Drag to select, then Copy")
+                        context.toast("Drag to select, then Copy or Quote")
                     })
                     MenuRow("Copy screen", HerdrIcons.Copy, { menu = false; view?.let { context.copyToClipboard("terminal", it.screenText(), "Screen copied") } })
                     MenuRow("Resize pane…", HerdrIcons.Maximize2, { menu = false; resizeOpen = true })
                     MenuRow("Layout…", HerdrIcons.LayoutDashboard, { menu = false; nav.navigate(Routes.layout(machineId, paneId)) })
+                    pane?.workspaceId?.let { ws ->
+                        MenuRow("Dev servers", HerdrIcons.Globe, { menu = false; nav.navigate(Routes.preview(machineId, ws)) })
+                    }
+                    MenuRow("Edit key bar…", HerdrIcons.Keyboard, { menu = false; editKeys = true })
+                    MenuRow(if (bar.keepScreenOn) "Let the screen sleep" else "Keep screen on", HerdrIcons.Sun, { menu = false; container.keyBar.setKeepScreenOn(!bar.keepScreenOn) })
                     MenuRow(if (keepHost) "Fit to phone" else "Desktop size", if (keepHost) HerdrIcons.Smartphone else HerdrIcons.Monitor, { menu = false; keepHost = !keepHost })
                     MenuRow("Reconnect", HerdrIcons.RefreshCcw, { menu = false; generation++ })
                 }
@@ -414,7 +465,12 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
                             v.onCellTap = { cell -> v.showKeyboard(); tapCell(cell) }
                             v.onCellLongPress = { cell -> v.startSelection(cell); selecting = true }
                             v.onLongPress = { context.copyToClipboard("terminal", v.screenText(), "Screen copied") }
-                            v.onModifiersConsumed = { ctrl = false; alt = false }
+                            // A key typed with the sticky modifiers: the armed ones go, the kept ones stay.
+                            v.onModifiersConsumed = {
+                                sticky = sticky.used()
+                                v.ctrlSticky = sticky.ctrl.on
+                                v.altSticky = sticky.alt.on
+                            }
                             v.setFontSizeSp(sizes.terminal)
                             v.onFontSizeChanged = { sp -> container.textSizes.setTerminal(sp) }
                             view = v
@@ -425,6 +481,7 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
                         v.onInput = { text -> stream?.send(text) }
                         v.onScroll = { lines -> if (lines != 0) stream?.scroll(lines > 0, kotlin.math.abs(lines)) }
                         if (v.fitToView != !keepHost) v.fitToView = !keepHost
+                        v.keepScreenOn = bar.keepScreenOn
                         if (kotlin.math.abs(v.fontSizeSp - sizes.terminal) > 0.01f) v.setFontSizeSp(sizes.terminal)
                     },
                     modifier = Modifier.fillMaxSize(),
@@ -476,46 +533,42 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
                 )
             }
             if (selecting) {
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .background(Herdr.colors.ground)
-                        .navigationBarsPadding()
-                        .padding(horizontal = Space.s, vertical = Space.xs),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        "Drag to select",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = Herdr.colors.muted,
-                        modifier = Modifier.weight(1f).padding(start = Space.s),
-                    )
-                    PrimaryButton(onClick = { copySelection() }) { Text("Copy") }
-                    QuietButton(
-                        onClick = {
-                            view?.clearSelection()
-                            selecting = false
-                        },
-                    ) { Text("Cancel") }
-                }
+                SelectionBar(
+                    onCopy = ::copySelection,
+                    onQuote = ::quoteSelection,
+                    onCoordinator = if (state.hasBoard) ::sendToCoordinator else null,
+                    onCancel = {
+                        view?.clearSelection()
+                        selecting = false
+                    },
+                )
             } else {
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .background(Herdr.colors.ground)
-                        .horizontalScroll(rememberScrollState())
-                        .navigationBarsPadding()
-                        .padding(horizontal = Space.xs),
-                    horizontalArrangement = Arrangement.spacedBy(0.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Key("⌨", highlighted = true) { view?.showKeyboard() }
-                    Key("ctrl", selected = ctrl) { ctrl = !ctrl }
-                    Key("alt", selected = alt) { alt = !alt }
-                    EXTRA_KEYS.forEach { (label, keys) -> Key(label) { send(keys) } }
-                }
+                KeyBarRows(
+                    keys = bar.bar,
+                    sticky = sticky,
+                    fnPage = fnPage,
+                    onKey = ::press,
+                    onCursor = { stream?.send(it) },
+                    onEdit = { editKeys = true },
+                    modifier = Modifier.background(Herdr.colors.ground).navigationBarsPadding(),
+                )
             }
         }
+    }
+
+    if (editKeys) {
+        HerdrSheet(onDismissRequest = { editKeys = false }) { KeyBarEditor(container.keyBar, bar) }
+    }
+
+    quoting?.let { quote ->
+        AgentPickSheet(
+            "Quote in chat",
+            "Which agent's message box it goes in",
+            targets,
+            snapshot,
+            onPick = { quoting = null; quoteTo(it, quote) },
+            onDismiss = { quoting = null },
+        )
     }
 
     if (resizeOpen) {
@@ -531,39 +584,29 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
 }
 
 /**
- * A key for the row above the keyboard (the web UI's `.key`): a 48dp target with a 40dp key drawn
- * in it, no fill and a hairline, `--radius-sm`. An armed modifier is the chosen one: `--bg-elevated`
- * with an amber edge and strong text.
+ * What selected text can do, in place of the key bar: copy it, quote it in an agent's chat, send it to
+ * the Coordinator (when the machine has the board). The close button ends the selection.
  */
 @Composable
-private fun Key(label: String, selected: Boolean = false, highlighted: Boolean = false, onClick: () -> Unit) {
-    val c = Herdr.colors
-    Box(
-        Modifier.heightIn(min = 52.dp).widthIn(min = 48.dp).clickable(role = Role.Button, onClick = onClick).padding(horizontal = 2.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Box(
-            Modifier
-                .heightIn(min = 40.dp)
-                .widthIn(min = 44.dp)
-                .clip(RoundedCornerShape(Radius.s))
-                .background(
-                    when {
-                        selected -> c.card
-                        highlighted -> c.hover
-                        else -> Color.Transparent
-                    },
-                )
-                .border(1.dp, if (selected) c.accent else c.line, RoundedCornerShape(Radius.s))
-                .padding(horizontal = 10.dp),
-            contentAlignment = Alignment.Center,
-        ) {
+private fun SelectionBar(onCopy: () -> Unit, onQuote: () -> Unit, onCoordinator: (() -> Unit)?, onCancel: () -> Unit) {
+    Column(Modifier.fillMaxWidth().background(Herdr.colors.ground).navigationBarsPadding().padding(horizontal = Space.s, vertical = Space.xs)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                label,
-                fontFamily = Mono,
+                "Drag to select",
                 style = MaterialTheme.typography.labelLarge,
-                color = if (selected) c.strong else c.text,
+                color = Herdr.colors.muted,
+                modifier = Modifier.weight(1f).padding(start = Space.s),
             )
+            BarIcon(HerdrIcons.X, "Cancel the selection", onCancel)
+        }
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = Space.xs),
+            horizontalArrangement = Arrangement.spacedBy(Space.xs),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            PrimaryButton(onClick = onCopy) { Text("Copy") }
+            SecondaryButton(onClick = onQuote) { Text("Quote in chat") }
+            if (onCoordinator != null) SecondaryButton(onClick = onCoordinator) { Text("Send to Coordinator") }
         }
     }
 }

@@ -535,16 +535,24 @@ fun HerdrTopBar(
     }
 }
 
-/** A 48dp icon button in a bar (`.icon-button`): a 20dp glyph in `--text`, pressed on `--bg-hover`, with an optional count badge. */
+/**
+ * A 48dp icon button in a bar (`.icon-button`): a 20dp glyph in `--text`, pressed on `--bg-hover`, with an optional count badge.
+ * [selected] (a setting it turns on, such as Keep screen on) draws it in amber on amber's tint, as a toggle.
+ */
 @Composable
-fun BarIcon(icon: ImageVector, contentDescription: String, onClick: () -> Unit, badge: Int = 0, enabled: Boolean = true) {
+fun BarIcon(icon: ImageVector, contentDescription: String, onClick: () -> Unit, badge: Int = 0, enabled: Boolean = true, selected: Boolean? = null) {
+    val c = Herdr.colors
     Box(
         Modifier.size(48.dp).clip(RoundedCornerShape(Radius.l))
-            .clickable(enabled = enabled, onClickLabel = null, role = Role.Button, onClick = onClick)
+            .then(if (selected == true) Modifier.background(c.accentTint) else Modifier)
+            .then(
+                if (selected == null) Modifier.clickable(enabled = enabled, onClickLabel = null, role = Role.Button, onClick = onClick)
+                else Modifier.toggleable(value = selected, enabled = enabled, role = Role.Switch, onValueChange = { onClick() }),
+            )
             .semantics { this.contentDescription = contentDescription },
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, null, tint = if (enabled) Herdr.colors.text else Herdr.colors.off, modifier = Modifier.size(20.dp))
+        Icon(icon, null, tint = if (!enabled) c.off else if (selected == true) c.accent else c.text, modifier = Modifier.size(20.dp))
         if (badge > 0) CountBadge(badge, Modifier.align(Alignment.TopEnd).offset(x = (-4).dp, y = 4.dp))
     }
 }

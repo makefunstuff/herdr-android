@@ -124,6 +124,10 @@ class SceneData {
     /** What the phone's code scanner reads when Scan is tapped (`herdr-push pair`'s code), and the host key each address shows. */
     var scanned: String? = Demo.PAIR_LINK
     var reachable: Map<String, String> = Demo.pairReachable()
+    /** The terminal's key bar and Keep screen on (KeyBarStore), as saved before the app opens. */
+    var keyBar: com.makefunstuff.herdr.data.KeyBarStore.Saved? = null
+    /** The terminal's selection once "Select text" starts one, in viewport cells (anchor, cursor): what a drag would select. */
+    var selection: Pair<com.makefunstuff.herdr.ui.terminal.CellPoint, com.makefunstuff.herdr.ui.terminal.CellPoint>? = null
     fun host(id: String): FakeMachine = hosts.getValue(id)
 }
 
@@ -172,12 +176,14 @@ fun render(scene: Scene, dark: Boolean, file: File) {
     PreviewPhone.quietMode = data.quietMode
     PreviewBubbles.allowed = data.bubblesAllowed
     PreviewScanner.code = data.scanned
+    PreviewTerminal.selection = data.selection
     PreviewScanner.hostKeys = data.reachable
     PreviewUnlock.screenLock = data.screenLock
     PreviewUnlock.answer = data.unlockAnswer
     synchronized(PreviewUnlock.asked) { PreviewUnlock.asked.clear() }
     data.looked.forEach { (key, at) -> com.makefunstuff.herdr.data.LookedStore(context.filesDir.resolve("looked.json")).mark(key.substringBefore('/'), key.substringAfter('/'), at) }
     data.composer?.let { context.filesDir.resolve("composer.json").writeText(Json.encodeToString(com.makefunstuff.herdr.data.ComposerStore.State.serializer(), it)) }
+    data.keyBar?.let { context.filesDir.resolve("key-bar.json").writeText(Json.encodeToString(com.makefunstuff.herdr.data.KeyBarStore.Saved.serializer(), it)) }
     data.textSizes?.let { context.filesDir.resolve("text-sizes.json").writeText(Json.encodeToString(com.makefunstuff.herdr.data.TextSizeStore.Sizes.serializer(), it)) }
     data.guard?.let { context.filesDir.resolve("guard.json").writeText(Json.encodeToString(com.makefunstuff.herdr.data.GuardState.serializer(), it)) }
     if (data.held.isNotEmpty()) context.filesDir.resolve("held.json").writeText(Json.encodeToString(ListSerializer(Alert.serializer()), data.held))

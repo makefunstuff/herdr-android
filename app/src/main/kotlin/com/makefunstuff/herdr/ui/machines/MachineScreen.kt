@@ -297,6 +297,7 @@ fun MachineScreen(nav: NavController, machineId: String) {
                 onCode = folder?.let { f -> { nav.navigate(Routes.codeAt(CodeSpot(machineId, f))) } },
                 onQuick = { quick = QuickPlace(machineId, folder.orEmpty(), label = ws.label.ifBlank { ws.workspaceId }, workspaceId = ws.workspaceId) },
                 onTab = { tabMenu = it },
+                onDevServers = { nav.navigate(Routes.preview(machineId, ws.workspaceId)) },
             ) { workspaceMenu = null }
         }
         tabMenu?.let { tab -> TabActionsSheet(session, tab, s) { tabMenu = null } }

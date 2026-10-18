@@ -16,3 +16,8 @@ fun View.confirmTap() {
 /** The board's answers that say yes to an agent's work, which [confirmTap] when they go. */
 val BoardAction.approves: Boolean
     get() = this == BoardAction.Approve || this == BoardAction.ApprovePlan || this == BoardAction.ApproveAnyway
+
+/** A key's tap: the terminal's key bar. */
+fun View.tapFeedback() {
+    performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+}

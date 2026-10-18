@@ -43,6 +43,17 @@ private fun SceneData.held() {
     }
 }
 
+/** The shell's test run selected, and what herdr reads for it. */
+private fun SceneData.selectTests() {
+    selection = com.makefunstuff.herdr.ui.terminal.CellPoint(16, 0) to com.makefunstuff.herdr.ui.terminal.CellPoint(19, 39)
+    host(DEVBOX).on("pane.selection.read") {
+        obj(
+            "text" to "BoardTest > coordinatorChatMerges PASSED\nChatTest > claudeTranscriptReadsTools PASSED\n" +
+                "ChatTest > blockedPromptParsesMenu PASSED\nPainterTest > drawsWideCharacters PASSED",
+        )
+    }
+}
+
 /** The quick replies turned on, as they start. */
 private fun SceneData.replies() {
     composer = (composer ?: com.makefunstuff.herdr.data.ComposerStore.State()).copy(replies = com.makefunstuff.herdr.core.chat.QuickReplies(on = true))
@@ -444,6 +455,32 @@ fun scenes(): List<Scene> = listOf(
     // sudo asks: a masked field over the keys; its own text size.
     Scene("terminal-password", route = Routes.terminal(DEVBOX, APP_SHELL), setup = { host(DEVBOX).screens += APP_SHELL to Demo.shellAsking() }),
     Scene("terminal-large-text", route = Routes.terminal(DEVBOX, APP_SHELL), setup = { textSizes = com.makefunstuff.herdr.data.TextSizeStore.Sizes(terminal = 15f) }),
+    // The key bar: Ctrl kept on (tapped twice) and Alt for the next key; its page of F-keys; its editor
+    // (tall, to show what can be added); a bar of one's own, with Keep screen on.
+    Scene("terminal-sticky", route = Routes.terminal(DEVBOX, APP_SHELL), actions = { tapLabel("Ctrl"); tapLabel("Ctrl"); tapLabel("Alt") }),
+    Scene("terminal-fkeys", route = Routes.terminal(DEVBOX, APP_SHELL), actions = { tapLabel("F-keys") }),
+    Scene("terminal-keys", route = Routes.terminal(DEVBOX, APP_SHELL), heightDp = 2000, actions = { tapLabel("Edit the key bar") }),
+    Scene(
+        "terminal-own-keys", route = Routes.terminal(DEVBOX, APP_SHELL),
+        setup = { keyBar = com.makefunstuff.herdr.data.KeyBarStore.Saved(keys = listOf("@ctrl", "@alt", "Esc", "Tab", "S-Tab", "Enter", "C-d", "C-z", "C-l", "M-b", "M-f", "@keyboard", "Home", "End", "Up", "Down", "Left", "Right", "/", "-"), keepScreenOn = true) },
+    ),
+    // Selected text: Copy, Quote in chat and Send to Coordinator; quoted, it is in the herdr-android agent's
+    // message box (the workspace's one agent); with two agents there, the app asks which; sent to the Coordinator.
+    Scene("terminal-select", route = Routes.terminal(DEVBOX, APP_SHELL), setup = { selectTests() }, actions = { tapLabel("More"); tapText("Select text") }),
+    Scene("terminal-quote", route = Routes.terminal(DEVBOX, APP_SHELL), setup = { selectTests() }, actions = { tapLabel("More"); tapText("Select text"); tapText("Quote in chat") }),
+    Scene(
+        "terminal-quote-pick", route = Routes.terminal(DEVBOX, APP_SHELL),
+        setup = { selectTests(); host(DEVBOX).snapshot = Demo.devbox(reviewer = true) },
+        actions = { tapLabel("More"); tapText("Select text"); tapText("Quote in chat") },
+    ),
+    Scene("terminal-to-coordinator", route = Routes.terminal(DEVBOX, APP_SHELL), setup = { selectTests() }, actions = { tapLabel("More"); tapText("Select text"); tapText("Send to Coordinator") }),
+
+    // A workspace's dev servers through SSH: the website's vite, its storybook, the machine's others behind a chip;
+    // at desktop size; a screenshot in the website agent's message box; a workspace with no web server.
+    Scene("preview", route = Routes.preview(DEVBOX, "w3")),
+    Scene("preview-desktop", route = Routes.preview(DEVBOX, "w3"), actions = { tapText("Phone size") }),
+    Scene("preview-screenshot", route = Routes.preview(DEVBOX, "w3"), actions = { tapText("Screenshot to agent") }),
+    Scene("preview-none", route = Routes.preview(DEVBOX, "w1")),
 
     // A window 840 dp wide or more (a tablet, an open foldable, a large window): the agents list, the chat or
     // terminal, the board, side by side. A landscape tablet before anything is opened, then with a chat open
