@@ -245,6 +245,62 @@ class QuickTest {
     }
 
     @Test
+    fun aLongOutputShowsItsEnd() = runBlocking {
+        val m = machine()
+        File(m.home, ".config/herdr/commands/long").apply {
+            // 700 KB of lines, then the line that matters, with a multi-byte character or two on the way.
+            writeText("#!/bin/sh\ni=0; while [ \$i -lt 10000 ]; do echo \"line \$i: héllo wörld, enough to fill seventy bytes ...\"; i=\$((i+1)); done\necho THE-END\n")
+            setExecutable(true)
+        }
+        val q = client(m)
+        val long = q.list("").commands.first { it.name == "long" }
+        val id = QuickClient.newId(1_792_000_004_000, 4)
+        q.start(id, long, QuickContext(cwd = m.home.path), "", at = 5)
+        waitFor("it to end") { q.read(id).run?.state == RunState.Done }
+        val size = q.read(id).run!!.size
+        assertTrue(size > com.makefunstuff.herdr.core.quick.QuickCommands.READ_LIMIT, "$size")
+        // Opened once it ended, as the sheet does: on until the end is in.
+        val out = com.makefunstuff.herdr.core.quick.QuickOutput()
+        var reads = 0
+        while (true) {
+            val read = out.read(q, id)
+            reads++
+            if (out.done(read.run!!, read)) break
+            check(reads < 10) { "never caught up: ${out.offset} of $size" }
+        }
+        assertTrue(out.text.endsWith("THE-END\n"), out.text.takeLast(80))
+        assertTrue(out.skipped > 0)
+        assertEquals(size, out.skipped + out.text.toByteArray().size)
+        assertTrue(out.text.startsWith("line "), out.text.take(40))
+        assertTrue('\uFFFD' !in out.text)
+    }
+
+    @Test
+    fun aCharacterCutByAReadWaitsForTheNext() {
+        val e = "é".toByteArray() // 2 bytes
+        fun read(bytes: ByteArray, offset: Long, size: Long, alive: Boolean) = QuickReader.read(
+            "@@now\t1\n@@run\tq1\nmeta\t{\"kind\":\"script\",\"path\":\"/b\"}\nstart\t1\n" +
+                (if (alive) "alive\t1\n" else "exit\t0\nend\t2\n") + "size\t$size\n@@out64\n" + java.util.Base64.getEncoder().encodeToString(bytes),
+            offset,
+        )
+        // A read that ends halfway into é: "a" now, é whole on the next read.
+        val first = read(byteArrayOf('a'.code.toByte(), e[0]), 0, 3, alive = true)
+        assertEquals("a", first.text)
+        assertEquals(1, first.bytes)
+        val next = read(byteArrayOf(e[0], e[1]), 1, 3, alive = true)
+        assertEquals("é", next.text)
+        assertEquals(2, next.bytes)
+        // A byte that isn't UTF-8 is taken as it is (a replacement character), and the reads go on past it.
+        val bad = read(byteArrayOf(0xFF.toByte(), 'b'.code.toByte()), 0, 2, alive = true)
+        assertEquals(2, bad.bytes)
+        // The last bytes of an ended run are taken even when they don't make a whole character.
+        val end = read(byteArrayOf(e[0]), 2, 3, alive = false)
+        assertEquals(1, end.bytes)
+        assertEquals(2, com.makefunstuff.herdr.core.quick.QuickText.utf8Prefix("ab€".toByteArray().copyOf(4)))
+        assertEquals(5, com.makefunstuff.herdr.core.quick.QuickText.utf8Prefix("ab€".toByteArray()))
+    }
+
+    @Test
     fun promptRunsStartTheWorker() = runBlocking {
         val m = machine()
         // A node and an npm of our own: the worker "answers" at once.

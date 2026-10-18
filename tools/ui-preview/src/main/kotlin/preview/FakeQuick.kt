@@ -47,7 +47,14 @@ class FakeQuick(
             "read" -> {
                 val r = runs.firstOrNull { it.id == args[0] }
                 val offset = args.getOrNull(1)?.toIntOrNull() ?: 0
-                ok("@@now\t$now\n" + (r?.let { info(it) + "@@out\n" + (it.answer ?: it.out.drop(offset)) } ?: "@@gone\n"))
+                ok(
+                    "@@now\t$now\n" + (
+                        r?.let {
+                            info(it) + (it.answer?.let { a -> "@@out\n$a" }
+                                ?: ("@@out64\n" + Base64.getEncoder().encodeToString(it.out.toByteArray().drop(offset).toByteArray())))
+                        } ?: "@@gone\n"
+                        ),
+                )
             }
             "start" -> {
                 // id, cwd, path, meta, repo, args…
@@ -149,6 +156,15 @@ class FakeQuick(
         const val TODAY = "q1792222900000-5b3e"
         const val DISK = "q1792215700000-19d0"
         const val EXPLAIN = "q1792209000000-c4a2"
+        const val BUILD = "q1792208000000-e01b"
+
+        /** A long build's log: some 300 KB of tasks, then how it failed. */
+        private fun longLog(): String = buildString {
+            var i = 0
+            while (length < 300_000) { append("> Task :app:compileDebugKotlin step ${i++}: compiling ui/board/BoardScreen.kt and its neighbours\n") }
+            append("e: file:///home/demo/src/herdr-android/app/src/main/kotlin/demo/herdr/ui/machines/MachineCard.kt:37:21 Unresolved reference 'lastAnswered'.\n\n")
+            append("FAILURE: Build failed with an exception.\n\n* What went wrong:\nExecution failed for task ':app:compileDebugKotlin'.\n> Compilation error. See log for more details\n\nBUILD FAILED in 4m 3s\n")
+        }
 
         fun devboxRuns(): MutableList<Run> = mutableListOf(
             Run(
@@ -169,6 +185,10 @@ class FakeQuick(
                 DISK, meta("Disk usage", "script", "hard-drive", "disk-usage", cwd = "/home/demo", scope = "global"),
                 exit = "0", start = NOW_S - 7202, end = NOW_S - 7201,
                 out = "Filesystem      Size  Used Avail Use% Mounted on\n/dev/nvme0n1p2  932G  611G  321G  66% /\n/dev/nvme1n1p1  1.8T  1.2T  540G  70% /data\ntmpfs            32G  2.1G   30G   7% /tmp\n",
+            ),
+            Run(
+                BUILD, meta("Build the APK", "script", "hammer", "build"),
+                exit = "1", start = NOW_S - 14500, end = NOW_S - 14257, out = longLog(),
             ),
             Run(
                 EXPLAIN, meta("Explain this error", "prompt", "circle-alert", "explain-error.prompt.md", args = "Unresolved reference: lastAnswered", scope = "global"),

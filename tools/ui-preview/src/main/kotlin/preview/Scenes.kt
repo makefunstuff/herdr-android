@@ -164,6 +164,8 @@ fun scenes(): List<Scene> = listOf(
     }),
     Scene("quick-failed", route = Routes.quickRuns(DEVBOX, FakeQuick.TESTS), heightDp = 1100),
     Scene("quick-answer", route = Routes.quickRuns(DEVBOX, FakeQuick.TODOS), heightDp = 1100),
+    // A long build log: the sheet shows its end, where the error is, and says how much of it is left out.
+    Scene("quick-long", route = Routes.quickRuns(DEVBOX, FakeQuick.BUILD), heightDp = 1100),
     Scene("quick-working", route = Routes.quickRuns(DEVBOX, FakeQuick.TODAY)),
     Scene("quick-runs", route = Routes.quickRuns(DEVBOX)),
     Scene("quick-new", route = Routes.agent(DEVBOX, APP_AGENT), heightDp = 1100, actions = {

@@ -158,15 +158,16 @@ object QuickCommands {
     )
 
     /**
-     * Run [id] ([runs]' lines, or `@@gone`), then `@@out` and what it printed from byte [offset]
-     * on (at most [READ_LIMIT]); for a prompt, its answer so far, whole.
+     * Run [id] ([runs]' lines, or `@@gone`), then a script's output from byte [offset] on (at
+     * most [READ_LIMIT] bytes) after `@@out64`, in base64 so every byte arrives as it is; or a
+     * prompt's answer so far, whole, after `@@out`.
      */
     fun read(id: String, offset: Long): String = script(
         "read",
         INFO + "valid \"\$1\" || exit 2; d=\"\$R/\$1\"; printf '@@now\\t%s\\n' \"\$(date +%s)\"; " +
-            "[ -f \"\$d/meta.json\" ] || { echo '@@gone'; exit 0; }; info \"\$d\" \"\$1\"; echo '@@out'; " +
-            "if [ -f \"\$d/request.json\" ]; then head -c $READ_LIMIT \"\$d/answer.md\" 2>/dev/null; " +
-            "else tail -c +\$((\$2 + 1)) \"\$d/out\" 2>/dev/null | head -c $READ_LIMIT; fi; exit 0",
+            "[ -f \"\$d/meta.json\" ] || { echo '@@gone'; exit 0; }; info \"\$d\" \"\$1\"; " +
+            "if [ -f \"\$d/request.json\" ]; then echo '@@out'; head -c $READ_LIMIT \"\$d/answer.md\" 2>/dev/null; " +
+            "else echo '@@out64'; tail -c +\$((\$2 + 1)) \"\$d/out\" 2>/dev/null | head -c $READ_LIMIT | base64 | tr -d '\\n'; fi; exit 0",
         id, offset.toString(),
     )
 

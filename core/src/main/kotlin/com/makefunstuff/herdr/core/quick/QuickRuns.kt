@@ -72,8 +72,12 @@ data class QuickRun(
 /** The runs on a machine, newest first, and the machine's clock when it said so. */
 data class RunList(val now: Long, val runs: List<QuickRun>)
 
-/** One run as read: its facts, and its output from where the read began ([text]; a prompt's whole answer). */
-data class RunRead(val now: Long, val run: QuickRun?, val text: String)
+/**
+ * One run as read: its facts, and its output from where the read began ([text]; a prompt's whole
+ * answer). For a script, [bytes] is how many bytes of its output [text] is: the next read starts that
+ * much further on. A character cut at the end of a read is left whole for the next one.
+ */
+data class RunRead(val now: Long, val run: QuickRun?, val text: String, val bytes: Long = 0)
 
 /** The commands a folder has, and where it is. */
 data class QuickListing(
@@ -96,6 +100,27 @@ data class QuickListing(
 
 /** Plain words from Markdown or a script's output, for a list's line and a notification. */
 object QuickText {
+    /**
+     * How much of [bytes] ends on a whole UTF-8 character: all of it, unless it ends in the start of
+     * one whose other bytes haven't come yet. A byte that isn't UTF-8 counts as whole.
+     */
+    fun utf8Prefix(bytes: ByteArray): Int {
+        val size = bytes.size
+        for (back in 1..minOf(3, size)) {
+            val b = bytes[size - back].toInt() and 0xFF
+            if (b and 0xC0 == 0x80) continue // a continuation byte: look further back
+            val need = when {
+                b and 0x80 == 0 -> 1
+                b and 0xE0 == 0xC0 -> 2
+                b and 0xF0 == 0xE0 -> 3
+                b and 0xF8 == 0xF0 -> 4
+                else -> 1
+            }
+            return if (back < need) size - back else size
+        }
+        return size
+    }
+
     /** The first line that says something (the last with [fromEnd]), without Markdown's marks, at most 200 characters. */
     fun line(text: String, fromEnd: Boolean = false): String {
         val lines = text.split('\n')
@@ -142,12 +167,20 @@ object QuickReader {
         return RunList(now, blocks.mapNotNull { run(it.first, it.second) })
     }
 
-    fun read(out: String): RunRead {
-        val head = out.substringBefore("\n@@out\n", out)
-        val text = if ("\n@@out\n" in out) out.substringAfter("\n@@out\n") else ""
+    /** [out] of a read from byte [offset] of a script's output (a prompt's: 0). */
+    fun read(out: String, offset: Long = 0): RunRead {
+        val raw = "\n@@out64\n" in out
+        val mark = if (raw) "\n@@out64\n" else "\n@@out\n"
+        val head = out.substringBefore(mark, out)
+        val body = if (mark in out) out.substringAfter(mark) else ""
         val (now, blocks) = blocks(head.split('\n'))
-        val b = blocks.firstOrNull()
-        return RunRead(now, b?.let { run(it.first, it.second) }, text)
+        val run = blocks.firstOrNull()?.let { run(it.first, it.second) }
+        if (!raw) return RunRead(now, run, body)
+        val bytes = runCatching { Base64.getMimeDecoder().decode(body.trim()) }.getOrDefault(ByteArray(0))
+        // Its whole output is in when it has ended and this read reaches its end; else a cut character waits.
+        val last = run != null && !run.state.running && offset + bytes.size >= run.size
+        val n = if (last) bytes.size else QuickText.utf8Prefix(bytes)
+        return RunRead(now, run, String(bytes, 0, n, Charsets.UTF_8), n.toLong())
     }
 
     /** `@@now`, then each `@@run <id>` with its `key<TAB>value` lines. */

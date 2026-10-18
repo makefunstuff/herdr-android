@@ -48,7 +48,7 @@ class QuickClient(
     suspend fun runs(limit: Int = 40): RunList = QuickReader.runs(out(QuickCommands.runs(limit), 30))
 
     /** Run [id] and its output from byte [offset] (a prompt's answer whole); its run is null when it is gone. */
-    suspend fun read(id: String, offset: Long = 0): RunRead = QuickReader.read(out(QuickCommands.read(id, offset), 30, quiet = true))
+    suspend fun read(id: String, offset: Long = 0): RunRead = QuickReader.read(out(QuickCommands.read(id, offset), 30, quiet = true), offset)
 
     suspend fun stop(id: String) {
         val r = run(QuickCommands.stop(id), 20)

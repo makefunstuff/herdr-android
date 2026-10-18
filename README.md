@@ -145,7 +145,7 @@ Your own scripts, one tap away: ask Claude (or any agent) to write a script into
 | `<repo>/.herdr/commands/` | in that repository's workspaces, worktrees, agents and tasks (a worktree's own folder first, then its main checkout's) |
 | `~/.config/herdr/commands/` | everywhere on that machine |
 
-A project's commands come first; one with the same name as the machine's wins. A command is an **executable file** (a script in any language) or a **`<name>.prompt.md`** file (an AI command, below). The list is read again each time it opens and when the machine connects; **↻** reads it again.
+A project's commands come first; one with the same name as the machine's wins. A command is an **executable file** (a script in any language) or a **`<name>.prompt.md`** file (an AI command, below). The list is read again each time it opens and when the machine connects; pull it down (or **↻**) to read it again.
 
 **The header** is a comment block at the top of the file, one `# key: value` per line (after the `#!` line). Without one, the file's name is the command's name.
 
@@ -159,7 +159,7 @@ A project's commands come first; one with the same name as the machine's wins. A
 # pane: true                # runs in a new herdr pane (long or interactive ones)
 ```
 
-**Running one.** It runs on the machine in the checkout's folder (the home folder for a machine command), detached from the phone: its output streams into a sheet, with how it ended (exit status, how long), **Stop**, **Copy** and **Run again**. Arguments typed in the form come as its arguments (split like a shell's words, quotes keep spaces) and whole in `$HERDR_ARGS`; it also gets `$HERDR_REPO`, `$HERDR_CWD` and `$HERDR_COMMAND`. **Run in a new pane** types it into a new tab of the workspace instead and opens its terminal. Every run is kept on the machine (`~/.local/state/herdr-android/quick/<run>/`, the newest 80), so closing the app or losing the connection doesn't stop it: **Runs** (the history icon in the sheet, or the machine's **⋯ → Quick command runs**) lists them with what they printed, to open, run again or remove.
+**Running one.** It runs on the machine in the checkout's folder (the home folder for a machine command), detached from the phone: its output streams into a sheet (a long log shows its end, the last 256 KB, and says how much is left out), with how it ended (exit status, how long), **Stop**, **Copy** and **Run again**. Arguments typed in the form come as its arguments (split like a shell's words, quotes keep spaces) and whole in `$HERDR_ARGS`; it also gets `$HERDR_REPO`, `$HERDR_CWD` and `$HERDR_COMMAND`. **Run in a new pane** types it into a new tab of the workspace instead and opens its terminal. Every run is kept on the machine (`~/.local/state/herdr-android/quick/<run>/`, the newest 80), so closing the app or losing the connection doesn't stop it: **Runs** (the history icon in the sheet, or the machine's **⋯ → Quick command runs**) lists them with what they printed, to open, run again or remove.
 
 **AI commands** are prompts run by a durable AI worker on the machine ([`host/herdr-quick`](host/herdr-quick/README.md), on [pi-durable](https://www.npmjs.com/package/@earendil-works/pi-durable)): `<name>.prompt.md`, the same header (its keys at the top, so a Markdown heading starts the prompt) and the prompt as the rest of the file.
 
@@ -218,7 +218,7 @@ UI changes are checked, and shown in review, with screen previews instead of an 
 ./gradlew -p tools/ui-preview render -Ponly=board,chat   # some of them
 ```
 
-It needs JDK 17, no Android SDK, and takes about 5 minutes for all 81 scenes (agents, machines, the code browser (repositories, files, a file, a comment, changes, a diff, history, search, comments waiting), quick commands (a machine's, a project's with one pinned, arguments, a command's menu, a run, its runs, an AI answer and one at work, a new one, none yet), a machine, a machine's health and cleanup, agent chats, the Coordinator, floating chats, the board and a task, the brief and when it comes, the terminal, settings with its notifications, the dialogs and sheets, and the three panes of a wide window, also across a rotation). CI renders them too and uploads them as the `herdr-screens-<run>` artifact. See [`tools/ui-preview/README.md`](tools/ui-preview/README.md) for how it works and how to add a scene, and [`AGENTS.md`](AGENTS.md) for how changes are reviewed.
+It needs JDK 17, no Android SDK, and takes about 5 minutes for all 82 scenes (agents, machines, the code browser (repositories, files, a file, a comment, changes, a diff, history, search, comments waiting), quick commands (a machine's, a project's with one pinned, arguments, a command's menu, a run, its runs, an AI answer and one at work, a long log, a new one, none yet), a machine, a machine's health and cleanup, agent chats, the Coordinator, floating chats, the board and a task, the brief and when it comes, the terminal, settings with its notifications, the dialogs and sheets, and the three panes of a wide window, also across a rotation). CI renders them too and uploads them as the `herdr-screens-<run>` artifact. See [`tools/ui-preview/README.md`](tools/ui-preview/README.md) for how it works and how to add a scene, and [`AGENTS.md`](AGENTS.md) for how changes are reviewed.
 
 ## Layout
 

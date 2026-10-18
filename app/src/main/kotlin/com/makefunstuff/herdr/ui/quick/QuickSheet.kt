@@ -6,6 +6,10 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
@@ -85,7 +89,7 @@ fun QuickSheets(nav: NavController, place: QuickPlace, onDismiss: () -> Unit, st
 /** What a tap on a command waits for: a yes, or its arguments. */
 private data class Asking(val command: QuickCommand, val inPane: Boolean)
 
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class, androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 private fun CommandsSheet(nav: NavController, place: QuickPlace, onDismiss: () -> Unit, onRun: (String) -> Unit, onNew: (QuickListing?) -> Unit) {
     val container = LocalContainer.current
@@ -98,6 +102,7 @@ private fun CommandsSheet(nav: NavController, place: QuickPlace, onDismiss: () -
     var listing by remember(place) { mutableStateOf(container.quick.listed(place.machine, place.dir)) }
     var problem by remember { mutableStateOf<String?>(null) }
     var reading by remember { mutableStateOf(true) }
+    var pulled by remember { mutableStateOf(false) }
     var asking by remember { mutableStateOf<Asking?>(null) }
     var menu by remember { mutableStateOf<QuickCommand?>(null) }
     var starting by remember { mutableStateOf<String?>(null) }
@@ -116,6 +121,7 @@ private fun CommandsSheet(nav: NavController, place: QuickPlace, onDismiss: () -
             problem = t.message ?: "Couldn't read the commands"
         }
         reading = false
+        pulled = false
     }
 
     fun run(command: QuickCommand, args: String, inPane: Boolean) {
@@ -155,10 +161,13 @@ private fun CommandsSheet(nav: NavController, place: QuickPlace, onDismiss: () -
             !online && list == null -> Notice("${host?.machine?.label ?: "The machine"} is offline", Modifier.padding(horizontal = Space.l), icon = HerdrIcons.Clock)
             list == null && problem != null -> ErrorMessage(problem!!, Modifier.padding(horizontal = Space.xl)) { again++ }
             list == null -> LoadingState("Reading the commands", Modifier.padding(vertical = Space.xl))
-            else -> {
-                if (problem != null) ErrorMessage(problem!!, Modifier.padding(horizontal = Space.xl, vertical = Space.s)) { again++ }
-                CommandList(list, pins[place.machine].orEmpty(), starting, onTap = { tap(it) }, onMenu = { menu = it })
-                if (list.commands.isEmpty()) Empty(list)
+            // Pull down on the list to read it again (drag the sheet away by its top).
+            else -> PullToRefreshBox(isRefreshing = pulled && reading, onRefresh = { pulled = true; again++ }, modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.fillMaxWidth().heightIn(max = 620.dp).verticalScroll(rememberScrollState())) {
+                    if (problem != null) ErrorMessage(problem!!, Modifier.padding(horizontal = Space.xl, vertical = Space.s)) { again++ }
+                    CommandList(list, pins[place.machine].orEmpty(), starting, onTap = { tap(it) }, onMenu = { menu = it })
+                    if (list.commands.isEmpty()) Empty(list)
+                }
             }
         }
         Row(Modifier.fillMaxWidth().padding(horizontal = Space.l, vertical = Space.m), horizontalArrangement = Arrangement.spacedBy(Space.s)) {

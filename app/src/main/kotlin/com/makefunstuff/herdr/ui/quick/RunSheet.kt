@@ -35,6 +35,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.makefunstuff.herdr.Routes
 import com.makefunstuff.herdr.core.quick.QuickKind
+import com.makefunstuff.herdr.core.quick.QuickOutput
 import com.makefunstuff.herdr.core.quick.QuickRun
 import com.makefunstuff.herdr.core.quick.RunState
 import com.makefunstuff.herdr.data.DraftStore
@@ -69,9 +70,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-/** What a run's output keeps at most on the phone: the end of a long one. */
-private const val KEEP_CHARS = 400_000
-
 /**
  * One run of a quick command, as it goes: its output streaming in (a prompt's answer, as Markdown),
  * how it ended, and Stop, Copy and Run again; an AI one's answer also goes to the Coordinator or
@@ -87,8 +85,10 @@ fun RunSheet(nav: NavController, machineId: String, id: String, onDismiss: () ->
     val session = container.hosts.session(machineId)
     val host = session?.state?.collectAsStateWithLifecycle()?.value
     var run by remember(id) { mutableStateOf<QuickRun?>(null) }
+    // What it printed, read on from where the last read stopped (kept across a Stop or a reconnect).
+    val output = remember(id) { QuickOutput() }
     var text by remember(id) { mutableStateOf("") }
-    var offset by remember(id) { mutableLongStateOf(0L) }
+    var skipped by remember(id) { mutableLongStateOf(0L) }
     var now by remember(id) { mutableLongStateOf(0L) }
     var gone by remember(id) { mutableStateOf(false) }
     var problem by remember(id) { mutableStateOf<String?>(null) }
@@ -97,34 +97,32 @@ fun RunSheet(nav: NavController, machineId: String, id: String, onDismiss: () ->
     var task by remember(id) { mutableStateOf(false) }
     val online = host?.online == true
 
-    // Read it every second while it runs (a script's output from where the last read stopped), then once more.
+    // Read it every second while it runs; once it ended, on until the whole of its output is in.
     LaunchedEffect(id, again, online) {
         if (session == null || !online) return@LaunchedEffect
         val q = session.quick()
         while (true) {
+            var more = false
             try {
-                val read = q.read(id, if (run?.kind == QuickKind.Prompt) 0 else offset)
+                val read = output.read(q, id)
                 now = read.now
                 val r = read.run
                 if (r == null) { gone = true; return@LaunchedEffect }
-                if (r.kind == QuickKind.Prompt) text = read.text
-                else if (read.text.isNotEmpty()) {
-                    val all = text + read.text
-                    text = if (all.length > KEEP_CHARS) all.takeLast(KEEP_CHARS) else all
-                    offset += read.text.toByteArray().size
-                }
+                text = output.text
+                skipped = output.skipped
                 run = r
                 problem = null
-                if (!r.state.running) {
+                if (output.done(r, read)) {
                     container.alertWork.quickSeen(machineId, host?.machine?.label.orEmpty(), r)
                     return@LaunchedEffect
                 }
+                more = !r.state.running
             } catch (e: CancellationException) {
                 throw e
             } catch (t: Throwable) {
                 problem = t.message ?: "Couldn't read it"
             }
-            delay(if (run?.state == RunState.Setup) 2000 else 900)
+            if (!more) delay(if (run?.state == RunState.Setup) 2000 else 900)
         }
     }
 
@@ -168,6 +166,10 @@ fun RunSheet(nav: NavController, machineId: String, id: String, onDismiss: () ->
                         color = Herdr.colors.notice, icon = HerdrIcons.TriangleAlert,
                     )
                     if (r.error.isNotEmpty() && r.state != RunState.Done) ErrorMessage(r.error)
+                    if (skipped > 0) Notice(
+                        "Showing its end: the first ${sizeWords(skipped)} of its output are left out here. All of it is on the machine, in ~/.local/state/herdr-android/quick/${r.id}/out.",
+                        icon = HerdrIcons.Info,
+                    )
                     Output(r, text)
                     if (problem != null) ErrorMessage(problem!!) { again++ }
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(Space.s), verticalArrangement = Arrangement.spacedBy(Space.s)) {
@@ -280,4 +282,11 @@ private fun MakeTaskDialog(r: QuickRun, answer: String, onDismiss: () -> Unit, o
         dismissButton = { QuietButton(onClick = onDismiss) { Text("Cancel") } },
         confirmButton = { PrimaryButton("Add", enabled = title.isNotBlank()) { onAdd(title.trim(), repo.trim(), desc.trim()) } },
     )
+}
+
+/** "12 KB", "3.4 MB". */
+private fun sizeWords(bytes: Long): String = when {
+    bytes < 1024 -> "$bytes bytes"
+    bytes < 1024 * 1024 -> "${bytes / 1024} KB"
+    else -> "%.1f MB".format(bytes / 1024.0 / 1024.0)
 }
