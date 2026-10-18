@@ -66,6 +66,9 @@ import com.makefunstuff.herdr.core.api.TabInfo
 import com.makefunstuff.herdr.core.api.WorkspaceInfo
 import com.makefunstuff.herdr.core.api.moveIndex
 import com.makefunstuff.herdr.core.host.HostSession
+import com.makefunstuff.herdr.core.push.Watch
+import com.makefunstuff.herdr.core.push.Watches
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.makefunstuff.herdr.ui.common.copyToClipboard
 import com.makefunstuff.herdr.ui.common.toast
 import kotlinx.coroutines.CoroutineScope
@@ -554,6 +557,7 @@ fun AgentActionsSheet(
             ManageRow("Why this state?", icon = HerdrIcons.Info, chevron = true) { explain = true }
             ManageRow("Details", icon = HerdrIcons.FileText, chevron = true) { details = true }
         }
+        if (agent != null) WatchRows(session.machine.id, agent, label)
         if (onTerminal != null) ManageRow("Open terminal", icon = HerdrIcons.SquareTerminal, chevron = true) { onTerminal() }
         if (onActivity != null) ManageRow("Activity timeline", detail = "What it did, step by step: commands, edits, tests, reviews", icon = HerdrIcons.Activity, chevron = true) { onActivity() }
         if (onCode != null) ManageRow("Browse the code", detail = "Its files and changes, to read and comment on", icon = HerdrIcons.Code, chevron = true) { onCode() }
@@ -588,6 +592,33 @@ fun AgentActionsSheet(
     }
     if (explain && target != null) {
         ExplainSheet(session, target, onDismiss = { explain = false })
+    }
+}
+
+/**
+ * "Notify me when it finishes": a one-shot watch on a working (or asking) agent, set and taken back
+ * here; it fires once, as a notification, and removes itself.
+ */
+@Composable
+private fun WatchRows(machineId: String, agent: AgentInfo, label: String) {
+    val container = com.makefunstuff.herdr.ui.common.LocalContainer.current
+    val context = LocalContext.current
+    val st by container.push.state.collectAsStateWithLifecycle()
+    val set = st.watches.firstOrNull { it.machineId == machineId && it.paneId == agent.paneId && it.what == Watch.What.AgentDone }
+    val offer = set ?: Watches.offers(machineId, agent, System.currentTimeMillis()).firstOrNull() ?: return
+    ManageRow(
+        "Notify me when it finishes",
+        icon = HerdrIcons.BellRing,
+        detail = if (set != null) "Once, then it removes itself. Tap to take it back." else null,
+        selected = set != null,
+    ) {
+        if (set != null) {
+            container.watchWork.remove(set.id)
+            context.toast("Watch removed")
+        } else {
+            container.watchWork.add(offer)
+            context.toast("You'll hear once $label finishes")
+        }
     }
 }
 

@@ -41,6 +41,12 @@ class AndroidAlerts(private val context: Context, private val appLock: () -> Boo
                 NotificationChannel(FINISHED, "Finished", NotificationManager.IMPORTANCE_DEFAULT).apply {
                     description = "An agent finished its work"
                 },
+                NotificationChannel(WENT_WRONG, "Went wrong", NotificationManager.IMPORTANCE_HIGH).apply {
+                    description = "A review or a check failed, or a task went wrong"
+                },
+                NotificationChannel(WATCHES, "Watches", NotificationManager.IMPORTANCE_HIGH).apply {
+                    description = "A watch you set fired: a task's checks passed, an agent finished"
+                },
                 NotificationChannel(WORKING, "Working", NotificationManager.IMPORTANCE_LOW).apply {
                     description = "While the app answers from a notification or looks at your machines"
                     setShowBadge(false)
@@ -102,8 +108,9 @@ class AndroidAlerts(private val context: Context, private val appLock: () -> Boo
 
     override fun cancel(tag: String) = nm.cancel(tag, ID)
 
-    private fun base(alert: Alert, quiet: Boolean): NotificationCompat.Builder =
-        NotificationCompat.Builder(context, if (alert.kind == Alert.Kind.NeedsYou) NEEDS_YOU else FINISHED)
+    private fun base(alert: Alert, quiet: Boolean): NotificationCompat.Builder {
+        val urgent = alert.kind != Alert.Kind.Finished && alert.kind != Alert.Kind.Test
+        return NotificationCompat.Builder(context, channel(alert.kind))
             .apply { if (appLock()) setVisibility(NotificationCompat.VISIBILITY_PRIVATE).setPublicVersion(redacted(alert)) }
             .setSmallIcon(R.drawable.ic_notification)
             .setColor(0xFFF0A830.toInt())
@@ -112,7 +119,15 @@ class AndroidAlerts(private val context: Context, private val appLock: () -> Boo
             .setAutoCancel(true)
             .setSilent(quiet)
             .setCategory(if (alert.kind == Alert.Kind.NeedsYou) NotificationCompat.CATEGORY_MESSAGE else NotificationCompat.CATEGORY_STATUS)
-            .setPriority(if (alert.kind == Alert.Kind.NeedsYou) NotificationCompat.PRIORITY_HIGH else NotificationCompat.PRIORITY_DEFAULT)
+            .setPriority(if (urgent) NotificationCompat.PRIORITY_HIGH else NotificationCompat.PRIORITY_DEFAULT)
+    }
+
+    private fun channel(kind: Alert.Kind) = when (kind) {
+        Alert.Kind.NeedsYou -> NEEDS_YOU
+        Alert.Kind.WentWrong -> WENT_WRONG
+        Alert.Kind.Watch -> WATCHES
+        Alert.Kind.Finished, Alert.Kind.Test -> FINISHED
+    }
 
     private fun post(tag: String, b: NotificationCompat.Builder) {
         // Without the permission there is nothing to post; the app's Settings say so.
@@ -123,11 +138,18 @@ class AndroidAlerts(private val context: Context, private val appLock: () -> Boo
     }
 
     /** What a locked phone shows with the app lock on: the app's name and the kind of news, nothing of what it is about. */
-    private fun redacted(alert: Alert) = NotificationCompat.Builder(context, if (alert.kind == Alert.Kind.NeedsYou) NEEDS_YOU else FINISHED)
+    private fun redacted(alert: Alert) = NotificationCompat.Builder(context, channel(alert.kind))
         .setSmallIcon(R.drawable.ic_notification)
         .setColor(0xFFF0A830.toInt())
         .setContentTitle("Herdr")
-        .setContentText(if (alert.kind == Alert.Kind.NeedsYou) "Something needs you. Unlock to see it." else "Something finished. Unlock to see it.")
+        .setContentText(
+            when (alert.kind) {
+                Alert.Kind.NeedsYou -> "Something needs you."
+                Alert.Kind.WentWrong -> "Something went wrong."
+                Alert.Kind.Watch -> "Something you watch changed."
+                Alert.Kind.Finished, Alert.Kind.Test -> "Something finished."
+            } + " Unlock to see it.",
+        )
         .build()
 
     /** A tap: the agent's chat, the task on the board (finished work: its review card), the machine's health, or a quick command's run. */
@@ -180,6 +202,8 @@ class AndroidAlerts(private val context: Context, private val appLock: () -> Boo
 
         const val NEEDS_YOU = "needs-you"
         const val FINISHED = "finished"
+        const val WENT_WRONG = "went-wrong"
+        const val WATCHES = "watches"
         const val WORKING = "working"
         /** The one notification for what was held during quiet hours. */
         const val SUMMARY = "quiet:summary"

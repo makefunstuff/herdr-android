@@ -2,6 +2,7 @@ package com.makefunstuff.herdr.push
 
 import com.makefunstuff.herdr.core.push.Alert
 import com.makefunstuff.herdr.core.push.AlertChange
+import com.makefunstuff.herdr.core.push.AlertRules
 import com.makefunstuff.herdr.core.push.PhoneQuiet
 import com.makefunstuff.herdr.core.push.QuietHours
 import com.makefunstuff.herdr.core.push.QuietSummary
@@ -74,7 +75,8 @@ interface PushPhone {
 /**
  * Turns alert changes into notifications, each state once: a push and the app's own look can both
  * report an agent that asks, and a notification swiped away stays away until something new happens.
- * During quiet hours what can wait is held instead ([QuietHours.holds]), and [release]d as one.
+ * What the notification rules switch off ([AlertRules]) isn't shown. During quiet hours what can wait
+ * is held instead ([QuietHours.holds]), and [release]d as one.
  */
 class Inbox(private val file: File, private val sink: AlertSink) {
     private val json = Json { ignoreUnknownKeys = true }
@@ -92,11 +94,18 @@ class Inbox(private val file: File, private val sink: AlertSink) {
     data class Seen(val sig: String, val at: Long)
 
     /**
-     * Shows what is new and takes down what is over. [quiet] while the app is on screen. [hold] during
-     * quiet hours: what can wait is held for [release], and only what needs you shows.
+     * Shows what is new and takes down what is over. [quiet] while the app is on screen or you are at a
+     * machine. [hold] during quiet hours: what can wait is held for [release], and only what needs you
+     * shows. [rules]: what is switched off is noted as seen and not shown (turned on later, it starts from then).
      */
     @Synchronized
-    fun apply(changes: List<AlertChange>, quiet: Boolean, hold: Boolean = false, now: Long = System.currentTimeMillis()) {
+    fun apply(
+        changes: List<AlertChange>,
+        quiet: Boolean,
+        hold: Boolean = false,
+        rules: AlertRules = AlertRules.ALL,
+        now: Long = System.currentTimeMillis(),
+    ) {
         var dirty = false
         var heldDirty = false
         for (c in changes) when (c) {
@@ -105,7 +114,10 @@ class Inbox(private val file: File, private val sink: AlertSink) {
                 if (a.sig.isNotEmpty() && seen[a.tag]?.sig == a.sig) continue
                 // A newer state replaces a held one under the same tag, held or shown.
                 if (held.remove(a.tag) != null) heldDirty = true
-                if (hold && QuietHours.holds(a)) {
+                if (!rules.allows(a)) {
+                    // Switched off: one up from before (it was on then) comes down with it.
+                    sink.cancel(a.tag)
+                } else if (hold && QuietHours.holds(a)) {
                     held[a.tag] = a
                     heldDirty = true
                 } else {

@@ -48,7 +48,7 @@ class PushHosts(
         }
         // Turning it on or off, a new address from the push app, or a machine left out: look again where online.
         scope.launch {
-            store.state.map { s -> listOf(s.on, s.endpoint, s.live, s.machines.mapValues { it.value.off }) }.distinctUntilChanged().collect {
+            store.state.map { s -> listOf(s.on, s.endpoint, s.live, s.machines.mapValues { it.value.off }, s.watches.map { w -> w.id }) }.distinctUntilChanged().collect {
                 for (s in hosts.hosts.value) if (s.online) scope.launch { sync(s.machine.id, quiet = true) }
             }
         }
@@ -84,7 +84,9 @@ class PushHosts(
         val m = store.state.value.machine(id)
         // Already set up for this address with this version: only make sure it runs and still reaches the phone.
         val live = store.state.value.live
-        if (m.sentTo == endpoint && m.version == HerdrPush.version && m.live == live) {
+        val watches = store.state.value.watches.filter { it.machineId == id }
+        val watching = HerdrPush.watching(watches, id)
+        if (m.sentTo == endpoint && m.version == HerdrPush.version && m.live == live && m.watching.orEmpty() == watching) {
             val status = runCatching { HerdrPush.status(client.run("ensure"), subscriber(id)) }.getOrNull()
             if (status != null && status.subscribed && !status.gone && status.version == HerdrPush.version) {
                 store.machine(id) { it.copy(problem = status.error?.let { e -> "Its last push didn't go through: $e" }) }
@@ -103,12 +105,14 @@ class PushHosts(
             herdrPath = host.herdrMachine.herdrPath,
             boardPath = host.boardPath,
             live = live,
+            watchTasks = watches.filter { it.what != com.makefunstuff.herdr.core.push.Watch.What.AgentDone }.map { it.taskId }.distinct(),
+            watchPanes = watches.filter { it.what == com.makefunstuff.herdr.core.push.Watch.What.AgentDone }.map { it.paneId }.distinct(),
         )
         client.run("subscribe", input = sub)
         val started = client.run("install")
         val note = (started["msg"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.takeIf { it != "running" }
         // A fresh subscription starts the order of its pushes afresh (in case the machine's clock went back).
-        store.machine(id) { it.copy(sentTo = endpoint, version = HerdrPush.version, problem = null, note = note, lastAt = 0, live = live) }
+        store.machine(id) { it.copy(sentTo = endpoint, version = HerdrPush.version, problem = null, note = note, lastAt = 0, live = live, watching = watching) }
     }
 
     private suspend fun takeOff(session: HostSession) {
@@ -120,7 +124,7 @@ class PushHosts(
             if ((left["phones"] as? kotlinx.serialization.json.JsonPrimitive)?.content == "0") client.run("uninstall")
         } catch (_: HerdrPush.MissingException) {
         }
-        store.machine(id) { it.copy(sentTo = null, version = "", problem = null, note = null, live = null) }
+        store.machine(id) { it.copy(sentTo = null, version = "", problem = null, note = null, live = null, watching = null) }
     }
 
     /** This phone's subscription for [machineId] on its host: one per machine in the app, also when two share a host. */

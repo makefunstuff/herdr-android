@@ -173,6 +173,7 @@ gets its initial in a quiet disc; a shell pane gets Lucide's terminal glyph.
 | Composer | `card`, floating over the transcript's faded end | `line`, amber while typing; `Radius.xxl` | `--shadow-card` |
 | Floating "Add" | `primary` | | `--shadow-card` |
 | Toast | black (the web UI's in-app alert, both themes) | pill | yes |
+| In-app alert (`AlertPill`) | black like the toast, with the agent's mark; one line, drops from the top, a tap opens it, gone after 5 s | pill | yes |
 | Code block | `panel` | `line`, `Radius.l` | |
 | Code viewer, diff | `panel` | | |
 | Terminal | `panel` (`--term-bg`) | | |

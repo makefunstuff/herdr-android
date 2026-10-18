@@ -69,6 +69,10 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.makefunstuff.herdr.core.push.Watch
+import com.makefunstuff.herdr.core.push.Watches
+import com.makefunstuff.herdr.ui.design.MenuSection
 import com.makefunstuff.herdr.core.board.BoardAction
 import com.makefunstuff.herdr.core.board.BoardActions
 import com.makefunstuff.herdr.core.board.BoardStatus
@@ -156,9 +160,24 @@ fun BoardPanel(
 @Composable
 internal fun PanelCancel(onDismiss: () -> Unit) = QuietButton(onClick = onDismiss) { Text("Cancel") }
 
-/** What a task's "More" offers: every action that fits, as rows with icons; finished work also its review card. */
+/**
+ * What a task's "More" (and its long-press) offers: every action that fits, as rows with icons;
+ * finished work also its review card; and, with [machineId], one-shot watches: tell me when its
+ * checks pass, when it's done.
+ */
 @Composable
-fun ActionsSheet(t: BoardTask, onDismiss: () -> Unit, onAction: (BoardAction) -> Unit, onEdit: () -> Unit, onOpen: (() -> Unit)?, onReview: (() -> Unit)? = null) {
+fun ActionsSheet(
+    t: BoardTask,
+    onDismiss: () -> Unit,
+    onAction: (BoardAction) -> Unit,
+    onEdit: () -> Unit,
+    onOpen: (() -> Unit)?,
+    onReview: (() -> Unit)? = null,
+    machineId: String? = null,
+) {
+    val container = com.makefunstuff.herdr.ui.common.LocalContainer.current
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val st by container.push.state.collectAsStateWithLifecycle()
     HerdrMenu(expanded = true, onDismissRequest = onDismiss, title = t.name + " · " + t.title) {
         if (onOpen != null) MenuRow("Open details", HerdrIcons.FileText, onOpen)
         if (onReview != null) MenuRow("Open its review card", HerdrIcons.Layers, onReview)
@@ -166,7 +185,33 @@ fun ActionsSheet(t: BoardTask, onDismiss: () -> Unit, onAction: (BoardAction) ->
             MenuRow(a.label.removeSuffix("…"), a.icon(), { onAction(a) }, destructive = a.destructive)
         }
         MenuRow("Edit title or description", HerdrIcons.Pencil, onEdit)
+        if (machineId != null) {
+            val set = st.watches.filter { it.machineId == machineId && it.taskId == t.id }
+            val offers = Watches.offers(machineId, t, System.currentTimeMillis()).filter { o -> set.none { it.id == o.id } }
+            if (set.isNotEmpty() || offers.isNotEmpty()) MenuSection("Tell me once")
+            set.forEach { w ->
+                MenuRow("Stop: " + watchWords(w), HerdrIcons.BellOff, {
+                    container.watchWork.remove(w.id)
+                    context.toast("Watch removed")
+                    onDismiss()
+                })
+            }
+            offers.forEach { w ->
+                MenuRow(watchWords(w).replaceFirstChar { it.uppercase() }, HerdrIcons.BellRing, {
+                    container.watchWork.add(w)
+                    context.toast("You'll hear once: " + watchWords(w))
+                    onDismiss()
+                })
+            }
+        }
     }
+}
+
+/** What a task's watch waits for, as its sheet row says it: "when its checks pass". */
+private fun watchWords(w: Watch) = when (w.what) {
+    Watch.What.ChecksPass -> "when its checks pass"
+    Watch.What.TaskDone -> "when it's done"
+    Watch.What.AgentDone -> "when it finishes"
 }
 
 /** Each action's icon, so the sheet's rows line up and read at a glance. */

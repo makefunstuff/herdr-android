@@ -122,8 +122,8 @@ fun QuietHoursScreen(nav: NavHostController) {
             QuietCard(padded = true) {
                 Column(verticalArrangement = Arrangement.spacedBy(Space.m)) {
                     Text("During quiet hours", style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
-                    Rule(HerdrIcons.BellRing, "Comes through", "An agent asks you something, or a board task waits for you: ready to approve, review failed, plan ready, asks you, stopped.")
-                    Rule(HerdrIcons.Moon, "Waits", "An agent finished, and the Live Updates of running tasks and agents. They come as one notification when quiet hours end, and the Live Updates come back.")
+                    Rule(HerdrIcons.BellRing, "Comes through", "An agent asks you something, a board task waits for you (ready to approve, plan ready, asks you, stopped), or something went wrong (a review or a check failed).")
+                    Rule(HerdrIcons.Moon, "Waits", "An agent finished, a watch you set fired, and the Live Updates of running tasks and agents. They come as one notification when quiet hours end, and the Live Updates come back.")
                     Text(
                         "Android still decides whether what comes through makes a sound: to hear it during Bedtime or Driving, allow Herdr in that mode's settings.",
                         style = MaterialTheme.typography.bodySmall,

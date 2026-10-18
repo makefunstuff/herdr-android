@@ -85,6 +85,20 @@ fun scenes(): List<Scene> = listOf(
     Scene("agents-seen", heightDp = 1500, setup = { home() }, actions = { tapText("Mark seen") }),
     Scene("agents-calm", setup = { host(DEVBOX).snapshot = Demo.devbox(apiStatus = "working"); host(DEVBOX).board = Demo.calmBoard() }),
     Scene("agent-actions", setup = { home() }, actions = { longPressText("Speed up /jobs") }),
+    // A one-shot watch from the long-press sheet: tell me once it finishes.
+    Scene("agent-watch", setup = { home() }, actions = { longPressText("Speed up /jobs"); tapText("Notify me when it finishes") }),
+    // In a chat, another agent starts asking: one line drops from the top (never for the chat that is open).
+    Scene("pill", route = Routes.agent(DEVBOX, APP_AGENT), setup = { host(DEVBOX).snapshot = Demo.devbox(apiStatus = "working") }, actions = { ctx ->
+        ctx.data.host(DEVBOX).snapshot = Demo.devbox()
+        ctx.refresh(DEVBOX)
+        settle(4)
+    }),
+    // A watch fires while the app is open: it shows the same way.
+    Scene("pill-watch", route = Routes.agent(DEVBOX, APP_AGENT), actions = { ctx ->
+        ctx.container.watchWork.add(Demo.watches().first())
+        ctx.container.watchWork.look(DEVBOX, "devbox", null, listOf(Demo.and6Reviewing()))
+        settle(4)
+    }),
     Scene("notifications", actions = { ctx ->
         // An agent finishes while the app is open, which the bell then lists.
         ctx.data.host(DEVBOX).snapshot = Demo.devbox(appStatus = "done")
@@ -178,6 +192,8 @@ fun scenes(): List<Scene> = listOf(
     Scene("task", route = Routes.board(DEVBOX), actions = { tapText("Show when each machine last answered") }),
     Scene("task-review-failed", route = Routes.board(DEVBOX), actions = { tapText("Rewrite the install page") }),
     Scene("task-actions", route = Routes.board(DEVBOX), actions = { longPressText("Rewrite the install page") }),
+    // A task at work offers watches: tell me once its checks pass, once it's done.
+    Scene("task-watch", route = Routes.board(DEVBOX), heightDp = 1000, actions = { longPressText("Add app screenshots to the README") }),
     Scene("board-add", route = Routes.board(DEVBOX), actions = { tapLabel("Add a task") }),
     // Finished work, one card a task across the boards: what changed and the agent's note, the review, the checks, the
     // pull request; its full diff a tap away; Approve anyway saying what failed; sending it back.
@@ -357,6 +373,13 @@ fun scenes(): List<Scene> = listOf(
     // Notifications while the app is closed: each machine's herdr-push, and before a push app is there.
     // A taller window shows the whole section under the SSH key (scrolling never settles in the desktop test harness).
     Scene("settings-notifications", route = Routes.SETTINGS, heightDp = 1580, setup = { push = Demo.push() }),
+    // What reaches the phone: a switch per kind (Finished off), silent while you are at a machine (devbox, now), the watches.
+    Scene("settings-rules", heightDp = 1100, setup = { push = Demo.push().copy(watches = Demo.watches()) }, actions = { ctx ->
+        ctx.container.quietWork.presence.record(DEVBOX, "devbox", com.makefunstuff.herdr.core.push.Presence(typedAgo = 20), System.currentTimeMillis())
+        runOnUiThread { ctx.nav.navigate(Routes.RULES) }
+        settle()
+    }),
+    Scene("settings-rules-empty", route = Routes.RULES, setup = { push = Demo.push() }),
     // Live Updates turned off for the app in Android's settings: they show as ordinary notifications.
     Scene("settings-live-off", route = Routes.SETTINGS, heightDp = 1580, setup = { push = Demo.push(); liveAllowed = false }),
     // Quiet hours: off; then on, the phone in Do Not Disturb with two finished agents held, and picking a time.
