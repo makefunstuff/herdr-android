@@ -25,6 +25,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -82,7 +83,7 @@ fun AlertPill(
 ) {
     val news = remember { WaitingNews() }
     var item by remember { mutableStateOf<PillItem?>(null) }
-    var count by remember { mutableStateOf(0L) }
+    var count by remember { mutableLongStateOf(0L) }
     val route = entry?.destination?.route
     val args: (String) -> String? = { k -> entry?.arguments?.getString(k) }
     LaunchedEffect(needsYou, agentsRead, boardsRead) {
