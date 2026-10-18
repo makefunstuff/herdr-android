@@ -202,6 +202,34 @@ object SshConnector {
         MachineConnection(client, jump, seen ?: "")
     }
 
+    /**
+     * Reaches [host]:[port] directly and gives the host key it shows, without logging in: where a
+     * pairing code's machine answers ([Pairing.reach]).
+     */
+    suspend fun hostKey(host: String, port: Int, timeoutMs: Int = 6_000): String = withContext(Dispatchers.IO) {
+        val client = SSHClient(DefaultConfig())
+        var seen: String? = null
+        client.addHostKeyVerifier(object : HostKeyVerifier {
+            override fun verify(hostname: String?, port: Int, key: PublicKey): Boolean {
+                seen = fingerprint(key)
+                return true
+            }
+
+            override fun findExistingAlgorithms(hostname: String?, port: Int): MutableList<String> = mutableListOf()
+        })
+        client.connectTimeout = timeoutMs
+        client.timeout = timeoutMs
+        try {
+            client.connect(host, port)
+            seen ?: throw ConnectError.Unreachable("$host:$port", IOException("no host key"))
+        } catch (e: IOException) {
+            seen ?: throw if (e is ConnectError) e else ConnectError.Unreachable("$host:$port", e)
+        } finally {
+            runCatching { client.disconnect() }
+            runCatching { client.close() }
+        }
+    }
+
     /** OpenSSH-style `SHA256:…` fingerprint. */
     fun fingerprint(key: PublicKey): String {
         val blob = Buffer.PlainBuffer().putPublicKey(key).compactData
