@@ -206,6 +206,8 @@ fun WorkspaceActionsSheet(
     onQuick: (() -> Unit)? = null,
     /** Opens its only tab's actions: the machine screen shows no row for a workspace's one tab. */
     onTab: ((TabInfo) -> Unit)? = null,
+    /** Opens its dev servers in the in-app browser. */
+    onDevServers: (() -> Unit)? = null,
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -227,6 +229,7 @@ fun WorkspaceActionsSheet(
         }
         if (onCode != null) ManageRow("Browse the code", icon = HerdrIcons.Code, chevron = true) { onDismiss(); onCode() }
         if (onQuick != null) ManageRow("Quick commands", detail = "Its project's scripts and AI commands", icon = HerdrIcons.Zap, chevron = true) { onDismiss(); onQuick() }
+        if (onDevServers != null) ManageRow("Dev servers", detail = "What it serves on a port, open here through SSH", icon = HerdrIcons.Globe, chevron = true) { onDismiss(); onDevServers() }
         ManageRow("Rename", icon = HerdrIcons.Pencil, chevron = true) { rename = true }
         val onlyTab = snap.tabs.filter { it.workspaceId == ws.workspaceId }.singleOrNull()
         if (onTab != null && onlyTab != null) {

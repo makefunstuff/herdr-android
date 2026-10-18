@@ -19,6 +19,8 @@ open class View(val context: Context) {
     val drawRevision = mutableLongStateOf(0L)
     fun invalidate() { drawRevision.longValue++ }
     fun performHapticFeedback(constant: Int): Boolean = true
+    /** Keeps the screen on while the view shows (the terminal's Keep screen on). */
+    var keepScreenOn = false
 
     @androidx.compose.runtime.Composable
     open fun Content(modifier: androidx.compose.ui.Modifier) {}

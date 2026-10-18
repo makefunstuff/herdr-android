@@ -167,9 +167,9 @@ class TerminalView(context: Context) : View(context) {
             clampPan(emu)
             canvas.save()
             canvas.translate(Math.round(pad - panX).toFloat(), Math.round(pad - panY).toFloat())
-            drawSelection(canvas, emu)
             surface.canvas = canvas
-            painter.paint(emu, surface, cellW, cellH, baseline)
+            // The selection on the grid's ground, under the text (the painter fills the ground first).
+            painter.paint(emu, surface, cellW, cellH, baseline) { drawSelection(canvas, emu) }
             surface.canvas = null
             canvas.restore()
         }

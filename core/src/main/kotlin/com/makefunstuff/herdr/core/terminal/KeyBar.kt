@@ -191,7 +191,7 @@ object KeyBar {
     fun label(key: BarKey): String = when (key) {
         is BarKey.Modifier -> key.which.name.lowercase()
         BarKey.FKeys -> "fn"
-        BarKey.Keyboard -> "⌨"
+        BarKey.Keyboard -> "kbd"
         is BarKey.Send -> {
             val k = key.key
             val m = key.mods
@@ -206,9 +206,9 @@ object KeyBar {
     private fun keyLabel(k: String): String = when (k) {
         "Esc" -> "esc"
         "Tab" -> "tab"
-        "Enter" -> "⏎"
-        "Space" -> "␣"
-        "BSpace" -> "⌫"
+        "Enter" -> "enter"
+        "Space" -> "space"
+        "BSpace" -> "bksp"
         "Del" -> "del"
         "Ins" -> "ins"
         "Up" -> "↑"

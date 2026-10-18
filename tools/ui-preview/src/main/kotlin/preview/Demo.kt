@@ -281,6 +281,7 @@ object Demo {
             quick = FakeQuick(),
             usage = FakeUsage(),
             agentCommands = AGENT_COMMANDS,
+            ports = DEVBOX_PORTS,
         ),
         GPU to FakeMachine(
             GPU,
@@ -299,6 +300,18 @@ object Demo {
         MINI to FakeMachine(MINI, refuse = ConnectError.Auth(null)),
     )
 
+    /**
+     * What listens on devbox: the website's vite and storybook, the API's uvicorn (started outside
+     * herdr, in its folder), the herdr-android workspace's Gradle daemon, and sshd (not the account's).
+     */
+    val DEVBOX_PORTS = listOf(
+        "L\t22\t0.0.0.0\t\t\t\t\t\t\t",
+        "L\t5173\t127.0.0.1\t4101\tnode\tw3\tw3:p1\t/home/demo/src/website\t1\tnode /home/demo/src/website/node_modules/.bin/vite --port 5173",
+        "L\t6006\t127.0.0.1\t4133\tnode\tw3\tw3:p1\t/home/demo/src/website\t1\tnode /home/demo/src/website/node_modules/.bin/storybook dev -p 6006",
+        "L\t8000\t0.0.0.0\t4120\tpython3\t\t\t/home/demo/src/api-server\t1\t/usr/bin/python3 -m uvicorn app:api --reload",
+        "L\t41234\t127.0.0.1\t4200\tjava\tw1\t\t/home/demo/src/herdr-android\t0\tjava -cp gradle-launcher.jar org.gradle.launcher.daemon.bootstrap.GradleDaemon 8.10",
+    ).joinToString("\n") + "\n"
+
     /** The own commands and skills on devbox, as `herdr-agent-commands` prints them: herdr-android's `/ship`, and a skill of the person's. */
     private val AGENT_COMMANDS = listOf(
         "@@herdr-command\tproject\tcommand\tship\n---\ndescription: Run the checks, commit and open a pull request\n---\nRun ./gradlew check, then commit and open a PR.\n",
@@ -315,14 +328,14 @@ object Demo {
      * so the Agents screen ties them to the board's tasks; and one more, at work on AND-6 in the
      * workspace the board opened for it.
      */
-    fun devbox(appStatus: String = "working", home: Boolean = false, apiStatus: String = "blocked"): JsonObject = snapshot(
+    fun devbox(appStatus: String = "working", home: Boolean = false, apiStatus: String = "blocked", reviewer: Boolean = false): JsonObject = snapshot(
         *listOfNotNull(
             Ws(
                 "w1", "herdr-android", "/home/demo/src/herdr-android",
                 listOf(
                     Pane(APP_AGENT, agent = Agent("claude", appStatus, APP_SESSION, "Show when each machine last answered", name = "sw-herdr-android-9".takeIf { home })),
                     Pane(APP_SHELL, label = "shell"),
-                ),
+                ) + listOfNotNull(if (reviewer) Pane("w1:p3", agent = Agent("codex", "idle", "0199a3e1-4f5a-7b60-8c7d-9e0f1a2b3c4d", "Review the last-answered change")) else null),
                 repo = "herdr-android",
             ),
             Ws("w2", "api-server", "/home/demo/src/api-server", listOf(Pane(API_AGENT, agent = Agent("claude", apiStatus, API_SESSION, "Speed up /jobs on large tables", name = "sw-api-server-3".takeIf { home }, seq = 41))), repo = "api-server"),

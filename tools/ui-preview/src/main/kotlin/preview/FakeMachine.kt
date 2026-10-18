@@ -80,6 +80,8 @@ class FakeMachine(
     var pictures: Map<String, java.io.File> = emptyMap(),
     /** What `herdr-agent-commands` prints there (AgentCommands.listCommand): the person's and the projects' own commands and skills. */
     var agentCommands: String = "",
+    /** What listens on its ports, as the dev servers' probe prints it (`DevServers.command`): `L` lines. */
+    var ports: String = "",
 ) {
     val fingerprint = "SHA256:" + Base64.getEncoder().withoutPadding().encodeToString(id.toByteArray()).padEnd(43, 'A')
     private val overrides = HashMap<String, (JsonObject) -> JsonElement>()
@@ -97,6 +99,7 @@ class FakeMachine(
         val w = Shell.words(command)
         return when {
             "pgrep" in command -> ok("server\t/home/demo/.local/bin/herdr\therdr $version\n")
+            "herdr-ports" in w -> ok(com.makefunstuff.herdr.core.ports.DevServers.MARK + " 1\n" + ports)
             w.containsAll(listOf("session", "list", "--json")) ->
                 ok("""{"sessions":[{"name":"default","default":true,"running":true,"socket_path":"/home/demo/.config/herdr/herdr.sock"}]}""")
             // herdr-push: only its journal is asked for in the previews; without one it isn't installed.

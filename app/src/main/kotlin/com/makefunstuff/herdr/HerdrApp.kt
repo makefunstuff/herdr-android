@@ -135,6 +135,8 @@ class AppContainer(app: Application) {
     val textSizes = com.makefunstuff.herdr.data.TextSizeStore(java.io.File(app.filesDir, "text-sizes.json"), scope) {
         app.getSharedPreferences("terminal", Context.MODE_PRIVATE).takeIf { it.contains("font_sp") }?.getFloat("font_sp", 11f)
     }
+    /** The terminal's key bar and whether it keeps the screen on. */
+    val keyBar = com.makefunstuff.herdr.data.KeyBarStore(java.io.File(app.filesDir, "key-bar.json"))
     /** The clock the screens read (a turn's "Working for 3m", the away card). */
     val clock: () -> Long = System::currentTimeMillis
     val bubbles: Bubbles = AndroidBubbles(app)
