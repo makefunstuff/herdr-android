@@ -91,6 +91,19 @@ object Demo {
         agentEntry(3, 40, "w3:p1", "codex", "done", "Profile the data loader", "notebooks › main"),
     )
 
+    /** A board on gpu-box with one task, whose two attempts wait for a pick (the review cards across machines). */
+    fun gpuBoard() = FakeBoard(
+        tasks = kotlinx.serialization.json.Json.parseToJsonElement(resource("board/gpu-list.json")) as kotlinx.serialization.json.JsonArray,
+        plain = resource("board/gpu-list.txt"),
+    )
+
+    /** devbox's board with nothing waiting for a yes: its approvals already merged. */
+    fun nothingToReview() = FakeBoard().apply {
+        val keep = tasks.indices.filter { i -> (tasks[i] as kotlinx.serialization.json.JsonObject)["stage"]?.toString()?.trim('"') != "approval" }
+        plain = plain.lines().filter { it.isNotBlank() }.filterIndexed { i, _ -> i in keep }.joinToString("") { it + "\n" }
+        tasks = kotlinx.serialization.json.JsonArray(keep.map { tasks[it] })
+    }
+
     fun resource(path: String): String =
         Demo::class.java.classLoader.getResourceAsStream("demo/$path")?.readBytes()?.toString(Charsets.UTF_8)
             ?: error("missing demo resource $path")

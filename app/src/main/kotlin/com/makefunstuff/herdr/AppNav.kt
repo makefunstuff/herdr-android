@@ -51,6 +51,7 @@ import com.makefunstuff.herdr.ui.admin.AdminScreen
 import com.makefunstuff.herdr.ui.agents.AgentScreen
 import com.makefunstuff.herdr.ui.agents.AgentsScreen
 import com.makefunstuff.herdr.ui.board.BoardScreen
+import com.makefunstuff.herdr.ui.board.ReviewScreen
 import com.makefunstuff.herdr.ui.brief.BriefScreen
 import com.makefunstuff.herdr.ui.brief.BriefSettingsScreen
 import com.makefunstuff.herdr.ui.code.CheckoutScreen
@@ -124,6 +125,8 @@ object Routes {
     const val LAYOUT = "layout/{mid}/{pane}"
     const val COORDINATOR = "coordinator/{mid}"
     const val BOARD = "board/{mid}?task={task}"
+    /** Finished work across every board, one card a task; opened at a machine's (and a task's) card when given. */
+    const val REVIEW = "review?mid={mid}&task={task}"
     const val ADMIN = "admin/{mid}?tab={tab}"
     const val WORKTREES = "worktrees/{mid}?ws={ws}"
     const val HEALTH = "health/{mid}"
@@ -149,6 +152,8 @@ object Routes {
     fun coordinator(mid: String) = "coordinator/$mid"
     fun ask(to: String) = "ask/$to"
     fun board(mid: String, task: String? = null) = if (task == null) "board/$mid" else "board/$mid?task=${Uri.encode(task)}"
+    fun review(mid: String? = null, task: String? = null) =
+        "review" + listOfNotNull(mid?.let { "mid=" + Uri.encode(it) }, task?.let { "task=" + Uri.encode(it) }).joinToString("&").let { if (it.isEmpty()) "" else "?$it" }
     fun admin(mid: String, tab: Int = 0) = "admin/$mid?tab=$tab"
     fun health(mid: String) = "health/$mid"
     fun codeRepos(mid: String) = "code/$mid"
@@ -284,6 +289,9 @@ internal fun NavGraphBuilder.screens(nav: NavHostController, agents: @Composable
     composable(Routes.HEALTH) { HealthScreen(nav, it.arguments?.getString("mid").orEmpty()) }
     composable(Routes.BOARD) {
         BoardScreen(nav, it.arguments?.getString("mid").orEmpty(), it.arguments?.getString("task")?.let(Uri::decode))
+    }
+    composable(Routes.REVIEW) {
+        ReviewScreen(nav, it.arguments?.getString("mid")?.let(Uri::decode)?.ifEmpty { null }, it.arguments?.getString("task")?.let(Uri::decode)?.ifEmpty { null })
     }
     composable(Routes.ASK) { AskScreen(nav, it.arguments?.getString("to").orEmpty()) }
     composable(Routes.CODE) { CodeMachinesScreen(nav) }

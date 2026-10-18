@@ -21,6 +21,9 @@ class FakeBoard(
     fun run(command: String): CommandResult {
         // sh -c LOGIN sh '<what the login shell runs>'
         val inner = Shell.words(Shell.words(command).last())
+        // The review cards' read of a task's record (ApprovalCommands.facts): sh -c <script> herdr-board-facts <launcher> <id> <pr>.
+        val facts = inner.indexOf("herdr-board-facts")
+        if (facts >= 0) return CommandResult(0, facts(inner[facts + 2]), "")
         val out = StringBuilder()
         var segment = ArrayList<String>()
         for (w in inner + ";") {
@@ -51,6 +54,11 @@ class FakeBoard(
         args.firstOrNull() == "details" -> Demo.resource("board/details-${args[1].replace('/', '-')}.json")
         else -> "Done (demo board)\n"
     }
+
+    /** What the board's record of [id] holds, as the facts command prints it; a task without one prints its parts empty. */
+    private fun facts(id: String): String =
+        runCatching { Demo.resource("board/facts-${id.replace('/', '-')}.txt") }.getOrNull()
+            ?: "@@herdr-facts task\n\n@@herdr-facts note\n\n@@herdr-facts end\n"
 
     private fun title(i: Int) = tasks[i].jsonObject["title"]?.jsonPrimitive?.content.orEmpty()
 

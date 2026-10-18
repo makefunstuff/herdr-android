@@ -57,6 +57,7 @@ import com.makefunstuff.herdr.ui.code.CheckoutTab
 import com.makefunstuff.herdr.ui.code.CodeSpot
 import com.makefunstuff.herdr.ui.quick.QuickPlace
 import com.makefunstuff.herdr.ui.quick.QuickSheets
+import com.makefunstuff.herdr.core.board.Approvals
 import com.makefunstuff.herdr.core.board.BoardAction
 import com.makefunstuff.herdr.core.board.BoardFilter
 import com.makefunstuff.herdr.core.board.BoardStatus
@@ -206,6 +207,13 @@ fun BoardScreen(nav: NavController, machineId: String, openTask: String? = null,
     }
 
     val repos = remember(tasks) { tasks.map { it.repo }.distinct().sorted() }
+    // Finished work waiting for a yes: the review cards go through it one task at a time.
+    val waiting = remember(tasks) { tasks.count { Approvals.waits(it) } }
+    fun openReview(task: BoardTask?) {
+        val route = Routes.review(machineId, task?.id)
+        // From the right pane the cards open in the middle, beside this board.
+        if (pane != null) panes.open(nav, route) else nav.navigate(route)
+    }
     val machines = remember(tasks) { tasks.map { it.machine }.filter { it.isNotEmpty() }.distinct().sorted() }
     val shown = remember(tasks, repo, machine) { tasks.filter { BoardFilter(repo = repo, machine = machine).matches(it) } }
     val groups = remember(shown) {
@@ -244,6 +252,7 @@ fun BoardScreen(nav: NavController, machineId: String, openTask: String? = null,
                 HerdrMenu(expanded = menu, onDismissRequest = { menu = false }) {
                     MenuRow(if (archived) "Hide archived" else "Show archived", if (archived) HerdrIcons.ArchiveRestore else HerdrIcons.Archive, { archived = !archived; menu = false })
                     MenuRow("Refresh", HerdrIcons.RefreshCw, { readNow.trySend(Unit); menu = false })
+                    MenuRow("Review finished work", HerdrIcons.Layers, { menu = false; openReview(null) })
                 }
             }
         },
@@ -286,6 +295,7 @@ fun BoardScreen(nav: NavController, machineId: String, openTask: String? = null,
                     verticalArrangement = Arrangement.spacedBy(Space.s),
                 ) {
                     problem?.let { p -> item(key = "problem") { ErrorMessage(p, onRetry = { readNow.trySend(Unit) }) } }
+                    if (waiting > 0 && !archived && query.isBlank()) item(key = "review") { ReviewEntryCard(waiting, onOpen = { openReview(null) }) }
                     if (groups.isEmpty()) {
                         item(key = "empty") {
                             StateBlock(
@@ -333,7 +343,8 @@ fun BoardScreen(nav: NavController, machineId: String, openTask: String? = null,
     quick?.let { place -> QuickSheets(nav, place, onDismiss = { quick = null }) }
     actionsFor?.let { t ->
         ActionsSheet(t, onDismiss = { actionsFor = null }, onAction = { a -> actionsFor = null; choose(t, a) }, onEdit = { actionsFor = null; pending = Pending.Edit(t) },
-            onOpen = if (openId == t.id) null else ({ actionsFor = null; openId = t.id }))
+            onOpen = if (openId == t.id) null else ({ actionsFor = null; openId = t.id }),
+            onReview = if (Approvals.waits(t)) ({ actionsFor = null; openReview(t) }) else null)
     }
     refusal?.let { r ->
         BoardPanel("The board said no", onDismiss = { refusal = null }, accent = Herdr.colors.red,

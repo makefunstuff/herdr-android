@@ -1,0 +1,48 @@
+@@from 1f0c2a9b7e4d3c2b1a0f9e8d7c6b5a4f3e2d1c0b
+diff --git a/content/install.md b/content/install.md
+index 3a1b2c4..9d8e7f6 100644
+--- a/content/install.md
++++ b/content/install.md
+@@ -1,19 +1,23 @@
+ # Install
+ 
+-Download the tarball for your platform from the releases page:
+-
+-```sh
+-wget https://demo.dev/releases/demo-linux-x86_64.tar.gz
+-tar xzf demo-linux-x86_64.tar.gz
+-sudo mv demo /usr/local/bin/
+-```
++One line, on Linux and macOS:
++
++```sh
++curl -fsSL https://demo.dev/install | sh
++```
+ 
+-Then check it runs:
++It downloads the binary for your machine into `~/.local/bin` and checks
++its checksum. Then:
+ 
+ ```sh
+ demo --version
+ ```
+ 
+-## Checksums
++## By hand
+ 
+-The checksums are next to each tarball.
++Download the binary from the [releases page](https://demo.dev/releases) and
++put it on your PATH.
++
++## Checksums
++
++All of them: [sha256.txt](https://demo.dev/releases/sha256.txt).
+diff --git a/content/_nav.yml b/content/_nav.yml
+index 77aa001..77aa002 100644
+--- a/content/_nav.yml
++++ b/content/_nav.yml
+@@ -3,3 +3,3 @@
+ - title: Install
+-  page: install-tarball
++  page: install
+ - title: Usage

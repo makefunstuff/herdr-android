@@ -162,6 +162,8 @@ class AlertsTest {
         assertEquals("herdr-android/7", approve.taskId)
         assertEquals(listOf("Approve and merge", "Ask Coordinator"), approve.actions.map { it.label })
         assertEquals(BoardAction.Approve, approve.actions[0].boardAction)
+        // Finished work: a tap opens its review card.
+        assertTrue(approve.review)
 
         val failed = show(Alerts.of("m1", "devbox", task("""{"id":"herdr-android/7","title":"Board view","state":"blocked","kind":"permission","stage":"approval","review":{"pass":false}}""")))
         assertEquals("AND-7 review failed", failed.title)
@@ -174,6 +176,7 @@ class AlertsTest {
 
         val asks = show(Alerts.of("m1", "devbox", task("""{"id":"herdr-android/7","title":"Board view","state":"blocked","kind":"question","stage":"working"}""")))
         assertEquals("AND-7 asks you", asks.title)
+        assertTrue(!asks.review)
         assertEquals(listOf(AlertAction.Type.TellTask), asks.actions.map { it.type })
 
         val stopped = show(Alerts.of("m1", "devbox", task("""{"id":"herdr-android/7","title":"Board view","state":"working","stage":"stopped"}""")))
@@ -181,6 +184,7 @@ class AlertsTest {
 
         val pick = show(Alerts.of("m1", "devbox", task("""{"id":"herdr-android/7","title":"Board view","state":"blocked","stage":"pick"}""")))
         assertEquals("AND-7 pick one", pick.title)
+        assertTrue(pick.review && plan.review && failed.review)
 
         assertEquals(
             AlertChange.Clear("task:m1:herdr-android/7"),

@@ -50,6 +50,9 @@ object BoardCommands {
     fun cli(machine: Machine, path: String, args: List<String>): String =
         "sh -c ${quote(LOGIN)} sh ${quote(envPrefix(machine) + quote(path) + " " + args.joinToString(" ") { quote(it) })}"
 
+    /** Any [command] through the same login shell, with the machine's session and herdr in its environment. */
+    fun login(machine: Machine, command: String): String = "sh -c ${quote(LOGIN)} sh ${quote(envPrefix(machine) + command)}"
+
     /** `list --json` and the plain `list` (which names each task by its short key), one after the other. */
     fun listCommand(machine: Machine, path: String, filter: BoardFilter): String {
         val flags = buildList {
@@ -265,6 +268,19 @@ class BoardClient(private val conn: MachineConnection, private val machine: Mach
             else -> listOf(action.verb, id)
         },
     )
+
+    /**
+     * What the board's record of [t] holds beyond `details`: its closing note, its checks, and the pull
+     * request's checks on GitHub. Another machine's task (`vm:repo/3`) has its record there: none here.
+     */
+    suspend fun facts(t: BoardTask): WorkFacts {
+        if (t.machine.isNotEmpty()) return WorkFacts()
+        val r = conn.run(ApprovalCommands.facts(machine, path, t.id, t.pr), timeoutSeconds = 40)
+        if (!r.stdout.contains(ApprovalCommands.MARK)) {
+            throw IOException(r.stderr.trim().lines().lastOrNull { it.isNotBlank() } ?: "The machine didn't answer")
+        }
+        return ApprovalReader.facts(r.stdout)
+    }
 
     suspend fun rename(id: String, title: String) = run(listOf("rename", id, title))
     suspend fun describe(id: String, text: String) = run(listOf("describe", id, text))
