@@ -953,6 +953,8 @@ fun QuietCard(
     onClick: (() -> Unit)? = null,
     onLongClick: (() -> Unit)? = null,
     onClickLabel: String? = null,
+    /** What a long press does, as TalkBack says it ("double-tap and hold to …"). */
+    onLongClickLabel: String? = "show more actions",
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Column(
@@ -960,6 +962,7 @@ fun QuietCard(
             .then(
                 if (onClick != null || onLongClick != null) Modifier.combinedClickable(
                     onClickLabel = onClickLabel, onClick = onClick ?: {}, onLongClick = onLongClick,
+                    onLongClickLabel = onLongClickLabel.takeIf { onLongClick != null },
                 ) else Modifier,
             )
             .then(if (padded) Modifier.padding(Space.card) else Modifier),
@@ -1031,6 +1034,7 @@ fun ListRow(
             .then(
                 if (onClick != null || onLongClick != null) Modifier.combinedClickable(
                     enabled = enabled, onClickLabel = onClickLabel, onClick = onClick ?: {}, onLongClick = onLongClick,
+                    onLongClickLabel = "show more actions".takeIf { onLongClick != null },
                 ) else Modifier,
             )
             .padding(horizontal = Space.l, vertical = Space.m),

@@ -27,7 +27,8 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         applicationId = "com.makefunstuff.herdr"
         minSdk = 28
-        targetSdk = 35
+        // 36 (Android 16): predictive back is on, and the manifest opts in for older phones too.
+        targetSdk = 36
         // CI's run number grows with every build, so each new APK installs as an update.
         versionCode = buildNumber
         versionName = "0.1.$buildNumber"

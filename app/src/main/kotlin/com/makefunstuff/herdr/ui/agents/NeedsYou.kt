@@ -116,12 +116,25 @@ private fun MetaLine(key: String?, parts: List<String>, modifier: Modifier = Mod
 private fun where(a: HomeAgent, task: BoardTask?, showMachine: Boolean) =
     listOfNotNull(a.agent.displayName, task?.repo ?: a.workspace.ifEmpty { a.location }, a.machineLabel.takeIf { showMachine })
 
-/** A card of the Needs you list: hairline card, chosen on a wide window when it is open beside the list. */
+/**
+ * A card of the Needs you list: hairline card, chosen on a wide window when it is open beside the
+ * list. [actions]: its buttons and what its long-press sheet offers, as TalkBack's actions on it.
+ */
 @Composable
-private fun WaitingCard(selected: Boolean, onOpen: () -> Unit, onMenu: (() -> Unit)?, label: String, content: @Composable () -> Unit) {
+private fun WaitingCard(
+    selected: Boolean,
+    onOpen: () -> Unit,
+    onMenu: (() -> Unit)?,
+    label: String,
+    actions: List<CustomAccessibilityAction>,
+    content: @Composable () -> Unit,
+) {
     val c = Herdr.colors
     QuietCard(
-        Modifier.padding(horizontal = Space.screen, vertical = Space.xs).semantics { this.selected = selected },
+        Modifier.padding(horizontal = Space.screen, vertical = Space.xs).semantics {
+            this.selected = selected
+            if (actions.isNotEmpty()) customActions = actions
+        },
         padded = true, onClick = onOpen, onLongClick = onMenu, onClickLabel = label,
         color = if (selected) c.hover else c.card, edge = if (selected) c.lineStrong else c.line,
     ) { content() }
@@ -167,11 +180,25 @@ fun QuestionCard(
     onMenu: () -> Unit,
     onChoose: (BlockedPrompt, Int) -> Unit,
     onReply: () -> Unit,
+    /** The rest of its long-press sheet (terminal, why this state, mute, …), for TalkBack after its answers. */
+    more: List<CustomAccessibilityAction> = emptyList(),
 ) {
     val c = Herdr.colors
     val a = q.agent.agent
     val asked = rememberAsked(q.agent)
-    WaitingCard(selected, onOpen, onMenu, "Open chat") {
+    val prompt = asked?.prompt
+    // What its buttons do, first: TalkBack offers the answers without finding each button.
+    val answers = if (busy != null) emptyList() else when {
+        prompt != null && prompt.yesNo -> listOf(
+            CustomAccessibilityAction("Answer yes") { onChoose(prompt, prompt.approveIndex!!); true },
+            CustomAccessibilityAction("Answer no") { onChoose(prompt, prompt.denyIndex!!); true },
+        )
+        prompt != null && prompt.options.size <= 2 -> prompt.options.indices.map { i ->
+            CustomAccessibilityAction("Answer: ${prompt.shortLabel(i)}") { onChoose(prompt, i); true }
+        }
+        else -> emptyList()
+    } + CustomAccessibilityAction("Reply…") { onReply(); true }
+    WaitingCard(selected, onOpen, onMenu, "Open chat", answers + more) {
         CardHead(
             mark = { AgentMark(a.agent ?: a.displayName) },
             title = q.task?.title ?: a.subtitle ?: a.displayName,
@@ -197,7 +224,6 @@ fun QuestionCard(
             Box(Modifier.padding(start = 22.dp, top = Space.s)) { BusyLine(busy) }
             return@WaitingCard
         }
-        val prompt = asked?.prompt
         FlowRow(
             Modifier.padding(start = 34.dp, top = Space.m),
             horizontalArrangement = Arrangement.spacedBy(Space.s),
@@ -242,7 +268,8 @@ fun TaskCard(
     val c = Herdr.colors
     val t = w.task
     val says = remember(t.msg) { Markdown.plain(t.msg) }
-    WaitingCard(selected, onOpen, null, "Open task") {
+    val actions = listOfNotNull(answer?.takeIf { busy == null }?.let { CustomAccessibilityAction(it.second) { onAnswer(); true } })
+    WaitingCard(selected, onOpen, null, "Open task", actions) {
         CardHead(
             mark = {
                 w.agent?.agent?.let { AgentMark(it.agent ?: it.displayName) }
@@ -298,7 +325,7 @@ fun AgentLine(
     onMenu: () -> Unit,
     /** How long it is snoozed, as the row says it ("until 18:00"); null when it isn't. */
     snoozed: String? = null,
-    /** The row's triage (seen, pin, snooze, mute) as TalkBack offers it. */
+    /** Its long-press sheet (triage, terminal, why this state, …) as TalkBack offers it. */
     actions: List<CustomAccessibilityAction> = emptyList(),
 ) {
     val c = Herdr.colors
@@ -311,7 +338,7 @@ fun AgentLine(
     Row(
         Modifier.fillMaxWidth().heightIn(min = 56.dp)
             .background(if (selected) c.hover else androidx.compose.ui.graphics.Color.Transparent)
-            .combinedClickable(onClickLabel = "Open chat", onClick = onOpen, onLongClick = onMenu)
+            .combinedClickable(onClickLabel = "Open chat", onClick = onOpen, onLongClickLabel = "show more actions", onLongClick = onMenu)
             .semantics(mergeDescendants = true) {
                 this.selected = selected
                 contentDescription = listOfNotNull(

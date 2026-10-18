@@ -227,7 +227,7 @@ class TerminalView(context: Context) : View(context) {
     private val scaleDetector = ScaleGestureDetector(context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
         override fun onScale(detector: ScaleGestureDetector): Boolean {
             val sp = fontSizePx / resources.displayMetrics.scaledDensity
-            setFontSizeSp((sp * detector.scaleFactor).coerceIn(5f, 24f))
+            setFontSizeSp((sp * detector.scaleFactor).coerceIn(com.makefunstuff.herdr.data.TextSizeStore.TERMINAL_RANGE))
             onFontSizeChanged(fontSizeSp)
             return true
         }

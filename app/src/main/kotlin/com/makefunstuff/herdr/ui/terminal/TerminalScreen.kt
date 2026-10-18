@@ -1,5 +1,8 @@
 package com.makefunstuff.herdr.ui.terminal
 
+import com.makefunstuff.herdr.ui.design.confirmTap
+import com.makefunstuff.herdr.core.chat.PasswordPrompt
+import com.makefunstuff.herdr.ui.common.PasswordCard
 import com.makefunstuff.herdr.ui.theme.Mono
 import android.content.Context
 import androidx.activity.compose.BackHandler
@@ -99,8 +102,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
-private const val PREFS = "terminal"
-private const val FONT_SP = "font_sp"
 private const val SILENT_MS = 15_000L
 
 private val EXTRA_KEYS = listOf(
@@ -134,7 +135,8 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
     val pane = snapshot?.pane(paneId)
     val hostRect = snapshot?.paneRect(paneId)
 
-    val prefs = remember { context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE) }
+    // Its text size, its own (Settings → Text size), which pinching the terminal changes too.
+    val sizes by container.textSizes.state.collectAsStateWithLifecycle()
     // The pane is resized to fit the phone; "Desktop size" keeps the host's size and pans instead.
     var keepHost by remember(paneId) { mutableStateOf(false) }
     var grid by remember { mutableStateOf<Pair<Int, Int>?>(null) }
@@ -202,6 +204,17 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
         if (s.status.value == TerminalStream.Status.Opening) silent = true
     }
     LaunchedEffect(revision, view) { view?.invalidate() }
+    // The line the cursor stands on asks for a password: a masked field over the keys for it, until
+    // it is answered or put away (then not again until the pane asks anew).
+    val asks = remember(revision, stream) {
+        stream?.emulator?.let { e ->
+            val line = e.lineText(e.cursorY)
+            if (line.drop(e.cursorX).isBlank()) PasswordPrompt.ask(line.take(e.cursorX)) else null
+        }
+    }
+    var putAway by remember(paneId) { mutableStateOf<String?>(null) }
+    val hostView = androidx.compose.ui.platform.LocalView.current
+    LaunchedEffect(asks) { if (asks == null) putAway = null }
     LaunchedEffect(stream, view) { view?.emulator = stream?.emulator }
     LaunchedEffect(ctrl, alt, view) {
         view?.ctrlSticky = ctrl
@@ -402,8 +415,8 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
                             v.onCellLongPress = { cell -> v.startSelection(cell); selecting = true }
                             v.onLongPress = { context.copyToClipboard("terminal", v.screenText(), "Screen copied") }
                             v.onModifiersConsumed = { ctrl = false; alt = false }
-                            v.setFontSizeSp(prefs.getFloat(FONT_SP, 11f))
-                            v.onFontSizeChanged = { sp -> prefs.edit().putFloat(FONT_SP, sp).apply() }
+                            v.setFontSizeSp(sizes.terminal)
+                            v.onFontSizeChanged = { sp -> container.textSizes.setTerminal(sp) }
                             view = v
                         }
                     },
@@ -412,6 +425,7 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
                         v.onInput = { text -> stream?.send(text) }
                         v.onScroll = { lines -> if (lines != 0) stream?.scroll(lines > 0, kotlin.math.abs(lines)) }
                         if (v.fitToView != !keepHost) v.fitToView = !keepHost
+                        if (kotlin.math.abs(v.fontSizeSp - sizes.terminal) > 0.01f) v.setFontSizeSp(sizes.terminal)
                     },
                     modifier = Modifier.fillMaxSize(),
                 )
@@ -452,6 +466,14 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
                         }
                     }
                 }
+            }
+            if (asks != null && asks != putAway && !selecting) {
+                PasswordCard(
+                    asks,
+                    onSend = { stream?.send(it + Keys.ENTER); hostView.confirmTap() },
+                    onDismiss = { putAway = asks },
+                    modifier = Modifier.padding(horizontal = Space.s, vertical = Space.xs),
+                )
             }
             if (selecting) {
                 Row(

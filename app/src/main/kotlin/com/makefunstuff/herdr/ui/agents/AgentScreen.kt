@@ -1,7 +1,8 @@
 package com.makefunstuff.herdr.ui.agents
 
-import android.os.Build
-import android.view.HapticFeedbackConstants
+import com.makefunstuff.herdr.core.home.Home
+import com.makefunstuff.herdr.core.home.HomeAgent
+import com.makefunstuff.herdr.ui.design.confirmTap
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.WindowInsets
@@ -240,7 +241,7 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
         if (answering) return
         answering = true
         // A light confirmation under the thumb.
-        view.performHapticFeedback(if (Build.VERSION.SDK_INT >= 30) HapticFeedbackConstants.CONFIRM else HapticFeedbackConstants.KEYBOARD_TAP)
+        view.confirmTap()
         scope.launch {
             runCatching { block(session.awaitApi()) }.onFailure { context.toast(it.message ?: "Couldn't answer") }
             answering = false
@@ -427,8 +428,10 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
                 )
             }
             away?.let { a -> AwayCard(a, onHide = { awayHidden = true }, modifier = Modifier.padding(horizontal = Space.screen).padding(top = Space.s)) }
+            val sizes by container.textSizes.state.collectAsStateWithLifecycle()
             ChatSurface(
                 Modifier.weight(1f).fillMaxWidth(),
+                textScale = sizes.chat,
                 composer = {
                     ChatComposer(
                         draft = draft,
@@ -558,7 +561,15 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
     }
 
     if (menu) {
+        // The task it works on, from the boards as last read: it names the sheet.
+        val boards = com.makefunstuff.herdr.ui.board.rememberBoards()
+        val task = remember(boards, agent, snapshot) {
+            val a = agent ?: return@remember null
+            val home = HomeAgent(machineId, host.machine.label, a, snapshot?.location(a.workspaceId, a.tabId).orEmpty(), snapshot?.workspace(a.workspaceId)?.label.orEmpty())
+            Home.taskOf(home, Home.own(boards)[machineId].orEmpty())
+        }
         AgentActionsSheet(
+            task = task,
             session = session,
             agent = agent,
             paneLabel = pane?.displayName ?: paneId,

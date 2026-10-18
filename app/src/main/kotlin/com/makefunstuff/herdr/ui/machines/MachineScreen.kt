@@ -353,7 +353,7 @@ private fun WorkspaceCard(
         Row(
             verticalAlignment = Alignment.CenterVertically,
             // Long-press the header for the workspace's Git actions.
-            modifier = Modifier.combinedClickable(onClick = {}, onLongClick = { menu = true })
+            modifier = Modifier.combinedClickable(onClick = {}, onLongClickLabel = "show the workspace's actions", onLongClick = { menu = true })
                 .padding(start = Space.card, top = Space.xs, end = Space.xs),
         ) {
             StatusDot(if (ws.agentStatus == AgentStatus.Unknown) c.off else ws.agentStatus.color())
