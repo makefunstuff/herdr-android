@@ -2,7 +2,7 @@
 
 How Herdr for Android looks and why. herdr-android keeps its own structure: its navigation
 (Agents, Board, Machines; Settings behind a gear), its screens and flows, its layouts (Needs you cards with their answers, one-line agent rows, machine cards, the
-work board's cards with a status stripe, workspace cards with Terminal buttons, floating "Add"
+work board's cards with a status stripe, workspace cards with a 48 dp row and a terminal icon per pane, floating "Add"
 buttons, the tabbed admin screen) and its own components. Its **visual language** is the
 [herdr web UI](https://github.com/devswha/herdr-web-ui)'s (MIT, by devswha): the same palette,
 type, icons, shapes and surface rules, carried over to Compose so the phone app looks like it
@@ -186,7 +186,7 @@ gets its initial in a quiet disc; a shell pane gets Lucide's terminal glyph.
 | `BarIcon` | `.icon-button`: 48dp target, 20dp glyph in `text`, pressed on `hover` with `Radius.m`; optional red count. |
 | `HerdrFab` | The screen's "add": an amber pill (`primary`, ink text), icon and label, or round with only +. Lists leave 96dp for it. |
 | `HerdrNavBar` | `panel` with a hairline above; the chosen screen's glyph amber on a `hover` pill, its label strong; the others dim. |
-| `QuietCard` | `card` + hairline, `Radius.l`, no shadow. Agent, machine, workspace, task and board-entry cards; groups of rows. |
+| `QuietCard` | `card` + hairline, `Radius.l`, no shadow. Agent, machine, workspace and task cards, a machine's place tiles; groups of rows. |
 | Agent cards | The agent's mark, what it works on (14sp medium, strong), under it the agent and where (12sp dim), its `StatusBadge` at the right; a blocked agent's question in red mono. |
 | Task cards | The board's status stripe (wider when it needs you), the key in mono, `StatusBadge`, agent; title; what it is doing; progress; the PR as an amber link. |
 | Workspace cards | Dot + name + tab pill + `⋯`; tab chips; layout thumbnail; one row per pane: the agent's mark (or the terminal glyph), name · state in its colour, a secondary "Terminal" button. |
