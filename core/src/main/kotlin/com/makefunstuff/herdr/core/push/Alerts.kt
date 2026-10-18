@@ -43,7 +43,12 @@ data class Alert(
     /** A tap opens the review cards at the task: finished work that waits for a yes, a no or a choice ([Approvals.waits]). */
     val review: Boolean = false,
 ) {
-    enum class Kind { NeedsYou, Finished, Test }
+    /**
+     * What it is about, which the notification rules ([AlertRules]) switch on and off: something waits
+     * for you, something finished, something went wrong (a review or a check failed, a task errored),
+     * a test, or a watch you set that fired ([Watch]).
+     */
+    enum class Kind { NeedsYou, Finished, WentWrong, Test, Watch }
 }
 
 /** A notification's button. */
@@ -197,7 +202,7 @@ object Alerts {
             Alert(
                 tag = tag,
                 sig = listOf(t.state, t.stage, t.kind, t.reviewRound, t.reviewPassed, t.approvalBlocked).joinToString("|"),
-                kind = Alert.Kind.NeedsYou,
+                kind = if (wentWrong(t)) Alert.Kind.WentWrong else Alert.Kind.NeedsYou,
                 machineId = machineId,
                 title = "${t.name} ${s.label}",
                 text = t.title,
@@ -209,6 +214,9 @@ object Alerts {
             ),
         )
     }
+
+    /** A task that waits for you because something failed: its review, or its run (a check, an error). */
+    fun wentWrong(t: BoardTask): Boolean = t.status == BoardStatus.ReviewFailed || t.status == BoardStatus.Error
 
     /**
      * A machine low on RAM or disk: what is low, and what uses the most memory. It needs you (a full
@@ -250,7 +258,7 @@ object Alerts {
             Alert(
                 tag = tag,
                 sig = "quick:${e.state}",
-                kind = Alert.Kind.Finished,
+                kind = if (e.state == "done") Alert.Kind.Finished else Alert.Kind.WentWrong,
                 machineId = machineId,
                 title = title,
                 text = text,

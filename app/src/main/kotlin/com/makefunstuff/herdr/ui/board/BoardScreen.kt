@@ -346,7 +346,7 @@ fun BoardScreen(nav: NavController, machineId: String, openTask: String? = null,
     actionsFor?.let { t ->
         ActionsSheet(t, onDismiss = { actionsFor = null }, onAction = { a -> actionsFor = null; choose(t, a) }, onEdit = { actionsFor = null; pending = Pending.Edit(t) },
             onOpen = if (openId == t.id) null else ({ actionsFor = null; openId = t.id }),
-            onReview = if (Approvals.waits(t)) ({ actionsFor = null; openReview(t) }) else null)
+            onReview = if (Approvals.waits(t)) ({ actionsFor = null; openReview(t) }) else null, machineId = machineId)
     }
     refusal?.let { r ->
         BoardPanel("The board said no", onDismiss = { refusal = null }, accent = Herdr.colors.red,

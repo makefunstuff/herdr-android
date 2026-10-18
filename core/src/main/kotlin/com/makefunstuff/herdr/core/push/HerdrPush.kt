@@ -77,6 +77,9 @@ object HerdrPush {
         herdrPath: String?,
         boardPath: String?,
         live: Boolean = false,
+        /** The tasks and agents (by pane) the phone watches here ([Watch]): herdr-push tells it each change of theirs. */
+        watchTasks: Collection<String> = emptyList(),
+        watchPanes: Collection<String> = emptyList(),
     ): String = buildJsonObject {
         put("id", id)
         put("name", phoneName)
@@ -87,7 +90,14 @@ object HerdrPush {
         boardPath?.takeIf { it.isNotBlank() }?.let { put("board", it) }
         // Live Updates: also what is running, as it changes.
         if (live) put("live", true)
+        if (watchTasks.isNotEmpty()) put("watch_tasks", kotlinx.serialization.json.JsonArray(watchTasks.sorted().map(::JsonPrimitive)))
+        if (watchPanes.isNotEmpty()) put("watch_panes", kotlinx.serialization.json.JsonArray(watchPanes.sorted().map(::JsonPrimitive)))
     }.toString()
+
+    /** What a phone's watches ask of [machineId]'s herdr-push, in one string: a change of it needs a new subscription. */
+    fun watching(watches: List<Watch>, machineId: String): String =
+        watches.filter { it.machineId == machineId }.map { if (it.what == Watch.What.AgentDone) "pane:" + it.paneId else "task:" + it.taskId }
+            .distinct().sorted().joinToString(",")
 
     /** herdr-push's answer: its last JSON line with an `ok`. */
     fun answer(stdout: String): JsonObject? = stdout.lines().asReversed().firstNotNullOfOrNull { l ->
@@ -136,6 +146,10 @@ object HerdrPush {
             if ((o["ok"] as? JsonPrimitive)?.booleanOrNull != true) throw IOException(o.str("msg").ifEmpty { "herdr-push refused on $label" })
             return o
         }
+
+        /** Whether someone is at the machine now ([Presence]); null from a herdr-push that can't tell (older, or none). */
+        suspend fun presence(): Presence? = runCatching { PushMessages.presence(run("presence", timeoutSeconds = 20)) }
+            .getOrElse { if (it is CancellationException) throw it; null }
 
         private fun problem(stderr: String, fallback: String) = stderr.trim().lines().lastOrNull { it.isNotBlank() } ?: fallback
     }

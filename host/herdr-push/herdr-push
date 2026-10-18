@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# version: 5
+# version: 6
 """herdr-push: tells your phone when a herdr agent or a work board task needs you.
 
 It runs on the machine with herdr, watches its agents (`herdr api snapshot`) and, where the board
@@ -14,7 +14,12 @@ subscribed (Herdr for Android sets this up over SSH) when:
   - the machine runs low on RAM (under 10% available) or on a disk, naming what uses the most, and
     when it has room again. It also keeps the last hour of RAM and CPU readings for the app's chart.
   - an AI quick command that the app started there ends (done, failed, or at its limit), with the
-    start of its answer.
+    start of its answer;
+  - a task or an agent a phone watches ("tell me when API-3's checks pass") changes, for that phone.
+
+Each push says whether someone is at this machine: how long ago someone typed in a herdr client here
+(its terminal's last input, as `w` reads it, or the presence file being touched), and whether a
+desktop session here is unlocked. A phone can then keep quiet while you sit at the machine.
 
 It also keeps a journal of the last week: each time a board task is done, starts waiting for you,
 goes wrong, starts or is added, and each time an agent finishes or asks something. The app reads it
@@ -35,6 +40,7 @@ that wasn't sealed with it. Python 3 alone, no packages.
   herdr-push once [--dry-run]    one look, printing what it would send
   herdr-push journal [--session NAME] [--since SECONDS]
                                  what happened, as JSON (the app's brief reads it)
+  herdr-push presence            whether someone is at this machine, as JSON
 
 See host/herdr-push/README.md in the herdr-android repo.
 """
@@ -57,7 +63,7 @@ import urllib.parse
 import urllib.request
 import zlib
 
-VERSION = "5"
+VERSION = "6"
 NAME = "herdr-push"
 
 HOME = os.path.expanduser("~")
@@ -69,6 +75,8 @@ SUBSCRIBERS = os.path.join(CONFIG_DIR, "subscribers.json")
 STATE = os.path.join(STATE_DIR, "state.json")
 LOCK = os.path.join(STATE_DIR, "run.lock")
 LOG = os.path.join(STATE_DIR, NAME + ".log")
+# Touched by anything that knows you are here (a shell prompt, an editor hook): counts as typing in herdr.
+PRESENT = os.path.join(STATE_DIR, "present")
 
 INTERVAL = float(os.environ.get("HERDR_PUSH_INTERVAL", "4"))
 BOARD_EVERY = int(os.environ.get("HERDR_PUSH_BOARD_EVERY", "3"))  # ticks between board reads
@@ -343,6 +351,58 @@ def task_events(tasks, seen, first):
     for tid, before in seen.items():
         if tid not in now and before:
             events.append({"type": "task", "key": "", "task": {"id": tid, "state": "gone"}})
+    seen.clear()
+    seen.update(now)
+    return events
+
+
+def watched(group, field):
+    """What the phones of [group] watch ([field]: watch_tasks or watch_panes), each with the phones watching it."""
+    out = {}
+    for s in group:
+        for w in s.get(field) or []:
+            out.setdefault(str(w), []).append(s["id"])
+    return out
+
+
+def watch_task_events(tasks, seen, watching, told):
+    """Watched tasks whose state or stage changed, for the phones watching them. [told]: tasks every phone hears of anyway."""
+    events = []
+    now = {}
+    for key, t in tasks:
+        tid = t["id"]
+        if tid not in watching:
+            continue
+        sig = json.dumps([t.get("state"), t.get("stage"), t.get("kind"), bool(t.get("archivedAt"))])
+        now[tid] = sig
+        before = seen.get(tid)
+        if before is not None and sig != before and tid not in told:
+            events.append({"type": "task", "key": key, "task": t, "for": watching[tid]})
+    for tid, before in seen.items():
+        if tid not in now and tid in watching:
+            events.append({"type": "task", "key": "", "task": {"id": tid, "state": "gone"}, "for": watching[tid]})
+    seen.clear()
+    seen.update(now)
+    return events
+
+
+def watch_agent_events(snap, seen, watching, told):
+    """Watched agents whose status changed (working to idle, say), for the phones watching them."""
+    events = []
+    now = {}
+    for a in snap.get("agents", []):
+        pane = a.get("pane_id")
+        if pane not in watching:
+            continue
+        status = a.get("agent_status", "unknown")
+        now[pane] = status
+        before = seen.get(pane)
+        if before is not None and status != before and pane not in told:
+            events.append({"type": "agent", "agent": a, "where": location(snap, a), "for": watching[pane]})
+    for pane in seen:
+        if pane not in now and pane in watching and pane not in told:
+            events.append({"type": "agent", "agent": {"pane_id": pane, "workspace_id": "", "tab_id": "", "agent_status": "gone"},
+                           "where": "", "for": watching[pane]})
     seen.clear()
     seen.update(now)
     return events
@@ -754,9 +814,109 @@ def journal_start(key, now):
         write_json(JOURNAL, j)
 
 
+# ---- who is at the machine -----------------------------------------------------------------------
+
+LOCKERS = ("hyprlock", "swaylock", "i3lock", "gtklock", "waylock", "xsecurelock", "slock", "physlock", "xlock", "kscreenlocker_greet")
+
+
+def _out(args, timeout=5):
+    try:
+        r = subprocess.run(args, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=timeout)
+    except Exception:  # noqa: BLE001 - not there, or hung: it can't tell
+        return None
+    return r.stdout.decode(errors="replace") if r.returncode == 0 else None
+
+
+def herdr_client(argv):
+    """Whether a `herdr …` command line is a client attached to a session (not the server, nor a one-off command)."""
+    if not argv or os.path.basename(argv[0]) != "herdr":
+        return False
+    args = argv[1:]
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a in ("--session", "--remote"):
+            i += 2
+            continue
+        if a.startswith("-"):
+            i += 1
+            continue
+        return a == "session" and i + 1 < len(args) and args[i + 1] == "attach"
+    return True
+
+
+def typed_at(ps=None):
+    """When someone last typed in a herdr client here (its terminal's last input), or touched the presence file; None."""
+    times = []
+    try:
+        times.append(os.stat(PRESENT).st_mtime)
+    except OSError:
+        pass
+    ps = _out(["ps", "-A", "-o", "tty=,args="]) if ps is None else ps
+    for line in (ps or "").splitlines():
+        parts = line.split()
+        if len(parts) < 2 or parts[0] in ("?", "??", "-") or not herdr_client(parts[1:]):
+            continue
+        try:
+            times.append(os.stat("/dev/" + parts[0]).st_atime)
+        except OSError:
+            pass
+    return max(times) if times else None
+
+
+def screen_unlocked():
+    """Whether a desktop session of this user here is unlocked: True, False, or None with no desktop (a server)."""
+    forced = os.environ.get("HERDR_PUSH_SCREEN")  # tests: locked, unlocked or none
+    if forced:
+        return {"locked": False, "unlocked": True}.get(forced)
+    if sys.platform == "darwin":
+        return _mac_unlocked()
+    sessions = _out(["loginctl", "list-sessions", "--no-legend"])
+    if sessions is None:
+        return None
+    desktop = None
+    for line in sessions.splitlines():
+        sid = (line.split() or [""])[0]
+        if not sid:
+            continue
+        info = _out(["loginctl", "show-session", sid, "-p", "Type", "-p", "Active", "-p", "LockedHint", "-p", "IdleHint", "-p", "User"]) or ""
+        p = dict(l.split("=", 1) for l in info.splitlines() if "=" in l)
+        if p.get("User") != str(os.getuid()) or p.get("Type") not in ("x11", "wayland", "mir") or p.get("Active") != "yes":
+            continue
+        desktop = bool(desktop) or (p.get("LockedHint") != "yes" and p.get("IdleHint") != "yes")
+    if desktop:
+        # A screen locker that doesn't tell logind (hyprlock, swaylock…) still locks it.
+        running = _out(["ps", "-A", "-o", "comm="]) or ""
+        if any(l.strip() in LOCKERS for l in running.splitlines()):
+            return False
+    return desktop
+
+
+def _mac_unlocked():
+    out = _out(["ioreg", "-n", "Root", "-d1", "-a"])
+    if not out:
+        return None
+    try:
+        import plistlib
+        users = plistlib.loads(out.encode()).get("IOConsoleUsers") or []
+    except Exception:  # noqa: BLE001
+        return None
+    for u in users:
+        if u.get("kCGSSessionUserIDKey") == os.getuid() and u.get("kCGSSessionOnConsoleKey"):
+            return not u.get("CGSSessionScreenIsLocked", False)
+    return None
+
+
+def presence(now=None):
+    """`{"typed": seconds since someone typed in herdr here (None), "unlocked": a desktop unlocked here (None: none)}`."""
+    now = time.time() if now is None else now
+    t = typed_at()
+    return {"typed": None if t is None else max(0, int(now - t)), "unlocked": screen_unlocked()}
+
+
 # ---- sending -------------------------------------------------------------------------------------
 
-def messages(events):
+def messages(events, present=None):
     """The events in as few pushes as fit, shortening a screen that alone is too long."""
     host = socket.gethostname()
     out, batch = [], []
@@ -773,7 +933,11 @@ def messages(events):
             ev["screen"] = ev["screen"][len(ev["screen"]) // 2:] if len(ev["screen"]) > 200 else None
     if batch:
         out.append(batch)
-    return [{"v": 1, "host": host, "at": int(time.time()), "events": b} for b in out]
+    msgs = [{"v": 1, "host": host, "at": int(time.time()), "events": b} for b in out]
+    if present is not None:
+        for m in msgs:
+            m["present"] = present
+    return msgs
 
 
 def _too_big(host, batch):
@@ -788,6 +952,8 @@ def gone(record, sub):
 
 def shows(event):
     """Whether [event] puts a notification up (rather than taking one down)."""
+    if event.get("for"):
+        return True  # a phone's watch: it may be what it waited for
     if event.get("type") == "agent":
         return event["agent"].get("agent_status") in ("blocked", "done")
     if event.get("type") == "task":
@@ -809,12 +975,13 @@ def post(sub, text, urgent):
         r.read()
 
 
-def send(sub, events, record):
-    """Sends [events] to one phone, a few tries each; notes how it went in [record]."""
+def send(sub, events, record, present=None):
+    """Sends [events] to one phone, a few tries each; notes how it went in [record]. [present]: who is at the machine."""
     key = base64.b64decode(sub["key"])
     urgent = any(shows(e) for e in events)
+    events = [{k: v for k, v in e.items() if k != "for"} for e in events]
     ok = True
-    for msg in messages(events):
+    for msg in messages(events, present() if callable(present) else present):
         text = seal_message(key, msg)
         for attempt in range(3):
             try:
@@ -852,9 +1019,19 @@ def tick(state, n, dry_run=False, now=None):
     subs = subscribers()
     sent = {}
     now = time.time() if now is None else now
+    seen_here = []
+
+    def here():
+        # Who is at the machine, looked at once a look and only when something is sent.
+        if not seen_here:
+            seen_here.append(presence(now))
+        return seen_here[0]
+
     for key, (src, group) in sources(subs).items():
         st = state.setdefault("sessions", {}).setdefault(key, {})
         live = any(s.get("live") for s in group)
+        watch_tasks = watched(group, "watch_tasks")
+        watch_panes = watched(group, "watch_panes")
         events = []
         agents = tasks = None
         # What the journal saw last; its first look only learns how things stand.
@@ -864,7 +1041,10 @@ def tick(state, n, dry_run=False, now=None):
             try:
                 snap = src.snapshot()
                 first = "agents" not in st
-                events += agent_events(src, snap, st.setdefault("agents", {}), first)
+                told = agent_events(src, snap, st.setdefault("agents", {}), first)
+                events += told
+                events += watch_agent_events(snap, st.setdefault("watch_agents", {}), watch_panes,
+                                             {e["agent"].get("pane_id") for e in told})
                 learn = "agents" not in jst or first
                 noted += journal_agents(snap, jst.setdefault("agents", {}), learn, now)
                 if live:
@@ -878,7 +1058,9 @@ def tick(state, n, dry_run=False, now=None):
             try:
                 first = "tasks" not in st
                 listed = src.tasks()
-                events += task_events(listed, st.setdefault("tasks", {}), first)
+                told = task_events(listed, st.setdefault("tasks", {}), first)
+                events += told
+                events += watch_task_events(listed, st.setdefault("watch_tasks", {}), watch_tasks, {e["task"]["id"] for e in told})
                 learn = "tasks" not in jst or first
                 noted += journal_tasks(listed, jst.setdefault("tasks", {}), learn, now)
                 if live:
@@ -908,10 +1090,10 @@ def tick(state, n, dry_run=False, now=None):
             record = state.setdefault("phones", {}).setdefault(sub["id"], {})
             if gone(record, sub):
                 continue
-            mine = [e for e in events if e.get("type") != "live" or sub.get("live")]
+            mine = [e for e in events if (e.get("type") != "live" or sub.get("live")) and sub["id"] in e.get("for", [sub["id"]])]
             if dry_run or not mine:
                 continue
-            send(sub, mine, record)
+            send(sub, mine, record, here)
     if subs:
         ev = health_look(state.setdefault("health", {}), now)
         if ev is not None:
@@ -919,7 +1101,7 @@ def tick(state, n, dry_run=False, now=None):
             for sub in subs:
                 record = state.setdefault("phones", {}).setdefault(sub["id"], {})
                 if not dry_run and not gone(record, sub):
-                    send(sub, [ev], record)
+                    send(sub, [ev], record, here)
         try:
             quick = quick_look(state.setdefault("quick", {}), now)
         except Exception as e:  # noqa: BLE001 - a nicety next to the agents
@@ -930,7 +1112,7 @@ def tick(state, n, dry_run=False, now=None):
             for sub in subs:
                 record = state.setdefault("phones", {}).setdefault(sub["id"], {})
                 if not dry_run and not gone(record, sub):
-                    send(sub, quick, record)
+                    send(sub, quick, record, here)
     return sent
 
 
@@ -1000,7 +1182,7 @@ def cmd_subscribe():
     if len(key) != 32 or not sub.get("id") or not endpoint.startswith(("https://", "http://")):
         out({"ok": False, "msg": "a subscription needs an id, an http(s) endpoint and a 32-byte key"})
         return 2
-    keep = ("id", "name", "endpoint", "key", "session", "herdr", "board", "live")
+    keep = ("id", "name", "endpoint", "key", "session", "herdr", "board", "live", "watch_tasks", "watch_panes")
     entry = {k: sub[k] for k in keep if sub.get(k)}
     entry["since"] = time.time()
     subs = [s for s in subscribers() if s["id"] != entry["id"]] + [entry]
@@ -1026,7 +1208,7 @@ def cmd_test(pid=None):
     results = []
     for s in subs:
         record = state.setdefault("phones", {}).setdefault(s["id"], {})
-        ok = send(s, [{"type": "test"}], record)
+        ok = send(s, [{"type": "test"}], record, presence)
         results.append({"id": s["id"], "ok": ok, "error": record.get("error")})
     write_json(STATE, state)
     good = all(r["ok"] for r in results)
@@ -1197,6 +1379,12 @@ def cmd_once(dry_run):
     return 0
 
 
+def cmd_presence():
+    p = presence()
+    out({"ok": True, "version": VERSION, "typed": p["typed"], "unlocked": p["unlocked"]})
+    return 0
+
+
 def cmd_journal(session, since):
     """What happened in herdr session [session] since [since] (seconds), oldest first."""
     key = session or "default"
@@ -1264,6 +1452,8 @@ def main(argv):
         except ValueError:
             since = 0
         return cmd_journal(session, since)
+    if cmd == "presence":
+        return cmd_presence()
     if cmd == "version":
         print(VERSION)
         return 0

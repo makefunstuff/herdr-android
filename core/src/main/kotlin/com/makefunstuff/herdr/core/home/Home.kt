@@ -187,3 +187,40 @@ data class BoardGroup(
         fun waiting(boards: List<HomeBoard>): Int = Home.own(boards).values.sumOf { l -> l.count { it.needsYou } }
     }
 }
+
+/**
+ * What newly needs you, for the in-app alert: the Needs you items that weren't there (or waited for
+ * something else) the last time, and none from a machine read for the first time, so opening the app
+ * doesn't announce what already waited.
+ */
+class WaitingNews {
+    private val known = HashMap<String, String>()
+    private val ready = HashSet<String>()
+
+    /**
+     * [waiting] now; the items new since the last call. [agentsRead] and [boardsRead]: the machines
+     * whose agents, and whose boards, the app has read (their items count from the next call on).
+     */
+    @Synchronized
+    fun update(waiting: List<Waiting>, agentsRead: Set<String>, boardsRead: Set<String>): List<Waiting> {
+        val fresh = waiting.filter { source(it) in ready && known[it.key] != sig(it) }
+        known.clear()
+        waiting.forEach { known[it.key] = sig(it) }
+        agentsRead.forEach { ready += "agents:$it" }
+        boardsRead.forEach { ready += "board:$it" }
+        return fresh
+    }
+
+    private fun source(w: Waiting) = when (w) {
+        is Waiting.Question -> "agents:${w.machineId}"
+        is Waiting.Task -> "board:${w.machineId}"
+    }
+
+    companion object {
+        /** What an item waits for: an agent's question (its state change), or a task's state. */
+        fun sig(w: Waiting): String = when (w) {
+            is Waiting.Question -> "q${w.agent.agent.stateChangeSeq}"
+            is Waiting.Task -> listOf(w.task.state, w.task.stage, w.task.kind, w.task.reviewRound).joinToString("|")
+        }
+    }
+}

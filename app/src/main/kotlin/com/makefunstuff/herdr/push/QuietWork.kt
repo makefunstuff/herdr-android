@@ -1,5 +1,6 @@
 package com.makefunstuff.herdr.push
 
+import com.makefunstuff.herdr.core.push.PresenceBook
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -16,6 +17,7 @@ import java.time.ZoneId
  * and when it ends, what was held shows as one. Asked as each push or look arrives, when the phone
  * leaves Do Not Disturb or car mode while the app runs, and by an alarm at the schedule's end (also
  * every quarter of an hour while the phone is quiet, since a closed app isn't told when that ends).
+ * Also whether you are at one of your machines ([presence]), when notifications then keep silent.
  */
 class QuietWork(
     private val scope: CoroutineScope,
@@ -30,6 +32,14 @@ class QuietWork(
     /** Why it is quiet now, in words for the settings; null when it isn't. As of the last [check]. */
     val reason: StateFlow<String?> = _reason.asStateFlow()
     @Volatile private var planned: Long? = null
+    /** Who is at which machine, as the machines' pushes and the app's looks said. */
+    val presence = PresenceBook()
+
+    /** Whether notifications keep silent now because you are at a machine (and the rules say so). */
+    fun atMachine(now: Long = System.currentTimeMillis()): Boolean = settings.value.rules.holdAtMachine && presence.present(now)
+
+    /** Silent now: the app is on screen, or you are at a machine. */
+    fun silent(now: Long = System.currentTimeMillis()): Boolean = foreground() || atMachine(now)
 
     fun start() {
         // Turned on, off or changed: what it means now, at once (also releasing what was held).
