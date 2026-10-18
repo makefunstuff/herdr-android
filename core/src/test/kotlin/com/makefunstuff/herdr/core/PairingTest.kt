@@ -242,6 +242,8 @@ class PairingTest {
                 "HERDR_PUSH_HOME" to File(dir, "push").path,
                 "HERDR_PAIR_AUTHORIZED_KEYS" to keys.path,
                 "HERDR_PAIR_HOST_KEYS" to dir.path,
+                // A shell whose time zone isn't the system's: sshd reads expiry-time in the system's.
+                "TZ" to "Etc/GMT+12",
             )
             pair = pb.redirectErrorStream(true).start()
             val printed = StringBuilder()

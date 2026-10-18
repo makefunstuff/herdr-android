@@ -1872,7 +1872,7 @@ def cmd_pair(rest):
     options = []
     if version is None or version >= (8, 2):
         # sshd refuses the key itself after this (local time, a minute's margin), should this command be killed.
-        options.append('expiry-time="%s"' % time.strftime("%Y%m%d%H%M", time.localtime(expires + 60)))
+        options.append('expiry-time="%s"' % time.strftime("%Y%m%d%H%M", system_localtime(expires + 60)))
     options.append('command="%s"' % command)
     options.append("restrict" if version is None or version >= (7, 2) else "no-port-forwarding,no-agent-forwarding,no-X11-forwarding,no-pty")
     entry = "%s ssh-ed25519 %s %s%s-%d" % (",".join(options), blob, PAIR_TAG, token, expires)
@@ -1979,6 +1979,18 @@ def cmd_pair_accept(rest):
     answer.update(name=socket.gethostname().split(".")[0], fingerprint=key_fingerprint(blob))
     out(answer)
     return 0
+
+
+def system_localtime(when):
+    """`when` in the system's time zone, as sshd reads expiry-time, whatever TZ this shell has."""
+    tz = os.environ.pop("TZ", None)
+    try:
+        time.tzset()
+        return time.localtime(when)
+    finally:
+        if tz is not None:
+            os.environ["TZ"] = tz
+        time.tzset()
 
 
 def _sh_quote(s):
