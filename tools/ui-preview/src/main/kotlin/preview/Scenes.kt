@@ -105,8 +105,8 @@ fun scenes(): List<Scene> = listOf(
         tapLabel("Picture 1 of 2, $SHOT_1")
         tapText("Crop")
         // The top left corner down and in, the bottom edge up: the cards around the Board card are kept.
-        drag("The picture", 0f to 0f, 0.04f to 0.12f, within = ::screenshotIn)
-        drag("The picture", 0.5f to 1f, 0.5f to 0.55f, within = ::screenshotIn)
+        drag("The picture", 0.01f to 0.01f, 0.05f to 0.13f, within = ::screenshotIn)
+        drag("The picture", 0.5f to 0.99f, 0.5f to 0.55f, within = ::screenshotIn)
     }),
     Scene("chat-sent-pictures", route = Routes.agent(DEVBOX, APP_AGENT), setup = { sentPictures() }),
     Scene("picture-view", route = Routes.agent(DEVBOX, APP_AGENT), setup = { sentPictures() }, actions = {

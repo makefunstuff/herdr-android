@@ -3,6 +3,8 @@ package com.makefunstuff.herdr.ui.images
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -107,6 +109,7 @@ fun ImageEditor(image: TrayImage, onSave: (TrayImage) -> Unit, onRemove: () -> U
     var crop by remember { mutableStateOf(Markup.Crop()) }
     var inks by remember { mutableStateOf(mapOf(Markup.Tool.Pen to Inks[0].first, Markup.Tool.Arrow to Inks[0].first, Markup.Tool.Highlight to Inks[1].first)) }
     var saving by remember { mutableStateOf(false) }
+    var downAt by remember { mutableStateOf<Offset?>(null) }
     val changed = marks.isNotEmpty() || !crop.isWhole
 
     fun done() {
@@ -186,10 +189,14 @@ fun ImageEditor(image: TrayImage, onSave: (TrayImage) -> Unit, onRemove: () -> U
                 Canvas(
                     Modifier.fillMaxSize()
                         .semantics { contentDescription = "The picture" + if (marks.isEmpty()) "" else ", with ${marks.size} marks" }
+                        // Where the finger went down: a drag is only known once it has moved a little, and a
+                        // stroke starts, or a corner is taken, where the finger touched rather than there.
+                        .pointerInput(Unit) { awaitEachGesture { downAt = awaitFirstDown(requireUnconsumed = false).position } }
                         .pointerInput(tool, inks, region, scale, left, top) {
                             var handle: Markup.Handle? = null
                             detectDragGestures(
-                                onDragStart = { o ->
+                                onDragStart = { moved ->
+                                    val o = downAt ?: moved
                                     val t = tool
                                     when {
                                         t == EditTool.Crop -> handle = Markup.handleAt(crop, fullW, fullH, o.x - left, o.y - top, reach)
