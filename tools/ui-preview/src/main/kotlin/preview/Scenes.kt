@@ -66,6 +66,14 @@ fun scenes(): List<Scene> = listOf(
     Scene("agents", setup = { home() }),
     Scene("agents-all", heightDp = 1500, setup = { home() }),
     Scene("agents-reply", setup = { home() }, actions = { tapText("Reply") }),
+    // Answered from its card: the question is read again and answered, the approved task leaves the list.
+    Scene("agents-yes", setup = { home() }, actions = { tapText("Yes") }),
+    Scene("agents-approved", setup = { home() }, actions = { tapText("Approve and merge") }),
+    // The board refuses a plain approve (its local check failed): the review card can approve anyway.
+    Scene("agents-refused", setup = {
+        home()
+        host(DEVBOX).board?.refuse = mapOf("approve" to "AND-9's check failed: ./gradlew test, 3 tests failed. Approve it anyway, or send it back.")
+    }, actions = { tapText("Approve and merge") }),
     Scene("agents-filter", setup = { home() }, actions = { tapText("All machines") }),
     Scene("agents-seen", heightDp = 1500, setup = { home() }, actions = { tapText("Mark seen") }),
     Scene("agents-calm", setup = { host(DEVBOX).snapshot = Demo.devbox(apiStatus = "working"); host(DEVBOX).board = Demo.calmBoard() }),

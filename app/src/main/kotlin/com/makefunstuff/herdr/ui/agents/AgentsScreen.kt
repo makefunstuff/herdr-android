@@ -96,6 +96,9 @@ private sealed interface Reply {
     data class ToTask(override val item: Waiting.Task) : Reply
 }
 
+/** What the board or the machine said no with; [review] when it refused a plain approve, whose review card can approve anyway. */
+private data class Refusal(val words: String, val review: Waiting.Task? = null)
+
 /**
  * The home screen: everything that waits for you, across machines, first, each card with its
  * answers (Yes, No and Reply for a question; Approve and merge, Fix, Reply for a task); then the
@@ -130,7 +133,7 @@ fun AgentsScreen(
     var showNotices by remember { mutableStateOf(false) }
     var filterMenu by remember { mutableStateOf(false) }
     var reply by remember { mutableStateOf<Reply?>(null) }
-    var refusal by remember { mutableStateOf<String?>(null) }
+    var refusal by remember { mutableStateOf<Refusal?>(null) }
     var allDone by rememberSaveable { mutableStateOf(false) }
     var allIdle by rememberSaveable { mutableStateOf(false) }
     // Cards answered here, by key, with how they stood; and the ones whose answer is on its way.
@@ -184,7 +187,7 @@ fun AgentsScreen(
                 }
             }
                 .onSuccess { handled[w.key] = sig(w); context.toast(it) }
-                .onFailure { refusal = it.message ?: "Couldn't send that" }
+                .onFailure { refusal = Refusal(it.message ?: "Couldn't send that") }
             busy.remove(w.key)
             readNow.trySend(Unit)
         }
@@ -201,7 +204,8 @@ fun AgentsScreen(
                     container.inbox.dismiss(Alerts.taskTag(w.machineId, w.task.id))
                     context.toast(it.ifEmpty { "Done" })
                 }
-                .onFailure { refusal = it.message ?: "The board refused" }
+                // A failed check (a review, the local check, GitHub's) stops a plain approve: its review card says what failed and offers Approve anyway.
+                .onFailure { refusal = Refusal(it.message ?: "The board refused", w.takeIf { action == BoardAction.Approve }) }
             busy.remove(w.key)
             readNow.trySend(Unit)
         }
@@ -360,8 +364,20 @@ fun AgentsScreen(
         }
     }
     refusal?.let { r ->
-        BoardPanel("That didn't go through", onDismiss = { refusal = null }, accent = Herdr.colors.red, buttons = { PrimaryButton("OK") { refusal = null } }) {
-            MarkdownText(r)
+        BoardPanel(
+            "That didn't go through", onDismiss = { refusal = null }, accent = Herdr.colors.red,
+            buttons = {
+                if (r.review == null) PrimaryButton("OK") { refusal = null }
+                else {
+                    PanelCancel { refusal = null }
+                    PrimaryButton("Open its review card") { refusal = null; openTask(r.review) }
+                }
+            },
+        ) {
+            MarkdownText(r.words)
+            if (r.review != null) {
+                Text("Its review card says what failed, and can approve it anyway.", style = MaterialTheme.typography.bodyMedium, color = Herdr.colors.muted)
+            }
         }
     }
     if (showNotices) {
