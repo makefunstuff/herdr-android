@@ -324,6 +324,58 @@ object Demo {
     )
 
     /**
+     * The Coordinator asked what needs you: it answers with a list of tasks, each with its own words,
+     * which stay under the task's row.
+     */
+    fun whatNeedsMe(): JsonObject {
+        val r = FakeBoard().remote
+        val c = r.getValue("coordinator") as JsonObject
+        val talk = (c.getValue("talk") as kotlinx.serialization.json.JsonArray) + listOf(
+            obj("you" to true, "text" to "What needs me?"),
+            obj(
+                "you" to false,
+                "text" to "Three tasks wait for you:\n\n" +
+                    "- **API-3** Speed up /jobs on large tables\n" +
+                    "  Asks whether the migration may lock the jobs table for a few seconds.\n" +
+                    "- **AND-9:** ready to merge, review passed\n" +
+                    "- **WEB-4**: the review found 2 problems\n" +
+                    "  - the Homebrew step names the old tap\n" +
+                    "  - no step for Linux arm64\n\n" +
+                    "AND-6 and EVAL-2 are still working.",
+            ),
+        )
+        return JsonObject(r + ("coordinator" to JsonObject(c + mapOf("talk" to json(talk), "said" to json(talk.last().let { (it as JsonObject).getValue("text") })))))
+    }
+
+    /**
+     * devbox with a second tab in herdr-android, "tests", where a shell runs the tests: a workspace
+     * with several tabs keeps its tab chips and layout thumbnail on the machine screen.
+     */
+    fun devboxTabs(): JsonObject {
+        val s = devbox()
+        fun list(k: String) = s.getValue(k) as kotlinx.serialization.json.JsonArray
+        val workspaces = list("workspaces").map { w ->
+            val o = w as JsonObject
+            if ((o["workspace_id"] as kotlinx.serialization.json.JsonPrimitive).content == "w1") JsonObject(o + mapOf("tab_count" to json(2), "pane_count" to json(3))) else o
+        }
+        val tab = obj("tab_id" to "w1:t2", "workspace_id" to "w1", "number" to 2, "label" to "tests", "focused" to false, "pane_count" to 1, "agent_status" to "unknown")
+        val pane = obj(
+            "pane_id" to "w1:p3", "terminal_id" to "t-w1:p3", "workspace_id" to "w1", "tab_id" to "w1:t2", "focused" to false,
+            "cwd" to "/home/demo/src/herdr-android", "label" to "tests", "agent_status" to "unknown", "terminal_title_stripped" to "gradle",
+        )
+        val layout = obj(
+            "workspace_id" to "w1", "tab_id" to "w1:t2", "area" to rect(0, 0, 200, 50), "focused_pane_id" to "w1:p3",
+            "panes" to listOf(obj("pane_id" to "w1:p3", "focused" to true, "rect" to rect(0, 0, 200, 50))), "splits" to emptyList<Any>(),
+        )
+        return JsonObject(
+            s + mapOf(
+                "workspaces" to json(workspaces), "tabs" to json(list("tabs") + tab),
+                "panes" to json(list("panes") + pane), "layouts" to json(list("layouts") + layout),
+            ),
+        )
+    }
+
+    /**
      * gpu-box's session: the eval at work, and with [home] the data loader's profile it finished in the
      * night (not looked at since), and an idle shell agent.
      */

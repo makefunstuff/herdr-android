@@ -43,7 +43,15 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
+import com.makefunstuff.herdr.LocalPanes
 import com.makefunstuff.herdr.Routes
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
+import com.makefunstuff.herdr.core.board.BoardGlance
+import com.makefunstuff.herdr.core.board.BoardTask
+import com.makefunstuff.herdr.core.board.CoordinatorAsk
+import com.makefunstuff.herdr.core.board.TaskMentions
 import com.makefunstuff.herdr.bubble.BubbleChat
 import com.makefunstuff.herdr.bubble.LocalBubble
 import com.makefunstuff.herdr.ui.common.rememberFloat
@@ -107,6 +115,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 @Composable
 fun CoordinatorScreen(nav: NavController, machineId: String) {
     val container = LocalContainer.current
+    val panes = LocalPanes.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val session = container.hosts.session(machineId)
@@ -115,6 +124,10 @@ fun CoordinatorScreen(nav: NavController, machineId: String) {
         return
     }
     val state by session.state.collectAsStateWithLifecycle()
+    // The board's tasks as the app last read them: the strip under the bar, the tasks the answers name, the asks.
+    val boardLists by container.boards.lists.collectAsStateWithLifecycle()
+    val tasks = boardLists[machineId]?.tasks
+    val byKey = remember(tasks) { tasks.orEmpty().filter { it.key.isNotEmpty() }.associateBy { it.key } }
     var view by remember { mutableStateOf<CoordinatorView?>(null) }
     var talk by remember { mutableStateOf<List<Said>>(emptyList()) }
     var problem by remember { mutableStateOf<String?>(null) }
@@ -174,7 +187,21 @@ fun CoordinatorScreen(nav: NavController, machineId: String) {
         else "${filesWaiting.size} shared files wait to be copied to ${state.machine.label}, and are attached to your message once it connects."
     }
     val readNow = remember { Channel<Unit>(Channel.CONFLATED) }
+    val readTasksNow = remember { Channel<Unit>(Channel.CONFLATED) }
     val list = rememberLazyListState()
+    val owner = LocalLifecycleOwner.current
+
+    // The board's tasks, while the screen is in front: every quarter minute, and as soon as the Coordinator answers.
+    LaunchedEffect(machineId, state.online, state.boardPath) {
+        if (!state.online || state.boardPath == null) return@LaunchedEffect
+        owner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            var asked = false
+            while (true) {
+                container.boards.readOne(machineId, freshMs = if (asked) 0 else 3_000)
+                asked = withTimeoutOrNull(15_000) { readTasksNow.receive() } != null
+            }
+        }
+    }
 
     // Read while the screen is open: often while the Coordinator works, so its answer comes in as it's written.
     LaunchedEffect(machineId, state.online, state.boardPath) {
@@ -220,6 +247,10 @@ fun CoordinatorScreen(nav: NavController, machineId: String) {
     LaunchedEffect(lines.size, lines.lastOrNull()?.text?.length) {
         if (lines.isNotEmpty() && list.firstVisibleItemIndex <= 1) list.animateScrollToItem(0)
     }
+    // A new answer, or the Coordinator done with one, may have added or started tasks.
+    LaunchedEffect(lines.count { !it.you }, v?.busy) { if (v != null && !v.busy) readTasksNow.trySend(Unit) }
+    val asks = remember(tasks, lines) { tasks?.let { CoordinatorAsk.of(it, lines.map { l -> l.text }) }.orEmpty() }
+    val openTask: (BoardTask) -> Unit = { t -> panes.openBoard(nav, machineId, t.id, alone = true) }
     val coordinatorPane = state.snapshot?.let { s ->
         s.agents.firstOrNull { a -> s.tab(a.tabId)?.label == "Coordinator" }?.paneId
     }
@@ -273,11 +304,19 @@ fun CoordinatorScreen(nav: NavController, machineId: String) {
     ) { padding ->
         // The top bar's inset comes from the scaffold; the bottom follows the keyboard or the nav bar.
         Column(Modifier.padding(top = padding.calculateTopPadding()).fillMaxSize().imePadding().navigationBarsPadding()) {
+            if (!typing && tasks != null && state.online && state.boardPath != null) {
+                BoardStrip(remember(tasks) { BoardGlance.of(tasks) }) { panes.openBoard(nav, machineId) }
+            }
             val sizes by container.textSizes.state.collectAsStateWithLifecycle()
             ChatSurface(
                 Modifier.weight(1f).fillMaxWidth(),
                 textScale = sizes.chat,
                 composer = {
+                    Column {
+                    // The asks are for a Coordinator that is there and an empty message box.
+                    if (v != null && draft.isEmpty() && tray.isEmpty && !sending && asks.isNotEmpty() && state.online) {
+                        AskRow(asks, onAsk = { draft = it.text }, Modifier.padding(bottom = Space.xs))
+                    }
                     CoordinatorComposer(
                         draft = draft,
                         onDraft = { draft = it },
@@ -298,6 +337,7 @@ fun CoordinatorScreen(nav: NavController, machineId: String) {
                         uploading = uploading,
                         tray = tray,
                     )
+                    }
                 },
             ) { bottom ->
                 when {
@@ -351,7 +391,7 @@ fun CoordinatorScreen(nav: NavController, machineId: String) {
                         } else {
                             item(key = "foot") { foot() }
                             val last = lines.lastIndex
-                            itemsIndexed(lines.asReversed(), key = { i, l -> "${last - i}/${l.you}" }) { _, line -> Bubble(line) }
+                            itemsIndexed(lines.asReversed(), key = { i, l -> "${last - i}/${l.you}" }) { _, line -> Bubble(line, byKey, openTask) }
                         }
                     } }
                 }
@@ -391,12 +431,16 @@ private fun ChatEmpty(icon: ImageVector, title: String, body: String) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { StateBlock(icon, title, body) }
 }
 
-/** Yours on the right on a neutral raised card; the Coordinator's answer as plain prose on the left, as the web UI's chat. */
+/**
+ * Yours on the right on a neutral raised card; the Coordinator's answer as plain prose on the left, as
+ * the web UI's chat, with each task it names on the board ([tasks], by key) as a row with its live state.
+ */
 @Composable
-private fun Bubble(line: ChatLine) {
+private fun Bubble(line: ChatLine, tasks: Map<String, BoardTask>, onTask: (BoardTask) -> Unit) {
     val mine = line.you
     // The pictures your message names show as pictures, over its words.
     val split = remember(line.text, mine) { if (mine) Images.split(line.text) else Images.Split(emptyList(), line.text) }
+    val parts = remember(line.text, mine, tasks.keys) { if (mine) null else TaskMentions.split(line.text, tasks.keys) }
     val c = Herdr.colors
     val scheme = MaterialTheme.colorScheme
     Row(Modifier.fillMaxWidth().padding(start = if (mine) 48.dp else 0.dp, end = if (mine) 0.dp else 32.dp), horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start) {
@@ -410,7 +454,14 @@ private fun Bubble(line: ChatLine) {
             ) {
                 Column(Modifier.padding(horizontal = if (mine) Space.l else Space.xs, vertical = if (mine) Space.m else Space.xs)) {
                     if (split.paths.isNotEmpty()) MessageImages(split.paths, Modifier.padding(bottom = if (split.text.isEmpty()) 0.dp else Space.s))
-                    if (split.text.isNotEmpty()) MarkdownText(split.text, style = MaterialTheme.typography.bodyLarge)
+                    if (parts != null) {
+                        parts.forEach { p ->
+                            when (p) {
+                                is TaskMentions.Part.Words -> MarkdownText(p.text, style = MaterialTheme.typography.bodyLarge)
+                                is TaskMentions.Part.Task -> tasks[p.key]?.let { t -> TaskMention(t, p.note) { onTask(t) } }
+                            }
+                        }
+                    } else if (split.text.isNotEmpty()) MarkdownText(split.text, style = MaterialTheme.typography.bodyLarge)
                 }
             }
             if (line.pending) {

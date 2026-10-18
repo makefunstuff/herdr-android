@@ -466,11 +466,12 @@ private fun dayName(day: String, long: Boolean = false): String =
 // ---- the way in, and the glance ------------------------------------------------------------------
 
 /**
- * The way into a machine's usage from its screen, beside Health: the tightest limit, in amber near it,
- * and a line on every provider. It reads the machine when its reading is older than ten minutes.
+ * The way into a machine's usage from its screen, under its tiles: one 48dp row with the tightest
+ * limit, in amber near it, and a word on every provider. With [tile] it is one of the tiles (a machine
+ * with no board has room in their row). It reads the machine when its reading is older than ten minutes.
  */
 @Composable
-fun UsageCard(session: HostSession, onOpen: () -> Unit) {
+fun UsageRow(session: HostSession, onOpen: () -> Unit, tile: Boolean = false, modifier: Modifier = Modifier) {
     val store = LocalContainer.current.usage
     val latest by store.latest.collectAsStateWithLifecycle()
     val state by session.state.collectAsStateWithLifecycle()
@@ -484,20 +485,29 @@ fun UsageCard(session: HostSession, onOpen: () -> Unit) {
     val tight = report?.let { UsageRules.tightest(mapOf(id to it), now) }
     val warn = tight?.takeIf { it.level >= 80 }
     val c = Herdr.colors
-    QuietCard(onClick = onOpen, onClickLabel = "Open usage and limits", padded = true, edge = warn?.let { limitColor(it.limit.percent) } ?: c.line) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(HerdrIcons.Gauge, null, tint = warn?.let { limitColor(it.limit.percent) } ?: c.text, modifier = Modifier.size(20.dp))
+    val tint = warn?.let { limitColor(it.limit.percent) }
+    val line = warn?.let { UsageRules.glance(it, now, zone) } ?: summary(report?.providers, now, zone)
+    if (tile) {
+        com.makefunstuff.herdr.ui.machines.PlaceTile(
+            HerdrIcons.Gauge, "Usage", line, tint ?: c.muted, modifier, onOpen, "Open usage and limits",
+            edge = tint ?: c.line, iconTint = tint ?: c.text,
+        )
+        return
+    }
+    QuietCard(
+        modifier.semantics(mergeDescendants = true) { contentDescription = "Usage: $line" },
+        onClick = onOpen, onClickLabel = "Open usage and limits", edge = tint ?: c.line,
+    ) {
+        Row(Modifier.heightIn(min = 48.dp).padding(horizontal = Space.m), verticalAlignment = Alignment.CenterVertically) {
+            Icon(HerdrIcons.Gauge, null, tint = tint ?: c.text, modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(Space.m))
-            Column(Modifier.weight(1f)) {
-                Text(
-                    warn?.let { UsageRules.glance(it, now, zone) } ?: "Usage",
-                    style = MaterialTheme.typography.titleMedium, color = warn?.let { limitColor(it.limit.percent) } ?: c.strong,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis,
-                )
-                Text(summary(report?.providers, now, zone), style = MaterialTheme.typography.bodySmall, color = c.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
+            Text("Usage", style = MaterialTheme.typography.titleSmall, color = c.strong, maxLines = 1)
             Spacer(Modifier.width(Space.s))
-            Pill("limits")
+            Text(
+                line, style = MaterialTheme.typography.bodySmall, color = tint ?: c.muted,
+                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
+            )
+            Icon(HerdrIcons.ChevronRight, null, tint = c.faint, modifier = Modifier.padding(start = Space.s).size(18.dp))
         }
     }
 }

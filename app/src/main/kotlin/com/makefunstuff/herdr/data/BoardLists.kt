@@ -48,6 +48,11 @@ class BoardLists(
         Unit
     }
 
+    /** Reads [machineId]'s board now, unless it was read within [freshMs]: for a screen about one machine. */
+    suspend fun readOne(machineId: String, freshMs: Long = 3_000) {
+        if (now() - (readAt[machineId] ?: 0L) >= freshMs) read(machineId)
+    }
+
     private suspend fun read(machineId: String) {
         try {
             val session = hosts.session(machineId) ?: return

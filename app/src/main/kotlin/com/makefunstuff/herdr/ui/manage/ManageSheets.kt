@@ -204,6 +204,8 @@ fun WorkspaceActionsSheet(
     onCode: (() -> Unit)? = null,
     /** Opens the quick commands of the workspace's folder. */
     onQuick: (() -> Unit)? = null,
+    /** Opens its only tab's actions: the machine screen shows no row for a workspace's one tab. */
+    onTab: ((TabInfo) -> Unit)? = null,
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -226,6 +228,11 @@ fun WorkspaceActionsSheet(
         if (onCode != null) ManageRow("Browse the code", icon = HerdrIcons.Code, chevron = true) { onDismiss(); onCode() }
         if (onQuick != null) ManageRow("Quick commands", detail = "Its project's scripts and AI commands", icon = HerdrIcons.Zap, chevron = true) { onDismiss(); onQuick() }
         ManageRow("Rename", icon = HerdrIcons.Pencil, chevron = true) { rename = true }
+        val onlyTab = snap.tabs.filter { it.workspaceId == ws.workspaceId }.singleOrNull()
+        if (onTab != null && onlyTab != null) {
+            val tabLabel = onlyTab.label.ifBlank { "${onlyTab.number}" }.let { l -> if (l.all { it.isDigit() }) "Tab $l" else l }
+            ManageRow("Its tab", icon = HerdrIcons.Layers, detail = tabLabel, chevron = true) { onDismiss(); onTab(onlyTab) }
+        }
         ManageRow(
             "Metadata",
             icon = HerdrIcons.Info,

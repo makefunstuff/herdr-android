@@ -24,21 +24,19 @@ import com.makefunstuff.herdr.core.health.HealthReport
 import com.makefunstuff.herdr.core.health.HealthSample
 import com.makefunstuff.herdr.core.health.Sizes
 import com.makefunstuff.herdr.core.host.HostSession
-import com.makefunstuff.herdr.core.push.HealthWords
 import com.makefunstuff.herdr.ui.common.LocalContainer
-import com.makefunstuff.herdr.ui.common.Pill
 import com.makefunstuff.herdr.ui.design.HerdrIcons
-import com.makefunstuff.herdr.ui.design.QuietCard
+import com.makefunstuff.herdr.ui.machines.PlaceTile
 import com.makefunstuff.herdr.ui.theme.Herdr
 import com.makefunstuff.herdr.ui.theme.Space
 import kotlinx.coroutines.delay
 
 /**
- * The way into a machine's health from its screen: RAM, CPU and the fullest disk at a glance, in red
- * when the machine runs low. It takes a quick look (no processes) every half minute while shown.
+ * The way into a machine's health from its screen, as a tile: the busiest of RAM, CPU and the fullest
+ * disk, or what runs low in red. It takes a quick look (no processes) every half minute while shown.
  */
 @Composable
-fun HealthCard(session: HostSession, onOpen: () -> Unit) {
+fun HealthTile(session: HostSession, modifier: Modifier = Modifier, onOpen: () -> Unit) {
     val store = LocalContainer.current.health
     val latest by store.latest.collectAsStateWithLifecycle()
     val state by session.state.collectAsStateWithLifecycle()
@@ -59,31 +57,29 @@ fun HealthCard(session: HostSession, onOpen: () -> Unit) {
     val s = latest[id]
     val report = s?.let { HealthReport.of(it, emptyList()) }?.takeIf { it.low.isNotEmpty() }
     val c = Herdr.colors
-    QuietCard(onClick = onOpen, onClickLabel = "Open health and cleanup", padded = true, edge = if (report != null) c.red else c.line) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(if (report != null) HerdrIcons.TriangleAlert else HerdrIcons.Activity, null, tint = if (report != null) c.red else c.text, modifier = Modifier.size(20.dp))
-            Spacer(Modifier.width(Space.m))
-            Column(Modifier.weight(1f)) {
-                Text(
-                    if (report != null) HealthWords.words(state.machine.label, report).first else "Health",
-                    style = MaterialTheme.typography.titleMedium, color = if (report != null) c.red else c.strong,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis,
-                )
-                Text(summary(s), style = MaterialTheme.typography.bodySmall, color = c.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-            Spacer(Modifier.width(Space.s))
-            Pill("cleanup")
-        }
-    }
+    PlaceTile(
+        if (report != null) HerdrIcons.TriangleAlert else HerdrIcons.Activity,
+        "Health",
+        when {
+            report == null -> busiest(s)
+            report.ram && report.low.size > 1 -> "Low on RAM and disk"
+            report.ram -> "Low on RAM"
+            else -> "Low on disk"
+        },
+        if (report != null) c.red else c.muted,
+        modifier, onOpen, "Open health and cleanup",
+        edge = if (report != null) c.red else c.line,
+        iconTint = if (report != null) c.red else c.text,
+    )
 }
 
-/** "RAM 67% · CPU 12% · / 4.7 GB free": the fullest disk. */
-private fun summary(s: HealthSample?): String {
-    if (s == null) return "RAM, CPU, disks and leftovers"
+/** "RAM 67%", "CPU 91%" or "Disk 88%" (the fullest): whichever is highest. */
+private fun busiest(s: HealthSample?): String {
+    if (s == null) return "RAM, CPU, disks"
     val disk = s.disks.minByOrNull { it.availPercent }
     return listOfNotNull(
-        s.memory?.let { "RAM ${Sizes.percent(it.usedPercent)}" },
-        (s.cpuBusy ?: s.loadPercent).let { "CPU ${Sizes.percent(it)}" },
-        disk?.let { "${it.mount} ${Sizes.kb(it.availKb)} free" },
-    ).joinToString(" · ")
+        s.memory?.let { it.usedPercent to "RAM ${Sizes.percent(it.usedPercent)}" },
+        (s.cpuBusy ?: s.loadPercent).let { it to "CPU ${Sizes.percent(it)}" },
+        disk?.let { it.usedPercent to "Disk ${Sizes.percent(it.usedPercent)}" },
+    ).maxByOrNull { it.first }?.second.orEmpty()
 }
