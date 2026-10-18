@@ -78,6 +78,8 @@ class FakeMachine(
     var quick: FakeQuick? = null,
     /** Pictures on it by their path there (the files they are), for a chat that reads one back (`Images.fetchCommand`). */
     var pictures: Map<String, java.io.File> = emptyMap(),
+    /** What `herdr-agent-commands` prints there (AgentCommands.listCommand): the person's and the projects' own commands and skills. */
+    var agentCommands: String = "",
 ) {
     val fingerprint = "SHA256:" + Base64.getEncoder().withoutPadding().encodeToString(id.toByteArray()).padEnd(43, 'A')
     private val overrides = HashMap<String, (JsonObject) -> JsonElement>()
@@ -113,6 +115,9 @@ class FakeMachine(
                 pictures[Shell.words(command.substringBefore(" && ")).first().removePrefix("f=")]
                     ?.let { ok(Base64.getMimeEncoder().encodeToString(it.readBytes()) + "\n") } ?: CommandResult(1, "", "")
             // An attached file (HostSession.upload): taken, and its path there printed, under a fixed stamp.
+            // The composer's completions: an agent's own commands, and the files in its folder.
+            "herdr-agent-commands" in w -> ok(agentCommands)
+            "herdr-agent-files" in w -> ok(code?.filesIn(w.last()).orEmpty())
             "herdr-android/uploads/" in command -> ok("/home/demo/.cache/herdr-android/uploads/20261017-091204-3f2a/" + Shell.words(command.substringAfterLast("\"/")).first())
             else -> ok("")
         }

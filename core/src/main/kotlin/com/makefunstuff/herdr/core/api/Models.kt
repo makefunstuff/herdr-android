@@ -147,6 +147,8 @@ data class AgentInfo(
     @SerialName("display_agent") val displayAgent: String? = null,
     @SerialName("agent_status") val agentStatusRaw: String = "unknown",
     @SerialName("state_labels") val stateLabels: Map<String, String> = emptyMap(),
+    /** What the agent's integration reports about it (`summary`, `progress`, `model`, `context`, …); see [tokens]. */
+    @SerialName("tokens") val tokensRaw: kotlinx.serialization.json.JsonObject? = null,
     @SerialName("workspace_id") val workspaceId: String,
     @SerialName("tab_id") val tabId: String,
     @SerialName("pane_id") val paneId: String,
@@ -172,6 +174,10 @@ data class AgentInfo(
             ?: terminalTitle?.takeIf { it.isNotBlank() }
 
     val statusLabel: String get() = stateLabels[agentStatusRaw] ?: agentStatusRaw
+
+    /** [tokensRaw] as key → text: a number or a flag reads as written, anything nested is left out. */
+    val tokens: Map<String, String>
+        get() = tokensRaw?.mapNotNull { (k, v) -> (v as? kotlinx.serialization.json.JsonPrimitive)?.takeIf { it !is kotlinx.serialization.json.JsonNull }?.let { k to it.content } }?.toMap().orEmpty()
 }
 
 /**

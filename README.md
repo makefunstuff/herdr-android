@@ -104,6 +104,15 @@ An agent's chat is its own transcript (Claude Code's, codex's, pi's or omp's), c
 
 The times, kinds, failures and edits come from the same reading of the agent's session as the activity timeline (below); a transcript without times still folds its turns, without durations or times.
 
+## Writing to an agent
+
+The composer knows the agent it writes to:
+
+- **Held messages**: what you send while the agent works isn't typed into its screen in the middle of its turn. It waits over the composer, *Held until claude is ready*, with **Send now** (it goes at once, as the agent's next words) and **X** to discard it. Nothing held goes by itself: once the agent is done the line says *claude is ready: review and send*, in amber. Held messages are kept per chat on the phone, through restarts; while the agent asks something they fold to their caption, and Send now waits for the answer.
+- **Quick replies**: one-tap chips over an empty box, *continue*, *commit and push*, *run the tests*. Off until **Settings → Quick replies** turns them on; there (or from the pencil at the chips' end) you edit, add or remove them. A chip sent while the agent works is held like anything typed.
+- **`/` and `@`**: a `/` at the start of the message lists the agent's own commands (Claude Code's `/compact`, `/review`, `/model`…, codex's, pi's and omp's), with your own and the project's commands and skills read on its machine (`~/.claude/commands`, `.claude/commands` in its folder, the skills folders; codex's saved prompts; pi's prompts and skills). `@` completes a file in the agent's folder: Git's files there (or a walk of the folder when it isn't a checkout), listed once over SSH, matched as you type. A tap puts it in the message.
+- **The model pill**: beside **+**, *Opus 5.5 · 62%* is the model the agent answers with and how full its context is, with a ring (amber past 80%). It comes from herdr's own fields for the agent (an integration that reports `model` and `context` in its `tokens`) or else the transcript: the model and the tokens its last request filled, of the window Codex states or Claude's usual 200k (1M once a request went past that). A tap shows the details (the tokens, the window, the reasoning level, the model's id, what herdr reports about the agent) and **Usage and limits**, the machine's provider page, with what the agent's provider has left.
+
 ## Answering a blocked agent
 
 In an agent's chat, the question a blocked agent asks is docked over the composer, so it never scrolls away with the transcript, and it is made for one thumb:

@@ -126,6 +126,8 @@ object Routes {
     const val QUIET = "settings/quiet"
     /** Which actions ask for the fingerprint, and the app lock. */
     const val GUARD = "settings/guard"
+    /** The quick replies over an agent's message box. */
+    const val COMPOSER = "settings/replies"
     /** Which notifications reach the phone, holding them while you are at a machine, and the watches. */
     const val RULES = "settings/rules"
     /** What happened while you were away; and when it comes as a notification. */
@@ -311,6 +313,7 @@ internal fun NavGraphBuilder.screens(nav: NavHostController, agents: @Composable
     composable(Routes.SETTINGS) { SettingsScreen(nav) }
     composable(Routes.QUIET) { QuietHoursScreen(nav) }
     composable(Routes.GUARD) { com.makefunstuff.herdr.ui.settings.GuardScreen(nav) }
+    composable(Routes.COMPOSER) { com.makefunstuff.herdr.ui.settings.QuickRepliesScreen(nav) }
     composable(Routes.RULES) { com.makefunstuff.herdr.ui.settings.AlertRulesScreen(nav) }
     composable(Routes.BRIEF) { BriefScreen(nav) }
     composable(Routes.BRIEF_SETTINGS) { BriefSettingsScreen(nav) }

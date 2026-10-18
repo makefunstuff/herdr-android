@@ -115,6 +115,8 @@ class SceneData {
     var quickPins: Map<String, List<String>> = emptyMap()
     /** When each agent's chat was last on screen (LookedStore), by `<machine>/<pane>`: its "While you were away" card counts from it. */
     var looked: Map<String, Long> = emptyMap()
+    /** The messages held over the agents' composers and the quick replies (ComposerStore), as saved before the app opens. */
+    var composer: com.makefunstuff.herdr.data.ComposerStore.State? = null
     /** Pictures waiting in a chat's composer, by DraftStore key: each a name and the picture it is (made smaller as the app does). */
     val images = HashMap<String, List<Pair<String, File>>>()
     fun host(id: String): FakeMachine = hosts.getValue(id)
@@ -168,6 +170,7 @@ fun render(scene: Scene, dark: Boolean, file: File) {
     PreviewUnlock.answer = data.unlockAnswer
     synchronized(PreviewUnlock.asked) { PreviewUnlock.asked.clear() }
     data.looked.forEach { (key, at) -> com.makefunstuff.herdr.data.LookedStore(context.filesDir.resolve("looked.json")).mark(key.substringBefore('/'), key.substringAfter('/'), at) }
+    data.composer?.let { context.filesDir.resolve("composer.json").writeText(Json.encodeToString(com.makefunstuff.herdr.data.ComposerStore.State.serializer(), it)) }
     data.guard?.let { context.filesDir.resolve("guard.json").writeText(Json.encodeToString(com.makefunstuff.herdr.data.GuardState.serializer(), it)) }
     if (data.held.isNotEmpty()) context.filesDir.resolve("held.json").writeText(Json.encodeToString(ListSerializer(Alert.serializer()), data.held))
     IdentityStore.initial = scene.key

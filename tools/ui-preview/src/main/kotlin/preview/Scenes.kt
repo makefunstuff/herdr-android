@@ -35,6 +35,19 @@ private fun SceneData.pictures() {
     drafts[com.makefunstuff.herdr.data.DraftStore.agent(DEVBOX, APP_AGENT)] = "The Board card jumps when a machine reconnects. Keep it where it was?"
 }
 
+/** A message sent to the app agent while it worked, held over its composer. */
+private fun SceneData.held() {
+    val key = com.makefunstuff.herdr.data.DraftStore.agent(DEVBOX, APP_AGENT)
+    composer = (composer ?: com.makefunstuff.herdr.data.ComposerStore.State()).let {
+        it.copy(held = it.held + (key to listOf(com.makefunstuff.herdr.core.chat.HeldMessage("held-1", "Also add it to the widget", Demo.NOW - 40_000))))
+    }
+}
+
+/** The quick replies turned on, as they start. */
+private fun SceneData.replies() {
+    composer = (composer ?: com.makefunstuff.herdr.data.ComposerStore.State()).copy(replies = com.makefunstuff.herdr.core.chat.QuickReplies(on = true))
+}
+
 /** The app agent's conversation after two screenshots were sent to it, which devbox still has. */
 private fun SceneData.sentPictures() {
     host(DEVBOX).transcripts = host(DEVBOX).transcripts + (Demo.APP_SESSION to Demo.appTranscriptWithPictures())
@@ -185,6 +198,20 @@ fun scenes(): List<Scene> = listOf(
         ctx.data.host(DEVBOX).append(Demo.APP_SESSION, Demo.APP_NEXT)
         settle()
     }),
+
+    // A composer that knows the agent: what you sent while it worked, held above the box with Send now and Discard
+    // (and once it is done, waiting for you to review and send); the quick replies, when on; `/` listing Claude's
+    // own commands with the project's; `@` completing a file in its folder; the model pill and its details.
+    Scene("chat-held", route = Routes.agent(DEVBOX, APP_AGENT), setup = { held(); replies() }),
+    Scene("chat-held-ready", route = Routes.agent(DEVBOX, APP_AGENT), setup = {
+        held()
+        host(DEVBOX).snapshot = Demo.devbox(appStatus = "done")
+        host(DEVBOX).transcripts = host(DEVBOX).transcripts + (Demo.APP_SESSION to Demo.appTranscriptDone())
+    }),
+    Scene("chat-commands", route = Routes.agent(DEVBOX, APP_AGENT), setup = { held(); replies() }, actions = { type("/") }),
+    Scene("chat-files", route = Routes.agent(DEVBOX, APP_AGENT), actions = { type("Look at @mach") }),
+    Scene("chat-model", route = Routes.agent(DEVBOX, APP_AGENT), actions = { tapLabel("Model Opus 5.5, context 62% full") }),
+    Scene("quick-replies", route = Routes.COMPOSER, setup = { replies() }),
 
     // Pictures for an agent: what the attach button offers, two screenshots in the composer (copied to devbox,
     // each with its ×), one opened to mark up (an arrow, a highlight, a ring drawn round), one being cropped;

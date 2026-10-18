@@ -45,6 +45,8 @@ class AgentChat(private val host: HostSession, val paneId: String, private val s
         val pending: List<SentMatch.Pending> = emptyList(),
         /** The transcript read as timed turns ([ActivityLog]): when each turn and step was, what an edit changed. */
         val turns: List<Turn> = emptyList(),
+        /** The model it answers with and how full its context is, as the transcript says. */
+        val use: ModelUse? = null,
     )
 
     private val _state = MutableStateFlow(State())
@@ -117,7 +119,7 @@ class AgentChat(private val host: HostSession, val paneId: String, private val s
                     val items = transcript.items()
                     val turns = transcript.activity?.turns().orEmpty()
                     _state.update { s ->
-                        s.copy(source = Source.Transcript, items = items, truncated = truncated, pending = unseen(s.pending, items), turns = turns)
+                        s.copy(source = Source.Transcript, items = items, truncated = truncated, pending = unseen(s.pending, items), turns = turns, use = transcript.use)
                     }
                     failures = 0
                 }
