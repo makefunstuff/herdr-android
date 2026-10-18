@@ -39,6 +39,10 @@ class AppContainer(app: Context) {
     // At the demo's fixed time, so "2 h ago" reads the same every run.
     val code = com.makefunstuff.herdr.data.CodeStore(java.io.File(app.filesDir, "code.json"), now = { Demo.NOW })
     val health = HealthStore()
+    // At the demo's fixed time, on UTC, so "resets 17:00" reads the same every run.
+    val usage = com.makefunstuff.herdr.data.UsageStore(
+        java.io.File(app.filesDir, "usage.json"), clock = { Demo.NOW }, zone = { java.time.ZoneOffset.UTC },
+    )
     val quick = com.makefunstuff.herdr.data.QuickStore(java.io.File(app.filesDir, "quick.json"))
     val shares = Shares(java.io.File(app.filesDir, "shares.json"), java.io.File(app.filesDir, "shared"))
     val images = com.makefunstuff.herdr.data.ImageStore(
@@ -53,7 +57,7 @@ class AppContainer(app: Context) {
     val tally = TallyStore(java.io.File(app.filesDir, "tally.json"), machines)
     /** One-shot watches set from the long-press sheets. */
     val watchWork = com.makefunstuff.herdr.push.WatchWork(push, inbox, quietWork)
-    val alertWork = AlertWork(hosts, machines, push, inbox, liveWork, quietWork, tally, quick, watchWork)
+    val alertWork = AlertWork(hosts, machines, push, inbox, liveWork, quietWork, tally, quick, watchWork, usage)
     /** Every board's list as last read, and which finished agents the phone has shown: the Agents screen's and the Board tab's. */
     val boards = com.makefunstuff.herdr.data.BoardLists(hosts, onRead = { id, tasks -> tally.tasks(id, tasks) })
     val seen = com.makefunstuff.herdr.data.SeenStore(java.io.File(app.filesDir, "seen.json"))
@@ -72,6 +76,7 @@ class AppContainer(app: Context) {
         quietWork.check()
         briefWork.start()
         watchWork.start(scope, hosts, boards)
+        usage.start(scope, hosts, machines)
     }
 
     /** Ends the scene: every machine session and the container's coroutines. */

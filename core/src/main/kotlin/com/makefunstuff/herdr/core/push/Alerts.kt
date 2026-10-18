@@ -42,15 +42,18 @@ data class Alert(
     val health: Boolean = false,
     /** A tap opens this quick command's run (an AI one that ended). */
     val quickRun: String = "",
+    /** A tap opens the machine's usage page (a provider near or at a limit). */
+    val usage: Boolean = false,
     /** A tap opens the review cards at the task: finished work that waits for a yes, a no or a choice ([Approvals.waits]). */
     val review: Boolean = false,
 ) {
     /**
      * What it is about, which the notification rules ([AlertRules]) switch on and off: something waits
      * for you, something finished, something went wrong (a review or a check failed, a task errored),
-     * a test, or a watch you set that fired ([Watch]).
+     * a test, a watch you set that fired ([Watch]), or an AI provider near or at a limit (and a task
+     * the board's fallback took over because of one).
      */
-    enum class Kind { NeedsYou, Finished, WentWrong, Test, Watch }
+    enum class Kind { NeedsYou, Finished, WentWrong, Test, Watch, Limits }
 }
 
 /** A notification's button. */
@@ -105,6 +108,8 @@ object Alerts {
     fun testTag(machineId: String) = "test:$machineId"
     fun healthTag(machineId: String) = "health:$machineId"
     fun quickTag(machineId: String, runId: String) = "quick:$machineId:$runId"
+    fun usageTag(machineId: String, provider: String, limit: String) = "usage:$machineId:$provider:$limit"
+    fun takeoverTag(machineId: String, taskId: String) = "takeover:$machineId:$taskId"
 
     /** The notifications [events] call for; what runs ([PushEvent.Live]) is a Live Update instead (LiveItems). */
     fun all(machineId: String, machineLabel: String, events: List<PushEvent>, host: String = ""): List<AlertChange> =
@@ -116,6 +121,8 @@ object Alerts {
         is PushEvent.Task -> task(machineId, machineLabel, event.task)
         is PushEvent.Health -> health(machineId, machineLabel, event.report)
         is PushEvent.Quick -> quick(machineId, machineLabel, event)
+        is PushEvent.Usage -> usage(machineId, machineLabel, event)
+        is PushEvent.Takeover -> takeover(machineId, machineLabel, event)
         PushEvent.Test -> AlertChange.Show(
             Alert(
                 tag = testTag(machineId),
@@ -290,6 +297,49 @@ object Alerts {
             else -> return null
         }
         return quick(machineId, machineLabel, PushEvent.Quick(run.id, run.name, state, run.preview, run.error, run.cwd))
+    }
+
+    /**
+     * A provider near a limit (80%), almost out (95%) or out (100%); each mark once per window (a new
+     * window resets [UsageLimit.resets], and with it the signature). It can wait: quiet hours hold it.
+     * Its kind is [Alert.Kind.Limits], which the notification rules switch on and off.
+     * Back under the marks (level 0), it comes down.
+     */
+    fun usage(machineId: String, machineLabel: String, e: PushEvent.Usage, now: Long = System.currentTimeMillis() / 1000): AlertChange {
+        val tag = usageTag(machineId, e.provider, e.limit.id)
+        if (e.level <= 0) return AlertChange.Clear(tag)
+        val (title, text) = com.makefunstuff.herdr.core.usage.UsageWords.warning(e.name, e.limit, e.level, machineLabel, now)
+        return AlertChange.Show(
+            Alert(
+                tag = tag,
+                sig = "usage:${e.level}:${e.limit.resets ?: 0}",
+                kind = Alert.Kind.Limits,
+                machineId = machineId,
+                title = title,
+                text = text,
+                detail = "$title\n$text",
+                usage = true,
+            ),
+        )
+    }
+
+    /** The board's fallback took a task over because of a limit: "codex took over from claude: out of allowance until 17:00". */
+    fun takeover(machineId: String, machineLabel: String, e: PushEvent.Takeover): AlertChange {
+        val words = "${e.to} took over from ${e.from}"
+        val role = if (e.role == "reviewer") " (its review)" else ""
+        return AlertChange.Show(
+            Alert(
+                tag = takeoverTag(machineId, e.taskId),
+                sig = "takeover:${e.at}",
+                kind = Alert.Kind.Limits,
+                machineId = machineId,
+                title = "${e.name}: $words$role",
+                text = e.why.ifEmpty { e.title },
+                detail = listOf("$words: ${e.why}", e.title, machineLabel).filter { it.isNotBlank() }.joinToString("\n"),
+                taskId = e.taskId,
+                taskName = e.name,
+            ),
+        )
     }
 
     /** What the Coordinator is sent for a reply to a task's notification. */

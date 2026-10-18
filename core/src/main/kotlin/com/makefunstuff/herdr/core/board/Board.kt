@@ -282,6 +282,18 @@ class BoardClient(private val conn: MachineConnection, private val machine: Mach
         return ApprovalReader.facts(r.stdout)
     }
 
+    /** The agents a task gets ([id]: that task's settings; none: the board's own), from `show`. */
+    suspend fun agents(id: String? = null): AgentChoices {
+        val r = conn.run(BoardCommands.cli(machine, path, listOfNotNull("show", id)), timeoutSeconds = 20)
+        val choices = AgentChoices.parse(r.stdout)
+        if (choices.worker.isEmpty() && r.exitStatus != 0) throw IOException(BoardTasks.plain(r.stderr).ifEmpty { "herdr-projects gave no settings" })
+        return choices
+    }
+
+    /** Starts an agent on a task; [agent] (`codex/gpt-6.1-sol`) in place of its worker for this task only, null: its own. */
+    suspend fun delegate(id: String, agent: String? = null): String =
+        run(listOf("delegate", id) + (agent?.takeIf { it.isNotBlank() }?.let { listOf("--worker.agent", it) } ?: emptyList()))
+
     suspend fun rename(id: String, title: String) = run(listOf("rename", id, title))
     suspend fun describe(id: String, text: String) = run(listOf("describe", id, text))
 
@@ -301,6 +313,40 @@ class BoardClient(private val conn: MachineConnection, private val machine: Mach
             val r = conn.run(BoardCommands.locate(), timeoutSeconds = 15)
             if (r.exitStatus != 0) return null
             return r.stdout.lines().lastOrNull { it.isNotBlank() }?.trim()
+        }
+    }
+}
+
+/**
+ * The agents the board puts on a task, as `show` lists its settings: the worker and the reviewer
+ * (`claude/claude-opus-5-5`, `pi/deepseek/deepseek-flash`), each with the agents it falls back to, in order.
+ */
+data class AgentChoices(
+    val worker: String = "",
+    val workerFallback: List<String> = emptyList(),
+    val reviewer: String = "",
+    val reviewerFallback: List<String> = emptyList(),
+) {
+    /** The worker, then the agents it falls back to: what can be chosen to start a task. */
+    val workers: List<String> get() = (listOf(worker) + workerFallback).filter { it.isNotEmpty() }.distinct()
+
+    companion object {
+        private val ROW = Regex("""^\*?\s*([a-z][a-z0-9_.-]*)\s{2,}(.+?)\s{2,}\S.*$""")
+
+        /** `* worker.agent   claude/claude-opus-5-5   you`, one setting a row: its name, value and where it came from. */
+        fun parse(out: String): AgentChoices {
+            val v = HashMap<String, String>()
+            for (line in out.lines()) {
+                val m = ROW.find(line.trimEnd()) ?: continue
+                v[m.groupValues[1]] = m.groupValues[2].trim()
+            }
+            fun list(k: String) = v[k].orEmpty().split(',').map { it.trim() }.filter { it.isNotEmpty() && it != "none" }
+            return AgentChoices(
+                worker = v["worker.agent"].orEmpty().takeIf { it != "none" }.orEmpty(),
+                workerFallback = list("worker.fallback"),
+                reviewer = v["reviewer.agent"].orEmpty().takeIf { it != "none" }.orEmpty(),
+                reviewerFallback = list("reviewer.fallback"),
+            )
         }
     }
 }

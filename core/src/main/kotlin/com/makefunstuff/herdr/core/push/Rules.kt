@@ -21,6 +21,8 @@ data class AlertRules(
     val finished: Boolean = false,
     /** A review or a check failed, a task went wrong, a quick command failed. */
     val wentWrong: Boolean = true,
+    /** An AI provider near (80%, 95%) or at a limit, a task the board's fallback took over because of one. */
+    val limits: Boolean = true,
     /** No sound or pop-up while you are at a machine ([Presence]): you see it there. */
     val holdAtMachine: Boolean = true,
 ) {
@@ -28,21 +30,22 @@ data class AlertRules(
         Alert.Kind.NeedsYou -> needsYou
         Alert.Kind.Finished -> finished
         Alert.Kind.WentWrong -> wentWrong
+        Alert.Kind.Limits -> limits
         Alert.Kind.Test, Alert.Kind.Watch -> true
     }
 
     companion object {
         /** Everything on, nothing held: where no rules apply. */
-        val ALL = AlertRules(needsYou = true, finished = true, wentWrong = true, holdAtMachine = false)
+        val ALL = AlertRules(needsYou = true, finished = true, wentWrong = true, limits = true, holdAtMachine = false)
     }
 
     /** As the settings show it: "Needs you and Went wrong", "Only your watches", "Needs you, Finished and Went wrong". */
     val label: String get() {
-        val on = listOfNotNull("Needs you".takeIf { needsYou }, "Finished".takeIf { finished }, "Went wrong".takeIf { wentWrong })
+        val on = listOfNotNull("Needs you".takeIf { needsYou }, "Finished".takeIf { finished }, "Went wrong".takeIf { wentWrong }, "Limits".takeIf { limits })
         return when (on.size) {
             0 -> "Only your watches"
-            3 -> "Needs you, Finished and Went wrong"
-            else -> on.joinToString(" and ")
+            1, 2 -> on.joinToString(" and ")
+            else -> on.dropLast(1).joinToString(", ") + " and " + on.last()
         }
     }
 }

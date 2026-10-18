@@ -58,6 +58,14 @@ class FakeBoard(
             if ("--json" in args) pretty.encodeToString(JsonArray.serializer(), JsonArray(shown.map { tasks[it] })) + "\n"
             else shown.joinToString("") { keys.getOrElse(it) { "" } + "\n" }
         }
+        // A task's settings (or the board's own): the agents it gets, as `show` lists them.
+        args.firstOrNull() == "show" -> """
+            |* worker.agent              claude/claude-opus-5-5                              you
+            |* worker.fallback           codex/gpt-6.1-sol, pi/deepseek/deepseek-flash, pi/llama.cpp/qwen3.8-27b  you
+            |* reviewer.agent            codex/gpt-6.1-sol                                   you
+            |  reviewer.fallback         none                                                built in
+            |  board.agents              4                                                   built in
+            |""".trimMargin()
         args.firstOrNull() == "details" -> Demo.resource("board/details-${args[1].replace('/', '-')}.json")
         else -> "Done (demo board)\n"
     }

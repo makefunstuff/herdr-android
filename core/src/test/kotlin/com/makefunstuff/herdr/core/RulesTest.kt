@@ -61,16 +61,22 @@ class RulesTest {
         assertTrue(r.allows(a(Alert.Kind.NeedsYou)))
         assertFalse(r.allows(a(Alert.Kind.Finished)))
         assertTrue(r.allows(a(Alert.Kind.WentWrong)))
+        // A provider near its limit comes by default, and can be turned off.
+        assertTrue(r.allows(a(Alert.Kind.Limits)))
+        assertFalse(r.copy(limits = false).allows(a(Alert.Kind.Limits)))
         // A test and a watch you set always come.
-        val none = AlertRules(needsYou = false, finished = false, wentWrong = false)
+        val none = AlertRules(needsYou = false, finished = false, wentWrong = false, limits = false)
         assertTrue(none.allows(a(Alert.Kind.Test)))
         assertTrue(none.allows(a(Alert.Kind.Watch)))
         assertFalse(none.allows(a(Alert.Kind.NeedsYou)))
-        assertEquals("Needs you and Went wrong", r.label)
+        assertEquals("Needs you, Went wrong and Limits", r.label)
+        assertEquals("Needs you and Went wrong", r.copy(limits = false).label)
+        assertEquals("Needs you, Finished, Went wrong and Limits", AlertRules.ALL.label)
         assertEquals("Only your watches", none.label)
         // Quiet hours hold what finished and a watch; what went wrong comes through, as what needs you does.
         assertTrue(QuietHours.holds(a(Alert.Kind.Watch)))
         assertFalse(QuietHours.holds(a(Alert.Kind.WentWrong)))
+        assertTrue(QuietHours.holds(a(Alert.Kind.Limits)))
     }
 
     @Test
