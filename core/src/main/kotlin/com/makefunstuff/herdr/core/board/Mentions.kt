@@ -1,5 +1,7 @@
 package com.makefunstuff.herdr.core.board
 
+import com.makefunstuff.herdr.core.chat.Markdown
+
 /**
  * The tasks the Coordinator names in an answer (`AND-6`, `API-3`), so the chat can show each as a
  * row with the task's live state. Only keys on the board count: "GPT-4" or "UTF-8" stay words.
@@ -8,8 +10,14 @@ object TaskMentions {
     /** A task key as the board prints it: letters (and digits) from the repo's name, a dash, the task's number. */
     private val KEY = Regex("""(?<![\w-])([A-Z][A-Z0-9]{0,11}-[0-9]+)(?![\w-])""")
 
-    /** A list item that starts with a key, bold or not: "- **AND-6** Add app screenshots", "1. API-3: Speed up". */
-    private val ITEM = Regex("""^\s*(?:[-*+]|\d+[.)])\s+(?:\*\*|__|`)?([A-Z][A-Z0-9]{0,11}-[0-9]+)(?:\*\*|__|`)?(?:[\s:,.–—-]|$)""")
+    /**
+     * A list item that starts with a key, bold or not: "- **AND-6** Add app screenshots", "1. API-3: Speed up",
+     * "- **AND-9:** ready". Groups: the opening mark, the key, the mark that closes right after it.
+     */
+    private val ITEM = Regex("""^\s*(?:[-*+]|\d+[.)])\s+(\*\*|__|`)?([A-Z][A-Z0-9]{0,11}-[0-9]+)(\*\*|__|`)?(?=[\s:,.–—-]|$)""")
+
+    /** What a note's start is trimmed of: the spaces and marks between a key or a title and the words. */
+    private fun Char.lead() = isWhitespace() || this in ":,.;–—-"
 
     /** Any list item, for telling where a list starts and ends. */
     private val LIST_ITEM = Regex("""^\s*(?:[-*+]|\d+[.)])\s+""")
@@ -56,13 +64,15 @@ object TaskMentions {
                 i++
                 continue
             }
-            // A list: its items, each with the lines indented under it, and the blank lines between them.
+            // A list: its items, each with the lines indented under it (sub-items too), and the blank lines between them.
             val items = mutableListOf<MutableList<String>>()
+            val base = lines[i].indent()
             var end = i
             var j = i
             while (j < lines.size) {
                 val line = lines[j]
                 when {
+                    item(j) && items.isNotEmpty() && line.indent() > base -> { items.last() += line.trim(); end = j + 1 }
                     item(j) -> { items += mutableListOf(line); end = j + 1 }
                     line.isBlank() -> {}
                     !code[j] && line.first().isWhitespace() && items.isNotEmpty() && end == j -> { items.last() += line.trim(); end = j + 1 }
@@ -70,13 +80,12 @@ object TaskMentions {
                 }
                 j++
             }
-            val tasks = items.map { lines -> ITEM.find(lines.first())?.takeIf { it.groupValues[1] in known }?.let { m -> m to lines } }
+            val tasks = items.map { lines -> ITEM.find(lines.first())?.takeIf { it.groupValues[2] in known }?.let { m -> m to lines } }
             if (tasks.all { it != null }) {
                 flush()
                 tasks.forEach { t ->
                     val (m, itemLines) = t!!
-                    val first = itemLines.first().substring(m.range.last + 1).trimStart { it.isWhitespace() || it in ":–—-" }
-                    out += Part.Task(m.groupValues[1], (listOf(first) + itemLines.drop(1)).filter { it.isNotBlank() }.joinToString("\n").trim())
+                    out += Part.Task(m.groupValues[2], (listOf(rest(itemLines.first(), m)) + itemLines.drop(1)).filter { it.isNotBlank() }.joinToString("\n").trim())
                 }
             } else {
                 for (k in i until end) words.append(lines[k]).append('\n')
@@ -95,6 +104,53 @@ object TaskMentions {
         prose.flatMap { keys(it) }.filter { it in known && it !in shown }.distinct().forEach { out += Part.Task(it) }
         return if (out.isEmpty()) listOf(Part.Words(text)) else out
     }
+
+    /**
+     * The words of an item after its key. When the key's bold reaches past it ("**AND-9:** ready",
+     * "**AND-9 Fix login**: ready") the mark left over goes too, or opens the bold again.
+     */
+    private fun rest(line: String, m: MatchResult): String {
+        val after = line.substring(m.range.last + 1)
+        val open = m.groupValues[1]
+        if (open.isEmpty() || m.groupValues[3].isNotEmpty()) return after.trimStart { it.lead() }
+        val at = after.indexOf(open)
+        return when {
+            at < 0 -> after.trimStart { it.lead() }
+            after.substring(0, at).all { it.lead() } -> after.substring(at + open.length).trimStart { it.lead() }
+            else -> open + after.trimStart { it.lead() }
+        }
+    }
+
+    /**
+     * What [note] says beyond [title]: without its first line when that line is the title again, or
+     * without the title it starts with ("Fix login: ready to merge" gives "ready to merge"). The lines
+     * under it stay. Empty when it says nothing more.
+     */
+    fun beyondTitle(note: String, title: String): String {
+        if (note.isBlank()) return ""
+        val first = note.substringBefore('\n')
+        val under = note.substringAfter('\n', "")
+        val name = title.trim().trimEnd('.', '!', '?', ':', ';')
+        fun norm(s: String) = s.lowercase().replace(Regex("\\s+"), " ").trim()
+        val head = when {
+            name.isEmpty() -> first
+            norm(Markdown.plain(first)).trimEnd('.', '!', '?', ':', ';') == norm(name) -> ""
+            else -> {
+                // The title as written, bold or in code, or plain; then a mark before the words.
+                val raw = Regex("""^(\*\*|__|`)?""" + Regex.escape(name) + """\1?(?=[\s:,.;–—-])""", RegexOption.IGNORE_CASE).find(first)
+                val plain = Markdown.plain(first)
+                when {
+                    raw != null -> first.substring(raw.range.last + 1).trimStart { it.lead() }
+                    plain.startsWith(name, ignoreCase = true) && plain.getOrNull(name.length)?.lead() == true ->
+                        plain.substring(name.length).trimStart { it.lead() }
+                    else -> first
+                }
+            }
+        }
+        return listOf(head, under).filter { it.isNotBlank() }.joinToString("\n").trim()
+    }
+
+    private fun String.indent() = takeWhile { it == ' ' || it == '\t' }.length
 
     /** [text] without its fenced code blocks and `inline code`. */
     private fun withoutCode(text: String): String =

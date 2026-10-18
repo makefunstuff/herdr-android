@@ -61,6 +61,48 @@ class MentionsTest {
     }
 
     @Test
+    fun aBoldKeyLeavesNoMarkBehind() {
+        assertEquals(
+            listOf(Part.Task("AND-9", "ready to merge, review passed")),
+            TaskMentions.split("- **AND-9:** ready to merge, review passed", setOf("AND-9")),
+        )
+        assertEquals(
+            listOf(Part.Task("AND-9", "**Fix login**: ready to merge")),
+            TaskMentions.split("- **AND-9 Fix login**: ready to merge", setOf("AND-9")),
+        )
+        assertEquals(listOf(Part.Task("AND-9", "ready")), TaskMentions.split("- `AND-9`: ready", setOf("AND-9")))
+    }
+
+    @Test
+    fun subItemsStayWithTheirTask() {
+        val answer = "- **API-3** Speed up /jobs\n  - asks about the lock\n  - waits since 09:12\n- **AND-9** Fix login\n - ready to merge"
+        assertEquals(
+            listOf(
+                Part.Task("API-3", "Speed up /jobs\n- asks about the lock\n- waits since 09:12"),
+                Part.Task("AND-9", "Fix login\n- ready to merge"),
+            ),
+            TaskMentions.split(answer, setOf("API-3", "AND-9")),
+        )
+    }
+
+    @Test
+    fun theNoteSaysWhatTheTitleDoesNot() {
+        val title = "Speed up /jobs on large tables"
+        // The title again on the first line: the lines under it stay.
+        val note = TaskMentions.split("- **API-3** Speed up /jobs on large tables\n Asks whether the migration may lock the jobs table.", setOf("API-3")).single() as Part.Task
+        assertEquals("Asks whether the migration may lock the jobs table.", TaskMentions.beyondTitle(note.note, title))
+        assertEquals("", TaskMentions.beyondTitle("Speed up `/jobs` on large tables.", title))
+        assertEquals("", TaskMentions.beyondTitle("", title))
+        // The title it starts with goes, the words after it stay.
+        assertEquals("ready to merge", TaskMentions.beyondTitle("**Fix login**: ready to merge", "Fix login"))
+        assertEquals("touches `auth.kt`\nsecond line", TaskMentions.beyondTitle("Fix login — touches `auth.kt`\nsecond line", "Fix login"))
+        assertEquals("ready to merge", TaskMentions.beyondTitle("Speed up `/jobs` on large tables: ready to merge", title))
+        // Only a whole title counts.
+        assertEquals("Fix logins everywhere", TaskMentions.beyondTitle("Fix logins everywhere", "Fix login"))
+        assertEquals("asks which index to use", TaskMentions.beyondTitle("asks which index to use", title))
+    }
+
+    @Test
     fun aListThatMixesTasksAndOtherItemsStaysWords() {
         val answer = "1. AND-6 first\n2. Something else\n3. API-3 last"
         assertEquals(listOf(Part.Words(answer), Part.Task("AND-6"), Part.Task("API-3")), TaskMentions.split(answer, setOf("AND-6", "API-3")))

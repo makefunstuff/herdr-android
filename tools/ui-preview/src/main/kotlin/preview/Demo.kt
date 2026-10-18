@@ -335,9 +335,12 @@ object Demo {
             obj(
                 "you" to false,
                 "text" to "Three tasks wait for you:\n\n" +
-                    "- **API-3**: asks whether the migration may lock the jobs table for a few seconds\n" +
-                    "- **AND-9**: ready to merge, review passed\n" +
-                    "- **WEB-4**: the review found 2 problems in the install steps\n\n" +
+                    "- **API-3** Speed up /jobs on large tables\n" +
+                    "  Asks whether the migration may lock the jobs table for a few seconds.\n" +
+                    "- **AND-9:** ready to merge, review passed\n" +
+                    "- **WEB-4**: the review found 2 problems\n" +
+                    "  - the Homebrew step names the old tap\n" +
+                    "  - no step for Linux arm64\n\n" +
                     "AND-6 and EVAL-2 are still working.",
             ),
         )

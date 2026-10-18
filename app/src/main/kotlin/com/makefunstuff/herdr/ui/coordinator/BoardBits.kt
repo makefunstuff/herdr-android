@@ -37,6 +37,7 @@ import com.makefunstuff.herdr.core.board.BoardGlance
 import com.makefunstuff.herdr.core.board.BoardStatus
 import com.makefunstuff.herdr.core.board.BoardTask
 import com.makefunstuff.herdr.core.board.CoordinatorAsk
+import com.makefunstuff.herdr.core.board.TaskMentions
 import com.makefunstuff.herdr.ui.board.color
 import com.makefunstuff.herdr.ui.design.HerdrIcons
 import com.makefunstuff.herdr.ui.design.HerdrShapes
@@ -84,18 +85,18 @@ internal fun BoardStrip(glance: BoardGlance, onOpen: () -> Unit) {
 
 /**
  * A task the Coordinator named, as a row with its live state: a stripe in the board's colour, the
- * key, the title and where it stands, and under them what the answer says of it ([note]) when that
- * is more than the title again. A tap opens it on the board.
+ * key, the title and where it stands, and under them what the answer says of it ([note]) beyond
+ * the title. A tap opens it on the board.
  */
 @Composable
 internal fun TaskMention(t: BoardTask, note: String, onOpen: () -> Unit) {
     val c = Herdr.colors
     val color = t.status.color()
     val state = listOfNotNull(t.status.label, t.progress?.takeIf { t.status == BoardStatus.Working }?.let { "$it%" }).joinToString(" · ")
-    val said = remember(note, t.title) { note.takeIf { it.isNotBlank() && !sameWords(Markdown.plain(it), t.title) } }
+    val said = remember(note, t.title) { TaskMentions.beyondTitle(note, t.title).ifBlank { null } }
     QuietCard(
         Modifier.padding(vertical = Space.xs).semantics(mergeDescendants = true) {
-            contentDescription = listOfNotNull(t.name, t.title, state, said?.let { Markdown.plain(it) }).joinToString(", ")
+            contentDescription = listOfNotNull(t.name, t.title, state, said?.lines()?.joinToString(" ") { Markdown.plain(it) }).joinToString(", ")
         },
         onClick = onOpen,
         onClickLabel = "Open on the board",
@@ -116,12 +117,6 @@ internal fun TaskMention(t: BoardTask, note: String, onOpen: () -> Unit) {
             Icon(HerdrIcons.ChevronRight, null, tint = c.faint, modifier = Modifier.padding(start = Space.m, end = Space.m, top = if (top) Space.s + 8.dp else 0.dp).size(18.dp))
         }
     }
-}
-
-/** Whether two lines say the same, give or take case, spaces and the end's punctuation. */
-private fun sameWords(a: String, b: String): Boolean {
-    fun norm(s: String) = s.lowercase().replace(Regex("\\s+"), " ").trim().trimEnd('.', '!', '?', ':', ';')
-    return norm(a) == norm(b)
 }
 
 /** The suggested asks above the composer, in one row that scrolls sideways; a tap puts the words in the message box. */
