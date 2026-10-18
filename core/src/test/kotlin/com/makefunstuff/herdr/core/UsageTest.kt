@@ -194,7 +194,8 @@ class UsageTest {
         assertEquals("AND-49: codex/gpt-6.1-sol took over from claude/opus", ta.title)
         assertEquals("out of allowance until 17:00", ta.text)
         assertEquals("herdr-android/49", ta.taskId)
-        assertEquals(Alert.Kind.Finished, ta.kind)
+        assertEquals(Alert.Kind.Limits, ta.kind)
+        assertEquals(Alert.Kind.Limits, alert.kind)
     }
 
     // ---- herdr-usage itself, on a made-up home -----------------------------------------------------

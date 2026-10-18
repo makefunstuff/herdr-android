@@ -68,6 +68,16 @@
             android:taskAffinity=""
             android:theme="@style/Theme.Herdr.Invisible" />
 
+        <!-- A notification's button that can't be undone (Approve and merge, Always allow): asks for the
+             fingerprint over whatever is on screen, then hands the button to the service, and closes. -->
+        <activity
+            android:name=".guard.ConfirmActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|density|uiMode"
+            android:theme="@style/Theme.Herdr.Invisible" />
+
         <!-- Asking the Coordinator from anywhere: the share sheet and "Send to Coordinator" next to Copy
              land here, which hands what was shared to MainActivity in the app's own task. -->
         <activity

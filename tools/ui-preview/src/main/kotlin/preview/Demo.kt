@@ -140,6 +140,20 @@ object Demo {
         )
     }
 
+    /** Watches set from the long-press sheets: AND-6's checks, the eval on gpu-box finishing. */
+    fun watches() = listOf(
+        com.makefunstuff.herdr.core.push.Watch(DEVBOX, com.makefunstuff.herdr.core.push.Watch.What.ChecksPass, taskId = "herdr-android/6", name = "AND-6"),
+        com.makefunstuff.herdr.core.push.Watch(GPU, com.makefunstuff.herdr.core.push.Watch.What.AgentDone, paneId = "w1:p1", name = "the eval"),
+    )
+
+    /** AND-6 past its checks, in review: what fires its watch. */
+    fun and6Reviewing() = com.makefunstuff.herdr.core.board.BoardTasks.task(
+        kotlinx.serialization.json.Json.parseToJsonElement(
+            """{"id":"herdr-android/6","title":"Add app screenshots to the README","state":"working","stage":"reviewing"}""",
+        ) as JsonObject,
+        "AND-6",
+    )!!
+
     /** Quiet hours as someone might set them: with the phone's modes, and weeknights from 22:00 to 07:00. */
     fun quiet() = QuietHours(followPhone = true, schedule = true, start = 22 * 60, end = 7 * 60, days = (1..5).toSet())
 

@@ -1,8 +1,10 @@
 package com.makefunstuff.herdr.push
 
 import android.content.Context
+import com.makefunstuff.herdr.core.push.AlertRules
 import com.makefunstuff.herdr.core.push.PushSeal
 import com.makefunstuff.herdr.core.push.QuietHours
+import com.makefunstuff.herdr.core.push.Watch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -31,6 +33,10 @@ data class PushState(
     val live: Boolean = true,
     /** When notifications that can wait are held, to come as one summary later. */
     val quiet: QuietHours = QuietHours(),
+    /** Which kinds reach the phone, and whether they stay silent while you are at a machine. */
+    val rules: AlertRules = AlertRules(),
+    /** One-shot watches set from the long-press sheets, oldest first; each is removed once it fires. */
+    val watches: List<Watch> = emptyList(),
     val machines: Map<String, MachinePush> = emptyMap(),
 ) {
     fun machine(id: String): MachinePush = machines[id] ?: MachinePush()
@@ -57,13 +63,15 @@ data class MachinePush(
     val lastAt: Long = 0,
     /** Whether its subscription asks for what runs (Live Updates); null before one was made with it. */
     val live: Boolean? = null,
+    /** What its subscription watches ([com.makefunstuff.herdr.core.push.HerdrPush.watching]); null before one was made with it. */
+    val watching: String? = null,
 ) {
     val keyBytes: ByteArray? get() = key.takeIf { it.isNotEmpty() }?.let { runCatching { Base64.getDecoder().decode(it) }.getOrNull() }
 }
 
 /** [PushState], kept as a small JSON file in app storage. */
-class PushStore(context: Context) {
-    private val file = File(context.filesDir, "push.json")
+class PushStore(private val file: File) {
+    constructor(context: Context) : this(File(context.filesDir, "push.json"))
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
     private val _state = MutableStateFlow(load())

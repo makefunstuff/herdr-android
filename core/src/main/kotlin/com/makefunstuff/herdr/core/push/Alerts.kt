@@ -6,6 +6,8 @@ import com.makefunstuff.herdr.core.board.BoardAction
 import com.makefunstuff.herdr.core.board.BoardStatus
 import com.makefunstuff.herdr.core.board.BoardTask
 import com.makefunstuff.herdr.core.chat.BlockedPrompt
+import com.makefunstuff.herdr.core.chat.OptionRole
+import com.makefunstuff.herdr.core.guard.Guarded
 import com.makefunstuff.herdr.core.health.Disk
 import com.makefunstuff.herdr.core.health.HealthReport
 import com.makefunstuff.herdr.core.health.Sizes
@@ -45,7 +47,13 @@ data class Alert(
     /** A tap opens the review cards at the task: finished work that waits for a yes, a no or a choice ([Approvals.waits]). */
     val review: Boolean = false,
 ) {
-    enum class Kind { NeedsYou, Finished, Test }
+    /**
+     * What it is about, which the notification rules ([AlertRules]) switch on and off: something waits
+     * for you, something finished, something went wrong (a review or a check failed, a task errored),
+     * a test, a watch you set that fired ([Watch]), or an AI provider near or at a limit (and a task
+     * the board's fallback took over because of one).
+     */
+    enum class Kind { NeedsYou, Finished, WentWrong, Test, Watch, Limits }
 }
 
 /** A notification's button. */
@@ -57,10 +65,14 @@ data class AlertAction(
     val option: Int = -1,
     val optionLabel: String = "",
     val question: String = "",
+    /** [Type.Choose]: what the question showed of what it would do (the command), which must still be the same. */
+    val details: List<String> = emptyList(),
     /** [Type.Board]: the board command, a [BoardAction] name. */
     val board: String = "",
     /** The reply box's hint, for the reply types. */
     val hint: String = "",
+    /** A [com.makefunstuff.herdr.core.guard.Guarded] key: the button asks for the fingerprint first, when that is on. */
+    val guard: String = "",
 ) {
     enum class Type {
         /** Picks an option of the agent's question. */
@@ -171,10 +183,15 @@ object Alerts {
     /** Approve and Deny for a yes-or-no question; a short menu's own options; nothing for a longer one (a tap opens it). */
     private fun choices(prompt: BlockedPrompt?): List<AlertAction> {
         if (prompt == null) return emptyList()
-        fun choose(i: Int, label: String) =
-            AlertAction(AlertAction.Type.Choose, label, option = i, optionLabel = prompt.options[i].label, question = prompt.question)
+        fun choose(i: Int, label: String) = AlertAction(
+            AlertAction.Type.Choose, label, option = i, optionLabel = prompt.options[i].label, question = prompt.question, details = prompt.details,
+            // A permanent "don't ask again" changes what the agent may do for good.
+            guard = if (prompt.role(i) == OptionRole.Always) Guarded.AlwaysAllow.key else "",
+        )
+        // A multiple choice or a form of several questions is answered in the chat.
+        if (prompt.multiSelect || prompt.steps.isNotEmpty()) return emptyList()
         if (prompt.yesNo) return listOf(choose(prompt.approveIndex!!, "Approve"), choose(prompt.denyIndex!!, "Deny"))
-        if (prompt.options.size <= 2) return prompt.options.indices.map { choose(it, short(prompt.options[it].label)) }
+        if (prompt.options.size <= 2) return prompt.options.indices.map { choose(it, short(prompt.shortLabel(it))) }
         return emptyList()
     }
 
@@ -187,7 +204,7 @@ object Alerts {
         val coordinator = AlertAction(AlertAction.Type.AskCoordinator, "Ask Coordinator", hint = "About ${t.name}, to the Coordinator")
         fun board(action: BoardAction, label: String) = AlertAction(AlertAction.Type.Board, label, board = action.name)
         val actions = when (s) {
-            BoardStatus.Approval -> listOf(board(BoardAction.Approve, "Approve and merge"), coordinator)
+            BoardStatus.Approval -> listOf(board(BoardAction.Approve, "Approve and merge").copy(guard = Guarded.Merge.key), coordinator)
             BoardStatus.ReviewFailed -> listOf(board(BoardAction.Review, "Send findings back"), coordinator)
             BoardStatus.PlanReady -> listOf(
                 board(BoardAction.ApprovePlan, "Approve plan"),
@@ -203,7 +220,7 @@ object Alerts {
             Alert(
                 tag = tag,
                 sig = listOf(t.state, t.stage, t.kind, t.reviewRound, t.reviewPassed, t.approvalBlocked).joinToString("|"),
-                kind = Alert.Kind.NeedsYou,
+                kind = if (wentWrong(t)) Alert.Kind.WentWrong else Alert.Kind.NeedsYou,
                 machineId = machineId,
                 title = "${t.name} ${s.label}",
                 text = t.title,
@@ -215,6 +232,9 @@ object Alerts {
             ),
         )
     }
+
+    /** A task that waits for you because something failed: its review, or its run (a check, an error). */
+    fun wentWrong(t: BoardTask): Boolean = t.status == BoardStatus.ReviewFailed || t.status == BoardStatus.Error
 
     /**
      * A machine low on RAM or disk: what is low, and what uses the most memory. It needs you (a full
@@ -256,7 +276,7 @@ object Alerts {
             Alert(
                 tag = tag,
                 sig = "quick:${e.state}",
-                kind = Alert.Kind.Finished,
+                kind = if (e.state == "done") Alert.Kind.Finished else Alert.Kind.WentWrong,
                 machineId = machineId,
                 title = title,
                 text = text,
@@ -282,6 +302,7 @@ object Alerts {
     /**
      * A provider near a limit (80%), almost out (95%) or out (100%); each mark once per window (a new
      * window resets [UsageLimit.resets], and with it the signature). It can wait: quiet hours hold it.
+     * Its kind is [Alert.Kind.Limits], which the notification rules switch on and off.
      * Back under the marks (level 0), it comes down.
      */
     fun usage(machineId: String, machineLabel: String, e: PushEvent.Usage, now: Long = System.currentTimeMillis() / 1000): AlertChange {
@@ -292,7 +313,7 @@ object Alerts {
             Alert(
                 tag = tag,
                 sig = "usage:${e.level}:${e.limit.resets ?: 0}",
-                kind = Alert.Kind.Finished,
+                kind = Alert.Kind.Limits,
                 machineId = machineId,
                 title = title,
                 text = text,
@@ -310,7 +331,7 @@ object Alerts {
             Alert(
                 tag = takeoverTag(machineId, e.taskId),
                 sig = "takeover:${e.at}",
-                kind = Alert.Kind.Finished,
+                kind = Alert.Kind.Limits,
                 machineId = machineId,
                 title = "${e.name}: $words$role",
                 text = e.why.ifEmpty { e.title },

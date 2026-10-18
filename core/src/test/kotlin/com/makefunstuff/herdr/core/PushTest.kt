@@ -20,6 +20,9 @@ import com.makefunstuff.herdr.core.push.PushEvent
 import com.makefunstuff.herdr.core.push.PushMessage
 import com.makefunstuff.herdr.core.push.PushMessages
 import com.makefunstuff.herdr.core.push.PushSeal
+import com.makefunstuff.herdr.core.push.Presence
+import com.makefunstuff.herdr.core.push.Watch
+import com.makefunstuff.herdr.core.push.Watches
 import com.sun.net.httpserver.HttpServer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
@@ -112,6 +115,8 @@ class AlertsTest {
         assertEquals("Yes", a.actions[0].optionLabel)
         assertEquals(2, a.actions[1].option)
         assertEquals("Do you want to proceed?", a.actions[1].question)
+        // What it would run must still be the same when the button is pressed.
+        assertTrue("touch b.txt" in a.actions[0].details, a.actions[0].details.toString())
         assertTrue(a.detail.endsWith("devbox · api › agents"))
         assertEquals("blocked#7", a.sig)
     }
@@ -128,6 +133,37 @@ class AlertsTest {
         assertEquals(listOf("Trust and continue", "Back to Agent Command C…", "Reply"), a.actions.map { it.label })
         val claudeTrust = assertNotNull(BlockedPrompt.parse(screen("claude-trust.txt")))
         assertTrue(claudeTrust.yesNo)
+    }
+
+    @Test
+    fun anAlwaysAllowButtonIsGuarded() {
+        // pi's two-option menu: each option is a button, and the permanent one asks for the fingerprint.
+        val screen = " Allow the extension to run git push?\n\n→ Allow once\n  Always allow\n\n ↑↓ navigate · enter select\n"
+        val a = show(Alerts.of("m1", "devbox", PushEvent.Agent(agent("blocked"), "", screen)))
+        assertEquals(listOf("Allow once", "Always allow", "Reply"), a.actions.map { it.label })
+        assertEquals(listOf("", "always", ""), a.actions.map { it.guard })
+        // Approve and Deny never press a permanent allow.
+        val yesNo = show(Alerts.of("m1", "devbox", PushEvent.Agent(agent("blocked"), "", screen("claude-permission.txt"))))
+        assertEquals(listOf("", "", ""), yesNo.actions.map { it.guard })
+    }
+
+    @Test
+    fun aClaudeFormIsAnsweredInTheChat() {
+        val screen = """
+            ←  ☐ Route  ☐ Author  ✔ Submit  →
+            Which way should the PR go?
+            ❯ 1. Log in as owner
+                 Authenticate as the repository owner.
+              2. Fork
+                 Push the branch to a fork.
+              3. Type something.
+            ────────────────────────────────────────
+              4. Chat about this
+            Enter to select · Tab/Arrow keys to navigate · Esc to cancel
+        """.trimIndent()
+        val a = show(Alerts.of("m1", "devbox", PushEvent.Agent(agent("blocked"), "", screen)))
+        assertEquals("Which way should the PR go?", a.text)
+        assertEquals(listOf("Reply"), a.actions.map { it.label })
     }
 
     @Test
@@ -162,6 +198,9 @@ class AlertsTest {
         assertEquals("herdr-android/7", approve.taskId)
         assertEquals(listOf("Approve and merge", "Ask Coordinator"), approve.actions.map { it.label })
         assertEquals(BoardAction.Approve, approve.actions[0].boardAction)
+        // A merge from the notification asks for the fingerprint first, when that is on.
+        assertEquals("merge", approve.actions[0].guard)
+        assertEquals("", approve.actions[1].guard)
         // Finished work: a tap opens its review card.
         assertTrue(approve.review)
 
@@ -225,7 +264,7 @@ class HerdrPushTest {
     @Test
     fun bundledScriptIsTheOneInHost() {
         assertEquals(script.readText(), HerdrPush.script)
-        assertEquals("6", HerdrPush.version)
+        assertEquals("7", HerdrPush.version)
     }
 
     @Test
@@ -328,7 +367,7 @@ class HerdrPushTest {
             val (_, t) = assertNotNull(PushMessages.open(received[2], mapOf("m1" to key)))
             assertEquals(listOf<PushEvent>(PushEvent.Test), t.events)
             val status = HerdrPush.status(assertNotNull(HerdrPush.answer(sh(dir, env, HerdrPush.command("status")).out)), "phone1:m1")
-            assertEquals("6", status.version)
+            assertEquals("7", status.version)
             assertTrue(status.subscribed)
             assertNull(status.error)
 
@@ -595,6 +634,86 @@ class HerdrPushTest {
             val plain = pushes("/plain", plainKey).single()
             assertTrue(plain.events.none { it is PushEvent.Live })
             assertEquals(2, plain.events.size)
+        } finally {
+            server.stop(0)
+            dir.deleteRecursively()
+        }
+    }
+
+    /**
+     * Who is at the machine rides on every push (and answers `presence`), and a phone's watches: a
+     * watched task's or agent's every change goes to that phone alone, and fires its watch there.
+     */
+    @Test
+    fun presenceAndWatches() {
+        assumeTrue(python(), "python3 isn't installed")
+        val dir = Files.createTempDirectory("herdr-push").toFile()
+        val received = CopyOnWriteArrayList<Pair<String, String>>()
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+        server.createContext("/") { ex ->
+            received += ex.requestURI.path to ex.requestBody.readBytes().toString(Charsets.UTF_8)
+            ex.sendResponseHeaders(200, -1)
+            ex.close()
+        }
+        server.start()
+        try {
+            val fake = File(dir, "fake").apply { mkdirs() }
+            val herdr = File(fake, "herdr").apply {
+                writeText("#!/bin/sh\ncase \"\$1 \$2\" in\n\"api snapshot\") cat \"\$FAKE/snapshot.json\";;\n\"pane read\") echo;;\n*) exit 3;;\nesac\n")
+                setExecutable(true)
+            }
+            val board = File(fake, "herdr-projects").apply {
+                writeText("#!/bin/sh\nif [ \"\$2\" = --json ]; then cat \"\$FAKE/tasks.json\"; else echo \"AND-7    working  [claude]  Board view\"; fi\n")
+                setExecutable(true)
+            }
+            fun agents(status: String) = File(fake, "snapshot.json").writeText(
+                """{"result":{"snapshot":{"agents":[{"pane_id":"w1:p1","workspace_id":"w1","tab_id":"t1","agent":"claude","name":"api","agent_status":"$status","state_change_seq":4}]}}}""",
+            )
+            fun stage(stage: String) = File(fake, "tasks.json").writeText("""[{"id":"herdr-android/7","title":"Board view","state":"working","stage":"$stage"}]""")
+            agents("working")
+            stage("working")
+            val state = File(dir, "state")
+            val env = mapOf(
+                "HOME" to dir.path, "FAKE" to fake.path, "HERDR_PUSH_HOME" to state.path, "HERDR_PUSH_HEALTH_EVERY" to "0",
+                "HERDR_PUSH_BOARD_EVERY" to "1", "HERDR_PUSH_SCREEN" to "unlocked",
+            )
+            assertEquals(0, sh(dir, env, HerdrPush.installCommand(), HerdrPush.script).exit)
+            val base = "http://127.0.0.1:${server.address.port}"
+            val key = PushSeal.newKey()
+            val otherKey = PushSeal.newKey()
+            sh(dir, env, HerdrPush.command("subscribe"), HerdrPush.subscription("phone1:m1", "Pixel", "$base/watching", key, "default", herdr.path, board.path, watchTasks = listOf("herdr-android/7"), watchPanes = listOf("w1:p1")))
+            sh(dir, env, HerdrPush.command("subscribe"), HerdrPush.subscription("phone2:m1", "Other", "$base/other", otherKey, "default", herdr.path, board.path))
+            fun pushes(path: String, k: ByteArray) = received.filter { it.first == path }.map { assertNotNull(PushMessages.open(it.second, mapOf("m1" to k))).second }
+
+            // Nobody typed in herdr here yet; the screen is unlocked.
+            val nobody = PushMessages.presence(assertNotNull(HerdrPush.answer(sh(dir, env, HerdrPush.command("presence")).out)))
+            assertEquals(Presence(typedAgo = null, unlocked = true), nobody)
+
+            assertEquals(0, sh(dir, env, HerdrPush.command("once")).exit)
+            assertTrue(received.isEmpty())
+            // The task moves on to its checks: only the watching phone hears, and its watch waits on.
+            stage("checking")
+            assertEquals(0, sh(dir, env, HerdrPush.command("once")).exit)
+            val checking = pushes("/watching", key).single()
+            val watch = Watch("m1", Watch.What.ChecksPass, taskId = "herdr-android/7", name = "AND-7")
+            assertTrue(Watches.events(listOf(watch), "m1", "devbox", checking.events).isEmpty())
+            assertTrue(pushes("/other", otherKey).isEmpty())
+            // Someone types (the presence file), and the checks pass: the watch fires, and the push says they are here.
+            File(state, "present").writeText("")
+            stage("reviewing")
+            assertEquals(0, sh(dir, env, HerdrPush.command("once")).exit)
+            val passed = pushes("/watching", key).last()
+            assertEquals("AND-7's checks passed", Watches.events(listOf(watch), "m1", "devbox", passed.events).single().alert?.title)
+            val here = assertNotNull(passed.presence)
+            assertEquals(true, here.unlocked)
+            assertTrue(here.typedAgo!! in 0..30)
+            // The watched agent goes from working to idle (not done: no notification for anyone else).
+            agents("idle")
+            assertEquals(0, sh(dir, env, HerdrPush.command("once")).exit)
+            val idle = pushes("/watching", key).last()
+            val agentWatch = Watch("m1", Watch.What.AgentDone, paneId = "w1:p1", name = "api", seq = 3)
+            assertEquals("api finished", Watches.events(listOf(agentWatch), "m1", "devbox", idle.events).single().alert?.title)
+            assertTrue(pushes("/other", otherKey).isEmpty())
         } finally {
             server.stop(0)
             dir.deleteRecursively()

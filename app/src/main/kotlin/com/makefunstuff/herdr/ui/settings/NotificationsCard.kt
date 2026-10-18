@@ -54,11 +54,12 @@ private const val POST_NOTIFICATIONS = "android.permission.POST_NOTIFICATIONS"
 private val CHECKS = listOf(0 to "Never", 15 to "15 min", 60 to "1 hour")
 
 /**
- * Notifications while the app is closed: the switch, the push app that carries them, each machine's
- * herdr-push, Live Updates, the way to quiet hours, and how often the app looks at the machines itself.
+ * Notifications while the app is closed: the switch, what reaches the phone (and the watches), the
+ * push app that carries them, each machine's herdr-push, Live Updates, the way to quiet hours, and
+ * how often the app looks at the machines itself.
  */
 @Composable
-fun NotificationsCard(onQuietHours: () -> Unit) {
+fun NotificationsCard(onQuietHours: () -> Unit, onRules: () -> Unit) {
     val container = LocalContainer.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -85,7 +86,7 @@ fun NotificationsCard(onQuietHours: () -> Unit) {
         Text("Notifications", style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
         SwitchRow(
             "While the app is closed",
-            detail = "When an agent needs you or finishes, or a board task waits for you. Approve, deny or reply from the notification.",
+            detail = "When an agent or a board task needs you, something went wrong, or a watch you set fires. Approve, deny or reply from the notification.",
             checked = st.on,
         ) { on ->
             if (on) {
@@ -102,6 +103,8 @@ fun NotificationsCard(onQuietHours: () -> Unit) {
             Notice("Android blocks this app's notifications, so none can show.", color = c.red, icon = HerdrIcons.BellOff)
             SecondaryButton("Allow notifications") { allow() }
         }
+
+        LinkRow("What reaches the phone", rulesLabel(st.rules, st.watches.size), onRules)
 
         PushAppLine(st, pushApps, phone::label, onGet = phone::getPushApp, onAsk = { container.pushHosts.turnOn() })
 
@@ -142,7 +145,11 @@ fun NotificationsCard(onQuietHours: () -> Unit) {
             SecondaryButton("Turn on Live Updates") { phone.openLiveSettings() }
         }
 
-        QuietHoursRow(st.quiet.label, onQuietHours)
+        Column {
+            RowDivider(inset = 0.dp)
+            LinkRow("Quiet hours", st.quiet.label, onQuietHours)
+            RowDivider(inset = 0.dp)
+        }
 
         Text("The app also looks", style = MaterialTheme.typography.titleSmall)
         SegmentedPills(
@@ -162,24 +169,20 @@ fun NotificationsCard(onQuietHours: () -> Unit) {
     }
 }
 
-/** The way to quiet hours, with how they are set. */
+/** The way to a page of the notification settings (quiet hours, what reaches the phone), with how it is set. */
 @Composable
-private fun QuietHoursRow(label: String, onClick: () -> Unit) {
+private fun LinkRow(title: String, label: String, onClick: () -> Unit) {
     val c = Herdr.colors
-    Column {
-        RowDivider(inset = 0.dp)
-        Row(
-            Modifier.fillMaxWidth().heightIn(min = 56.dp).clickable(onClick = onClick).padding(vertical = Space.s),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text("Quiet hours", style = MaterialTheme.typography.titleMedium, color = c.strong)
-                Text(label, style = MaterialTheme.typography.bodySmall, color = c.muted)
-            }
-            Spacer(Modifier.width(Space.s))
-            Icon(HerdrIcons.ChevronRight, null, tint = c.muted, modifier = Modifier.size(18.dp))
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = 56.dp).clickable(onClick = onClick).padding(vertical = Space.s),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.titleMedium, color = c.strong)
+            Text(label, style = MaterialTheme.typography.bodySmall, color = c.muted)
         }
-        RowDivider(inset = 0.dp)
+        Spacer(Modifier.width(Space.s))
+        Icon(HerdrIcons.ChevronRight, null, tint = c.muted, modifier = Modifier.size(18.dp))
     }
 }
 

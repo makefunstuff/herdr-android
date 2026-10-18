@@ -1,5 +1,8 @@
 package com.makefunstuff.herdr.ui.agents
 
+import com.makefunstuff.herdr.core.chat.OptionRole
+import com.makefunstuff.herdr.core.guard.Guarded
+
 import android.net.Uri
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -151,14 +154,16 @@ fun AgentsScreen(
     val showMachine = hosts.size > 1 && filter == null
     val anyBoard = hosts.any { it.hasBoard }
 
-    fun answer(q: Waiting.Question, prompt: BlockedPrompt, index: Int) {
+    val guard = com.makefunstuff.herdr.ui.common.LocalGuard.current
+
+    fun press(q: Waiting.Question, prompt: BlockedPrompt, index: Int) {
         if (q.key in busy) return
         val label = prompt.options[index].label
         busy[q.key] = "Answering: $label"
         scope.launch {
             runCatching {
                 val session = container.hosts.session(q.machineId) ?: error("This machine isn't in the app any more")
-                AgentInput.choose(session.awaitApi(10_000), q.agent.agent.paneId, prompt.question, index, label)
+                AgentInput.choose(session.awaitApi(10_000), q.agent.agent.paneId, prompt.question, index, label, prompt.details)
                 session.refresh()
             }
                 .onSuccess {
@@ -169,6 +174,13 @@ fun AgentsScreen(
                 .onFailure { context.toast(it.message ?: "Couldn't answer") }
             busy.remove(q.key)
         }
+    }
+
+    /** An answer from the card; a permanent "always allow" asks for the fingerprint first, as on the chat's card and the notification. */
+    fun answer(q: Waiting.Question, prompt: BlockedPrompt, index: Int) {
+        if (prompt.role(index) == OptionRole.Always) {
+            guard.run(Guarded.AlwaysAllow, "${prompt.shortLabel(index)}?", prompt.details.firstOrNull { it.startsWith("$ ") } ?: prompt.question) { press(q, prompt, index) }
+        } else press(q, prompt, index)
     }
 
     fun say(r: Reply, text: String) {
@@ -193,9 +205,8 @@ fun AgentsScreen(
         }
     }
 
-    fun act(w: Waiting.Task, action: BoardAction, label: String) {
+    fun carryOut(w: Waiting.Task, action: BoardAction, label: String) {
         if (w.key in busy) return
-        if (action == BoardAction.Tell) { reply = Reply.ToTask(w); return }
         busy[w.key] = "$label · ${w.task.name}"
         scope.launch {
             runCatching { (container.hosts.session(w.machineId) ?: error("This machine isn't in the app any more")).awaitBoard().act(action, w.task.id) }
@@ -209,6 +220,16 @@ fun AgentsScreen(
             busy.remove(w.key)
             readNow.trySend(Unit)
         }
+    }
+
+    fun act(w: Waiting.Task, action: BoardAction, label: String) {
+        if (w.key in busy) return
+        if (action == BoardAction.Tell) { reply = Reply.ToTask(w); return }
+        // A merge can't be taken back: the fingerprint first, when that is on.
+        if (action == BoardAction.Approve || action == BoardAction.ApproveAnyway) {
+            return guard.run(Guarded.Merge, "Approve and merge ${w.task.name}?", w.task.title) { carryOut(w, action, label) }
+        }
+        carryOut(w, action, label)
     }
 
     /** Finished work opens on its review card (what changed, the review, the checks); any other task on its board. */

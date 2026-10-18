@@ -64,8 +64,11 @@ data class LiveAgent(val agent: AgentInfo, val where: String, val since: Long = 
 /** A running task; [reviews] is how many reviews it gets at most, when known. [since]: when its current part began. */
 data class LiveTask(val task: BoardTask, val reviews: Int? = null, val since: Long = 0)
 
-/** A push from herdr-push (host/herdr-push): `{"v":1,"host":…,"at":…,"events":[…]}`, sealed. */
-data class PushMessage(val host: String, val at: Long, val events: List<PushEvent>)
+/**
+ * A push from herdr-push (host/herdr-push): `{"v":1,"host":…,"at":…,"events":[…],"present":{…}}`, sealed.
+ * [presence]: whether someone is at that machine as it sent it; null from an older herdr-push.
+ */
+data class PushMessage(val host: String, val at: Long, val events: List<PushEvent>, val presence: Presence? = null)
 
 object PushMessages {
     /** The machine whose key opens [text], and what it says; null when none does. */
@@ -94,8 +97,14 @@ object PushMessages {
     fun parse(json: String): PushMessage? {
         val o = runCatching { HerdrJson.parseToJsonElement(json).jsonObject }.getOrNull() ?: return null
         val events = (o["events"] as? JsonArray).orEmpty().mapNotNull { e -> event(e as? JsonObject ?: return@mapNotNull null) }
-        return PushMessage(o.str("host"), (o["at"] as? JsonPrimitive)?.longOrNull ?: 0, events)
+        return PushMessage(o.str("host"), (o["at"] as? JsonPrimitive)?.longOrNull ?: 0, events, (o["present"] as? JsonObject)?.let(::presence))
     }
+
+    /** `{"typed": <seconds ago, or null>, "unlocked": <true, false or null>}`: herdr-push's `present`, also its `presence` command's answer. */
+    fun presence(o: JsonObject): Presence = Presence(
+        typedAgo = (o["typed"] as? JsonPrimitive)?.takeIf { !it.isString }?.longOrNull,
+        unlocked = (o["unlocked"] as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull,
+    )
 
     private fun event(e: JsonObject): PushEvent? = when (e.str("type")) {
         "agent" -> (e["agent"] as? JsonObject)?.let { a ->

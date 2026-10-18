@@ -9,6 +9,7 @@ import com.makefunstuff.herdr.core.board.BoardStatus
 import com.makefunstuff.herdr.core.board.BoardTask
 import com.makefunstuff.herdr.core.board.BoardTasks
 import com.makefunstuff.herdr.core.chat.AgentInput
+import com.makefunstuff.herdr.core.chat.BlockedPrompt
 import com.makefunstuff.herdr.core.home.BoardGroup
 import com.makefunstuff.herdr.core.home.Home
 import com.makefunstuff.herdr.core.home.HomeAgent
@@ -177,19 +178,25 @@ class HomeTest {
 
     @Test
     fun anAnswerReadsTheScreenAgainFirst() = runBlocking {
+        val shown = BlockedPrompt.parse(menu)!!.details
         val fake = Screen("blocked", menu)
-        AgentInput.choose(HerdrApi(fake), "w1:p1", "Do you want to proceed?", 2, "No, and tell Claude what to do differently")
+        AgentInput.choose(HerdrApi(fake), "w1:p1", "Do you want to proceed?", 2, "No, and tell Claude what to do differently", shown)
         assertTrue(fake.keys.single().contains("down") && fake.keys.single().contains("enter"), fake.keys.toString())
 
         // Another question by now: nothing is pressed.
         val changed = Screen("blocked", menu.replace("Do you want to proceed?", "Do you want to delete the table?"))
-        val e = assertFailsWith<IOException> { AgentInput.choose(HerdrApi(changed), "w1:p1", "Do you want to proceed?", 0, "Yes") }
+        val e = assertFailsWith<IOException> { AgentInput.choose(HerdrApi(changed), "w1:p1", "Do you want to proceed?", 0, "Yes", shown) }
         assertEquals("The question changed. Open the chat to answer it.", e.message)
         assertTrue(changed.keys.isEmpty())
 
+        // The same question with the same options, about another command: nothing is pressed either.
+        val other = Screen("blocked", menu.replace("npm run db:migrate", "npm run db:reset --force"))
+        assertFailsWith<IOException> { AgentInput.choose(HerdrApi(other), "w1:p1", "Do you want to proceed?", 0, "Yes", shown) }
+        assertTrue(other.keys.isEmpty())
+
         // Answered meanwhile at the desk.
         val gone = Screen("working", menu)
-        assertFailsWith<IOException> { AgentInput.choose(HerdrApi(gone), "w1:p1", "Do you want to proceed?", 0, "Yes") }
+        assertFailsWith<IOException> { AgentInput.choose(HerdrApi(gone), "w1:p1", "Do you want to proceed?", 0, "Yes", shown) }
         assertTrue(gone.keys.isEmpty())
     }
 }

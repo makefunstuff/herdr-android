@@ -57,8 +57,13 @@ class HerdrApp : Application() {
 
         container = AppContainer(this)
         ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
-            override fun onStart(owner: LifecycleOwner) = container.hosts.setForeground(true)
+            override fun onStart(owner: LifecycleOwner) {
+                container.guard.started()
+                container.hosts.setForeground(true)
+            }
             override fun onStop(owner: LifecycleOwner) {
+                // The app lock counts the time away from here.
+                container.guard.stopped()
                 // What the screens showed was seen; the next look while closed reports only what is new.
                 container.alertWork.leaving()
                 container.briefWork.leaving()
@@ -105,13 +110,18 @@ class AppContainer(app: Application) {
         java.io.File(app.filesDir, "images.json"), java.io.File(app.filesDir, "images"), java.io.File(app.cacheDir, "sent-images"),
     )
     val push = PushStore(app)
-    val inbox = Inbox(java.io.File(app.filesDir, "alerts.json"), AndroidAlerts(app))
+    /** Which actions ask for the fingerprint, and the app lock. */
+    val guard = com.makefunstuff.herdr.data.GuardStore(java.io.File(app.filesDir, "guard.json"), com.makefunstuff.herdr.guard.AndroidUnlock(app))
+    // With the app lock on, a locked phone shows its notifications without what they are about.
+    val inbox = Inbox(java.io.File(app.filesDir, "alerts.json"), AndroidAlerts(app, appLock = { guard.state.value.appLock }))
     val phone = AndroidPhone(app, push)
     val pushHosts = PushHosts(scope, hosts, machines, push, phone)
     val quietWork = QuietWork(scope, push.state, phone, inbox, foreground = { hosts.isForeground })
     val liveWork = LiveWork(scope, hosts, machines, push, AndroidLive(app), quietWork)
     val tally = TallyStore(java.io.File(app.filesDir, "tally.json"), machines)
-    val alertWork = AlertWork(hosts, machines, push, inbox, liveWork, quietWork, tally, quick, usage)
+    /** One-shot watches set from the long-press sheets. */
+    val watchWork = com.makefunstuff.herdr.push.WatchWork(push, inbox, quietWork)
+    val alertWork = AlertWork(hosts, machines, push, inbox, liveWork, quietWork, tally, quick, watchWork, usage)
     /** Every board's list as last read, and which finished agents the phone has shown: the Agents screen's and the Board tab's. */
     val boards = com.makefunstuff.herdr.data.BoardLists(hosts, onRead = { id, tasks -> tally.tasks(id, tasks) })
     val seen = com.makefunstuff.herdr.data.SeenStore(java.io.File(app.filesDir, "seen.json"))
@@ -131,6 +141,7 @@ class AppContainer(app: Application) {
         // The boards the app reads while on screen are what the person saw, for the brief.
         tally.start(scope, hosts, onBoard = { id, tasks -> boards.put(id, tasks); briefWork.looked(id, tasks, null) })
         briefWork.start()
+        watchWork.start(scope, hosts, boards)
         usage.start(scope, hosts, machines)
         // Shared files waiting for a machine taken out of the app go with it.
         scope.launch { machines.machines.collect { list -> shares.keep(list.map { it.id }.toSet()) } }

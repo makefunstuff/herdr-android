@@ -1,5 +1,7 @@
 package com.makefunstuff.herdr.ui.worktrees
 
+import com.makefunstuff.herdr.core.guard.Guarded
+
 import com.makefunstuff.herdr.ui.design.SheetTitle
 import com.makefunstuff.herdr.ui.design.FieldLabel
 import com.makefunstuff.herdr.ui.theme.Space
@@ -145,6 +147,7 @@ data class RemoveRequest(val title: String, val path: String, val workspaceId: S
 @Composable
 fun RemoveWorktreeFlow(session: HostSession, request: RemoveRequest, onDone: (removed: Boolean) -> Unit) {
     val context = LocalContext.current
+    val guard = com.makefunstuff.herdr.ui.common.LocalGuard.current
     val scope = rememberCoroutineScope()
     var busy by remember { mutableStateOf(false) }
     // Set once herdr refused because of changes: the workspace to force, and whether we opened it.
@@ -203,7 +206,8 @@ fun RemoveWorktreeFlow(session: HostSession, request: RemoveRequest, onDone: (re
             },
             confirmButton = {
                 QuietButton(
-                    onClick = { remove(force = false) },
+                    // The fingerprint first, when that is on; herdr asking again about changes doesn't need it twice.
+                    onClick = { guard.run(Guarded.RemoveWorktree, "Remove ${request.title}?", request.path.shortPath()) { remove(force = false) } },
                     enabled = !busy,
                     color = Herdr.colors.red,
                 ) { Text(if (busy) "Removing…" else "Remove") }

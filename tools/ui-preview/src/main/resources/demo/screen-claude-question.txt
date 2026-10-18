@@ -1,0 +1,17 @@
+[32m●[0m [1mWrite[0m(migrations/0042_jobs_created_at.sql)
+  ⎿  Wrote 1 line
+
+────────────────────────────────────────────────────────
+☐ Index
+
+Which index should the migration add?
+
+❯ 1. created_at only (Recommended)
+     Smallest; the slow query filters on it alone.
+  2. tenant_id, created_at
+     Also serves the per-tenant job list, at twice the size.
+  3. Type something.
+────────────────────────────────────────────────────────
+  4. Chat about this
+
+Enter to select · ↑/↓ to navigate · Esc to cancel

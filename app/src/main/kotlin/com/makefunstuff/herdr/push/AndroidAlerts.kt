@@ -18,12 +18,17 @@ import com.makefunstuff.herdr.R
 import com.makefunstuff.herdr.bubble.BubbleChat
 import com.makefunstuff.herdr.bubble.FloatActivity
 import com.makefunstuff.herdr.core.push.Alert
+import com.makefunstuff.herdr.core.push.AlertAction
+import com.makefunstuff.herdr.guard.ConfirmActivity
 import com.makefunstuff.herdr.core.push.LiveItems
 import com.makefunstuff.herdr.core.push.QuietSummary
 import kotlinx.serialization.json.Json
 
-/** [AlertSink] on Android: notifications with their buttons, on two channels. */
-class AndroidAlerts(private val context: Context) : AlertSink {
+/**
+ * [AlertSink] on Android: notifications with their buttons, on two channels. With the app lock on
+ * ([appLock]), a locked phone shows only that something needs you: no question, no command, no buttons.
+ */
+class AndroidAlerts(private val context: Context, private val appLock: () -> Boolean = { false }) : AlertSink {
     private val nm = NotificationManagerCompat.from(context)
 
     init {
@@ -35,6 +40,15 @@ class AndroidAlerts(private val context: Context) : AlertSink {
                 },
                 NotificationChannel(FINISHED, "Finished", NotificationManager.IMPORTANCE_DEFAULT).apply {
                     description = "An agent finished its work"
+                },
+                NotificationChannel(WENT_WRONG, "Went wrong", NotificationManager.IMPORTANCE_HIGH).apply {
+                    description = "A review or a check failed, or a task went wrong"
+                },
+                NotificationChannel(WATCHES, "Watches", NotificationManager.IMPORTANCE_HIGH).apply {
+                    description = "A watch you set fired: a task's checks passed, an agent finished"
+                },
+                NotificationChannel(LIMITS, "Limits", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                    description = "An AI provider near or at a limit, or a task handed to another agent because of one"
                 },
                 NotificationChannel(WORKING, "Working", NotificationManager.IMPORTANCE_LOW).apply {
                     description = "While the app answers from a notification or looks at your machines"
@@ -49,7 +63,7 @@ class AndroidAlerts(private val context: Context) : AlertSink {
             .setContentText(note ?: alert.text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(listOfNotNull(note, alert.detail.ifEmpty { alert.text }).joinToString("\n\n")))
         alert.actions.take(3).forEachIndexed { i, a ->
-            val action = NotificationCompat.Action.Builder(0, a.label, actionIntent(alert, i, a.reply))
+            val action = NotificationCompat.Action.Builder(0, a.label, actionIntent(alert, i, a))
             if (a.reply) {
                 action.addRemoteInput(RemoteInput.Builder(WorkService.REPLY).setLabel(a.hint.ifEmpty { a.label }).build())
                     .setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_REPLY)
@@ -97,8 +111,10 @@ class AndroidAlerts(private val context: Context) : AlertSink {
 
     override fun cancel(tag: String) = nm.cancel(tag, ID)
 
-    private fun base(alert: Alert, quiet: Boolean): NotificationCompat.Builder =
-        NotificationCompat.Builder(context, if (alert.kind == Alert.Kind.NeedsYou) NEEDS_YOU else FINISHED)
+    private fun base(alert: Alert, quiet: Boolean): NotificationCompat.Builder {
+        val urgent = alert.kind != Alert.Kind.Finished && alert.kind != Alert.Kind.Test
+        return NotificationCompat.Builder(context, channel(alert.kind))
+            .apply { if (appLock()) setVisibility(NotificationCompat.VISIBILITY_PRIVATE).setPublicVersion(redacted(alert)) }
             .setSmallIcon(R.drawable.ic_notification)
             .setColor(0xFFF0A830.toInt())
             .setContentTitle(alert.title)
@@ -106,7 +122,16 @@ class AndroidAlerts(private val context: Context) : AlertSink {
             .setAutoCancel(true)
             .setSilent(quiet)
             .setCategory(if (alert.kind == Alert.Kind.NeedsYou) NotificationCompat.CATEGORY_MESSAGE else NotificationCompat.CATEGORY_STATUS)
-            .setPriority(if (alert.kind == Alert.Kind.NeedsYou) NotificationCompat.PRIORITY_HIGH else NotificationCompat.PRIORITY_DEFAULT)
+            .setPriority(if (urgent) NotificationCompat.PRIORITY_HIGH else NotificationCompat.PRIORITY_DEFAULT)
+    }
+
+    private fun channel(kind: Alert.Kind) = when (kind) {
+        Alert.Kind.NeedsYou -> NEEDS_YOU
+        Alert.Kind.WentWrong -> WENT_WRONG
+        Alert.Kind.Watch -> WATCHES
+        Alert.Kind.Limits -> LIMITS
+        Alert.Kind.Finished, Alert.Kind.Test -> FINISHED
+    }
 
     private fun post(tag: String, b: NotificationCompat.Builder) {
         // Without the permission there is nothing to post; the app's Settings say so.
@@ -115,6 +140,22 @@ class AndroidAlerts(private val context: Context) : AlertSink {
         ) return
         runCatching { nm.notify(tag, ID, b.build()) }
     }
+
+    /** What a locked phone shows with the app lock on: the app's name and the kind of news, nothing of what it is about. */
+    private fun redacted(alert: Alert) = NotificationCompat.Builder(context, channel(alert.kind))
+        .setSmallIcon(R.drawable.ic_notification)
+        .setColor(0xFFF0A830.toInt())
+        .setContentTitle("Herdr")
+        .setContentText(
+            when (alert.kind) {
+                Alert.Kind.NeedsYou -> "Something needs you."
+                Alert.Kind.WentWrong -> "Something went wrong."
+                Alert.Kind.Watch -> "Something you watch changed."
+                Alert.Kind.Limits -> "A limit is near."
+                Alert.Kind.Finished, Alert.Kind.Test -> "Something finished."
+            } + " Unlock to see it.",
+        )
+        .build()
 
     /** A tap: the agent's chat, the task on the board (finished work: its review card), the machine's health, or a quick command's run. */
     private fun openIntent(alert: Alert): PendingIntent {
@@ -131,8 +172,21 @@ class AndroidAlerts(private val context: Context) : AlertSink {
         return PendingIntent.getActivity(context, alert.tag.hashCode(), intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
     }
 
-    /** A button: carried out by [WorkService], which may start from a notification while the app is closed. */
-    private fun actionIntent(alert: Alert, index: Int, reply: Boolean): PendingIntent {
+    /**
+     * A button: carried out by [WorkService], which may start from a notification while the app is closed.
+     * One that can't be undone (Approve and merge, Always allow) opens [ConfirmActivity] instead, which asks
+     * for the fingerprint first when that is on.
+     */
+    private fun actionIntent(alert: Alert, index: Int, a: AlertAction): PendingIntent {
+        val reply = a.reply
+        if (a.guard.isNotEmpty() && !reply) {
+            return PendingIntent.getActivity(
+                context, alert.tag.hashCode() * 31 + index,
+                ConfirmActivity.intent(context, json.encodeToString(Alert.serializer(), alert), index)
+                    .setData(Uri.parse("herdr://alert/${Uri.encode(alert.tag)}/$index")),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+            )
+        }
         val intent = Intent(context, WorkService::class.java)
             .setAction(WorkService.ACT)
             .setData(Uri.parse("herdr://alert/${Uri.encode(alert.tag)}/$index"))
@@ -154,6 +208,9 @@ class AndroidAlerts(private val context: Context) : AlertSink {
 
         const val NEEDS_YOU = "needs-you"
         const val FINISHED = "finished"
+        const val WENT_WRONG = "went-wrong"
+        const val WATCHES = "watches"
+        const val LIMITS = "limits"
         const val WORKING = "working"
         /** The one notification for what was held during quiet hours. */
         const val SUMMARY = "quiet:summary"

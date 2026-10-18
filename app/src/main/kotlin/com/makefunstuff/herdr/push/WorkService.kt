@@ -20,6 +20,7 @@ import com.makefunstuff.herdr.HerdrApp
 import com.makefunstuff.herdr.R
 import com.makefunstuff.herdr.brief.AndroidVoice
 import com.makefunstuff.herdr.brief.Reading
+import com.makefunstuff.herdr.core.guard.Guarded
 import com.makefunstuff.herdr.core.push.Alert
 import com.makefunstuff.herdr.core.push.LiveItem
 import kotlinx.coroutines.coroutineScope
@@ -86,7 +87,12 @@ class WorkService : Service() {
                         val alert = intent.getStringExtra(ALERT)?.let { runCatching { AndroidAlerts.json.decodeFromString(Alert.serializer(), it) }.getOrNull() }
                         val chosen = alert?.actions?.getOrNull(intent.getIntExtra(INDEX, -1))
                         val text = RemoteInput.getResultsFromIntent(intent)?.getCharSequence(REPLY)?.toString()
-                        if (alert != null && chosen != null) container.alertWork.perform(alert, chosen, text)
+                        // A button that asks for the fingerprint comes through ConfirmActivity; one posted before
+                        // that was turned on comes here straight, and is shown again with the button that asks.
+                        val guarded = chosen?.guard?.let(Guarded::of)
+                        if (alert != null && guarded != null && container.guard.wants(guarded) && !intent.getBooleanExtra(CONFIRMED, false)) {
+                            container.inbox.show(alert, quiet = true, note = "Tap ${chosen.label} again to confirm it with your fingerprint.")
+                        } else if (alert != null && chosen != null) container.alertWork.perform(alert, chosen, text)
                     }
                     LIVE_STOP -> {
                         val item = intent.getStringExtra(LIVE)?.let { runCatching { AndroidAlerts.json.decodeFromString(LiveItem.serializer(), it) }.getOrNull() }
@@ -163,8 +169,19 @@ class WorkService : Service() {
         const val BRIEF_AT = "brief_at"
         const val ALERT = "alert"
         const val INDEX = "index"
+        /** Set by [com.makefunstuff.herdr.guard.ConfirmActivity] once the fingerprint was given. */
+        const val CONFIRMED = "confirmed"
         const val REPLY = "reply"
         private const val ID = 2
+
+        /** Carries out button [index] of the notification [alert] (its JSON). */
+        fun act(context: Context, alert: String, index: Int, confirmed: Boolean = false): Intent =
+            Intent(context, WorkService::class.java)
+                .setAction(ACT)
+                .setData(android.net.Uri.parse("herdr://alert/act/${alert.hashCode()}/$index"))
+                .putExtra(ALERT, alert)
+                .putExtra(INDEX, index)
+                .putExtra(CONFIRMED, confirmed)
     }
 }
 

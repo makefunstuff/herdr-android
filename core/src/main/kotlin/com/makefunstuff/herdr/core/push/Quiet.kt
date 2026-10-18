@@ -90,8 +90,11 @@ data class QuietHours(
             else -> days.sorted().joinToString(", ") { DAY_NAMES[it - 1] }
         }
 
-        /** Whether [alert] waits while it is quiet: only what can wait. What needs you, and a test, come through. */
-        fun holds(alert: Alert): Boolean = alert.kind == Alert.Kind.Finished
+        /**
+         * Whether [alert] waits while it is quiet: only what can wait (what finished, a watch that fired, a limit).
+         * What needs you, what went wrong, and a test, come through.
+         */
+        fun holds(alert: Alert): Boolean = alert.kind == Alert.Kind.Finished || alert.kind == Alert.Kind.Watch || alert.kind == Alert.Kind.Limits
     }
 }
 

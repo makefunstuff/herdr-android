@@ -2,6 +2,7 @@ package com.makefunstuff.herdr.push
 
 import com.makefunstuff.herdr.core.push.Alert
 import com.makefunstuff.herdr.core.push.AlertChange
+import com.makefunstuff.herdr.core.push.AlertRules
 import com.makefunstuff.herdr.core.push.QuietSummary
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -104,5 +105,25 @@ class InboxTest {
         assertEquals(1, again.heldCount.value)
         again.release(quiet = false)
         assertEquals(listOf("show agent:m1:p1 done#4"), sink.log)
+    }
+
+    @Test fun rulesLeaveOutWhatIsSwitchedOff() {
+        val sink = Recorder()
+        val inbox = Inbox(file, sink)
+        // Finished is off by default: not shown (and one up from before comes down), what needs you shows.
+        inbox.apply(listOf(AlertChange.Show(finished("agent:m1:p1", "done#4")), AlertChange.Show(alert("agent:m1:p2", "blocked#2"))), quiet = false, rules = AlertRules())
+        assertEquals(listOf("cancel agent:m1:p1", "show agent:m1:p2 blocked#2"), sink.log)
+        // Turned on later, the same finish isn't news; the next one is.
+        inbox.apply(listOf(AlertChange.Show(finished("agent:m1:p1", "done#4"))), quiet = false, rules = AlertRules(finished = true))
+        inbox.apply(listOf(AlertChange.Show(finished("agent:m1:p1", "done#6"))), quiet = false, rules = AlertRules(finished = true))
+        assertEquals("show agent:m1:p1 done#6", sink.log.last())
+        // A task that waited for your yes and then failed its review, with Went wrong off: its notification comes down.
+        inbox.apply(listOf(AlertChange.Show(alert("task:m1:r/7", "approval"))), quiet = false, rules = AlertRules(wentWrong = false))
+        inbox.apply(listOf(AlertChange.Show(alert("task:m1:r/7", "failed").copy(kind = Alert.Kind.WentWrong))), quiet = false, rules = AlertRules(wentWrong = false))
+        assertEquals(listOf("show task:m1:r/7 approval", "cancel task:m1:r/7"), sink.log.takeLast(2))
+        // A watch you set comes whatever is switched off.
+        val watch = Alert("watch:m1:ChecksPass:r/7", "", Alert.Kind.Watch, "m1", "AND-7's checks passed", "Board view")
+        inbox.apply(listOf(AlertChange.Show(watch)), quiet = true, rules = AlertRules(needsYou = false, wentWrong = false))
+        assertEquals("show watch:m1:ChecksPass:r/7  quiet", sink.log.last())
     }
 }

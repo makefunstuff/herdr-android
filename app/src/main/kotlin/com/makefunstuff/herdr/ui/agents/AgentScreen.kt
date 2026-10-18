@@ -1,6 +1,18 @@
 package com.makefunstuff.herdr.ui.agents
 
+import android.os.Build
+import android.view.HapticFeedbackConstants
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.isImeVisible
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalView
+import com.makefunstuff.herdr.core.chat.BlockedPrompt
+import com.makefunstuff.herdr.core.chat.OptionRole
+import com.makefunstuff.herdr.core.guard.Guarded
+import com.makefunstuff.herdr.ui.common.LocalGuard
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -84,6 +96,7 @@ import kotlinx.coroutines.launch
  * An agent as a chat: its conversation, its state, its questions with their choices, and a box to
  * send the next prompt. The terminal is one tap away for anything the chat can't do.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
     val container = LocalContainer.current
@@ -142,6 +155,63 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
         }
     }
 
+    // The question docked over the composer: an answer on its way, a "No, tell it…" being written,
+    // the reply after Amend, and whether it stays open while the keyboard is up.
+    val guard = LocalGuard.current
+    val view = LocalView.current
+    val composerFocus = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
+    var answering by remember { mutableStateOf(false) }
+    var telling by remember { mutableStateOf<Telling?>(null) }
+    var amending by remember { mutableStateOf(false) }
+    var cardOpen by remember { mutableStateOf(false) }
+    val prompt = state.prompt
+    // A new question (or none): what was begun for the last one is over.
+    LaunchedEffect(prompt?.question, status) {
+        if (status != AgentStatus.Blocked || telling?.prompt?.same(prompt) == false) telling = null
+        if (status != AgentStatus.Blocked) amending = false
+        cardOpen = false
+    }
+
+    fun reply() {
+        composerFocus.requestFocus()
+        keyboard?.show()
+    }
+
+    /** Carries out [block] on the question shown, which it checks is still on the agent's screen. */
+    fun answer(block: suspend (com.makefunstuff.herdr.core.api.HerdrApi) -> Unit) {
+        if (answering) return
+        answering = true
+        // A light confirmation under the thumb.
+        view.performHapticFeedback(if (Build.VERSION.SDK_INT >= 30) HapticFeedbackConstants.CONFIRM else HapticFeedbackConstants.KEYBOARD_TAP)
+        scope.launch {
+            runCatching { block(session.awaitApi()) }.onFailure { context.toast(it.message ?: "Couldn't answer") }
+            answering = false
+            session.refresh()
+        }
+    }
+
+    fun press(p: PromptPress) {
+        val asked = prompt
+        val named = agent != null
+        when (p) {
+            is PromptPress.Option -> {
+                if (asked == null) return
+                val choose = { answer { api -> AgentInput.choose(api, paneId, asked, p.index, named) } }
+                // "Yes, and don't ask again" changes what the agent may do for good: the fingerprint first, when that is on.
+                if (asked.role(p.index) == OptionRole.Always) guard.run(Guarded.AlwaysAllow, "${asked.shortLabel(p.index)}?", command(asked), choose)
+                else choose()
+            }
+            is PromptPress.Tell -> if (asked != null) { telling = Telling(asked, p.index); reply() }
+            is PromptPress.Ticks -> if (asked != null) answer { api -> AgentInput.tick(api, paneId, asked, p.indices, named) }
+            is PromptPress.Key -> {
+                keys(listOf(p.key))
+                if (p.reply) { amending = true; reply() }
+            }
+            is PromptPress.Keys -> keys(p.keys)
+        }
+    }
+
     fun send() {
         val typed = draft
         val pictures = tray.images
@@ -150,16 +220,29 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
         if (text.isEmpty() || sending || tray.waiting) return
         sending = true
         val blocked = status == AgentStatus.Blocked
+        // What the words answer: "No, tell it…" (the no, then the words as the next prompt), the question's own
+        // "Type something." row, or (after Amend, or for a question with neither) typed into its screen.
+        val tell = telling?.takeIf { blocked }
+        val own = prompt?.takeIf { blocked && tell == null && !amending && it.customIndex != null && !it.multiSelect }
         // Counted before the send, so a transcript that is quicker than this call still confirms it.
-        if (!blocked) chat.addPending(text)
+        if (!blocked || tell != null) chat.addPending(text)
         // What you just said is the newest line: bring the chat to its end, also if you had scrolled up.
         scope.launch { listState.animateScrollToItem(0) }
         scope.launch {
-            runCatching { AgentInput.send(session.awaitApi(), paneId, text, named = agent != null, blocked = blocked) }.onSuccess {
+            runCatching {
+                val api = session.awaitApi()
+                when {
+                    tell != null -> AgentInput.refuseAndTell(api, paneId, tell.prompt, tell.index, text, named = agent != null)
+                    own != null -> AgentInput.typeAnswer(api, paneId, own, text, named = agent != null)
+                    else -> AgentInput.send(api, paneId, text, named = agent != null, blocked = blocked)
+                }
+            }.onSuccess {
                 draft = DraftStore.afterSend(draft, typed)
                 tray.sent(pictures)
+                telling = null
+                amending = false
             }.onFailure {
-                if (!blocked) chat.dropPending(text)
+                if (!blocked || tell != null) chat.dropPending(text)
                 context.toast(it.message ?: "Couldn't send")
             }
             sending = false
@@ -190,6 +273,8 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
     }
 
     val typing = typingInShortWindow()
+    val imeUp = WindowInsets.isImeVisible
+    val guardState by container.guard.state.collectAsStateWithLifecycle()
     Scaffold(
         containerColor = Herdr.colors.ground,
         topBar = {
@@ -217,6 +302,9 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
                         draft = draft,
                         onDraft = { draft = it },
                         placeholder = when {
+                            status == AgentStatus.Blocked && telling != null -> "Tell it what to do instead…"
+                            status == AgentStatus.Blocked && amending -> "Add to your answer…"
+                            status == AgentStatus.Blocked && prompt?.customIndex != null && !prompt.multiSelect -> "Type your own answer…"
                             status == AgentStatus.Blocked -> "Type an answer…"
                             agent != null -> "Message ${agent.name?.takeIf { it.isNotBlank() } ?: agent.displayName}…"
                             else -> "Type into the pane…"
@@ -238,7 +326,30 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
                         attached = !tray.isEmpty,
                         stop = if (status == AgentStatus.Working) ({ keys(listOf("esc")) }) else null,
                         floating = true,
-                        above = if (showKeys) ({ KeyRow(onKeys = ::keys) }) else null,
+                        focusRequester = composerFocus,
+                        above = if (showKeys || status == AgentStatus.Blocked) ({
+                            Column(verticalArrangement = Arrangement.spacedBy(Space.s)) {
+                                if (status == AgentStatus.Blocked) {
+                                    // Docked over the composer, so it can't scroll away; folded to a line while you write.
+                                    val fold = telling != null || (imeUp && !cardOpen)
+                                    if (fold) {
+                                        PromptBar(
+                                            prompt?.question ?: "Waiting for your answer",
+                                            telling = telling != null,
+                                            onOpen = { if (telling == null) cardOpen = true },
+                                            onCancelTell = { telling = null },
+                                        )
+                                    } else {
+                                        PromptCard(
+                                            prompt, state.screen, answering = answering,
+                                            alwaysGuarded = guardState.asks(Guarded.AlwaysAllow) && container.guard.unlock.canAsk(),
+                                            onPress = ::press,
+                                        )
+                                    }
+                                }
+                                if (showKeys) KeyRow(onKeys = ::keys)
+                            }
+                        }) else null,
                     )
                 },
             ) { bottom ->
@@ -261,8 +372,7 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
                         verticalArrangement = Arrangement.spacedBy(Space.m, Alignment.Bottom),
                         modifier = Modifier.fillMaxSize(),
                     ) {
-                        // The newest entry: the question the agent is waiting on, or what it is doing.
-                        if (status == AgentStatus.Blocked) item(key = "blocked") { BlockedCard(state.prompt, state.screen, onKeys = ::keys) }
+                        // The newest entry: what the agent is doing (its question is docked over the composer).
                         if (status == AgentStatus.Working) item(key = "working") { WorkingLine(activity) }
                         items(rows.asReversed(), key = { it.key }) { ChatRowView(it) }
                     } }
@@ -305,6 +415,15 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
     quick?.let { place -> QuickSheets(nav, place, onDismiss = { quick = null }) }
     if (attachMenu) AttachMenu(attach, tray, online = host.online, onDismiss = { attachMenu = false })
 }
+
+/** The command a question is about, for the fingerprint's prompt: codex's `$ …` line, or the line under Claude's tool header. */
+private fun command(p: BlockedPrompt): String =
+    p.details.firstOrNull { it.startsWith("$ ") }
+        ?: p.details.getOrNull(1)?.takeIf { p.details[0].split(' ').size <= 3 }
+        ?: p.question
+
+/** "No, tell it…" being written: the option to press once the words go, on this question. */
+private class Telling(val prompt: BlockedPrompt, val index: Int)
 
 /** Under the bar: the agent's state in its colour, and what it is doing. */
 @Composable
