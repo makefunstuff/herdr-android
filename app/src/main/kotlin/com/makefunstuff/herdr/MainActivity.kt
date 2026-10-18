@@ -26,7 +26,7 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * A tapped notification: its agent's chat, its task on the board, its machine's health, a quick command's run, or the brief. The tile,
+     * A tapped notification: its agent's chat, its task on the board (or its review card), its machine's health, a quick command's run, or the brief. The tile,
      * a widget or a share: [Ask]. A floating chat's "Open in the app" or its shortcut: that chat. False
      * when it opens nothing.
      */
@@ -42,6 +42,8 @@ class MainActivity : ComponentActivity() {
             quick.isNotEmpty() -> Links.open(Routes.quickRuns(machine, quick))
             intent.getBooleanExtra(OPEN_COORDINATOR, false) -> Links.open(Routes.coordinator(machine))
             pane.isNotEmpty() -> Links.open(Routes.agent(machine, pane))
+            // Finished work that waits for a yes: its review card, with the others after it.
+            task.isNotEmpty() && intent.getBooleanExtra(OPEN_REVIEW, false) -> Links.open(Routes.review(machine, task))
             task.isNotEmpty() -> Links.open(Routes.board(machine, task))
             else -> Links.open(Routes.SETTINGS)
         }
@@ -52,6 +54,7 @@ class MainActivity : ComponentActivity() {
         const val OPEN_MACHINE = "open_machine"
         const val OPEN_PANE = "open_pane"
         const val OPEN_TASK = "open_task"
+        const val OPEN_REVIEW = "open_review"
         const val OPEN_HEALTH = "open_health"
         const val OPEN_QUICK = "open_quick"
         const val OPEN_COORDINATOR = "open_coordinator"

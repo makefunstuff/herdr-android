@@ -11,7 +11,7 @@ class FakeCode(
     val home: String = "/home/demo",
 ) {
     /** A checkout; [recording] names its files in demo/code (`task` → task.files, task.log, task/…); null has a README only. */
-    class Checkout(val path: String, val branch: String, val recording: String?)
+    class Checkout(val path: String, val branch: String, val recording: String?, /** Its diff against main, for one without a [recording]. */ val diffBase: String? = null)
 
     private val checkouts get() = repos.flatten()
 
@@ -32,7 +32,7 @@ class FakeCode(
             "read" -> ok(read(co, args[1]))
             "search" -> ok(search(co, args[1], args.getOrElse(2) { "" }, args.getOrNull(3)?.toIntOrNull() ?: 400))
             "status" -> ok(co?.recording?.let { Demo.resource("code/$it.status") } ?: "## ${co?.branch ?: "main"}\n")
-            "diff" -> ok(co?.recording?.let { Demo.resource("code/$it." + if (args.getOrNull(2) == "head") "diff-head" else "diff-base") } ?: "@@from 0000000\n")
+            "diff" -> ok(co?.diffBase?.takeIf { args.getOrNull(2) != "head" }?.let { Demo.resource("code/$it") } ?: co?.recording?.let { Demo.resource("code/$it." + if (args.getOrNull(2) == "head") "diff-head" else "diff-base") } ?: "@@from 0000000\n")
             "log" -> ok(co?.recording?.let { Demo.resource("code/$it.log") } ?: "@@herdr-code log\n")
             "show" -> ok(resource("code/show/${args.getOrElse(1) { "" }}") ?: "")
             else -> CommandResult(127, "", "unknown")
@@ -102,7 +102,7 @@ class FakeCode(
         fun devbox() = listOf(
             listOf(Checkout(MAIN, "main", "main"), Checkout(TASK, "work/9-last-answered", "task")),
             listOf(Checkout("/home/demo/src/api-server", "main", null)),
-            listOf(Checkout("/home/demo/src/website", "main", null), Checkout("/home/demo/src/website-4", "work/4-install-page", null)),
+            listOf(Checkout("/home/demo/src/website", "main", null), Checkout("/home/demo/src/website-4", "work/4-install-page", null, diffBase = "website-4.diff-base")),
         )
 
         /** The [n]th commit of the task's history, newest first. */

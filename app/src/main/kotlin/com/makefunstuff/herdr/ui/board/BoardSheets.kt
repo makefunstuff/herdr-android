@@ -156,11 +156,12 @@ fun BoardPanel(
 @Composable
 private fun PanelCancel(onDismiss: () -> Unit) = QuietButton(onClick = onDismiss) { Text("Cancel") }
 
-/** What a task's "More" offers: every action that fits, as rows with icons. */
+/** What a task's "More" offers: every action that fits, as rows with icons; finished work also its review card. */
 @Composable
-fun ActionsSheet(t: BoardTask, onDismiss: () -> Unit, onAction: (BoardAction) -> Unit, onEdit: () -> Unit, onOpen: (() -> Unit)?) {
+fun ActionsSheet(t: BoardTask, onDismiss: () -> Unit, onAction: (BoardAction) -> Unit, onEdit: () -> Unit, onOpen: (() -> Unit)?, onReview: (() -> Unit)? = null) {
     HerdrMenu(expanded = true, onDismissRequest = onDismiss, title = t.name + " · " + t.title) {
         if (onOpen != null) MenuRow("Open details", HerdrIcons.FileText, onOpen)
+        if (onReview != null) MenuRow("Open its review card", HerdrIcons.Layers, onReview)
         BoardActions.forTask(t).forEach { a ->
             MenuRow(a.label.removeSuffix("…"), a.icon(), { onAction(a) }, destructive = a.destructive)
         }
@@ -169,7 +170,7 @@ fun ActionsSheet(t: BoardTask, onDismiss: () -> Unit, onAction: (BoardAction) ->
 }
 
 /** Each action's icon, so the sheet's rows line up and read at a glance. */
-private fun BoardAction.icon(): ImageVector = when (this) {
+internal fun BoardAction.icon(): ImageVector = when (this) {
     BoardAction.Delegate -> HerdrIcons.Play
     BoardAction.Tell, BoardAction.SendPlanBack -> HerdrIcons.MessageSquare
     BoardAction.Stop -> HerdrIcons.CircleStop
@@ -390,7 +391,7 @@ fun TaskDetailContent(
 }
 
 @Composable
-private fun LinkRow(label: String, value: String, onClick: () -> Unit) {
+internal fun LinkRow(label: String, value: String, onClick: () -> Unit) {
     QuietCard(onClick = onClick, onClickLabel = "Open $label in the browser", padded = true) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
@@ -437,7 +438,7 @@ private fun Section(title: String, startOpen: Boolean = true, collapseLong: Bool
 }
 
 @Composable
-private fun severityColor(s: String) = when (s) {
+internal fun severityColor(s: String) = when (s) {
     "critical", "blocker", "major" -> Herdr.colors.red
     "minor" -> Herdr.colors.notice
     else -> Herdr.colors.idle

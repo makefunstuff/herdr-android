@@ -81,6 +81,18 @@ fun scenes(): List<Scene> = listOf(
     Scene("task-review-failed", route = Routes.board(DEVBOX), actions = { tapText("Rewrite the install page") }),
     Scene("task-actions", route = Routes.board(DEVBOX), actions = { longPressText("Rewrite the install page") }),
     Scene("board-add", route = Routes.board(DEVBOX), actions = { tapLabel("Add a task") }),
+    // Finished work, one card a task across the boards: what changed and the agent's note, the review, the checks, the
+    // pull request; its full diff a tap away; Approve anyway saying what failed; sending it back.
+    Scene("review", route = Routes.review(DEVBOX)),
+    Scene("review-full", route = Routes.review(DEVBOX), heightDp = 1500),
+    Scene("review-failed", route = Routes.review(DEVBOX, "website/4"), heightDp = 1500),
+    Scene("review-diff", route = Routes.review(DEVBOX), heightDp = 1300, actions = { tapText("What changed") }),
+    Scene("review-file", route = Routes.review(DEVBOX), actions = { tapText("What changed"); tapText("MachineCard.kt") }),
+    Scene("review-anyway", route = Routes.review(DEVBOX, "website/4"), actions = { tapText("Approve anyway") }),
+    Scene("review-send-back", route = Routes.review(DEVBOX, "website/4"), actions = { tapText("Send back") }),
+    // gpu-box has a board too: its task waits for a pick, among devbox's cards, and says whose it is.
+    Scene("review-pick", route = Routes.review(GPU, "llm-eval/3"), heightDp = 1300, setup = { host(GPU).board = Demo.gpuBoard() }),
+    Scene("review-empty", route = Routes.review(DEVBOX), setup = { host(DEVBOX).board = Demo.nothingToReview() }),
 
     // A chat floating over other apps as a bubble: offered in the agent's menu and the Coordinator's bar, Android's
     // bubbles not yet allowed for the app, and the bubble's own window (an agent's chat, the Coordinator), which
