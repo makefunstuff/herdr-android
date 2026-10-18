@@ -338,7 +338,8 @@ fun BoardScreen(nav: NavController, machineId: String, openTask: String? = null,
         TaskDetailScreen(session, open, onBack = { openId = null }, busy = busy, onAction = { a -> choose(open, a) }, onPick = { letter -> perform(open, BoardAction.Pick, letter = letter) },
             onMore = { actionsFor = open }, backEnabled = !middleCloses,
             onCode = { d -> nav.navigate(Routes.codeAt(CodeSpot(machineId, d.worktree, task = open.id, taskName = open.name), CheckoutTab.Changes)) },
-            onQuick = { d -> quick = QuickPlace(machineId, d.worktree, label = open.name, task = open.id, taskName = open.name) })
+            onQuick = { d -> quick = QuickPlace(machineId, d.worktree, label = open.name, task = open.id, taskName = open.name) },
+            onActivity = if (open.machine.isEmpty()) ({ nav.navigate(Routes.activity(machineId, task = open.id, name = open.name)) }) else null)
     }
     quick?.let { place -> QuickSheets(nav, place, onDismiss = { quick = null }) }
     actionsFor?.let { t ->

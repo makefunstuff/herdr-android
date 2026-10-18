@@ -288,6 +288,7 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
             onCode = (agent?.cwd ?: pane?.foregroundCwd ?: pane?.cwd)?.ifBlank { null }?.takeIf { !inBubble }?.let { dir ->
                 { menu = false; nav.navigate(Routes.codeAt(CodeSpot(machineId, dir, pane = paneId))) }
             },
+            onActivity = if (inBubble) null else ({ menu = false; nav.navigate(Routes.activity(machineId, pane = paneId)) }),
             onQuick = if (inBubble) null else ({
                 menu = false
                 val name = agent?.let { it.name?.takeIf { n -> n.isNotBlank() } ?: it.displayName }
