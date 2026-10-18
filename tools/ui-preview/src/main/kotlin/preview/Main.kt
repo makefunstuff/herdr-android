@@ -109,6 +109,8 @@ class SceneData {
     /** Comments on code kept for later (CodeStore), and how code is shown. */
     var notes: List<com.makefunstuff.herdr.core.code.ReviewNote> = emptyList()
     var codeView: com.makefunstuff.herdr.data.CodeView? = null
+    /** The Agents list's pins, snoozes and mutes (TriageStore), as saved before the app opens. */
+    var triage: com.makefunstuff.herdr.core.home.Triage? = null
     /** Quick commands pinned, per machine (`Project:Run unit tests`). */
     var quickPins: Map<String, List<String>> = emptyMap()
     /** When each agent's chat was last on screen (LookedStore), by `<machine>/<pane>`: its "While you were away" card counts from it. */
@@ -155,6 +157,7 @@ fun render(scene: Scene, dark: Boolean, file: File) {
     context.filesDir.resolve("machines.json").writeText(Json.encodeToString(ListSerializer(Machine.serializer()), data.machines))
     data.drafts.forEach { (k, v) -> context.getSharedPreferences("drafts", 0).edit().putString(k, v).apply() }
     data.push?.let { context.filesDir.resolve("push.json").writeText(Json.encodeToString(PushState.serializer(), it)) }
+    data.triage?.let { context.filesDir.resolve("triage.json").writeText(Json.encodeToString(com.makefunstuff.herdr.core.home.Triage.serializer(), it)) }
     data.brief?.let { context.filesDir.resolve("brief.json").writeText(Json.encodeToString(com.makefunstuff.herdr.brief.BriefState.serializer(), it)) }
     PreviewPhone.apps = data.pushApps
     PreviewPhone.allowed = data.notificationsAllowed

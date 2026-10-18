@@ -224,4 +224,31 @@ class LiveTrackerTest {
         assertEquals(listOf(a2.tag), c.cancel)
         assertEquals(listOf(LiveItems.taskTag("m1", "r/1")), t.update("m1", LiveItem.Kind.Task, emptyList()).cancel)
     }
+
+    @Test
+    fun aMutedAgentHasNoLiveUpdate() {
+        val t = LiveTracker()
+        assertEquals(listOf(a1, a2), t.update("m1", LiveItem.Kind.Agent, listOf(a1, a2)).post)
+        // Muted while it works: it comes down, and stays down while it still works; the other stays.
+        assertEquals(listOf(a1.tag), t.mute(setOf("m1/p1")).cancel)
+        assertTrue(t.update("m1", LiveItem.Kind.Agent, listOf(a1, a2)).post.isEmpty())
+        assertEquals(listOf(a2), t.items())
+        // Unmuted: it is up again.
+        assertEquals(listOf(a1), t.mute(emptySet()).post)
+    }
+
+    @Test
+    fun aMutedAgentUpFromBeforeComesDown() {
+        // Up when the app started, then muted: down at once.
+        val t = LiveTracker()
+        t.adopt(listOf(a1.tag, a2.tag))
+        assertEquals(listOf(a2.tag), t.mute(setOf("m1/p2")).cancel)
+        // Muted first, found up later: its list still names it, and it comes down rather than being posted.
+        val later = LiveTracker()
+        later.mute(setOf("m1/p1"))
+        later.adopt(listOf(a1.tag))
+        val c = later.update("m1", LiveItem.Kind.Agent, listOf(a1))
+        assertTrue(c.post.isEmpty())
+        assertEquals(listOf(a1.tag), c.cancel)
+    }
 }

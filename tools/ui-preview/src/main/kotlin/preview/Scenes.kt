@@ -82,7 +82,15 @@ fun scenes(): List<Scene> = listOf(
         host(DEVBOX).screens += API_AGENT to " Allow the extension to run git push?\n\n→ Always allow\n  Deny\n\n ↑↓ navigate · enter select\n"
     }, actions = { tapText("Always allow") }),
     Scene("agents-filter", setup = { home() }, actions = { tapText("All machines") }),
-    Scene("agents-seen", heightDp = 1500, setup = { home() }, actions = { tapText("Mark seen") }),
+    Scene("agents-seen", heightDp = 1500, setup = { home() }, actions = { tapText("Mark all seen") }),
+    // Triage: the eval pinned on top (and muted), AND-6 snoozed for three hours, the profile still new in Done.
+    Scene("agents-triage", heightDp = 1500, setup = { home(); triage = Demo.triage() }),
+    // A row swiped left shows Pin, Snooze and Mute under it; one swiped right is seen and leaves Done.
+    Scene("agents-swipe", heightDp = 1500, setup = { home() }, actions = { drag("Long-context eval", 0.85f to 0.5f, 0.15f to 0.5f) }),
+    Scene("agents-swiped-seen", heightDp = 1500, setup = { home() }, actions = { drag("Profile the data loader", 0.1f to 0.5f, 0.7f to 0.5f) }),
+    // The same in the long-press sheet, and how long to snooze.
+    Scene("agent-triage", heightDp = 1500, setup = { home() }, actions = { longPressText("Profile the data loader") }),
+    Scene("agent-snooze", heightDp = 1500, setup = { home() }, actions = { longPressText("Profile the data loader"); tapText("Snooze") }),
     Scene("agents-calm", setup = { host(DEVBOX).snapshot = Demo.devbox(apiStatus = "working"); host(DEVBOX).board = Demo.calmBoard() }),
     Scene("agent-actions", setup = { home() }, actions = { longPressText("Speed up /jobs") }),
     // A one-shot watch from the long-press sheet: tell me once it finishes.

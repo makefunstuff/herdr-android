@@ -126,4 +126,22 @@ class InboxTest {
         inbox.apply(listOf(AlertChange.Show(watch)), quiet = true, rules = AlertRules(needsYou = false, wentWrong = false))
         assertEquals("show watch:m1:ChecksPass:r/7  quiet", sink.log.last())
     }
+
+    @Test fun aMutedAgentStaysQuiet() {
+        val sink = Recorder()
+        val muted = mutableSetOf("m1/p1")
+        val inbox = Inbox(file, sink, muted = { m, p -> "$m/$p" in muted })
+        val asks = alert("agent:m1:p1", "blocked#4").copy(paneId = "p1")
+        // Muted: it asks, and nothing shows (one up from before comes down); another agent still comes through.
+        inbox.apply(listOf(AlertChange.Show(asks), AlertChange.Show(alert("agent:m1:p2", "blocked#2").copy(paneId = "p2"))), quiet = false)
+        assertEquals(listOf("cancel agent:m1:p1", "show agent:m1:p2 blocked#2"), sink.log)
+        // A watch you set on it still comes, and so does its task's news.
+        val watch = Alert("watch:m1:AgentDone:p1", "", Alert.Kind.Watch, "m1", "claude finished", "Fixed it", paneId = "p1")
+        inbox.apply(listOf(AlertChange.Show(watch), AlertChange.Show(alert("task:m1:r/7", "approval").copy(paneId = "p1", taskId = "r/7"))), quiet = false)
+        assertEquals(listOf("show watch:m1:AgentDone:p1 ", "show task:m1:r/7 approval"), sink.log.takeLast(2))
+        // Unmuted, its next news shows.
+        muted.clear()
+        inbox.apply(listOf(AlertChange.Show(alert("agent:m1:p1", "blocked#9").copy(paneId = "p1"))), quiet = false)
+        assertEquals("show agent:m1:p1 blocked#9", sink.log.last())
+    }
 }

@@ -39,6 +39,7 @@ object HerdrIcons {
     val Camera: ImageVector by lazy { lucide("Camera", "M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z", "M9 13a3 3 0 1 0 6 0a3 3 0 1 0 -6 0") }
     val Car: ImageVector by lazy { lucide("Car", "M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2", "M5 17a2 2 0 1 0 4 0a2 2 0 1 0 -4 0", "M9 17h6", "M15 17a2 2 0 1 0 4 0a2 2 0 1 0 -4 0") }
     val ChartLine: ImageVector by lazy { lucide("ChartLine", "M3 3v16a2 2 0 0 0 2 2h16", "m19 9-5 5-4-4-3 3") }
+    val CheckCheck: ImageVector by lazy { lucide("CheckCheck", "M18 6 7 17l-5-5", "m22 10-7.5 7.5L13 16") }
     val Check: ImageVector by lazy { lucide("Check", "M20 6 9 17l-5-5") }
     val ChevronDown: ImageVector by lazy { lucide("ChevronDown", "m6 9 6 6 6-6") }
     val ChevronLeft: ImageVector by lazy { lucide("ChevronLeft", "m15 18-6-6 6-6") }
@@ -203,6 +204,7 @@ object HerdrIcons {
             "car" to { Car },
             "chartline" to { ChartLine },
             "check" to { Check },
+            "checkcheck" to { CheckCheck },
             "chevrondown" to { ChevronDown },
             "chevronleft" to { ChevronLeft },
             "chevronright" to { ChevronRight },

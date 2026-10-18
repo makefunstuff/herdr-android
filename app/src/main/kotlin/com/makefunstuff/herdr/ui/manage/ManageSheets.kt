@@ -539,6 +539,8 @@ fun AgentActionsSheet(
     onQuick: (() -> Unit)? = null,
     /** Opens the timeline of what the agent did (its task's, when it works on one). */
     onActivity: (() -> Unit)? = null,
+    /** The Agents list's triage of it: mark seen, pin, snooze, mute. */
+    triage: (@Composable () -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -558,6 +560,7 @@ fun AgentActionsSheet(
             ManageRow("Details", icon = HerdrIcons.FileText, chevron = true) { details = true }
         }
         if (agent != null) WatchRows(session.machine.id, agent, label)
+        triage?.invoke()
         if (onTerminal != null) ManageRow("Open terminal", icon = HerdrIcons.SquareTerminal, chevron = true) { onTerminal() }
         if (onActivity != null) ManageRow("Activity timeline", detail = "What it did, step by step: commands, edits, tests, reviews", icon = HerdrIcons.Activity, chevron = true) { onActivity() }
         if (onCode != null) ManageRow("Browse the code", detail = "Its files and changes, to read and comment on", icon = HerdrIcons.Code, chevron = true) { onCode() }
