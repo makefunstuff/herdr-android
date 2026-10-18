@@ -169,6 +169,7 @@ fun MachineScreen(nav: NavController, machineId: String) {
                 if (state.notices.isNotEmpty()) {
                     BarIcon(HerdrIcons.Bell, "Notifications", { showNotices = true; session.markNoticesRead() }, badge = state.unreadNotices)
                 }
+                BarIcon(HerdrIcons.Search, "Search ${state.machine.label}", { nav.navigate(Routes.search(machineId)) })
                 if (state.online) BarIcon(HerdrIcons.Zap, "Quick commands", { quick = QuickPlace(machineId, label = state.machine.label) })
                 BarIcon(HerdrIcons.RefreshCw, "Refresh", { session.retry(); session.refresh(); scope.launch { session.checkBoard() } })
                 BarIcon(HerdrIcons.Ellipsis, "More", { menu = true })

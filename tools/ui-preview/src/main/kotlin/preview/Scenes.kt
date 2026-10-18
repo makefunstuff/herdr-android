@@ -266,6 +266,26 @@ fun scenes(): List<Scene> = listOf(
         tapLabel("Picture 2 of 2, Screenshot_20261018_101230.png")
     }),
 
+    // Search: one box for agents, tasks, machines, workspaces and words in the chats, with its chips and actions.
+    // "jobs" across the machines; nothing typed (Start work, then what waits); from devbox, only its own, with a
+    // workspace's terminal; and a chip chosen.
+    Scene("search", route = Routes.search(q = "jobs"), setup = { home() }, actions = { settle() }),
+    Scene("search-empty", route = Routes.search(), setup = { home() }),
+    Scene("search-machine", route = Routes.search(DEVBOX, "api"), setup = { home() }, actions = { settle() }),
+    Scene("search-needs", route = Routes.search(q = "jobs"), setup = { home() }, actions = { settle(); tapText("Needs you") }),
+
+    // Start work from a sentence: as a board task on devbox; as an agent now (its folders and the agents
+    // installed there); and the folder browser, one level down.
+    Scene("start", route = Routes.start(text = "Add a “last answered 2 min ago” line to each machine card, and a test for it"), setup = { home() }),
+    Scene(
+        "start-agent", route = Routes.start(text = "Add a “last answered 2 min ago” line to each machine card, and a test for it"), setup = { home() },
+        actions = { tapExact("Agent now") },
+    ),
+    Scene(
+        "start-folders", route = Routes.start(text = "Look into the flaky upload test"), setup = { home() },
+        actions = { tapExact("Agent now"); tapText("Browse"); settle(); tapExact("scratch") },
+    ),
+
     // The work board and its Coordinator.
     Scene("coordinator", route = Routes.coordinator(DEVBOX)),
     // An answer that lists the tasks waiting for you: each item's own words stay under its row.

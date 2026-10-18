@@ -57,6 +57,7 @@ val androidOnly = listOf(
     "com/makefunstuff/herdr/share/ShareActivity.kt",
     "com/makefunstuff/herdr/share/CoordinatorTile.kt",
     "com/makefunstuff/herdr/share/Widgets.kt",
+    "com/makefunstuff/herdr/share/AndroidShortcuts.kt",
     "com/makefunstuff/herdr/bubble/AndroidBubbles.kt",
     "com/makefunstuff/herdr/bubble/BubbleActivity.kt",
     "com/makefunstuff/herdr/brief/AndroidBrief.kt",

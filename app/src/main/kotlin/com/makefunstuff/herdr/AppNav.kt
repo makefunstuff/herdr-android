@@ -36,6 +36,12 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -159,6 +165,10 @@ object Routes {
     const val CODE_DIFF = "code/{mid}/diff?${CodeSpot.ARGS}&src={src}&file={file}"
     const val CODE_COMMIT = "code/{mid}/commit?${CodeSpot.ARGS}&sha={sha}"
     const val CODE_NOTES = "code/{mid}/notes?${CodeSpot.ARGS}"
+    /** One box for agents, tasks, machines, workspaces and chats; from a machine ([mid]) only its own, at first. */
+    const val SEARCH = "search?mid={mid}&q={q}"
+    /** Start work from a sentence: what, then how and where; on [mid] and with [text] when given. */
+    const val START = "start?mid={mid}&text={text}"
     /** What an agent did, as a timeline: a board task's (its key as [name]), or one agent's (its pane). */
     const val ACTIVITY = "activity/{mid}?task={task}&name={name}&pane={pane}"
     /** A machine's quick-command runs, with one open ([quickRuns]'s run, from its notification). */
@@ -194,6 +204,10 @@ object Routes {
             .joinToString("&").let { if (it.isEmpty()) "" else "?$it" }
     fun preview(mid: String, workspaceId: String, port: Int? = null) =
         "preview/$mid?ws=${Uri.encode(workspaceId)}" + (port?.let { "&port=$it" } ?: "")
+    fun search(mid: String? = null, q: String? = null) =
+        "search" + listOfNotNull(mid?.let { "mid=" + Uri.encode(it) }, q?.let { "q=" + Uri.encode(it) }).joinToString("&").let { if (it.isEmpty()) "" else "?$it" }
+    fun start(mid: String? = null, text: String? = null) =
+        "start" + listOfNotNull(mid?.let { "mid=" + Uri.encode(it) }, text?.let { "text=" + Uri.encode(it) }).joinToString("&").let { if (it.isEmpty()) "" else "?$it" }
     fun quickRuns(mid: String, run: String? = null) = if (run == null) "quick/$mid" else "quick/$mid?run=${Uri.encode(run)}"
     fun worktrees(mid: String, workspaceId: String? = null) =
         if (workspaceId == null) "worktrees/$mid" else "worktrees/$mid?ws=${Uri.encode(workspaceId)}"
@@ -238,7 +252,15 @@ private fun AppNav(nav: NavHostController) {
     }
 
     // The window's width, not the screen's: a tablet in split screen or a resized desktop window counts as what it shows.
-    BoxWithConstraints(Modifier.fillMaxSize().background(Herdr.colors.ground)) {
+    // Ctrl+K from a hardware keyboard opens the search, from wherever the app is (once: not over itself).
+    BoxWithConstraints(
+        Modifier.fillMaxSize().background(Herdr.colors.ground).onPreviewKeyEvent { e ->
+            if (e.type == KeyEventType.KeyDown && e.isCtrlPressed && e.key == Key.K) {
+                if (nav.currentDestination?.route != Routes.SEARCH) nav.navigate(Routes.search())
+                true
+            } else false
+        },
+    ) {
         val wide = maxWidth >= WIDE
         val boards = hosts.filter { it.hasBoard }.map { it.machine.id }
         // A board already open in the middle (it was open when the window grew) isn't shown twice.
@@ -372,6 +394,16 @@ internal fun NavGraphBuilder.screens(nav: NavHostController, agents: @Composable
         com.makefunstuff.herdr.ui.preview.DevServerScreen(
             nav, it.arguments?.getString("mid").orEmpty(), it.arguments?.getString("ws")?.let(Uri::decode).orEmpty(),
             startPort = it.arguments?.getString("port")?.toIntOrNull(),
+        )
+    }
+    composable(Routes.SEARCH) {
+        com.makefunstuff.herdr.ui.search.SearchScreen(
+            nav, it.arguments?.getString("mid")?.let(Uri::decode)?.ifEmpty { null }, it.arguments?.getString("q")?.let(Uri::decode).orEmpty(),
+        )
+    }
+    composable(Routes.START) {
+        com.makefunstuff.herdr.ui.start.StartWorkScreen(
+            nav, it.arguments?.getString("mid")?.let(Uri::decode)?.ifEmpty { null }, it.arguments?.getString("text")?.let(Uri::decode).orEmpty(),
         )
     }
     composable(Routes.TERMINAL) {

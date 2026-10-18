@@ -143,6 +143,9 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
 
     // The chat is open: its notification has done its job.
     LaunchedEffect(machineId, paneId) { container.inbox.dismiss(Alerts.agentTag(machineId, paneId)) }
+    // The launcher's recent agents: this one first, as "claude · api-server".
+    val shortcutTitle = agent?.let { a -> listOfNotNull(a.agent ?: name, snapshot?.workspace(a.workspaceId)?.label?.ifBlank { null }).joinToString(" · ") }
+    LaunchedEffect(machineId, paneId, shortcutTitle) { shortcutTitle?.let { container.shortcuts.opened(machineId, paneId, it, host.machine.label) } }
     // A finish shown here is seen: the Agents screen no longer lists it as new.
     val finished = agent?.takeIf { it.agentStatus == AgentStatus.Done }?.let { it.completionSeq ?: it.stateChangeSeq }
     LaunchedEffect(machineId, paneId, finished) { finished?.let { container.seen.mark(machineId, paneId, it) } }

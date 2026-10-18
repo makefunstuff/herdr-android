@@ -562,19 +562,30 @@ fun BarIcon(icon: ImageVector, contentDescription: String, onClick: () -> Unit, 
  * bottom right, in the user's own amber (`--primary`, ink text) with its label ("Add machine",
  * "New"), lifted by `--shadow-card`. [text] null draws the round icon-only one.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun HerdrFab(text: String?, contentDescription: String = text ?: "Add", icon: ImageVector = HerdrIcons.Plus, onClick: () -> Unit) {
+fun HerdrFab(
+    text: String?,
+    contentDescription: String = text ?: "Add",
+    icon: ImageVector = HerdrIcons.Plus,
+    /** A second action on a long press, named [onLongClickLabel] for TalkBack. */
+    onLongClick: (() -> Unit)? = null,
+    onLongClickLabel: String? = null,
+    onClick: () -> Unit,
+) {
     val c = Herdr.colors
     Surface(
-        onClick = onClick,
         shape = HerdrShapes.Pill,
         color = c.primary,
         contentColor = c.onPrimary,
         shadowElevation = 4.dp,
-        modifier = Modifier.heightIn(min = 52.dp).semantics { this.contentDescription = contentDescription },
+        modifier = Modifier.heightIn(min = 52.dp),
     ) {
         Row(
-            Modifier.heightIn(min = 52.dp).padding(start = if (text == null) 14.dp else 16.dp, end = if (text == null) 14.dp else 20.dp),
+            Modifier.clip(HerdrShapes.Pill)
+                .combinedClickable(role = Role.Button, onClick = onClick, onLongClick = onLongClick, onLongClickLabel = onLongClickLabel)
+                .semantics { this.contentDescription = contentDescription }
+                .heightIn(min = 52.dp).padding(start = if (text == null) 14.dp else 16.dp, end = if (text == null) 14.dp else 20.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(Space.s),
         ) {
