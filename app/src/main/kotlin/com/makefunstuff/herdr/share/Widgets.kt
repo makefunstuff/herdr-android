@@ -46,7 +46,8 @@ object Widgets {
         }
         val statuses = manager.getAppWidgetIds(ComponentName(context, StatusWidget::class.java))
         if (statuses.isNotEmpty()) {
-            val usage = UsageRules.tightest(container.usage.reports().filterKeys { container.machines.get(it) != null })
+            // As the limits stand now: one whose reset time passed since the reading counts as fresh.
+            val usage = UsageRules.tightest(container.usage.reports().filterKeys { container.machines.get(it) != null }, container.usage.nowSeconds())
             manager.updateAppWidget(statuses, status(context, container.tally.counts.value, usage, container.usage.nowSeconds()))
         }
     }

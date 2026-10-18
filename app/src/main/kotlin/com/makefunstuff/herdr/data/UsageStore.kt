@@ -3,6 +3,7 @@ package com.makefunstuff.herdr.data
 import com.makefunstuff.herdr.core.api.plainMessage
 import com.makefunstuff.herdr.core.host.HostSession
 import com.makefunstuff.herdr.core.usage.HerdrUsage
+import com.makefunstuff.herdr.core.usage.UsageLimit
 import com.makefunstuff.herdr.core.usage.UsageReader
 import com.makefunstuff.herdr.core.usage.UsageReport
 import kotlinx.coroutines.CancellationException
@@ -90,6 +91,27 @@ class UsageStore(
 
     fun put(machineId: String, report: UsageReport) {
         _latest.update { it + (machineId to Entry(report, clock())) }
+        save()
+    }
+
+    /**
+     * Newer limits for [machineId] (`herdr-usage limits`, the app's own look while closed), into its
+     * reading: the week of use stays, and so does when the whole reading was taken. A machine with no
+     * reading yet keeps these as one.
+     */
+    fun putLimits(machineId: String, limits: UsageReport) {
+        _latest.update { all ->
+            val e = all[machineId]
+            // No whole reading yet: these show, and the usage page still reads the whole (read at 0: stale).
+            all + (machineId to if (e == null) Entry(limits.copy(raw = UsageReader.write(limits)), 0) else e.copy(report = e.report.withLimits(limits)))
+        }
+        save()
+    }
+
+    /** One limit as a push told it ([at]: the machine's clock, seconds), into [machineId]'s reading. */
+    fun putLimit(machineId: String, provider: String, limit: UsageLimit, at: Long) {
+        val e = _latest.value[machineId] ?: return
+        _latest.update { it + (machineId to e.copy(report = e.report.withLimit(provider, limit, at))) }
         save()
     }
 

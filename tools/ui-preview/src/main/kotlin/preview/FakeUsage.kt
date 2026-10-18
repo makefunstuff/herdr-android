@@ -16,6 +16,10 @@ class FakeUsage(
     var refuse: String? = null,
     /** Only these providers (by id); null: all of them. */
     var only: Set<String>? = null,
+    /** When Claude's session resets, as hours after midnight UTC on the demo's day (the demo is at 07:42). */
+    var claudeResetHour: Int = 11,
+    /** Providers whose key or login failed, by id: the reason herdr-usage gives. */
+    var errors: Map<String, String> = emptyMap(),
 ) {
     fun run(command: String): CommandResult? {
         if (!command.contains(HerdrUsage.FILE.substringAfterLast('/'))) return null
@@ -38,7 +42,7 @@ class FakeUsage(
             "claude" to """{"id": "claude", "name": "Claude Code", "kind": "subscription", "plan": "Max 5x",
               "source": "Anthropic's usage API, with Claude Code's login", "readAt": ${now - 120},
               "limits": [
-                {"id": "session", "name": "5-hour session", "percent": $claudeSession, "resets": ${at(11)}, "window": 18000},
+                {"id": "session", "name": "5-hour session", "percent": $claudeSession, "resets": ${at(claudeResetHour)}, "window": 18000},
                 {"id": "weekly", "name": "Weekly", "percent": $claudeWeekly, "resets": ${at(13, days = 3)}, "window": 604800},
                 {"id": "weekly-opus", "name": "Weekly · Opus", "percent": 12.0, "resets": ${at(13, days = 3)}, "window": 604800}],
               "days": ${days(1_850_000, 2_420_000, 960_000, 310_000, 2_910_000, 3_540_000, 2_120_000)},
@@ -92,7 +96,8 @@ class FakeUsage(
               "tasks": [{"id": "herdr-android/10", "title": "Haptics when an agent needs you", "tokens": 410_000, "cost": 0}],
               "agents": [{"name": "pi · qwen3.8-27b", "tokens": 490_000, "cost": 0}],
               "match": ["pi/llama.cpp"]}""",
-        ).filter { only == null || it.first in only!! }.map { it.second }
+        ).filter { only == null || it.first in only!! }
+            .map { (id, json) -> errors[id]?.let { json.trimEnd().removeSuffix("}") + """, "error": "$it"}""" } ?: json }
         return """{"ok": true, "v": 1, "version": "${HerdrUsage.VERSION}", "at": $now, "today": "2026-10-17", "providers": [${providers.joinToString(", ")}]}"""
             .replace(Regex("\\s*\\n\\s*"), " ").replace(Regex("(?<=\\d)_(?=\\d)"), "")
     }

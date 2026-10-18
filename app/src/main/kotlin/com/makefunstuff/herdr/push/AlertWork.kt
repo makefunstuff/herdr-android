@@ -61,6 +61,8 @@ class AlertWork(
         msg.presence?.let { quiet.presence.record(machineId, label, it, minOf(now, msg.at * 1000).takeIf { msg.at > 0 } ?: now) }
         inbox.apply(changes, quiet = quiet.silent(now), hold = quiet.check(now), rules = rules)
         watches.events(machineId, label, msg.events)
+        // A limit's warning carries its reading: the glance and the widget show it at once.
+        msg.events.filterIsInstance<PushEvent.Usage>().forEach { usage.putLimit(machineId, it.provider, it.limit, msg.at) }
         return true
     }
 
@@ -155,9 +157,16 @@ class AlertWork(
         runCatching {
             HerdrUsage.Client({ cmd, t -> conn.run(cmd, t) }, { cmd, input, t -> conn.runWithInput(cmd, input.byteInputStream(), t) }, s.machine.label).limits()
         }.getOrNull()?.let { r ->
+            // The limits as they are now, for the glance and the status widget while the app is closed.
+            usage.putLimits(machineId, r)
             val now = usage.nowSeconds()
-            val changes = r.providers.filter { !it.stale }.flatMap { p ->
-                p.limits.map { l -> Alerts.usage(machineId, s.machine.label, PushEvent.Usage(p.id, p.name, l, UsageRules.level(l.percent)), now) }
+            val changes = r.providers.filter { !it.stale && it.error.isEmpty() }.flatMap { p ->
+                p.limits.mapNotNull { l ->
+                    val level = UsageRules.level(l.percent)
+                    // Under the marks a warning comes down only after its window, or well under them for a rolling one (UsageRules.CLEAR).
+                    if (level == 0 && l.resets == null && l.percent >= UsageRules.CLEAR) null
+                    else Alerts.usage(machineId, s.machine.label, PushEvent.Usage(p.id, p.name, l, level), now)
+                }
             }
             if (changes.isNotEmpty()) inbox.apply(changes, quiet = quiet.silent(), hold = quiet.check(), rules = rules)
         }

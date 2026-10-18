@@ -128,6 +128,7 @@ private fun AgentChoiceRow(agent: String, role: String, selected: Boolean, machi
 fun AgentLeft(agent: String, machineId: String, prefix: String = "") {
     val store = LocalContainer.current.usage
     val latest by store.latest.collectAsStateWithLifecycle()
+    // At the time it is shown: a limit whose reset passed since the reading counts as fresh.
     val left = UsageRules.leftFor(agent, latest[machineId]?.report, store.nowSeconds(), store.zone()) ?: return
     if (left.words.isEmpty()) return
     Text(

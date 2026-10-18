@@ -128,8 +128,10 @@ QUICK_FRESH = 3600
 
 # Usage: every USAGE_EVERY seconds (0: never) the providers' limits, from herdr-usage (host/herdr-usage,
 # which the app puts in ~/.local/share/herdr-usage). The marks are the app's (core/…/usage/UsageRules.kt):
-# near a limit from 80%, almost out from 95%, out at 100%; each told once per window.
+# near a limit from 80%, almost out from 95%, out at 100%; each told once per window, and the
+# warning comes down when the window is over.
 USAGE_EVERY = float(os.environ.get("HERDR_PUSH_USAGE_EVERY", "300"))
+USAGE_CLEAR = 70.0  # a rolling window's warning comes down under this (UsageRules.CLEAR)
 USAGE_SCRIPT = os.environ.get("HERDR_PUSH_USAGE") or os.path.join(HOME, ".local", "share", "herdr-usage", "herdr-usage")
 # A hand-over is told when the board gave this reason (its words: "out of allowance until 17:00"),
 # not when an agent ran out of room in its context, and only while it's news.
@@ -730,16 +732,28 @@ def usage_look(st, now):
             if not isinstance(lim, dict):
                 continue
             key = "%s\t%s" % (p["id"], lim.get("id"))
-            level = usage_level(lim.get("percent"))
+            percent = float(lim.get("percent") or 0)
             resets = lim.get("resets") or 0
+            # A reading from before its own reset time (a cached one): that window is over, it starts afresh.
+            if resets and now >= resets:
+                percent, resets = 0.0, 0
+            level = usage_level(percent)
             before = levels.get(key) or {}
             told = before.get("level", 0)
-            # A new window (it resets at another time) starts afresh.
-            if resets and before.get("resets") and before.get("resets") != resets:
-                told = 0 if level < told else told
-            if level > told or (level == 0 and before.get("level", 0) > 0):
+            # The window told about is over: it reset at another time now, or its reset time passed.
+            # A rolling one (no reset time) is over once well under the marks (USAGE_CLEAR), so a limit
+            # hovering around 80% isn't told again and again.
+            ended = (resets and before.get("resets") and before.get("resets") != resets) \
+                or (before.get("resets") and now >= before["resets"]) \
+                or (not resets and not before.get("resets") and percent < USAGE_CLEAR)
+            if ended and told:
+                told = 0
+                if level == 0:
+                    events.append({"type": "usage", "provider": p["id"], "name": p.get("name") or p["id"], "limit": lim, "level": 0})
+            if level > told:
                 events.append({"type": "usage", "provider": p["id"], "name": p.get("name") or p["id"], "limit": lim, "level": level})
-            levels[key] = {"level": level if level >= told or level == 0 else told, "resets": resets}
+                told = level
+            levels[key] = {"level": told, "resets": resets}
     return events
 
 

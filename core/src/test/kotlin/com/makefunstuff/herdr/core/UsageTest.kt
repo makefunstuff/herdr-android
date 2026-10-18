@@ -104,14 +104,14 @@ class UsageTest {
         assertEquals(listOf(0, 80, 80, 95, 100, 100), listOf(79.9, 80.0, 94.0, 95.0, 100.0, 130.0).map(UsageRules::level))
         val r = UsageReader.parse(sample)
         // The provider's own count before an estimate, though the estimate is higher.
-        val t = assertNotNull(UsageRules.tightest(mapOf("devbox" to r)))
+        val t = assertNotNull(UsageRules.tightest(mapOf("devbox" to r), now))
         assertEquals("devbox", t.machineId)
         assertEquals("Claude 82% · resets 11:00", UsageRules.glance(t, now, utc))
         assertEquals(80, t.level)
         // Only estimates: they count.
         val est = UsageReport(now, providers = listOf(r.providers[2]))
-        assertEquals("OpenCode Go 97%", UsageRules.glance(UsageRules.tightest(mapOf("m" to est))!!, now, utc))
-        assertNull(UsageRules.tightest(mapOf("m" to UsageReport(now))))
+        assertEquals("OpenCode Go 97%", UsageRules.glance(UsageRules.tightest(mapOf("m" to est), now)!!, now, utc))
+        assertNull(UsageRules.tightest(mapOf("m" to UsageReport(now)), now))
         // Reset times as the phone's clock says them.
         assertEquals("11:00", UsageWords.at(now + 3 * 3600 + 18 * 60, now, utc))
         assertEquals("Tue 07:42", UsageWords.at(now + 3 * 86400, now, utc))
@@ -140,7 +140,81 @@ class UsageTest {
         assertNull(UsageRules.leftFor("claude", null, now, utc))
         val out = r.providers[0].copy(limits = listOf(UsageLimit("session", "5-hour session", 100.0, now + 3600)))
         assertEquals("out until 08:42", UsageRules.left(out, now, utc))
-        assertEquals(100, UsageRules.pressure(r.providers[1].copy(spend = r.providers[1].spend!!.copy(balance = 0.0))))
+        assertEquals(100, UsageRules.pressure(r.providers[1].copy(spend = r.providers[1].spend!!.copy(balance = 0.0)), now))
+    }
+
+    @Test
+    fun aLimitStartsAgainOnceItsResetTimeHasPassed() {
+        val r = UsageReader.parse(sample)
+        val reset = now + 3 * 3600 + 18 * 60
+        // Claude's session at 98%, read before 11:00.
+        val read = r.copy(providers = r.providers.map { p -> if (p.id != "claude") p else p.copy(limits = p.limits.map { if (it.id == "session") it.copy(percent = 98.0) else it }) })
+        assertEquals("Claude 98% · resets 11:00", UsageRules.glance(UsageRules.tightest(mapOf("m" to read), now)!!, now, utc))
+        assertEquals("2% left · resets 11:00", UsageRules.leftFor("claude", read, now, utc)?.words)
+        assertEquals(95, UsageRules.leftFor("claude", read, now, utc)?.level)
+        // Two hours after 11:00, with no newer reading: the session is fresh, the weekly limit is the tightest.
+        val later = reset + 2 * 3600
+        val t = assertNotNull(UsageRules.tightest(mapOf("m" to read), later))
+        assertEquals("weekly", t.limit.id)
+        assertEquals("Claude 47% · resets Tue 07:42", UsageRules.glance(t, later, utc))
+        assertEquals(0, t.level)
+        assertEquals("53% left · resets Tue 07:42", UsageRules.leftFor("claude", read, later, utc)?.words)
+        assertEquals(0, UsageRules.leftFor("claude", read, later, utc)?.level)
+        val session = read.providers[0].at(later).limits.first { it.id == "session" }
+        assertEquals(0.0, session.percent)
+        assertNull(session.resets)
+        assertEquals(reset, session.wasReset)
+        // Exactly at the reset time it is over; a second before, not yet.
+        assertEquals(0.0, read.providers[0].limits[0].at(reset).percent)
+        assertEquals(98.0, read.providers[0].limits[0].at(reset - 1).percent)
+        // A rolling window (no reset time) stays as read.
+        assertEquals(97.0, r.providers[2].at(later).limits[0].percent)
+    }
+
+    @Test
+    fun aProviderThatFailedIsNotOffered() {
+        val r = UsageReader.parse(sample)
+        val expired = r.copy(providers = r.providers.map { p ->
+            if (p.id == "opencode-go") p.copy(error = "The OpenCode Go key has expired: make a new one in the OpenCode console", limits = p.limits.map { it.copy(percent = 1.0) }) else p
+        })
+        val left = assertNotNull(UsageRules.leftFor("pi/opencode-go/deepseek-v4.1-flash", expired, now, utc))
+        assertEquals("The OpenCode Go key has expired", left.words)
+        assertEquals(100, left.level)
+        // Nor does its estimate count in the glance.
+        val only = UsageReport(now, providers = expired.providers.filter { it.id == "opencode-go" })
+        assertNull(UsageRules.tightest(mapOf("m" to only), now))
+        // A login that expired with nothing else known says so too.
+        val claude = r.providers[0].copy(limits = emptyList(), error = "Claude Code's login has expired; it renews the next time Claude Code runs")
+        assertEquals("Claude Code's login has expired", UsageRules.left(claude, now, utc))
+        assertEquals(100, UsageRules.pressure(claude, now))
+    }
+
+    @Test
+    fun newerLimitsJoinTheReadingTheAppKeeps() {
+        val r = UsageReader.parse(sample)
+        // The app's own look while closed reads the limits alone: they replace the old ones, the week of use stays.
+        val limits = UsageReader.parse(
+            """{"ok": true, "version": "1", "at": ${now + 600}, "providers": [
+              {"id": "claude", "name": "Claude Code", "kind": "subscription", "plan": "Max 5x", "readAt": ${now + 600},
+               "limits": [{"id": "session", "name": "5-hour session", "percent": 12.0, "resets": ${now + 7 * 3600}, "window": 18000}]},
+              {"id": "codex", "name": "Codex", "kind": "subscription", "limits": [{"id": "weekly", "name": "Weekly", "percent": 61.0}]}]}""".lines().joinToString(" "),
+        )
+        val merged = r.withLimits(limits)
+        val claude = merged.providers.first { it.id == "claude" }
+        assertEquals(listOf(12.0), claude.limits.map { it.percent })
+        assertEquals(now + 600, claude.readAt)
+        assertEquals(r.providers[0].days, claude.days)
+        assertEquals(r.providers[0].tasks, claude.tasks)
+        assertEquals(listOf("claude", "deepseek", "opencode-go", "local:llama.cpp", "codex"), merged.providers.map { it.id })
+        // Kept by the app as it was merged, it reads back the same.
+        assertEquals(merged.providers, UsageReader.cached(merged.raw)?.providers)
+        assertEquals(r.providers, UsageReader.cached(UsageReader.write(r))?.providers)
+        // A push's warning carries one limit.
+        val pushed = r.withLimit("claude", UsageLimit("session", "5-hour session", 96.0, now + 3600, 18000), now + 60)
+        assertEquals(96.0, pushed.providers[0].limits.first { it.id == "session" }.percent)
+        assertEquals(47.0, pushed.providers[0].limits.first { it.id == "weekly" }.percent)
+        assertEquals(pushed.providers, UsageReader.cached(pushed.raw)?.providers)
+        assertEquals(r, r.withLimit("nobody", UsageLimit("x", "x", 1.0), now))
     }
 
     @Test
@@ -363,12 +437,26 @@ class UsageTest {
                 setExecutable(true)
             }
             val record = File(data, "tasks/herdr-android/49/task.json").apply { parentFile.mkdirs(); writeText("""{"handovers":[]}""") }
+            // Claude's 5-hour session (its % and when it resets), and a rolling estimated window once there is one.
             val percent = File(fake, "percent").apply { writeText("50") }
+            val resets = File(fake, "resets")
+            val rolling = File(fake, "rolling")
+            val hour = System.currentTimeMillis() / 1000 + 3600
+            resets.writeText("$hour")
             val usage = File(fake, "usage").apply {
                 writeText(
-                    "#!/usr/bin/env python3\nimport json\np = float(open('${percent.path}').read())\n" +
-                        "print(json.dumps({'ok': True, 'providers': [{'id': 'claude', 'name': 'Claude Code', 'limits': " +
-                        "[{'id': 'session', 'name': '5-hour session', 'percent': p, 'resets': 1792400000}]}]}))\n",
+                    """
+                    #!/usr/bin/env python3
+                    import json, os
+                    d = '${fake.path}'
+                    lim = {'id': 'session', 'name': '5-hour session', 'percent': float(open(d + '/percent').read())}
+                    r = int(open(d + '/resets').read())
+                    if r: lim['resets'] = r
+                    lims = [lim]
+                    if os.path.exists(d + '/rolling'):
+                        lims.append({'id': 'week', 'name': 'Weekly (est.)', 'percent': float(open(d + '/rolling').read()), 'estimated': True})
+                    print(json.dumps({'ok': True, 'providers': [{'id': 'claude', 'name': 'Claude Code', 'limits': lims}]}))
+                    """.trimIndent() + "\n",
                 )
                 setExecutable(true)
             }
@@ -394,18 +482,41 @@ class UsageTest {
             assertEquals(0, sh(HerdrPush.command("subscribe"), sub))
             fun once() { Thread.sleep(30); assertEquals(0, sh(HerdrPush.command("once"))) }
             fun events(i: Int) = assertNotNull(PushMessages.open(received[i], mapOf("m1" to key))).second.events
-            fun level(i: Int) = assertIs<PushEvent.Usage>(events(i).single()).level
+            // Every limit told so far: which, and at what mark (0: the warning comes down).
+            fun told() = received.indices.flatMap { i -> events(i).filterIsInstance<PushEvent.Usage>().map { "${it.limit.id} ${it.level}" } }
 
             once()
             assertTrue(received.isEmpty())
             percent.writeText("82"); once(); once()
-            assertEquals(listOf(80), received.indices.map(::level))
+            assertEquals(listOf("session 80"), told())
+            // Under the mark and over it again in the same window: nothing new, nothing taken down.
+            percent.writeText("70"); once()
+            percent.writeText("83"); once()
+            assertEquals(listOf("session 80"), told())
             percent.writeText("96"); once()
             percent.writeText("100"); once(); once()
-            assertEquals(listOf(80, 95, 100), received.indices.map(::level))
-            // The window reset: the notification comes down.
-            percent.writeText("4"); once()
-            assertEquals(listOf(80, 95, 100, 0), received.indices.map(::level))
+            assertEquals(listOf("session 80", "session 95", "session 100"), told())
+            // A new window (it resets at another time): the notification comes down.
+            resets.writeText("${hour + 18000}"); percent.writeText("4"); once()
+            assertEquals(listOf("session 80", "session 95", "session 100", "session 0"), told())
+            // A reading taken before its own reset time, still at 85% after it (herdr-usage's cache): the window is over all the same.
+            val soon = System.currentTimeMillis() / 1000 + 2
+            resets.writeText("$soon"); percent.writeText("85"); once()
+            assertEquals("session 80", told().last())
+            while (System.currentTimeMillis() / 1000 <= soon) Thread.sleep(100)
+            once()
+            assertEquals("session 0", told().last())
+            // A rolling window (no reset time) hovering around 80% is told once; it comes down only well under it.
+            resets.writeText("${hour + 36000}"); percent.writeText("3")
+            val before = told().size
+            rolling.writeText("82"); once()
+            rolling.writeText("75"); once()
+            rolling.writeText("83"); once()
+            assertEquals(listOf("week 80"), told().drop(before))
+            rolling.writeText("60"); once()
+            rolling.writeText("81"); once()
+            assertEquals(listOf("week 80", "week 0", "week 80"), told().drop(before))
+            val pushes = received.size
 
             // The board's fallback hands the task over because of a limit: told once. Running out of room isn't a limit.
             val ms = System.currentTimeMillis()
@@ -414,13 +525,13 @@ class UsageTest {
                    {"at":$ms,"role":"worker","from":"claude/opus","to":"codex/gpt-6.1-sol","why":"out of allowance until 17:00"}]}""",
             )
             once(); once()
-            assertEquals(5, received.size)
-            val t = assertIs<PushEvent.Takeover>(events(4).single())
+            assertEquals(pushes + 1, received.size)
+            val t = assertIs<PushEvent.Takeover>(events(pushes).single())
             assertEquals(listOf("herdr-android/49", "claude/opus", "codex/gpt-6.1-sol", "out of allowance until 17:00"), listOf(t.taskId, t.from, t.to, t.why))
             record.writeText("""{"handovers":[{"at":${ms + 5},"role":"worker","from":"codex","to":"pi","why":"it ran out of room (context or output limit)"}]}""")
             record.setLastModified(System.currentTimeMillis() + 2000)
             once()
-            assertEquals(5, received.size)
+            assertEquals(pushes + 1, received.size)
         } finally {
             server.stop(0)
             dir.deleteRecursively()

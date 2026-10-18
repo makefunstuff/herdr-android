@@ -107,7 +107,7 @@ fun UsageScreen(nav: NavController, machineId: String) {
     val lists by container.boards.lists.collectAsStateWithLifecycle()
     val owner = LocalLifecycleOwner.current
     val entry = latest[machineId]
-    val now = store.nowSeconds()
+    val now by rememberNow()
     val zone = store.zone()
 
     LaunchedEffect(machineId, state.online) {
@@ -131,7 +131,7 @@ fun UsageScreen(nav: NavController, machineId: String) {
                     state.machine.label,
                     when {
                         machineId in reading -> "reading…"
-                        entry != null -> "read ${ago(store.clock() - entry.readMs)}"
+                        entry != null && entry.readMs > 0 -> "read ${ago(store.clock() - entry.readMs)}"
                         machineId in problems -> "couldn't read it"
                         !state.online -> state.status.label()
                         else -> "reading…"
@@ -158,7 +158,8 @@ fun UsageScreen(nav: NavController, machineId: String) {
             verticalArrangement = Arrangement.spacedBy(Space.m),
         ) {
             problems[machineId]?.let { p ->
-                item(key = "problem") { Notice("Couldn't read it again: $p. This is the reading from ${ago(store.clock() - entry.readMs)}.", color = Herdr.colors.notice, icon = HerdrIcons.Clock) }
+                val from = if (entry.readMs > 0) "the reading from ${ago(store.clock() - entry.readMs)}" else "the last limits it sent"
+                item(key = "problem") { Notice("Couldn't read it again: $p. This is $from.", color = Herdr.colors.notice, icon = HerdrIcons.Clock) }
             }
             if (report.partial) item(key = "partial") {
                 Notice("Not every session record was read yet: what the agents used fills in with the next look.", icon = HerdrIcons.Hourglass)
@@ -171,7 +172,8 @@ fun UsageScreen(nav: NavController, machineId: String) {
                 )
             }
             items(report.providers, key = { it.id }) { p ->
-                ProviderCard(p, now, zone, keys) { task -> nav.navigate(Routes.board(machineId, task)) }
+                // As it stands now: a limit whose reset passed since the reading starts again.
+                ProviderCard(p.at(now), now, zone, keys) { task -> nav.navigate(Routes.board(machineId, task)) }
             }
             item(key = "foot") {
                 Text(
@@ -181,6 +183,21 @@ fun UsageScreen(nav: NavController, machineId: String) {
                     style = MaterialTheme.typography.bodySmall, color = Herdr.colors.muted, modifier = Modifier.padding(top = Space.s),
                 )
             }
+        }
+    }
+}
+
+/**
+ * The phone's time in seconds ([com.makefunstuff.herdr.data.UsageStore.clock]), again each minute: a
+ * limit whose reset time passes while it is shown starts again from nothing.
+ */
+@Composable
+private fun rememberNow(): androidx.compose.runtime.State<Long> {
+    val store = LocalContainer.current.usage
+    return androidx.compose.runtime.produceState(store.nowSeconds()) {
+        while (true) {
+            kotlinx.coroutines.delay(60_000)
+            value = store.nowSeconds()
         }
     }
 }
@@ -301,7 +318,9 @@ private fun Heading(text: String) {
 private fun LimitMeter(l: UsageLimit, now: Long, zone: ZoneId) {
     val c = Herdr.colors
     val color = limitColor(l.percent)
-    val reset = l.resets?.let { "resets ${UsageWords.at(it, now, zone)}" } ?: if (l.window != null) "rolling" else null
+    val reset = l.resets?.let { "resets ${UsageWords.at(it, now, zone)}" }
+        ?: l.wasReset?.let { "reset at ${UsageWords.at(it, now, zone)}" }
+        ?: if (l.window != null) "rolling" else null
     Column(Modifier.fillMaxWidth().padding(vertical = Space.xs).semantics(mergeDescendants = true) {}) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(l.name, style = MaterialTheme.typography.bodyMedium, color = c.text, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
@@ -457,10 +476,10 @@ fun UsageCard(session: HostSession, onOpen: () -> Unit) {
     LaunchedEffect(id, state.online) {
         if (state.online && store.stale(id, 10 * 60_000L)) store.read(session)
     }
-    val report = latest[id]?.report
-    val now = store.nowSeconds()
+    val now by rememberNow()
+    val report = latest[id]?.report?.let { r -> r.copy(providers = r.providers.map { it.at(now) }) }
     val zone = store.zone()
-    val tight = report?.let { UsageRules.tightest(mapOf(id to it)) }
+    val tight = report?.let { UsageRules.tightest(mapOf(id to it), now) }
     val warn = tight?.takeIf { it.level >= 80 }
     val c = Herdr.colors
     QuietCard(onClick = onOpen, onClickLabel = "Open usage and limits", padded = true, edge = warn?.let { limitColor(it.limit.percent) } ?: c.line) {
@@ -487,6 +506,7 @@ private fun summary(providers: List<ProviderUsage>?, now: Long, zone: ZoneId): S
     if (providers.isEmpty()) return "No AI provider found on this machine"
     return providers.joinToString(" · ") { p ->
         when {
+            p.error.isNotEmpty() -> "${p.short} unavailable"
             p.tightest != null -> "${p.short} ${UsageRules.percent(p.tightest!!.percent)}"
             p.kind == ProviderKind.Local -> "${p.short} local"
             p.spend?.balance != null -> "${p.short} ${UsageWords.money(p.spend.balance, p.spend.currency)} left"
@@ -508,13 +528,14 @@ fun UsageChip(nav: NavController, compact: Boolean = false) {
     val hosts by container.hosts.hosts.collectAsStateWithLifecycle()
     val panes = LocalPanes.current
     val ids = hosts.map { it.machine.id }.toSet()
-    val tight = remember(latest, ids) { UsageRules.tightest(latest.filterKeys { it in ids }.mapValues { it.value.report }) } ?: return
+    val now by rememberNow()
+    val tight = remember(latest, ids, now) { UsageRules.tightest(latest.filterKeys { it in ids }.mapValues { it.value.report }, now) } ?: return
     val c = Herdr.colors
     val color = if (tight.level >= 80) limitColor(tight.limit.percent) else c.muted
-    val words = UsageRules.glance(tight, store.nowSeconds(), store.zone())
+    val words = UsageRules.glance(tight, now, store.zone())
     val shown = if (compact) words.substringBefore(" · ") else words
     Row(
-        Modifier.widthIn(max = 188.dp).heightIn(min = 32.dp).clip(HerdrShapes.Pill)
+        Modifier.widthIn(max = 216.dp).heightIn(min = 32.dp).clip(HerdrShapes.Pill)
             .background(if (tight.level >= 80) c.tint(color) else c.card)
             .then(if (tight.level < 80) Modifier.hairline(HerdrShapes.Pill) else Modifier)
             .clickable(onClickLabel = "Open usage and limits") { panes.open(nav, Routes.usage(tight.machineId)) }

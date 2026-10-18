@@ -4,7 +4,13 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
+import kotlinx.serialization.json.putJsonObject
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.jsonObject
 import java.io.IOException
@@ -23,7 +29,16 @@ data class UsageLimit(
     val resets: Long? = null,
     val window: Long? = null,
     val estimated: Boolean = false,
-)
+    /** Its reset time passed since it was read ([at]): it was this, and is a fresh window now. */
+    val wasReset: Long? = null,
+) {
+    /**
+     * As it stands at [now] (epoch seconds): once its reset time has passed it starts again from
+     * nothing, whatever the last reading said, until the next reading says when it resets next.
+     */
+    fun at(now: Long): UsageLimit =
+        if (resets != null && resets <= now) copy(percent = 0.0, resets = null, wasReset = resets) else this
+}
 
 /** An API account's money, in [currency]; what isn't known is null. [estimated]: from this machine's sessions. */
 data class Spend(
@@ -88,6 +103,9 @@ data class ProviderUsage(
         else -> name
     }
 
+    /** As it stands at [now]: its limits whose reset passed since the reading start again ([UsageLimit.at]). */
+    fun at(now: Long): ProviderUsage = if (limits.none { it.resets != null && it.resets <= now }) this else copy(limits = limits.map { it.at(now) })
+
     val weekTokens: Long get() = days.sumOf { it.tokens }
     val weekCost: Double get() = days.sumOf { it.cost }
 }
@@ -101,7 +119,28 @@ data class UsageReport(
     val partial: Boolean = false,
     /** The answer it was read from, kept as the app's cache. */
     val raw: String = "",
-)
+) {
+    /**
+     * This reading with [newer]'s limits (`herdr-usage limits`, the app's own look while closed): each
+     * provider's limits, error and when it was read replaced, its week of use kept; a provider only
+     * in [newer] added. [raw] is written again, so the app keeps the merged reading.
+     */
+    fun withLimits(newer: UsageReport): UsageReport {
+        val fresh = newer.providers.associateBy { it.id }
+        val merged = providers.map { p ->
+            fresh[p.id]?.let { n -> p.copy(limits = n.limits, error = n.error, stale = n.stale, readAt = n.readAt.takeIf { it > 0 } ?: p.readAt, plan = n.plan.ifEmpty { p.plan }) } ?: p
+        } + newer.providers.filter { n -> providers.none { it.id == n.id } }
+        return copy(providers = merged).let { it.copy(raw = UsageReader.write(it)) }
+    }
+
+    /** This reading with one limit of [provider] as a push told it (herdr-push's warning); unchanged when it doesn't have that provider. */
+    fun withLimit(provider: String, limit: UsageLimit, at: Long): UsageReport {
+        val p = providers.firstOrNull { it.id == provider } ?: return this
+        val limits = if (p.limits.any { it.id == limit.id }) p.limits.map { if (it.id == limit.id) limit else it } else p.limits + limit
+        return copy(providers = providers.map { if (it.id == provider) it.copy(limits = limits, readAt = maxOf(it.readAt, at)) else it })
+            .let { it.copy(raw = UsageReader.write(it)) }
+    }
+}
 
 object UsageReader {
     private val json = Json { ignoreUnknownKeys = true }
@@ -126,6 +165,49 @@ object UsageReader {
         partial = o.bool("partial"),
         raw = o.toString(),
     )
+
+    /** [r] as herdr-usage writes it, for the app's cache of a reading it merged. */
+    fun write(r: UsageReport): String = buildJsonObject {
+        put("ok", true)
+        put("v", 1)
+        put("version", HerdrUsage.VERSION)
+        put("at", r.at)
+        put("today", r.today)
+        if (r.partial) put("partial", true)
+        putJsonArray("providers") {
+            for (p in r.providers) addJsonObject {
+                put("id", p.id)
+                put("name", p.name)
+                put("kind", p.kind.name.lowercase())
+                if (p.plan.isNotEmpty()) put("plan", p.plan)
+                putJsonArray("limits") {
+                    for (l in p.limits) addJsonObject {
+                        put("id", l.id); put("name", l.name); put("percent", l.percent)
+                        l.resets?.let { put("resets", it) }
+                        l.window?.let { put("window", it) }
+                        if (l.estimated) put("estimated", true)
+                    }
+                }
+                p.spend?.let { s ->
+                    putJsonObject("spend") {
+                        put("currency", s.currency)
+                        s.today?.let { put("today", it) }; s.week?.let { put("week", it) }; s.month?.let { put("month", it) }
+                        s.balance?.let { put("balance", it) }; s.limit?.let { put("limit", it) }; s.left?.let { put("left", it) }
+                        if (s.estimated) put("estimated", true)
+                    }
+                }
+                putJsonArray("days") { for (d in p.days) addJsonObject { put("day", d.day); put("tokens", d.tokens); put("cost", d.cost) } }
+                putJsonArray("tasks") { for (t in p.tasks) addJsonObject { put("id", t.id); put("title", t.title); put("tokens", t.tokens); put("cost", t.cost) } }
+                putJsonArray("agents") { for (a in p.agents) addJsonObject { put("name", a.name); put("tokens", a.tokens); put("cost", a.cost) } }
+                for ((k, v) in listOf("source" to p.source, "error" to p.error, "note" to p.note, "key" to p.key, "url" to p.url)) if (v.isNotEmpty()) put(k, v)
+                if (p.stale) put("stale", true)
+                put("readAt", p.readAt)
+                p.running?.let { put("running", it) }
+                putJsonArray("models") { p.models.forEach { add(it) } }
+                putJsonArray("match") { p.match.forEach { add(it) } }
+            }
+        }
+    }.toString()
 
     /** A report the app kept, or null when it can't be read any more. */
     fun cached(raw: String): UsageReport? = runCatching { report(json.parseToJsonElement(raw).jsonObject) }.getOrNull()

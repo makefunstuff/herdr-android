@@ -15,6 +15,13 @@ object UsageRules {
     const val ALMOST = 95.0
     const val OUT = 100.0
 
+    /**
+     * A warning about a window without a reset time (a rolling one, OpenCode Go's estimate) comes down
+     * only under this, so a limit hovering around 80% isn't told again and again. One with a reset time
+     * comes down when its window is over.
+     */
+    const val CLEAR = 70.0
+
     /** 0, 80, 95 or 100: the mark [percent] has passed. */
     fun level(percent: Double): Int = when {
         percent >= OUT -> 100
@@ -29,11 +36,13 @@ object UsageRules {
     }
 
     /**
-     * The limit closest to its end across [reports] (machine id → its report): the glance in the top
-     * bar and the status widget. The provider's own counts before estimates; null when nothing has a limit.
+     * The limit closest to its end across [reports] (machine id → its report) at [now]: the glance in
+     * the top bar and the status widget. A limit whose reset time has passed counts as fresh; a provider
+     * that can't be used (its key or login failed) is left out. The provider's own counts before
+     * estimates; null when nothing has a limit.
      */
-    fun tightest(reports: Map<String, UsageReport>): Tight? =
-        reports.flatMap { (id, r) -> r.providers.flatMap { p -> p.limits.map { Tight(id, p, it) } } }
+    fun tightest(reports: Map<String, UsageReport>, now: Long): Tight? =
+        reports.flatMap { (id, r) -> r.providers.filter { it.error.isEmpty() }.map { it.at(now) }.flatMap { p -> p.limits.map { Tight(id, p, it) } } }
             .sortedWith(compareBy<Tight> { it.limit.estimated }.thenByDescending { it.limit.percent })
             .let { all -> all.firstOrNull { !it.limit.estimated } ?: all.firstOrNull() }
 
@@ -52,9 +61,13 @@ object UsageRules {
             .maxByOrNull { it.first.length }?.second
     }
 
-    /** What is left, as a few words next to an agent: "18% left · resets 17:00", "$7.63 left", "local, no limit". */
-    fun left(p: ProviderUsage, now: Long, zone: ZoneId = ZoneId.systemDefault()): String {
-        if (p.error.isNotEmpty() && p.limits.isEmpty() && p.spend?.balance == null) return p.error.substringBefore(':').substringBefore(';')
+    /**
+     * What is left at [now], as a few words next to an agent: "18% left · resets 17:00", "$7.63 left",
+     * "local, no limit"; a provider whose key or login failed says so instead ("The OpenCode Go key has expired").
+     */
+    fun left(provider: ProviderUsage, now: Long, zone: ZoneId = ZoneId.systemDefault()): String {
+        val p = provider.at(now)
+        if (p.error.isNotEmpty()) return p.error.substringBefore(':').substringBefore(';')
         if (p.kind == ProviderKind.Local) return if (p.running == false) "local, not answering" else "local, no limit"
         p.tightest?.let { l ->
             val left = (100 - l.percent).coerceAtLeast(0.0)
@@ -78,13 +91,20 @@ object UsageRules {
 
     /** [left] for a board agent (`claude/opus`), or null when [report] has nothing on its provider. */
     fun leftFor(agent: String, report: UsageReport?, now: Long, zone: ZoneId = ZoneId.systemDefault()): Left? =
-        providerFor(agent, report)?.let { p -> Left(p, left(p, now, zone), pressure(p)) }
+        providerFor(agent, report)?.let { p -> Left(p, left(p, now, zone), pressure(p, now)) }
 
-    /** How tight [p] is for an agent about to start: 0, or its tightest limit's [level]. An empty balance counts as out. */
-    fun pressure(p: ProviderUsage): Int = when {
-        p.tightest != null -> level(p.tightest!!.percent)
-        p.spend?.balance != null && p.spend.balance <= 0.0 -> 100
-        else -> 0
+    /**
+     * How tight [provider] is at [now] for an agent about to start: 0, or its tightest limit's [level].
+     * An empty balance, and a key or login that failed, count as out.
+     */
+    fun pressure(provider: ProviderUsage, now: Long): Int {
+        val p = provider.at(now)
+        return when {
+            p.error.isNotEmpty() -> 100
+            p.tightest != null -> level(p.tightest!!.percent)
+            p.spend?.balance != null && p.spend.balance <= 0.0 -> 100
+            else -> 0
+        }
     }
 
     fun percent(p: Double): String = "${p.toInt().coerceIn(0, 999)}%"
