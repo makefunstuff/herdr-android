@@ -267,7 +267,9 @@ nothing else moves on its own.
   CONFIRM, a key's tap before Android 11). Nothing else buzzes.
 - Chats and the terminal have their own text sizes (Settings → **Text size**, `TextSizeStore`), on
   top of the phone's font scale: the chats' scale (85–150%) applies to a chat's transcript and
-  composer (`ChatSurface`), not its bars; the terminal's size is in sp (5–24, pinch sets it too).
+  composer (`ChatSurface`), not its bars, and multiplies what the phone's own font scaling makes of
+  each size (`withTextScale`: Android 14's curve, where large text grows less, is kept; at 100% a
+  chat reads as the rest of the app); the terminal's size is in sp (5–24, pinch sets it too).
 - A terminal that asks for a password (`PasswordPrompt`: what stands before the cursor ends in a
   colon after *password*, *passphrase*, *passcode* or *PIN*, and no shell or TUI prompt stands
   before that word) gets a masked field (`PasswordCard`) over its keys. Dots, the keyboard's

@@ -35,7 +35,6 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.Density
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -391,7 +390,8 @@ fun typingInShortWindow(): Boolean = WindowInsets.isImeVisible && LocalConfigura
  * [transcript] gets the composer's measured height to leave free under its last line (as bottom
  * content padding), so the newest message is never under the card, and a reversed list stays at
  * its end while the box grows or the keyboard opens. [textScale] is the chats' own text size over
- * the phone's (Settings → Text size): the messages and the composer grow with it, the bars don't.
+ * the phone's (Settings → Text size), after the phone's own font scaling ([withTextScale]): the
+ * messages and the composer grow with it, the bars don't.
  */
 @Composable
 fun ChatSurface(
@@ -402,7 +402,7 @@ fun ChatSurface(
 ) {
     var height by remember { mutableIntStateOf(0) }
     val density = LocalDensity.current
-    CompositionLocalProvider(LocalDensity provides Density(density.density, density.fontScale * textScale)) {
+    CompositionLocalProvider(LocalDensity provides density.withTextScale(textScale)) {
         Box(modifier) {
             transcript(with(density) { height.toDp() })
             Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().onSizeChanged { height = it.height }) { composer() }
