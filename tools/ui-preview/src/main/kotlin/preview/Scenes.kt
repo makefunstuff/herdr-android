@@ -131,6 +131,11 @@ fun scenes(): List<Scene> = listOf(
     // Machines and one machine's workspaces.
     Scene("machines", route = Routes.MACHINES),
     Scene("machine", route = Routes.machine(DEVBOX)),
+    // A workspace with two tabs keeps its tab chips and its layout; with one tab, its actions are in the workspace's ⋯.
+    Scene("machine-tabs", route = Routes.machine(DEVBOX), setup = { host(DEVBOX).snapshot = Demo.devboxTabs() }),
+    Scene("machine-one-tab", route = Routes.machine(DEVBOX), actions = { tapLabel("Workspace actions") }),
+    // A machine without the work board: Health and Usage are its tiles.
+    Scene("machine-no-board", route = Routes.machine(GPU)),
     Scene("machine-new", route = Routes.machine(DEVBOX), actions = { tapText("New") }),
     Scene("add-machine", route = Routes.edit()),
 
@@ -239,6 +244,12 @@ fun scenes(): List<Scene> = listOf(
 
     // The work board and its Coordinator.
     Scene("coordinator", route = Routes.coordinator(DEVBOX)),
+    // An answer that lists the tasks waiting for you: each item's own words stay under its row.
+    Scene("coordinator-needs", route = Routes.coordinator(DEVBOX), setup = { host(DEVBOX).board?.remote = Demo.whatNeedsMe() }),
+    // A suggested ask tapped: its words wait in the message box, to send or change.
+    Scene("coordinator-ask", route = Routes.coordinator(DEVBOX), actions = { tapText("What needs me?") }),
+    // A task in an answer opens on the board.
+    Scene("coordinator-task", route = Routes.coordinator(DEVBOX), actions = { tapText("Speed up /jobs on large tables") }),
     // Reaching the Coordinator from outside the app: a share (a log line and a screenshot) choosing its machine,
     // the tile or widget when it can't tell which, and the chat it lands in with the shared words in its box.
     Scene("share", route = Routes.ask(Ask.SHARE), setup = { shared = Demo.shared() }),

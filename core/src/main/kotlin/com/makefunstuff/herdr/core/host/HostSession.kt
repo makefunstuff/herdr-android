@@ -98,6 +98,12 @@ class HostSession(
     private val scope = CoroutineScope(parentScope.coroutineContext + SupervisorJob(parentScope.coroutineContext[Job]))
     private val _state = MutableStateFlow(HostState(machine))
     val state: StateFlow<HostState> = _state.asStateFlow()
+    private val _answeredAt = MutableStateFlow<Long?>(null)
+    /**
+     * When herdr on the machine last answered (a snapshot read, at least every 15 s while connected),
+     * by the phone's clock; null until it first does. Apart from [state], so that ticking doesn't redraw every screen.
+     */
+    val answeredAt: StateFlow<Long?> = _answeredAt.asStateFlow()
 
     private var loop: Job? = null
     private val retryNow = Channel<Unit>(Channel.CONFLATED)
@@ -152,6 +158,7 @@ class HostSession(
 
     /** Takes a new snapshot, noting the agents that finished or started waiting since the last one. */
     private fun applySnapshot(next: SessionSnapshot, extra: (HostState) -> HostState = { it }) {
+        _answeredAt.value = System.currentTimeMillis()
         _state.update { s ->
             val added = Notices.between(s.snapshot, next, System.currentTimeMillis())
             extra(s).copy(

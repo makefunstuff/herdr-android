@@ -85,7 +85,9 @@ Swipe an agent left for **Pin** (it stays on top, under Needs you, in the order 
 
 ## Managing from the phone
 
-Everything that exists in a session is editable from the app, not just readable. A workspace or tab header has an actions button, and panes and agents answer to a long press: rename, focus, reorder, move, swap, zoom, clear a pane's scrollback, read what a pane is running, and ask `agent.explain` why an agent is in the state it shows. Closing a workspace, tab or pane asks first. herdr's own refusals ("There's no pane in that direction.") come back as plain sentences.
+A machine's screen opens with its places as tiles in one row, each with a live line: **Board** (how many tasks need you, else how many are at work), **Coordinator** (idle, working, waits for you) and **Health**; **Usage** is a line under them (a tile on a machine without the board). Its workspaces follow, each with its branch and pull request under its name and one row per pane: the agent and its state, or the shell and its folder, a tap opening its chat (or terminal) and the terminal icon its terminal. Tab chips and the layout thumbnail show only for a workspace with several tabs. The bar says when the machine last answered ("Online · answered 4 s ago"), and **New** steps aside while you scroll down.
+
+Everything that exists in a session is editable from the app, not just readable. A workspace or tab header has an actions button (a workspace's one tab is under its actions, **Its tab**), and panes and agents answer to a long press: rename, focus, reorder, move, swap, zoom, clear a pane's scrollback, read what a pane is running, and ask `agent.explain` why an agent is in the state it shows. Closing a workspace, tab or pane asks first. herdr's own refusals ("There's no pane in that direction.") come back as plain sentences.
 
 The screens follow herdr's `events.subscribe` stream, so a change made anywhere — desktop or phone — appears here. Notifications are the exception: herdr has no list of them, so the app derives them from agents finishing or blocking and shows them behind the bell in the top bar; the menu can also show a notification on the desktop running herdr.
 
@@ -129,7 +131,7 @@ In an agent's chat, the question a blocked agent asks is docked over the compose
 
 ## Machine health and cleanup
 
-A machine's screen has a **Health** card (RAM, CPU and its fullest disk, red when it runs low), and **⋯ → Health and cleanup** opens the whole picture, read over the same SSH connection every 5 seconds while the screen is in front:
+A machine's screen has a **Health** tile (the busiest of RAM, CPU and its fullest disk, red when it runs low), and **⋯ → Health and cleanup** opens the whole picture, read over the same SSH connection every 5 seconds while the screen is in front:
 
 - **RAM, swap, CPU and every disk** (free space per mount), and a chart of RAM and CPU over the **last hour**. The hour comes from herdr-push, which notes a reading every 30 seconds on the machine; without it the chart fills while the screen is open.
 - **The biggest processes** by memory or CPU, each with what it is and whose: Android emulators (with their AVD), QEMU VMs, Gradle and Kotlin daemons, dev servers (vite, next, uvicorn, …), node, the coding agents, herdr; and the board task whose worktree it runs in or was started from (`AND-22 · done`), or the herdr pane and agent it runs under. A tap shows its details and **Stop process** (after a confirmation: SIGTERM, then SIGKILL after 5 seconds, and only while that pid is still the same program).
@@ -141,7 +143,7 @@ The full readings and process labels are Linux's (`/proc`); on macOS the screen 
 
 ## Usage and limits
 
-Each machine has its own logins, so each has a **Usage** page (the card under **Health** on its screen, or **⋯ → Usage and limits**): one card per AI provider that machine uses.
+Each machine has its own logins, so each has a **Usage** page (the **Usage** line under the tiles on its screen, or **⋯ → Usage and limits**): one card per AI provider that machine uses.
 
 - **Claude Code** and **Codex** (subscriptions): the 5-hour session and the weekly limits (and Claude's per-model weekly ones), how much is used and when each resets, amber from 80% and red when out.
 - **API accounts** whose keys are on the machine: DeepSeek's balance, OpenRouter's spend today and this month and its key's limit, Anthropic's costs (with an admin key), OpenCode Go's key and its limits (estimated from what the machine's agents spent: it has no usage API).
@@ -279,6 +281,8 @@ It is built from what the agents' harnesses record, read over SSH: Claude Code's
 ## The work board's Coordinator
 
 On a machine with [herdr-projects](https://github.com/eliasstravik/herdr-projects) (its launcher at `~/.herdr-projects/data/bin/herdr-projects`, or `herdr-projects` on the PATH), the app shows a **Coordinator** chat above that machine's agents. It reaches the board the way another machine's board does, over the same SSH connection: `herdr-projects remote list` for the conversation and where the Coordinator stands, and `herdr-projects remote dispatch` for a message, which joins the same queue as the words typed in the board's own box. So the phone and the desktop show one conversation. **Start agents**, the switch beside Send, is the board's Tab: what the Coordinator adds from that message gets an agent at once. What you type stays in the box per chat, also when you leave the app, until it is sent. **+** attaches files from the phone, in both chats: each is copied to that machine (`~/.cache/herdr-android/uploads/`) and named in the message as `@path`, which the agents read. Photos and screenshots go the same way, after a look (below).
+
+The Coordinator's answers name tasks by their keys (`AND-6`, `API-3`); each one on the board shows as a row with its live state (`working · 3%`, `asks you`, `done`) that opens it there. A list of tasks becomes rows in its place, each with what the answer says of it under the title (its sub-items and indented lines too, the title not twice); a list that mixes tasks with other items stays as written, and a task named in passing gets its row after the answer (not one named in code). A strip under the bar shows the board at a glance (`3 need you · 3 working · 1 queued`, counted as the Board tab counts them) and opens it. Above an empty message box, suggested asks that are a next step on that board now: **What needs me?** when something does, **Start the queued ones** when tasks wait their turn, and **Status of** the open task the conversation named last; a tap puts the words in the box, to send or change.
 
 ## Photos and screenshots
 
