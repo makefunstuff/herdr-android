@@ -47,6 +47,9 @@ class AndroidAlerts(private val context: Context, private val appLock: () -> Boo
                 NotificationChannel(WATCHES, "Watches", NotificationManager.IMPORTANCE_HIGH).apply {
                     description = "A watch you set fired: a task's checks passed, an agent finished"
                 },
+                NotificationChannel(LIMITS, "Limits", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                    description = "An AI provider near or at a limit, or a task handed to another agent because of one"
+                },
                 NotificationChannel(WORKING, "Working", NotificationManager.IMPORTANCE_LOW).apply {
                     description = "While the app answers from a notification or looks at your machines"
                     setShowBadge(false)
@@ -126,6 +129,7 @@ class AndroidAlerts(private val context: Context, private val appLock: () -> Boo
         Alert.Kind.NeedsYou -> NEEDS_YOU
         Alert.Kind.WentWrong -> WENT_WRONG
         Alert.Kind.Watch -> WATCHES
+        Alert.Kind.Limits -> LIMITS
         Alert.Kind.Finished, Alert.Kind.Test -> FINISHED
     }
 
@@ -147,6 +151,7 @@ class AndroidAlerts(private val context: Context, private val appLock: () -> Boo
                 Alert.Kind.NeedsYou -> "Something needs you."
                 Alert.Kind.WentWrong -> "Something went wrong."
                 Alert.Kind.Watch -> "Something you watch changed."
+                Alert.Kind.Limits -> "A limit is near."
                 Alert.Kind.Finished, Alert.Kind.Test -> "Something finished."
             } + " Unlock to see it.",
         )
@@ -161,6 +166,7 @@ class AndroidAlerts(private val context: Context, private val appLock: () -> Boo
             .putExtra(MainActivity.OPEN_TASK, alert.taskId)
             .putExtra(MainActivity.OPEN_REVIEW, alert.review)
             .putExtra(MainActivity.OPEN_HEALTH, alert.health)
+            .putExtra(MainActivity.OPEN_USAGE, alert.usage)
             .putExtra(MainActivity.OPEN_QUICK, alert.quickRun)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         return PendingIntent.getActivity(context, alert.tag.hashCode(), intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
@@ -204,6 +210,7 @@ class AndroidAlerts(private val context: Context, private val appLock: () -> Boo
         const val FINISHED = "finished"
         const val WENT_WRONG = "went-wrong"
         const val WATCHES = "watches"
+        const val LIMITS = "limits"
         const val WORKING = "working"
         /** The one notification for what was held during quiet hours. */
         const val SUMMARY = "quiet:summary"

@@ -251,6 +251,7 @@ object Demo {
             journal = devboxJournal(),
             code = FakeCode(),
             quick = FakeQuick(),
+            usage = FakeUsage(),
         ),
         GPU to FakeMachine(
             GPU,

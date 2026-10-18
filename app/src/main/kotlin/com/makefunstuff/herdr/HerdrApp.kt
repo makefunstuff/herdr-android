@@ -87,7 +87,8 @@ class HerdrApp : Application() {
             combine(
                 container.tally.counts.map { it.copy(at = it.at / 60_000) }.distinctUntilChanged(),
                 container.shares.last,
-            ) { _, _ -> }.collect { Widgets.update(this@HerdrApp) }
+                container.usage.latest,
+            ) { _, _, _ -> }.collect { Widgets.update(this@HerdrApp) }
         }
     }
 }
@@ -100,6 +101,8 @@ class AppContainer(app: Application) {
     val drafts = DraftStore(app)
     val code = com.makefunstuff.herdr.data.CodeStore(java.io.File(app.filesDir, "code.json"))
     val health = HealthStore()
+    /** Each machine's providers and limits, as last read there (kept through restarts). */
+    val usage = com.makefunstuff.herdr.data.UsageStore(java.io.File(app.filesDir, "usage.json"))
     val quick = com.makefunstuff.herdr.data.QuickStore(java.io.File(app.filesDir, "quick.json"))
     val shares = Shares(java.io.File(app.filesDir, "shares.json"), java.io.File(app.cacheDir, "shared"))
     // Pictures waiting in a composer are the app's own files; pictures sent are a cache Android may clear.
@@ -120,7 +123,7 @@ class AppContainer(app: Application) {
     val tally = TallyStore(java.io.File(app.filesDir, "tally.json"), machines)
     /** One-shot watches set from the long-press sheets. */
     val watchWork = com.makefunstuff.herdr.push.WatchWork(push, inbox, quietWork)
-    val alertWork = AlertWork(hosts, machines, push, inbox, liveWork, quietWork, tally, quick, watchWork)
+    val alertWork = AlertWork(hosts, machines, push, inbox, liveWork, quietWork, tally, quick, watchWork, usage)
     /** Every board's list as last read, and which finished agents the phone has shown: the Agents screen's and the Board tab's. */
     val boards = com.makefunstuff.herdr.data.BoardLists(hosts, onRead = { id, tasks -> tally.tasks(id, tasks) })
     val seen = com.makefunstuff.herdr.data.SeenStore(java.io.File(app.filesDir, "seen.json"))
@@ -141,6 +144,7 @@ class AppContainer(app: Application) {
         tally.start(scope, hosts, onBoard = { id, tasks -> boards.put(id, tasks); briefWork.looked(id, tasks, null) })
         briefWork.start()
         watchWork.start(scope, hosts, boards)
+        usage.start(scope, hosts, machines)
         // Shared files waiting for a machine taken out of the app go with it.
         scope.launch { machines.machines.collect { list -> shares.keep(list.map { it.id }.toSet()) } }
         // Pins, snoozes and mutes of panes gone (or snoozes over) go as the machines are read.
