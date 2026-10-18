@@ -71,5 +71,9 @@ object SshConnector {
         return MachineConnection(host, host.fingerprint)
     }
 
+    /** The host key an address shows, as a scene set it ([preview.PreviewScanner.hostKeys]); other addresses don't answer. */
+    suspend fun hostKey(host: String, port: Int, timeoutMs: Int = 6_000): String =
+        preview.PreviewScanner.hostKeys[host] ?: throw ConnectError.Unreachable("$host:$port", IOException("No route to host"))
+
     fun fingerprint(key: PublicKey): String = "SHA256:preview"
 }

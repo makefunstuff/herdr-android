@@ -29,6 +29,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -60,6 +61,7 @@ import com.makefunstuff.herdr.ui.design.HerdrTopBar
 import com.makefunstuff.herdr.ui.design.LoadingState
 import com.makefunstuff.herdr.ui.design.MonoBlock
 import com.makefunstuff.herdr.ui.design.PrimaryButton
+import com.makefunstuff.herdr.ui.design.QuietButton
 import com.makefunstuff.herdr.ui.design.QuietCard
 import com.makefunstuff.herdr.ui.design.SecondaryButton
 import com.makefunstuff.herdr.ui.design.SectionHeading
@@ -79,10 +81,20 @@ private sealed interface TestResult {
     data class Failed(val message: String) : TestResult
 }
 
-/** Add a machine (id == null) or edit an existing one. */
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * Add a machine (id == null) or edit an existing one. Adding starts with scanning the code
+ * `herdr-push pair` shows on the machine ([PairMachineScreen]); typing the address is the other way.
+ */
 @Composable
 fun EditMachineScreen(nav: NavController, id: String?) {
+    var typing by rememberSaveable(id) { mutableStateOf(id != null) }
+    if (typing) MachineForm(nav, id, onScan = { typing = false }.takeIf { id == null }) else PairMachineScreen(nav, onType = { typing = true })
+}
+
+/** The machine's address and settings, typed; [onScan] (adding only) goes back to scanning its code. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MachineForm(nav: NavController, id: String?, onScan: (() -> Unit)?) {
     val container = LocalContainer.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -192,7 +204,13 @@ fun EditMachineScreen(nav: NavController, id: String?) {
             Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = Space.screen),
             verticalArrangement = Arrangement.spacedBy(Space.s),
         ) {
-            SectionHeading("Where it is", top = Space.xs)
+            if (onScan != null) {
+                QuietButton(onClick = onScan, modifier = Modifier.padding(top = Space.xs)) {
+                    Icon(HerdrIcons.ScanQrCode, null, modifier = Modifier.size(16.dp))
+                    Text("Scan the code from herdr-push pair instead")
+                }
+            }
+            SectionHeading("Where it is", top = if (onScan != null) 0.dp else Space.xs)
             HerdrTextField(
                 value = target,
                 onValueChange = { target = it; test = null },

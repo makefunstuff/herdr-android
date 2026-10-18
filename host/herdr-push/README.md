@@ -59,6 +59,7 @@ python3 $P once --dry-run  # one look: what it would send now (the first look on
 python3 $P test            # a test notification to every phone
 python3 $P journal         # what it kept for the brief (--since <unix seconds>)
 python3 $P presence        # whether someone is at this machine: typed (seconds ago) and unlocked
+python3 $P pair            # a QR code a phone scans to add this machine (see Pairing a phone)
 python3 $P ensure          # start it if it isn't running
 python3 $P install         # start it now and with the machine
 python3 $P uninstall       # stop it and remove the start-up entry (--purge: and the phones and its state)
@@ -70,6 +71,40 @@ To install it without the app's help, copy `herdr-push` from this folder to `~/.
 What it watches comes from each phone's subscription: the herdr session (`default` unless the machine is set to another in the app), and the `herdr` and `herdr-projects` the app found there. It reads them with `herdr api snapshot`, `herdr pane read <pane> --source visible` (for a blocked agent's question), `herdr-projects list --json` and, for a task in review on a phone with Live Updates, `herdr-projects show <id>` once an hour (its `review.rounds`), every 4 seconds and every 12 seconds for the board. `HERDR_PUSH_INTERVAL` (seconds) and `HERDR_PUSH_BOARD_EVERY` (looks between board reads) change that; under systemd, set them with `systemctl --user edit herdr-push` (`[Service]` / `Environment=HERDR_PUSH_INTERVAL=10`).
 
 Removing a machine from the app doesn't reach the machine. Turn it off in Settings → Notifications first, or run `herdr-push uninstall --purge` there.
+
+## Pairing a phone
+
+`herdr-push pair` adds a phone to this machine by a QR code, so nothing has to be copied from the phone into `authorized_keys`, and no address typed on a phone keyboard:
+
+```sh
+python3 ~/.local/share/herdr-push/herdr-push pair
+
+# on a machine without it yet (or with one too old to know pair):
+curl -fsSLO https://raw.githubusercontent.com/makefunstuff/herdr-android/HEAD/host/herdr-push/herdr-push
+python3 herdr-push pair
+```
+
+It prints the code, what it names (the machine, its host key) and the link the code holds, to paste in the app when the phone can't scan. Then it waits until a phone paired, five minutes passed, or Ctrl-C. In the app: **Machines → Add machine → Scan the code**.
+
+| Option | |
+| --- | --- |
+| `--host NAME[,NAME…]` | where the phone reaches this machine, tried before the ones found: the Tailscale name and address (`tailscale status`), then the address of the default route. At most four go in the code. |
+| `--port N` | sshd's port (else the `Port` in `/etc/ssh/sshd_config`, else 22) |
+| `--session NAME` | the herdr session the app opens there (else `default`) |
+| `--name NAME` | the machine's name in the app (else the host name) |
+
+How it works:
+
+- It makes a one-time Ed25519 key with `ssh-keygen` and adds it to `~/.ssh/authorized_keys` as `restrict`, `expiry-time` five minutes on (OpenSSH 8.2 and newer), `command="… herdr-push pair-accept <token> …"`: that key gets no shell, no forwarding and no terminal, only `pair-accept`.
+- The code holds `herdr://pair?v=1&n=<name>&u=<user>&a=<addresses>&p=<port>&k=<host keys>&c=<one-time code>&x=<expiry>`. The one-time code is that key's 32-byte seed; the host keys are the SHA256 fingerprints of `/etc/ssh/ssh_host_*_key.pub` (or of what `ssh-keyscan` sees on the port), both in URL-safe base64. The QR code is drawn by herdr-push itself, in the terminal's half blocks, dark on light.
+- The phone tries each address and goes on only where the machine shows one of those host keys, so the code works with this machine and nothing that answers in its place. It logs in with the one-time key and sends its own public key. `pair-accept` checks it is one public key, adds it to `authorized_keys` (unless it is there already), takes the one-time key out and answers in one line of JSON. The phone then logs in with its own key to check it took, and pins the host key.
+- The one-time key goes when it is used, when its five minutes are over, or when `pair` stops. A `pair` that was killed leaves it to the next `pair` or `pair-accept`, and to sshd's `expiry-time`. A code pairs one phone.
+
+Anyone who sees the code within its five minutes could pair with it, as with any such code: show it where you'd type a password.
+
+It touches one line in `~/.ssh/authorized_keys` while it waits (then the phone's key is there instead), and `pair-<token>.json` and `pair.lock` in `~/.local/state/herdr-push/`. It needs neither the watcher running nor a phone subscribed.
+
+It can't help when sshd reads keys from elsewhere (`AuthorizedKeysFile` in `/etc/ssh/sshd_config`; the phone then says the machine still refuses its key), or when the phone reaches the machine only through another one (a jump host): add those by hand.
 
 ## Your own push server
 

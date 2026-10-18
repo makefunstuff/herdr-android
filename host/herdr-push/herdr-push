@@ -1886,21 +1886,21 @@ def cmd_pair(rest):
     link = pair_link(name, user, addresses, port, fingerprints, seed, expires, opts["session"])
     done = None
     try:
-        print()
-        print(qr_text(link))
-        print()
-        print("Scan this in Herdr for Android: Machines → Add machine → Scan the code.")
-        print()
+        # The code last, so it stays on screen with the line under it however short the terminal is.
+        minutes = max(1, opts["ttl"] // 60)
+        print("Pairing a phone with %s\n" % name)
         print("  Machine   %s@%s%s" % (user, addresses[0], "" if port == 22 else ":%d" % port))
         for other in addresses[1:]:
             print("            or %s" % other)
         print("  Host key  %s" % fingerprints[0])
         for other in fingerprints[1:]:
             print("            %s" % other)
-        print("  Code      one-time, valid %d minutes" % max(1, opts["ttl"] // 60))
+        print("  Code      one-time, valid %d minute%s" % (minutes, "" if minutes == 1 else "s"))
         if not ssh_answers(port):
             print("\n  No SSH server answers on port %d here. Is sshd running? (--port N for another port)" % port)
-        print("\nThe link, if the phone can't scan (paste it in Add machine):\n%s\n" % link)
+        print("\nIf the phone can't scan, paste this link in Add machine:\n%s\n" % link)
+        print(qr_text(link))
+        print("\nScan it in Herdr for Android: Machines → Add machine → Scan the code.")
         sys.stdout.flush()
         tty = sys.stdout.isatty()
         while True:
