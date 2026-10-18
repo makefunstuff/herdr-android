@@ -618,7 +618,7 @@ fun agentTitle(agent: AgentInfo?, paneLabel: String, task: BoardTask?): Pair<Str
         named != null && kind != null -> "$named ($kind)"
         else -> named ?: agent.displayName
     }
-    val title = task?.title?.takeIf { it.isNotBlank() } ?: agent.subtitle?.takeIf { it != who } ?: who
+    val title = task?.title?.takeIf { it.isNotBlank() } ?: agent.subtitle?.takeIf { it != who && it != named } ?: who
     val subtitle = listOfNotNull(task?.name?.takeIf { it.isNotBlank() }, who.takeIf { it != title }, agent.statusLabel.takeIf { it.isNotBlank() })
     return title to subtitle.distinct().joinToString(" · ")
 }

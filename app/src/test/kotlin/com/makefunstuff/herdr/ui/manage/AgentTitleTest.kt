@@ -27,6 +27,8 @@ class AgentTitleTest {
         // herdr-projects names its agents after the task: the task says it already.
         assertEquals("Speed up /jobs" to "AND-12 · claude · blocked", agentTitle(agent(name = "sw-herdr-android-12"), "w1:p1", task))
         assertEquals("Speed up /jobs" to "AND-12 · claude · blocked", agentTitle(agent(name = "claude"), "w1:p1", task))
+        // Without a task its name is the title once, not the title and again under it.
+        assertEquals("reviewer (claude)" to "blocked", agentTitle(agent(name = "reviewer"), "w1:p1", null))
     }
 
     @Test fun aPaneWithoutAnAgent() {
