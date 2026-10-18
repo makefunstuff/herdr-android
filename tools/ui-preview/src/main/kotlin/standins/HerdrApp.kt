@@ -53,6 +53,7 @@ class AppContainer(app: Context) {
     val tally = TallyStore(java.io.File(app.filesDir, "tally.json"), machines)
     val alertWork = AlertWork(hosts, machines, push, inbox, liveWork, quietWork, tally, quick)
     val bubbles: Bubbles = PreviewBubbles
+    val guard = com.makefunstuff.herdr.data.GuardStore(java.io.File(app.filesDir, "guard.json"), preview.PreviewUnlock)
     // The brief at the demo's fixed time, on UTC, so it reads the same every run.
     val briefWork = BriefWork(
         scope, hosts, machines, BriefStore(java.io.File(app.filesDir, "brief.json")), PreviewBrief, PreviewVoice(),

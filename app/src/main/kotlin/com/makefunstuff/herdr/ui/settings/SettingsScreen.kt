@@ -100,6 +100,7 @@ fun SettingsScreen(nav: NavHostController) {
                     }
                 }
             }
+            QuietCard(padded = true) { GuardRow(onOpen = { nav.navigate(Routes.GUARD) }) }
             QuietCard(padded = true) { NotificationsCard(onQuietHours = { nav.navigate(Routes.QUIET) }) }
             QuietCard(padded = true) { BriefCard(onOpen = { nav.navigate(Routes.BRIEF) }, onSchedule = { nav.navigate(Routes.BRIEF_SETTINGS) }) }
             QuietCard(padded = true) {

@@ -34,7 +34,7 @@ private const val CHAT = "bubble"
 fun BubbleRoot(container: AppContainer, chat: BubbleChat, dark: Boolean = isSystemInDarkTheme(), nav: NavHostController = rememberNavController()) {
     CompositionLocalProvider(LocalContainer provides container) {
         HerdrTheme(dark) {
-            Box(Modifier.fillMaxSize().background(Herdr.colors.ground)) {
+            Box(Modifier.fillMaxSize().background(Herdr.colors.ground)) { com.makefunstuff.herdr.ui.common.GuardHost(container.guard) {
                 val agentsFilter = rememberSaveable { mutableStateOf<String?>(null) }
                 val agentsList = rememberLazyListState()
                 NavHost(nav, startDestination = CHAT, modifier = Modifier.fillMaxSize()) {
@@ -48,6 +48,7 @@ fun BubbleRoot(container: AppContainer, chat: BubbleChat, dark: Boolean = isSyst
                         }
                     }
                     screens(nav) { AgentsScreen(nav, agentsFilter, agentsList) }
+                }
                 }
                 ToastHost()
             }

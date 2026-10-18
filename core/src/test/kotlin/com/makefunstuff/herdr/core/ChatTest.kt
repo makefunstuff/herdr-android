@@ -2,6 +2,9 @@ package com.makefunstuff.herdr.core
 
 import com.makefunstuff.herdr.core.api.AgentSessionRef
 import com.makefunstuff.herdr.core.chat.BlockedPrompt
+import com.makefunstuff.herdr.core.chat.HintKey
+import com.makefunstuff.herdr.core.chat.OptionRole
+import com.makefunstuff.herdr.core.chat.PromptTag
 import com.makefunstuff.herdr.core.chat.ChatItem
 import com.makefunstuff.herdr.core.chat.ClaudeTranscript
 import com.makefunstuff.herdr.core.chat.CodexTranscript
@@ -79,6 +82,222 @@ class BlockedPromptTest {
     @Test
     fun noMenu() {
         assertNull(BlockedPrompt.parse("just some output\nand more\n"))
+    }
+
+    @Test
+    fun rolesAndShortLabels() {
+        val claude = assertNotNull(BlockedPrompt.parse(screen("claude-permission.txt")))
+        assertEquals(listOf(OptionRole.Yes, OptionRole.Always, OptionRole.No), claude.options.indices.map { claude.role(it) })
+        assertTrue(claude.shortLabel(1).startsWith("Always allow access to /tmp/"), claude.shortLabel(1))
+        val codex = assertNotNull(BlockedPrompt.parse(screen("codex-permission.txt")))
+        assertEquals(listOf(OptionRole.Yes, OptionRole.Always, OptionRole.TellInstead), codex.options.indices.map { codex.role(it) })
+        assertEquals(listOf("Yes, proceed", "Always for `printf 'hi' > c.txt`", "No, tell it…"), codex.options.indices.map { codex.shortLabel(it) })
+        val demo = assertNotNull(BlockedPrompt.parse(DEMO))
+        // The command stays a line of its own under Claude's tool header.
+        assertEquals(listOf("Bash command", "npm run db:migrate", "Apply the new migration"), demo.details)
+        assertEquals("Always for npm run", demo.shortLabel(1))
+        assertEquals(OptionRole.TellInstead, demo.role(2))
+        // The yes is never the permanent one, so a notification's Approve can't press it.
+        val pi = assertNotNull(BlockedPrompt.parse(" Allow it?\n\n  Always allow\n→ Allow once\n  Deny\n"))
+        assertEquals(1, pi.approveIndex)
+        assertEquals(2, pi.denyIndex)
+        val trust = assertNotNull(BlockedPrompt.parse(screen("claude-trust.txt")))
+        assertEquals(listOf(OptionRole.No, OptionRole.Yes), trust.options.indices.map { trust.role(it) })
+    }
+
+    @Test
+    fun theFootersKeysBecomeButtons() {
+        val claude = assertNotNull(BlockedPrompt.parse(screen("claude-permission.txt")))
+        assertEquals(listOf(HintKey("Amend", "tab"), HintKey("Cancel", "esc")), claude.hintKeys)
+        val codex = assertNotNull(BlockedPrompt.parse(screen("codex-permission.txt")))
+        assertEquals(listOf(HintKey("Cancel", "esc")), codex.hintKeys)
+        assertEquals(emptyList(), assertNotNull(BlockedPrompt.parse(" Go?\n\n→ Yes\n  No\n\n ↑↓ navigate · enter select\n")).hintKeys)
+        val more = assertNotNull(BlockedPrompt.parse(" Go?\n\n❯ 1. Yes\n  2. No\n\n ctrl+e to explain · shift+tab to approve all · esc to cancel\n"))
+        assertEquals(listOf(HintKey("Explain", "ctrl+e"), HintKey("Approve all", "shift+tab"), HintKey("Cancel", "esc")), more.hintKeys)
+    }
+
+    @Test
+    fun actionTags() {
+        fun tag(screen: String) = PromptTag.of(assertNotNull(BlockedPrompt.parse(screen)))
+        fun bash(command: String) = " Bash command\n   $command\n\n Do you want to proceed?\n ❯ 1. Yes\n   2. No\n\n Esc to cancel\n"
+        assertEquals(PromptTag("runs a migration", PromptTag.Risk.Caution), tag(DEMO))
+        assertEquals("pushes", tag(bash("git push origin main"))?.text)
+        assertEquals(PromptTag("force-pushes", PromptTag.Risk.Danger), tag(bash("git push --force origin main")))
+        assertEquals(PromptTag("deletes files", PromptTag.Risk.Danger), tag(bash("rm -rf build/")))
+        assertEquals("deletes data", tag(bash("psql -c 'DROP TABLE jobs'"))?.text)
+        assertEquals("discards changes", tag(bash("git reset --hard HEAD~1"))?.text)
+        assertEquals("installs packages", tag(bash("npm install left-pad"))?.text)
+        assertEquals("runs a command", tag(bash("ls -la"))?.text)
+        assertEquals("runs a command", tag(screen("claude-permission.txt"))?.text)
+        assertEquals("trusts this folder", tag(screen("claude-trust.txt"))?.text)
+        // A file the agent writes, even into migrations/, is an edit, not a migration.
+        assertEquals("edits a file", tag(" Create file\n migrations/0042_jobs.sql\n\n Do you want to create 0042_jobs.sql?\n ❯ 1. Yes\n   2. No\n")?.text)
+        assertNull(tag(CLAUDE_QUESTION))
+    }
+
+    @Test
+    fun claudeQuestionForm() {
+        val p = assertNotNull(BlockedPrompt.parse(CLAUDE_QUESTION))
+        assertEquals("Which evaluation dataset should we use?", p.question)
+        assertEquals(listOf("LM-O", "YCB-V", "T-LESS", "Type something.", "Chat about this"), p.options.map { it.label })
+        assertEquals("Occlusion benchmark.", p.options[0].description)
+        assertEquals(null, p.options[3].description)
+        assertEquals(listOf(OptionRole.Other, OptionRole.Other, OptionRole.Other, OptionRole.Custom, OptionRole.Chat), p.options.indices.map { p.role(it) })
+        assertEquals(3, p.customIndex)
+        assertEquals(false, p.multiSelect)
+        assertEquals(emptyList(), p.steps)
+        assertEquals(listOf(HintKey("Cancel", "esc")), p.hintKeys)
+        assertEquals(listOf("down", "enter"), p.keysFor(1))
+        assertEquals(listOf("down", "down", "down"), p.keysToType())
+        assertEquals(listOf("down", "down", "down", "down", "enter"), p.keysFor(4))
+    }
+
+    @Test
+    fun claudeFormOfSeveralQuestions() {
+        val first = assertNotNull(BlockedPrompt.parse(TABS))
+        assertEquals("Which way should the PR go?", first.question)
+        assertEquals(listOf("Route", "Author", "Submit"), first.steps.map { it.label })
+        assertEquals(listOf(true, false, false), first.steps.map { it.current })
+        assertEquals(listOf(false, false, false), first.steps.map { it.answered })
+        assertTrue(first.steps.last().submit)
+
+        val review = assertNotNull(BlockedPrompt.parse(REVIEW))
+        assertEquals("Ready to submit your answers?", review.question)
+        assertEquals(listOf("Submit answers", "Cancel"), review.options.map { it.label })
+        assertEquals(listOf(true, true, false), review.steps.map { it.answered })
+        assertEquals(listOf(false, false, true), review.steps.map { it.current })
+    }
+
+    @Test
+    fun claudeMultipleChoice() {
+        val sets = assertNotNull(BlockedPrompt.parse(SETS))
+        assertTrue(sets.multiSelect)
+        assertEquals(listOf("Route", "Sets", "Submit"), sets.steps.map { it.label })
+        assertEquals(listOf(false, true, false), sets.steps.map { it.current })
+        assertEquals(listOf("LM-O", "YCB-V", "T-LESS", "Type something", "Chat about this"), sets.options.map { it.label })
+        assertEquals(listOf(false, false, false, null, null), sets.options.map { it.checked })
+        assertEquals("Include the LM-O dataset.", sets.options[0].description)
+        // Each wanted box ticked with Enter, then → to the next step (as the web UI answers it).
+        assertEquals(listOf("enter", "down", "down", "enter", "right"), sets.keysForTicks(setOf(0, 2)))
+
+        // Claude Code 2.1.296: ticked rows drawn [✔], and a Submit row the cursor stops on.
+        fun screen(at: String) = listOf(
+            "←  ☒ Pick  ✔ Submit  →",
+            "Which ones?",
+            "${if (at == "A") "❯" else " "} 1. [✔] Option A",
+            "         First description",
+            "${if (at == "B") "❯" else " "} 2. [✔] Option B",
+            "         Second description",
+            "  3. [ ] Type something",
+            "${if (at == "Submit") "❯" else " "}    Submit",
+            "─".repeat(40),
+            "${if (at == "Chat") "❯" else " "} 4. Chat about this",
+            "Enter to select · ↑/↓ to navigate · Esc to cancel",
+        ).joinToString("\n")
+        val b = assertNotNull(BlockedPrompt.parse(screen("B")))
+        assertEquals(listOf(true, true, null, null), b.options.map { it.checked })
+        assertEquals(listOf("enter", "right"), b.keysForTicks(setOf(0)))
+        assertEquals(listOf("right"), b.keysForTicks(setOf(0, 1)))
+        val onSubmit = assertNotNull(BlockedPrompt.parse(screen("Submit")))
+        assertEquals(-1, onSubmit.selected)
+        // Submit → Type something → Option B
+        assertEquals(listOf("up", "up", "enter", "right"), onSubmit.keysForTicks(setOf(0)))
+        val onChat = assertNotNull(BlockedPrompt.parse(screen("Chat")))
+        // Chat about this → Submit → Type something → Option B → Option A
+        assertEquals(listOf("up", "up", "up", "up", "enter", "right"), onChat.keysForTicks(setOf(1)))
+    }
+
+    @Test
+    fun aGenericMultipleChoiceTogglesWithSpace() {
+        val p = assertNotNull(BlockedPrompt.parse(" Which checks?\n\n→ [x] Lint\n  [ ] Tests\n  [ ] Build\n\n ↑↓ move · space toggle · enter submit · esc cancel\n"))
+        assertTrue(p.multiSelect)
+        assertEquals(listOf("Lint", "Tests", "Build"), p.options.map { it.label })
+        assertEquals(listOf(true, false, false), p.options.map { it.checked })
+        assertEquals(listOf("down", "space", "enter"), p.keysForTicks(setOf(0, 1)))
+    }
+
+    @Test
+    fun sameQuestion() {
+        val a = assertNotNull(BlockedPrompt.parse(DEMO))
+        assertTrue(a.same(BlockedPrompt.parse(DEMO.replace("❯ 1. Yes", "  1. Yes").replace("   2. Yes,", " ❯ 2. Yes,"))))
+        assertEquals(false, a.same(BlockedPrompt.parse(DEMO.replace("db:migrate", "db:seed").replace("Do you want to proceed?", "Do you want to seed?"))))
+        assertEquals(false, a.same(null))
+    }
+
+    private companion object {
+        val DEMO = """
+            ────────────────────────────────────────────────────────
+             Bash command
+               npm run db:migrate
+               Apply the new migration
+            ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+             Do you want to proceed?
+             ❯ 1. Yes
+               2. Yes, and don't ask again for npm run commands
+               3. No, and tell Claude what to do differently
+
+             Esc to cancel · Tab to amend
+        """.trimIndent()
+
+        // Claude Code's AskUserQuestion screens, as the herdr web UI's tests have them (captured from 2.1.280).
+        val CLAUDE_QUESTION = """
+            ☐ Dataset
+
+            Which evaluation dataset should we use?
+
+            ❯ 1. LM-O
+                 Occlusion benchmark.
+              2. YCB-V
+                 Household objects.
+              3. T-LESS
+                 Texture-less objects.
+              4. Type something.
+            ────────────────────────────
+              5. Chat about this
+
+            Enter to select · ↑/↓ to navigate · Esc to cancel
+        """.trimIndent()
+
+        val TABS = """
+            ←  ☐ Route  ☐ Author  ✔ Submit  →
+            Which way should the PR go?
+            ❯ 1. Log in as owner
+                 Authenticate as the repository owner and open the PR directly on the repo.
+              2. Fork
+                 Push the branch to a fork and open the PR from there.
+              3. Type something.
+            ────────────────────────────────────────
+              4. Chat about this
+            Enter to select · Tab/Arrow keys to navigate · Esc to cancel
+        """.trimIndent()
+
+        val SETS = """
+            ←  ☒ Route  ☐ Sets  ✔ Submit  →
+            Which datasets?
+            ❯ 1. [ ] LM-O
+                     Include the LM-O dataset.
+              2. [ ] YCB-V
+                     Include the YCB-V dataset.
+              3. [ ] T-LESS
+                     Include the T-LESS dataset.
+              4. [ ] Type something
+                 Next
+            ────────────────────────────────────────
+              5. Chat about this
+            Enter to select · Tab/Arrow keys to navigate · Esc to cancel
+        """.trimIndent()
+
+        val REVIEW = """
+            ←  ☒ Route  ☒ Author  ✔ Submit  →
+            Review your answers
+             ● Which way should the PR go?
+               → Log in as owner
+             ● Who should author the commits?
+               → Repo owner
+            Ready to submit your answers?
+            ❯ 1. Submit answers
+              2. Cancel
+        """.trimIndent()
     }
 }
 

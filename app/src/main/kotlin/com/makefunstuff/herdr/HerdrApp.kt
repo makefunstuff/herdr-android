@@ -57,8 +57,13 @@ class HerdrApp : Application() {
 
         container = AppContainer(this)
         ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
-            override fun onStart(owner: LifecycleOwner) = container.hosts.setForeground(true)
+            override fun onStart(owner: LifecycleOwner) {
+                container.guard.started()
+                container.hosts.setForeground(true)
+            }
             override fun onStop(owner: LifecycleOwner) {
+                // The app lock counts the time away from here.
+                container.guard.stopped()
                 // What the screens showed was seen; the next look while closed reports only what is new.
                 container.alertWork.leaving()
                 container.briefWork.leaving()
@@ -110,6 +115,8 @@ class AppContainer(app: Application) {
     val tally = TallyStore(java.io.File(app.filesDir, "tally.json"), machines)
     val alertWork = AlertWork(hosts, machines, push, inbox, liveWork, quietWork, tally, quick)
     val bubbles: Bubbles = AndroidBubbles(app)
+    /** Which actions ask for the fingerprint, and the app lock. */
+    val guard = com.makefunstuff.herdr.data.GuardStore(java.io.File(app.filesDir, "guard.json"), com.makefunstuff.herdr.guard.AndroidUnlock(app))
     val briefWork = BriefWork(
         scope, hosts, machines, BriefStore(java.io.File(app.filesDir, "brief.json")), AndroidBrief(app), AndroidVoice(app),
         quiet = { quietWork.check() },

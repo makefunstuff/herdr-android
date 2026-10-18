@@ -131,6 +131,37 @@ class AlertsTest {
     }
 
     @Test
+    fun anAlwaysAllowButtonIsGuarded() {
+        // pi's two-option menu: each option is a button, and the permanent one asks for the fingerprint.
+        val screen = " Allow the extension to run git push?\n\n→ Allow once\n  Always allow\n\n ↑↓ navigate · enter select\n"
+        val a = show(Alerts.of("m1", "devbox", PushEvent.Agent(agent("blocked"), "", screen)))
+        assertEquals(listOf("Allow once", "Always allow", "Reply"), a.actions.map { it.label })
+        assertEquals(listOf("", "always", ""), a.actions.map { it.guard })
+        // Approve and Deny never press a permanent allow.
+        val yesNo = show(Alerts.of("m1", "devbox", PushEvent.Agent(agent("blocked"), "", screen("claude-permission.txt"))))
+        assertEquals(listOf("", "", ""), yesNo.actions.map { it.guard })
+    }
+
+    @Test
+    fun aClaudeFormIsAnsweredInTheChat() {
+        val screen = """
+            ←  ☐ Route  ☐ Author  ✔ Submit  →
+            Which way should the PR go?
+            ❯ 1. Log in as owner
+                 Authenticate as the repository owner.
+              2. Fork
+                 Push the branch to a fork.
+              3. Type something.
+            ────────────────────────────────────────
+              4. Chat about this
+            Enter to select · Tab/Arrow keys to navigate · Esc to cancel
+        """.trimIndent()
+        val a = show(Alerts.of("m1", "devbox", PushEvent.Agent(agent("blocked"), "", screen)))
+        assertEquals("Which way should the PR go?", a.text)
+        assertEquals(listOf("Reply"), a.actions.map { it.label })
+    }
+
+    @Test
     fun blockedWithoutAScreenOnlyReplies() {
         val a = show(Alerts.of("m1", "devbox", PushEvent.Agent(agent("blocked", name = null), "")))
         assertEquals("claude needs you", a.title)
@@ -162,6 +193,9 @@ class AlertsTest {
         assertEquals("herdr-android/7", approve.taskId)
         assertEquals(listOf("Approve and merge", "Ask Coordinator"), approve.actions.map { it.label })
         assertEquals(BoardAction.Approve, approve.actions[0].boardAction)
+        // A merge from the notification asks for the fingerprint first, when that is on.
+        assertEquals("merge", approve.actions[0].guard)
+        assertEquals("", approve.actions[1].guard)
         // Finished work: a tap opens its review card.
         assertTrue(approve.review)
 

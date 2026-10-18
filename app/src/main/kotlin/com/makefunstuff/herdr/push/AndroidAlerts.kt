@@ -18,6 +18,8 @@ import com.makefunstuff.herdr.R
 import com.makefunstuff.herdr.bubble.BubbleChat
 import com.makefunstuff.herdr.bubble.FloatActivity
 import com.makefunstuff.herdr.core.push.Alert
+import com.makefunstuff.herdr.core.push.AlertAction
+import com.makefunstuff.herdr.guard.ConfirmActivity
 import com.makefunstuff.herdr.core.push.LiveItems
 import com.makefunstuff.herdr.core.push.QuietSummary
 import kotlinx.serialization.json.Json
@@ -49,7 +51,7 @@ class AndroidAlerts(private val context: Context) : AlertSink {
             .setContentText(note ?: alert.text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(listOfNotNull(note, alert.detail.ifEmpty { alert.text }).joinToString("\n\n")))
         alert.actions.take(3).forEachIndexed { i, a ->
-            val action = NotificationCompat.Action.Builder(0, a.label, actionIntent(alert, i, a.reply))
+            val action = NotificationCompat.Action.Builder(0, a.label, actionIntent(alert, i, a))
             if (a.reply) {
                 action.addRemoteInput(RemoteInput.Builder(WorkService.REPLY).setLabel(a.hint.ifEmpty { a.label }).build())
                     .setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_REPLY)
@@ -130,8 +132,21 @@ class AndroidAlerts(private val context: Context) : AlertSink {
         return PendingIntent.getActivity(context, alert.tag.hashCode(), intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
     }
 
-    /** A button: carried out by [WorkService], which may start from a notification while the app is closed. */
-    private fun actionIntent(alert: Alert, index: Int, reply: Boolean): PendingIntent {
+    /**
+     * A button: carried out by [WorkService], which may start from a notification while the app is closed.
+     * One that can't be undone (Approve and merge, Always allow) opens [ConfirmActivity] instead, which asks
+     * for the fingerprint first when that is on.
+     */
+    private fun actionIntent(alert: Alert, index: Int, a: AlertAction): PendingIntent {
+        val reply = a.reply
+        if (a.guard.isNotEmpty() && !reply) {
+            return PendingIntent.getActivity(
+                context, alert.tag.hashCode() * 31 + index,
+                ConfirmActivity.intent(context, json.encodeToString(Alert.serializer(), alert), index)
+                    .setData(Uri.parse("herdr://alert/${Uri.encode(alert.tag)}/$index")),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+            )
+        }
         val intent = Intent(context, WorkService::class.java)
             .setAction(WorkService.ACT)
             .setData(Uri.parse("herdr://alert/${Uri.encode(alert.tag)}/$index"))

@@ -6,6 +6,8 @@ import com.makefunstuff.herdr.core.board.BoardAction
 import com.makefunstuff.herdr.core.board.BoardStatus
 import com.makefunstuff.herdr.core.board.BoardTask
 import com.makefunstuff.herdr.core.chat.BlockedPrompt
+import com.makefunstuff.herdr.core.chat.OptionRole
+import com.makefunstuff.herdr.core.guard.Guarded
 import com.makefunstuff.herdr.core.health.Disk
 import com.makefunstuff.herdr.core.health.HealthReport
 import com.makefunstuff.herdr.core.health.Sizes
@@ -59,6 +61,8 @@ data class AlertAction(
     val board: String = "",
     /** The reply box's hint, for the reply types. */
     val hint: String = "",
+    /** A [com.makefunstuff.herdr.core.guard.Guarded] key: the button asks for the fingerprint first, when that is on. */
+    val guard: String = "",
 ) {
     enum class Type {
         /** Picks an option of the agent's question. */
@@ -165,10 +169,15 @@ object Alerts {
     /** Approve and Deny for a yes-or-no question; a short menu's own options; nothing for a longer one (a tap opens it). */
     private fun choices(prompt: BlockedPrompt?): List<AlertAction> {
         if (prompt == null) return emptyList()
-        fun choose(i: Int, label: String) =
-            AlertAction(AlertAction.Type.Choose, label, option = i, optionLabel = prompt.options[i].label, question = prompt.question)
+        fun choose(i: Int, label: String) = AlertAction(
+            AlertAction.Type.Choose, label, option = i, optionLabel = prompt.options[i].label, question = prompt.question,
+            // A permanent "don't ask again" changes what the agent may do for good.
+            guard = if (prompt.role(i) == OptionRole.Always) Guarded.AlwaysAllow.key else "",
+        )
+        // A multiple choice or a form of several questions is answered in the chat.
+        if (prompt.multiSelect || prompt.steps.isNotEmpty()) return emptyList()
         if (prompt.yesNo) return listOf(choose(prompt.approveIndex!!, "Approve"), choose(prompt.denyIndex!!, "Deny"))
-        if (prompt.options.size <= 2) return prompt.options.indices.map { choose(it, short(prompt.options[it].label)) }
+        if (prompt.options.size <= 2) return prompt.options.indices.map { choose(it, short(prompt.shortLabel(it))) }
         return emptyList()
     }
 
@@ -181,7 +190,7 @@ object Alerts {
         val coordinator = AlertAction(AlertAction.Type.AskCoordinator, "Ask Coordinator", hint = "About ${t.name}, to the Coordinator")
         fun board(action: BoardAction, label: String) = AlertAction(AlertAction.Type.Board, label, board = action.name)
         val actions = when (s) {
-            BoardStatus.Approval -> listOf(board(BoardAction.Approve, "Approve and merge"), coordinator)
+            BoardStatus.Approval -> listOf(board(BoardAction.Approve, "Approve and merge").copy(guard = Guarded.Merge.key), coordinator)
             BoardStatus.ReviewFailed -> listOf(board(BoardAction.Review, "Send findings back"), coordinator)
             BoardStatus.PlanReady -> listOf(
                 board(BoardAction.ApprovePlan, "Approve plan"),
