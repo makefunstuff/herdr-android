@@ -152,6 +152,12 @@ data class AgentInfo(
     @SerialName("pane_id") val paneId: String,
     val focused: Boolean = false,
     @SerialName("state_change_seq") val stateChangeSeq: Long = 0,
+    /**
+     * The state change that ended the work it finished last, whoever has looked since (herdr 0.9.5);
+     * null when it has finished nothing, or on an older herdr. herdr's own "seen" is its status:
+     * `done` until its pane is in front at herdr's terminal, then `idle`.
+     */
+    @SerialName("completion_seq") val completionSeq: Long? = null,
     val cwd: String? = null,
     @SerialName("agent_session") val agentSession: AgentSessionRef? = null,
 ) {

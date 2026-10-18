@@ -3,7 +3,6 @@ package com.makefunstuff.herdr.push
 import com.makefunstuff.herdr.core.api.AgentStatus
 import com.makefunstuff.herdr.core.board.BoardAction
 import com.makefunstuff.herdr.core.chat.AgentInput
-import com.makefunstuff.herdr.core.chat.BlockedPrompt
 import com.makefunstuff.herdr.core.health.HealthClient
 import com.makefunstuff.herdr.core.health.HealthReport
 import com.makefunstuff.herdr.core.health.ProcLabels
@@ -71,15 +70,8 @@ class AlertWork(
 
     private suspend fun act(s: HostSession, alert: Alert, action: AlertAction, text: String): String = when (action.type) {
         AlertAction.Type.Choose -> {
-            val api = s.awaitApi()
-            val agent = api.snapshot().agents.firstOrNull { it.paneId == alert.paneId }
-            if (agent?.agentStatus != AgentStatus.Blocked) throw IOException("It isn't waiting any more.")
             // Only press the option the notification showed, on the question it showed.
-            val prompt = BlockedPrompt.parse(api.readPane(alert.paneId, source = "visible", lines = 80).text)
-            if (prompt == null || prompt.question != action.question || prompt.options.getOrNull(action.option)?.label != action.optionLabel) {
-                throw IOException("The question changed. Open the chat to answer it.")
-            }
-            AgentInput.keys(api, alert.paneId, prompt.keysFor(action.option), named = true)
+            AgentInput.choose(s.awaitApi(), alert.paneId, action.question, action.option, action.optionLabel)
             s.refresh()
             "Answered: ${action.optionLabel}"
         }
