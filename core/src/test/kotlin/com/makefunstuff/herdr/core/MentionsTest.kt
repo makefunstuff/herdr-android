@@ -27,8 +27,8 @@ class MentionsTest {
         assertEquals(
             listOf(
                 Part.Words("Added two tasks:"),
-                Part.Task("AND-6"),
-                Part.Task("API-3"),
+                Part.Task("AND-6", "Add app screenshots to the README"),
+                Part.Task("API-3", "Speed up `/jobs` on large tables"),
                 Part.Words("API-3 has an agent now. AND-6 waits for AND-2."),
                 Part.Task("AND-2"),
             ),
@@ -38,11 +38,35 @@ class MentionsTest {
 
     @Test
     fun unknownKeysAndCodeStayWords() {
-        val answer = "1. WEB-9: not on this board\n```\n- AND-6 in a code block\n```"
+        val answer = "1. WEB-9: not on this board\n```\n- AND-6 in a code block\n```\nRun `API-3` by hand."
         assertEquals(listOf(Part.Words(answer)), TaskMentions.split(answer, setOf("API-3")))
         assertEquals(listOf(Part.Words(answer)), TaskMentions.split(answer, emptySet()))
-        // In a code block it is the code's; the key still gets its row after the words.
-        assertEquals(listOf(Part.Words(answer), Part.Task("AND-6")), TaskMentions.split(answer, setOf("AND-6")))
+        // In code it is the code's: no row, in its place or after.
+        assertEquals(listOf(Part.Words(answer)), TaskMentions.split(answer, setOf("AND-6")))
+    }
+
+    @Test
+    fun anItemKeepsItsOwnWords() {
+        val answer = "Two need you:\n\n- **AND-9**: approve the push to main, it touches CI\n- API-3: asks which index to use (btree or gin)\n  It waits since 09:12.\n\nThe rest work."
+        assertEquals(
+            listOf(
+                Part.Words("Two need you:"),
+                Part.Task("AND-9", "approve the push to main, it touches CI"),
+                Part.Task("API-3", "asks which index to use (btree or gin)\nIt waits since 09:12."),
+                Part.Words("The rest work."),
+            ),
+            TaskMentions.split(answer, setOf("AND-9", "API-3")),
+        )
+        assertEquals(listOf(Part.Task("AND-9")), TaskMentions.split("- AND-9", setOf("AND-9")))
+    }
+
+    @Test
+    fun aListThatMixesTasksAndOtherItemsStaysWords() {
+        val answer = "1. AND-6 first\n2. Something else\n3. API-3 last"
+        assertEquals(listOf(Part.Words(answer), Part.Task("AND-6"), Part.Task("API-3")), TaskMentions.split(answer, setOf("AND-6", "API-3")))
+        // A key the board doesn't have makes it a mixed list too.
+        val other = "- AND-6 first\n- WEB-9 elsewhere"
+        assertEquals(listOf(Part.Words(other), Part.Task("AND-6")), TaskMentions.split(other, setOf("AND-6")))
     }
 
     @Test

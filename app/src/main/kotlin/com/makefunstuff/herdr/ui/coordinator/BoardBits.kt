@@ -21,6 +21,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import com.makefunstuff.herdr.core.chat.Markdown
+import com.makefunstuff.herdr.ui.common.MarkdownText
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -81,31 +84,44 @@ internal fun BoardStrip(glance: BoardGlance, onOpen: () -> Unit) {
 
 /**
  * A task the Coordinator named, as a row with its live state: a stripe in the board's colour, the
- * key, the title and where it stands. A tap opens it on the board.
+ * key, the title and where it stands, and under them what the answer says of it ([note]) when that
+ * is more than the title again. A tap opens it on the board.
  */
 @Composable
-internal fun TaskMention(t: BoardTask, onOpen: () -> Unit) {
+internal fun TaskMention(t: BoardTask, note: String, onOpen: () -> Unit) {
     val c = Herdr.colors
     val color = t.status.color()
     val state = listOfNotNull(t.status.label, t.progress?.takeIf { t.status == BoardStatus.Working }?.let { "$it%" }).joinToString(" · ")
+    val said = remember(note, t.title) { note.takeIf { it.isNotBlank() && !sameWords(Markdown.plain(it), t.title) } }
     QuietCard(
-        Modifier.padding(vertical = Space.xs).semantics(mergeDescendants = true) { contentDescription = "${t.name}, ${t.title}, $state" },
+        Modifier.padding(vertical = Space.xs).semantics(mergeDescendants = true) {
+            contentDescription = listOfNotNull(t.name, t.title, state, said?.let { Markdown.plain(it) }).joinToString(", ")
+        },
         onClick = onOpen,
         onClickLabel = "Open on the board",
     ) {
-        Row(Modifier.height(IntrinsicSize.Min).heightIn(min = 56.dp), verticalAlignment = Alignment.CenterVertically) {
+        // With the answer's words under the title, the key and the chevron stay by the title.
+        val top = said != null
+        Row(Modifier.height(IntrinsicSize.Min).heightIn(min = 56.dp), verticalAlignment = if (top) Alignment.Top else Alignment.CenterVertically) {
             Box(Modifier.padding(start = Space.s, top = Space.m, bottom = Space.m).width(if (t.needsYou) 4.dp else 3.dp).fillMaxHeight().clip(HerdrShapes.Pill).background(color))
-            Text(t.name, style = CodeStyle.copy(fontSize = 13.sp), color = c.strong, maxLines = 1, modifier = Modifier.padding(start = Space.m))
+            Text(t.name, style = CodeStyle.copy(fontSize = 13.sp), color = c.strong, maxLines = 1, modifier = Modifier.padding(start = Space.m, top = if (top) Space.s + 6.dp else 0.dp))
             Column(Modifier.weight(1f).padding(start = Space.m, top = Space.s, bottom = Space.s)) {
                 Text(
                     t.title, style = MaterialTheme.typography.titleSmall, color = if (t.status == BoardStatus.Done) c.muted else c.strong,
                     maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
                 Text(state, style = MaterialTheme.typography.labelMedium, color = color, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (said != null) MarkdownText(said, Modifier.padding(top = Space.xs), style = MaterialTheme.typography.bodyMedium, color = c.text)
             }
-            Icon(HerdrIcons.ChevronRight, null, tint = c.faint, modifier = Modifier.padding(horizontal = Space.m).size(18.dp))
+            Icon(HerdrIcons.ChevronRight, null, tint = c.faint, modifier = Modifier.padding(start = Space.m, end = Space.m, top = if (top) Space.s + 8.dp else 0.dp).size(18.dp))
         }
     }
+}
+
+/** Whether two lines say the same, give or take case, spaces and the end's punctuation. */
+private fun sameWords(a: String, b: String): Boolean {
+    fun norm(s: String) = s.lowercase().replace(Regex("\\s+"), " ").trim().trimEnd('.', '!', '?', ':', ';')
+    return norm(a) == norm(b)
 }
 
 /** The suggested asks above the composer, in one row that scrolls sideways; a tap puts the words in the message box. */

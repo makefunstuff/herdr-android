@@ -11,49 +11,94 @@ object TaskMentions {
     /** A list item that starts with a key, bold or not: "- **AND-6** Add app screenshots", "1. API-3: Speed up". */
     private val ITEM = Regex("""^\s*(?:[-*+]|\d+[.)])\s+(?:\*\*|__|`)?([A-Z][A-Z0-9]{0,11}-[0-9]+)(?:\*\*|__|`)?(?:[\s:,.–—-]|$)""")
 
-    /** A piece of an answer: its own words, or a task it names. */
+    /** Any list item, for telling where a list starts and ends. */
+    private val LIST_ITEM = Regex("""^\s*(?:[-*+]|\d+[.)])\s+""")
+
+    /** A piece of an answer: its own words, or a task it names with what the answer says of it there. */
     sealed interface Part {
         data class Words(val text: String) : Part
-        data class Task(val key: String) : Part
+        /** [note]: the item's words after the key ("approve the push to main"), empty for a task named in passing. */
+        data class Task(val key: String, val note: String = "") : Part
     }
 
     /** Every key in [text] in the order it first appears, once each. */
     fun keys(text: String): List<String> = KEY.findAll(text).map { it.groupValues[1] }.distinct().toList()
 
     /**
-     * [text] with each list item that starts with a key in [known] as that task, in its place; the
-     * other keys in [known] it names come once each after the words. Nothing changes with no key known.
+     * [text] with each list of tasks as rows in its place: a list whose every item starts with a key
+     * in [known], each item's own words kept as its [Part.Task.note]. A list that mixes tasks with
+     * other items stays words, numbering and all. The other keys in [known] it names come once each
+     * after the words; not those in code. Nothing changes with no key known.
      */
     fun split(text: String, known: Set<String>): List<Part> {
         if (known.isEmpty()) return listOf(Part.Words(text))
+        val lines = text.lines()
+        // Which lines are code (a fence and what is between), where nothing is a list or a key.
+        val code = BooleanArray(lines.size)
+        var fence = false
+        for ((i, line) in lines.withIndex()) {
+            val marker = line.trimStart().startsWith("```")
+            code[i] = fence || marker
+            if (marker) fence = !fence
+        }
+        fun item(i: Int) = !code[i] && LIST_ITEM.containsMatchIn(lines[i])
         val out = mutableListOf<Part>()
-        val shown = LinkedHashSet<String>()
         val words = StringBuilder()
         fun flush() {
             val w = words.toString().trim('\n')
             if (w.isNotBlank()) out += Part.Words(w)
             words.clear()
         }
-        var fence = false
-        for (line in text.lines()) {
-            if (line.trimStart().startsWith("```")) fence = !fence
-            val key = if (fence) null else ITEM.find(line)?.groupValues?.get(1)?.takeIf { it in known && it !in shown }
-            if (key != null) {
-                flush()
-                out += Part.Task(key)
-                shown += key
-            } else {
-                // A blank line between two task rows is the list's, not the answer's.
-                if (line.isBlank() && out.lastOrNull() is Part.Task && words.isEmpty()) continue
-                words.append(line).append('\n')
+        var i = 0
+        while (i < lines.size) {
+            if (!item(i)) {
+                words.append(lines[i]).append('\n')
+                i++
+                continue
             }
+            // A list: its items, each with the lines indented under it, and the blank lines between them.
+            val items = mutableListOf<MutableList<String>>()
+            var end = i
+            var j = i
+            while (j < lines.size) {
+                val line = lines[j]
+                when {
+                    item(j) -> { items += mutableListOf(line); end = j + 1 }
+                    line.isBlank() -> {}
+                    !code[j] && line.first().isWhitespace() && items.isNotEmpty() && end == j -> { items.last() += line.trim(); end = j + 1 }
+                    else -> break
+                }
+                j++
+            }
+            val tasks = items.map { lines -> ITEM.find(lines.first())?.takeIf { it.groupValues[1] in known }?.let { m -> m to lines } }
+            if (tasks.all { it != null }) {
+                flush()
+                tasks.forEach { t ->
+                    val (m, itemLines) = t!!
+                    val first = itemLines.first().substring(m.range.last + 1).trimStart { it.isWhitespace() || it in ":–—-" }
+                    out += Part.Task(m.groupValues[1], (listOf(first) + itemLines.drop(1)).filter { it.isNotBlank() }.joinToString("\n").trim())
+                }
+            } else {
+                for (k in i until end) words.append(lines[k]).append('\n')
+            }
+            i = end
         }
         flush()
-        // Named in passing ("waits for AND-2"): the task's row comes after the words.
-        val rest = out.filterIsInstance<Part.Words>().flatMap { keys(it.text) }.filter { it in known && it !in shown }.distinct()
-        rest.forEach { out += Part.Task(it) }
+        // Named in passing ("waits for AND-2"): the task's row comes after the words, once; not for a key in code.
+        val shown = out.filterIsInstance<Part.Task>().map { it.key }.toSet()
+        val prose = out.flatMap { p ->
+            when (p) {
+                is Part.Words -> listOf(withoutCode(p.text))
+                is Part.Task -> listOf(p.note)
+            }
+        }
+        prose.flatMap { keys(it) }.filter { it in known && it !in shown }.distinct().forEach { out += Part.Task(it) }
         return if (out.isEmpty()) listOf(Part.Words(text)) else out
     }
+
+    /** [text] without its fenced code blocks and `inline code`. */
+    private fun withoutCode(text: String): String =
+        text.replace(Regex("""```.*?(```|$)""", RegexOption.DOT_MATCHES_ALL), " ").replace(Regex("""`[^`]*`"""), " ")
 }
 
 /** A board at a glance, for the strip under the Coordinator's bar. */

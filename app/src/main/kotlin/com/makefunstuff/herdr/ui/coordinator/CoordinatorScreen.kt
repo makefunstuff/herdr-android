@@ -456,7 +456,7 @@ private fun Bubble(line: ChatLine, tasks: Map<String, BoardTask>, onTask: (Board
                         parts.forEach { p ->
                             when (p) {
                                 is TaskMentions.Part.Words -> MarkdownText(p.text, style = MaterialTheme.typography.bodyLarge)
-                                is TaskMentions.Part.Task -> tasks[p.key]?.let { t -> TaskMention(t) { onTask(t) } }
+                                is TaskMentions.Part.Task -> tasks[p.key]?.let { t -> TaskMention(t, p.note) { onTask(t) } }
                             }
                         }
                     } else if (split.text.isNotEmpty()) MarkdownText(split.text, style = MaterialTheme.typography.bodyLarge)

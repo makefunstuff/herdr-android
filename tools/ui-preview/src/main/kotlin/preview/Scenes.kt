@@ -217,6 +217,8 @@ fun scenes(): List<Scene> = listOf(
 
     // The work board and its Coordinator.
     Scene("coordinator", route = Routes.coordinator(DEVBOX)),
+    // An answer that lists the tasks waiting for you: each item's own words stay under its row.
+    Scene("coordinator-needs", route = Routes.coordinator(DEVBOX), setup = { host(DEVBOX).board?.remote = Demo.whatNeedsMe() }),
     // A suggested ask tapped: its words wait in the message box, to send or change.
     Scene("coordinator-ask", route = Routes.coordinator(DEVBOX), actions = { tapText("What needs me?") }),
     // A task in an answer opens on the board.

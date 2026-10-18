@@ -317,6 +317,27 @@ object Demo {
     )
 
     /**
+     * The Coordinator asked what needs you: it answers with a list of tasks, each with its own words,
+     * which stay under the task's row.
+     */
+    fun whatNeedsMe(): JsonObject {
+        val r = FakeBoard().remote
+        val c = r.getValue("coordinator") as JsonObject
+        val talk = (c.getValue("talk") as kotlinx.serialization.json.JsonArray) + listOf(
+            obj("you" to true, "text" to "What needs me?"),
+            obj(
+                "you" to false,
+                "text" to "Three tasks wait for you:\n\n" +
+                    "- **API-3**: asks whether the migration may lock the jobs table for a few seconds\n" +
+                    "- **AND-9**: ready to merge, review passed\n" +
+                    "- **WEB-4**: the review found 2 problems in the install steps\n\n" +
+                    "AND-6 and EVAL-2 are still working.",
+            ),
+        )
+        return JsonObject(r + ("coordinator" to JsonObject(c + mapOf("talk" to json(talk), "said" to json(talk.last().let { (it as JsonObject).getValue("text") })))))
+    }
+
+    /**
      * devbox with a second tab in herdr-android, "tests", where a shell runs the tests: a workspace
      * with several tabs keeps its tab chips and layout thumbnail on the machine screen.
      */
