@@ -9,7 +9,7 @@ Renders the app's real screens to PNGs on the desktop JVM, in dark and light, wi
 ./gradlew -p tools/ui-preview render -Pout=/tmp/shots       # somewhere else
 ```
 
-Needs JDK 17 and, the first time, network for Gradle to fetch Compose Desktop. Every scene takes about 2.5 s per theme, so all of them take about 2 minutes; nothing runs after it exits. Each scene is saved as `<scene>.png` (dark) and `<scene>-light.png`, 824×1784 px (a 412×892 dp phone at 2×). The same code and data give the same pixels every run. A scene that throws prints `FAIL <name>` and the task fails.
+Needs JDK 17 and, the first time, network for Gradle to fetch Compose Desktop. Every scene takes about 3 s per theme, so all of them take about 15 minutes (`-Ponly` renders just some); nothing runs after it exits. Each scene is saved as `<scene>.png` (dark) and `<scene>-light.png`, 824×1784 px (a 412×892 dp phone at 2×). The same code and data give the same pixels every run. A scene that throws prints `FAIL <name>` and the task fails.
 
 ## How it works
 
