@@ -3,16 +3,22 @@ package com.makefunstuff.herdr
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
-import androidx.activity.ComponentActivity
+import android.os.Build
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import com.makefunstuff.herdr.ui.share.Ask
 
-class MainActivity : ComponentActivity() {
+/** The app. A FragmentActivity, as the fingerprint prompt (androidx.biometric) shows over one. */
+class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         val container = (application as HerdrApp).container
+        // With the app lock on, the recent apps show no picture of the screens either.
+        if (Build.VERSION.SDK_INT >= 33) lifecycleScope.launch { container.guard.state.collect { setRecentsScreenshotEnabled(!it.appLock) } }
         setContent { HerdrRoot(container) }
         if (savedInstanceState == null && !open(intent) && container.shares.pending.value != null) {
             // Something shared was waiting for a machine when Android ended the app: ask again.

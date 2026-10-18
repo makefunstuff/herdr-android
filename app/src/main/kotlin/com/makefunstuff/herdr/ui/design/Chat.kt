@@ -114,7 +114,9 @@ val ReplyBubbleShape = RoundedCornerShape(12.dp)
  * Enter makes a new line; Ctrl+Enter (or ⌘+Enter) on a hardware keyboard sends. A send gives a
  * light haptic. [floating] draws the composer for a place over the transcript's end (see
  * [ChatSurface]): the region over the card fades the transcript into the ground. [above] goes over
- * the card, inside the composer (the agent's key row).
+ * the card, inside the composer (a blocked agent's question, the agent's key row), and never takes
+ * more than about 60% of the room: what it holds scrolls inside. [focusRequester] lets the screen put
+ * the cursor in the box (a reply the question asks for).
  */
 @Composable
 fun ChatComposer(
@@ -136,12 +138,14 @@ fun ChatComposer(
     trailing: (@Composable RowScope.() -> Unit)? = null,
     attachments: (@Composable () -> Unit)? = null,
     attached: Boolean = false,
+    focusRequester: FocusRequester? = null,
 ) {
     val c = Herdr.colors
     val view = LocalView.current
     val focus = remember { MutableInteractionSource() }
     val focused by focus.collectIsFocusedAsState()
-    val focusRequester = remember { FocusRequester() }
+    val ownFocus = remember { FocusRequester() }
+    val focusRequester = focusRequester ?: ownFocus
     val keyboard = LocalSoftwareKeyboardController.current
     val canSend = enabled && !sending && !holdSend && (draft.isNotBlank() || attached)
     val showStop = stop != null && draft.isBlank() && !attached && !sending
@@ -188,7 +192,9 @@ fun ChatComposer(
                 )
                 .padding(start = Space.m, end = Space.m, top = if (glide) fade else Space.s, bottom = Space.s),
         ) {
-            if (above != null) Box(Modifier.padding(bottom = Space.s)) { above() }
+            if (above != null) {
+                Box(Modifier.padding(bottom = Space.s).then(if (room != Dp.Infinity) Modifier.heightIn(max = room * 0.6f) else Modifier)) { above() }
+            }
             Column(
                 Modifier.fillMaxWidth()
                     .shadow(6.dp, card, ambientColor = c.shadow, spotColor = c.shadow)

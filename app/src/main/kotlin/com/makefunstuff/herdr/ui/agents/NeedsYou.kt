@@ -1,5 +1,7 @@
 package com.makefunstuff.herdr.ui.agents
 
+import com.makefunstuff.herdr.core.chat.OptionRole
+
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -207,7 +209,12 @@ fun QuestionCard(
                     AnswerButton("No", HerdrIcons.X, primary = false, enabled = true) { onChoose(prompt, prompt.denyIndex!!) }
                 }
                 prompt != null && prompt.options.size <= 2 -> prompt.options.forEachIndexed { i, o ->
-                    AnswerButton(o.label.let { if (it.length <= 24) it else it.take(23).trimEnd() + "…" }, null, primary = i == 0, enabled = true) { onChoose(prompt, i) }
+                    // A permanent allow carries the fingerprint, as it asks for one first.
+                    val always = prompt.role(i) == OptionRole.Always
+                    AnswerButton(
+                        prompt.shortLabel(i).let { if (it.length <= 24) it else it.take(23).trimEnd() + "…" },
+                        if (always) HerdrIcons.FingerprintPattern else null, primary = i == 0 && !always, enabled = true,
+                    ) { onChoose(prompt, i) }
                 }
                 else -> AnswerButton("Open", null, primary = false, enabled = true, onClick = onOpen)
             }

@@ -96,6 +96,11 @@ class SceneData {
     var held: List<Alert> = emptyList()
     /** Whether Android lets the app's chats float as bubbles. */
     var bubblesAllowed: Boolean = true
+    /** Which actions ask for the fingerprint and the app lock, as saved before the app opens (GuardStore). */
+    var guard: com.makefunstuff.herdr.data.GuardState? = null
+    /** Whether the phone has a screen lock (or a fingerprint) to ask with; and what its prompt answers (null: it stays up). */
+    var screenLock: Boolean = true
+    var unlockAnswer: Boolean? = true
     /** The brief's part as saved before the app opens (BriefStore): its schedule, when you last looked, what you saw. */
     var brief: com.makefunstuff.herdr.brief.BriefState? = null
     /** Shared to the app from elsewhere (the share sheet), waiting for a machine. */
@@ -156,6 +161,10 @@ fun render(scene: Scene, dark: Boolean, file: File) {
     PreviewPhone.liveAllowed = data.liveAllowed
     PreviewPhone.quietMode = data.quietMode
     PreviewBubbles.allowed = data.bubblesAllowed
+    PreviewUnlock.screenLock = data.screenLock
+    PreviewUnlock.answer = data.unlockAnswer
+    synchronized(PreviewUnlock.asked) { PreviewUnlock.asked.clear() }
+    data.guard?.let { context.filesDir.resolve("guard.json").writeText(Json.encodeToString(com.makefunstuff.herdr.data.GuardState.serializer(), it)) }
     if (data.held.isNotEmpty()) context.filesDir.resolve("held.json").writeText(Json.encodeToString(ListSerializer(Alert.serializer()), data.held))
     IdentityStore.initial = scene.key
     FakeMachines.machines = data.hosts

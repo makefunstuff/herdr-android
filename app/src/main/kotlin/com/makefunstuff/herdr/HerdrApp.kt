@@ -57,8 +57,13 @@ class HerdrApp : Application() {
 
         container = AppContainer(this)
         ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
-            override fun onStart(owner: LifecycleOwner) = container.hosts.setForeground(true)
+            override fun onStart(owner: LifecycleOwner) {
+                container.guard.started()
+                container.hosts.setForeground(true)
+            }
             override fun onStop(owner: LifecycleOwner) {
+                // The app lock counts the time away from here.
+                container.guard.stopped()
                 // What the screens showed was seen; the next look while closed reports only what is new.
                 container.alertWork.leaving()
                 container.briefWork.leaving()
@@ -104,7 +109,10 @@ class AppContainer(app: Application) {
     val push = PushStore(app)
     /** The Agents list's pins, snoozes and mutes; a muted agent's notifications don't show. */
     val triage = com.makefunstuff.herdr.data.TriageStore(java.io.File(app.filesDir, "triage.json"))
-    val inbox = Inbox(java.io.File(app.filesDir, "alerts.json"), AndroidAlerts(app), muted = triage::mutes)
+    /** Which actions ask for the fingerprint, and the app lock. */
+    val guard = com.makefunstuff.herdr.data.GuardStore(java.io.File(app.filesDir, "guard.json"), com.makefunstuff.herdr.guard.AndroidUnlock(app))
+    // With the app lock on, a locked phone shows its notifications without what they are about.
+    val inbox = Inbox(java.io.File(app.filesDir, "alerts.json"), AndroidAlerts(app, appLock = { guard.state.value.appLock }), muted = triage::mutes)
     val phone = AndroidPhone(app, push)
     val pushHosts = PushHosts(scope, hosts, machines, push, phone)
     val quietWork = QuietWork(scope, push.state, phone, inbox, foreground = { hosts.isForeground })

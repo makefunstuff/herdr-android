@@ -61,6 +61,7 @@ class AppContainer(app: Context) {
     val boards = com.makefunstuff.herdr.data.BoardLists(hosts, onRead = { id, tasks -> tally.tasks(id, tasks) })
     val seen = com.makefunstuff.herdr.data.SeenStore(java.io.File(app.filesDir, "seen.json"))
     val bubbles: Bubbles = PreviewBubbles
+    val guard = com.makefunstuff.herdr.data.GuardStore(java.io.File(app.filesDir, "guard.json"), preview.PreviewUnlock)
     // The brief at the demo's fixed time, on UTC, so it reads the same every run.
     val briefWork = BriefWork(
         scope, hosts, machines, BriefStore(java.io.File(app.filesDir, "brief.json")), PreviewBrief, PreviewVoice(),

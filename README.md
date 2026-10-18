@@ -6,7 +6,7 @@ A native Android client for [herdr](https://herdr.dev) hosts: see your agents ac
   <tr>
     <td align="center" width="25%"><img src="docs/screenshots/agents.webp" alt="Agents list" width="200"><br><sub><b>Agents</b>: what needs you on every machine first, answerable on the card</sub></td>
     <td align="center" width="25%"><img src="docs/screenshots/chat.webp" alt="An agent's chat" width="200"><br><sub><b>Agent chat</b>: the agent's own transcript, with tool calls folded</sub></td>
-    <td align="center" width="25%"><img src="docs/screenshots/blocked.webp" alt="A blocked agent asking for approval" width="200"><br><sub><b>Needs you</b>: answer a blocked agent with one tap</sub></td>
+    <td align="center" width="25%"><img src="docs/screenshots/blocked.webp" alt="A blocked agent asking for approval" width="200"><br><sub><b>Needs you</b>: the question docked over the composer, answered with a thumb</sub></td>
     <td align="center" width="25%"><img src="docs/screenshots/coordinator.webp" alt="Coordinator chat" width="200"><br><sub><b>Coordinator</b>: talk to the work board</sub></td>
   </tr>
   <tr>
@@ -89,6 +89,22 @@ Everything that exists in a session is editable from the app, not just readable.
 
 The screens follow herdr's `events.subscribe` stream, so a change made anywhere — desktop or phone — appears here. Notifications are the exception: herdr has no list of them, so the app derives them from agents finishing or blocking and shows them behind the bell in the top bar; the menu can also show a notification on the desktop running herdr.
 
+## Answering a blocked agent
+
+In an agent's chat, the question a blocked agent asks is docked over the composer, so it never scrolls away with the transcript, and it is made for one thumb:
+
+- **The choices are buttons**: **Yes** first and filled; a permanent allow ("Yes, and don't ask again for npm run commands") as **Always for npm run**, which asks for the fingerprint first (below); **No, tell it…** opens the reply, and the no is pressed only when your words go, which then become the agent's next prompt (X takes it back and the question stays).
+- **The agent's footer is buttons too**: "Esc to cancel · Tab to amend" becomes **Amend** (presses Tab, then what you type is added to your answer) and **Cancel** (Esc); other keys it names (`ctrl+e to explain`) get their own.
+- **A tag says what it would do**: *runs a migration*, *pushes*, *installs packages*, *edits a file*, in red when it can't be taken back (*deletes files*, *force-pushes*, *discards changes*, *deletes data*).
+- **Claude's own questions** (its AskUserQuestion form) list each option with its description and a *Recommended* tag; your own words go in the composer. A multiple choice has boxes and **Submit (n)**; a form of several questions shows its steps as chips (✓ answered, the one asked now, Submit).
+- Every press reads the agent's screen again first and presses nothing if the question, or the command it is about, changed; so do the notification buttons and the Needs you cards. While you type, the card folds to one line.
+
+## Fingerprint and app lock
+
+**Settings → Fingerprint and app lock** asks for the fingerprint (or face, or the phone's PIN) before what can't be undone, each one switchable: **Always allow** on an agent's question, **Approve and merge** (also "Approve anyway", and on a Needs you card), **Stop a process** (and the leftovers, and Gradle daemons, on a machine's health), **Remove a worktree**, and **Replace the SSH key** (a new key, or restoring another). Every one asks until you turn it off, and turning one off asks too. A notification's **Approve and merge** or permanent allow opens the prompt over whatever is on screen before it does anything.
+
+**App lock** makes opening the app ask as well (it holds the SSH key to every machine), again after it was away for a while (at once, 1, 5 or 15 minutes), keeps its picture out of the recent apps, and makes a locked phone show its notifications only as "Something needs you", without the question, the command or the buttons. A phone with no screen lock has nothing to ask with: the screen says so, the app lock stays off, and the one-tap actions (always allow, merges) ask for a tap on **Confirm** instead.
+
 ## Machine health and cleanup
 
 A machine's screen has a **Health** card (RAM, CPU and its fullest disk, red when it runs low), and **⋯ → Health and cleanup** opens the whole picture, read over the same SSH connection every 5 seconds while the screen is in front:
@@ -103,7 +119,7 @@ The full readings and process labels are Linux's (`/proc`); on macOS the screen 
 
 ## Notifications while the app is closed
 
-**Settings → Notifications → While the app is closed** makes your machines tell the phone when an agent needs you or finishes, or a work board task waits for you (ready to approve, review failed, plan ready, pick one, asks you, stopped at a limit, went wrong), like Puggie does. Each notification has its buttons: **Approve** or **Deny** a blocked agent's question, **Reply** to that agent (or to the task's agent, or to the Coordinator about the task), **Approve and merge**, **Approve plan**, **Continue**. A tap opens the agent's chat or the task; finished work (ready to approve, review failed, plan ready, pick one) opens at its review card. The buttons connect to the machine over SSH while the app stays closed; Approve and Deny read the agent's screen again first and press nothing if the question changed.
+**Settings → Notifications → While the app is closed** makes your machines tell the phone when an agent needs you or finishes, or a work board task waits for you (ready to approve, review failed, plan ready, pick one, asks you, stopped at a limit, went wrong), like Puggie does. Each notification has its buttons: **Approve** or **Deny** a blocked agent's question, **Reply** to that agent (or to the task's agent, or to the Coordinator about the task), **Approve and merge** (after the fingerprint, when that asks), **Approve plan**, **Continue**. A tap opens the agent's chat or the task; finished work (ready to approve, review failed, plan ready, pick one) opens at its review card. The buttons connect to the machine over SSH while the app stays closed; Approve and Deny read the agent's screen again first and press nothing if the question changed.
 
 Two ways in, both on every machine the app knows:
 

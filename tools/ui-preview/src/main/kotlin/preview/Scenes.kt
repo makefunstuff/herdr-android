@@ -74,6 +74,13 @@ fun scenes(): List<Scene> = listOf(
         home()
         host(DEVBOX).board?.refuse = mapOf("approve" to "AND-9's check failed: ./gradlew test, 3 tests failed. Approve it anyway, or send it back.")
     }, actions = { tapText("Approve and merge") }),
+    // The same merge on a phone with no screen lock: the app's own confirmation stands in for the fingerprint.
+    Scene("agents-merge-confirm", setup = { home(); screenLock = false }, actions = { tapText("Approve and merge") }),
+    // A two-option menu with a permanent allow on a card: it carries the fingerprint, and asks before it presses.
+    Scene("agents-always-confirm", setup = {
+        home(); screenLock = false
+        host(DEVBOX).screens += API_AGENT to " Allow the extension to run git push?\n\n→ Always allow\n  Deny\n\n ↑↓ navigate · enter select\n"
+    }, actions = { tapText("Always allow") }),
     Scene("agents-filter", setup = { home() }, actions = { tapText("All machines") }),
     Scene("agents-seen", heightDp = 1500, setup = { home() }, actions = { tapText("Mark all seen") }),
     // Triage: the eval pinned on top (and muted), AND-6 snoozed for three hours, the profile still new in Done.
@@ -129,6 +136,13 @@ fun scenes(): List<Scene> = listOf(
     // An agent's chat: its transcript, a blocked agent's question, a Codex transcript.
     Scene("chat", route = Routes.agent(DEVBOX, APP_AGENT)),
     Scene("chat-blocked", route = Routes.agent(DEVBOX, API_AGENT)),
+    // The question docked over the composer, made for thumbs: "No, tell it…" folds it while the reply is written;
+    // on a phone with no screen lock, "Always for npm run" asks for a tap on Confirm instead of the fingerprint.
+    Scene("prompt-tell", route = Routes.agent(DEVBOX, API_AGENT), actions = { tapText("No, tell it…") }),
+    Scene("prompt-confirm", route = Routes.agent(DEVBOX, API_AGENT), setup = { screenLock = false }, actions = { tapText("Always for npm run") }),
+    // Claude's own questions: one with descriptions and a recommended pick, and a form of three with a multiple choice.
+    Scene("prompt-question", route = Routes.agent(DEVBOX, API_AGENT), setup = { host(DEVBOX).screens += API_AGENT to Demo.resource("screen-claude-question.txt") }),
+    Scene("prompt-checks", route = Routes.agent(DEVBOX, API_AGENT), setup = { host(DEVBOX).screens += API_AGENT to Demo.resource("screen-claude-checks.txt") }),
     Scene("chat-codex", route = Routes.agent(DEVBOX, SITE_AGENT)),
 
     // Pictures for an agent: what the attach button offers, two screenshots in the composer (copied to devbox,
@@ -354,10 +368,19 @@ fun scenes(): List<Scene> = listOf(
     Scene("settings", route = Routes.MACHINES, actions = { tapLabel("Settings") }),
     Scene("settings-new-key", route = Routes.SETTINGS, actions = { tapText("New key") }),
     Scene("key-setup", key = IdentityStore.State.Missing),
+    // The fingerprint before what can't be undone, and the app lock: its settings (one action turned off, the lock
+    // on), the same on a phone with no screen lock, the app locked, and a merge confirmed in the app without a screen lock.
+    Scene(
+        "settings-guard", route = Routes.GUARD,
+        setup = { guard = com.makefunstuff.herdr.data.GuardState(off = setOf("stop"), appLock = true, lockAfter = 5) },
+    ),
+    Scene("settings-guard-nolock", route = Routes.GUARD, setup = { screenLock = false }),
+    Scene("app-lock", setup = { guard = com.makefunstuff.herdr.data.GuardState(appLock = true); unlockAnswer = null }),
+    Scene("review-merge-confirm", route = Routes.review(DEVBOX), setup = { screenLock = false }, actions = { tapText("Approve and merge") }),
 
     // Notifications while the app is closed: each machine's herdr-push, and before a push app is there.
     // A taller window shows the whole section under the SSH key (scrolling never settles in the desktop test harness).
-    Scene("settings-notifications", route = Routes.SETTINGS, heightDp = 1460, setup = { push = Demo.push() }),
+    Scene("settings-notifications", route = Routes.SETTINGS, heightDp = 1580, setup = { push = Demo.push() }),
     // What reaches the phone: a switch per kind (Finished off), silent while you are at a machine (devbox, now), the watches.
     Scene("settings-rules", heightDp = 1100, setup = { push = Demo.push().copy(watches = Demo.watches()) }, actions = { ctx ->
         ctx.container.quietWork.presence.record(DEVBOX, "devbox", com.makefunstuff.herdr.core.push.Presence(typedAgo = 20), System.currentTimeMillis())
@@ -366,7 +389,7 @@ fun scenes(): List<Scene> = listOf(
     }),
     Scene("settings-rules-empty", route = Routes.RULES, setup = { push = Demo.push() }),
     // Live Updates turned off for the app in Android's settings: they show as ordinary notifications.
-    Scene("settings-live-off", route = Routes.SETTINGS, heightDp = 1460, setup = { push = Demo.push(); liveAllowed = false }),
+    Scene("settings-live-off", route = Routes.SETTINGS, heightDp = 1580, setup = { push = Demo.push(); liveAllowed = false }),
     // Quiet hours: off; then on, the phone in Do Not Disturb with two finished agents held, and picking a time.
     Scene("quiet-hours-off", route = Routes.QUIET, setup = { push = Demo.push() }),
     Scene(
@@ -379,7 +402,7 @@ fun scenes(): List<Scene> = listOf(
         actions = { tapText("From") },
     ),
     Scene(
-        "settings-no-push-app", route = Routes.SETTINGS, heightDp = 1200,
+        "settings-no-push-app", route = Routes.SETTINGS, heightDp = 1320,
         setup = { push = Demo.push().copy(endpoint = null, distributor = null); pushApps = emptyList(); notificationsAllowed = false },
     ),
 )
