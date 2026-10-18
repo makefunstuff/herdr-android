@@ -174,6 +174,7 @@ object Demo {
             workspaceTokens = mapOf("w1" to mapOf("branch" to "work/9-last-answered", "pr" to "#9")),
             journal = devboxJournal(),
             code = FakeCode(),
+            quick = FakeQuick(),
         ),
         GPU to FakeMachine(
             GPU,

@@ -67,6 +67,8 @@ class FakeMachine(
     var journal: JsonObject? = null,
     /** Its repositories, for the code browser; null answers no code command. */
     var code: FakeCode? = null,
+    /** Its quick commands and their runs; null answers no quick-command command. */
+    var quick: FakeQuick? = null,
 ) {
     val fingerprint = "SHA256:" + Base64.getEncoder().withoutPadding().encodeToString(id.toByteArray()).padEnd(43, 'A')
     private val overrides = HashMap<String, (JsonObject) -> JsonElement>()
@@ -78,6 +80,7 @@ class FakeMachine(
 
     fun run(command: String): CommandResult {
         code?.run(command)?.let { return it }
+        quick?.run(command)?.let { return it }
         health.run(command)?.let { return it }
         val w = Shell.words(command)
         return when {

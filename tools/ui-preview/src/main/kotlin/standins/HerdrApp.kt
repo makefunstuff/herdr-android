@@ -39,6 +39,7 @@ class AppContainer(app: Context) {
     // At the demo's fixed time, so "2 h ago" reads the same every run.
     val code = com.makefunstuff.herdr.data.CodeStore(java.io.File(app.filesDir, "code.json"), now = { Demo.NOW })
     val health = HealthStore()
+    val quick = com.makefunstuff.herdr.data.QuickStore(java.io.File(app.filesDir, "quick.json"))
     val shares = Shares(java.io.File(app.filesDir, "shares.json"), java.io.File(app.filesDir, "shared"))
     val push = PushStore(app)
     val inbox = Inbox(java.io.File(app.filesDir, "alerts.json"), PreviewAlerts)
@@ -47,7 +48,7 @@ class AppContainer(app: Context) {
     val quietWork = QuietWork(scope, push.state, phone, inbox, foreground = { hosts.isForeground })
     val liveWork = LiveWork(scope, hosts, machines, push, PreviewLive, quietWork)
     val tally = TallyStore(java.io.File(app.filesDir, "tally.json"), machines)
-    val alertWork = AlertWork(hosts, machines, push, inbox, liveWork, quietWork, tally)
+    val alertWork = AlertWork(hosts, machines, push, inbox, liveWork, quietWork, tally, quick)
     val bubbles: Bubbles = PreviewBubbles
     // The brief at the demo's fixed time, on UTC, so it reads the same every run.
     val briefWork = BriefWork(
