@@ -98,13 +98,14 @@ sealed interface ChatRow {
     /**
      * The agent's reasoning, folded to its first line and its length; [open], it follows as
      * [ThoughtPart] rows, a piece each, so a long one scrolls as smoothly as the rest. [live] while
-     * it is the newest thing in the running turn: the agent may still be at it.
+     * it is the newest thing in the running turn: the agent may still be at it. [partial]: what the
+     * agent's screen shows of a thought it is still writing, not yet in its transcript.
      */
-    data class Thought(val item: ChatItem.Reasoning, val open: Boolean, val live: Boolean) : ChatRow {
+    data class Thought(val item: ChatItem.Reasoning, val open: Boolean, val live: Boolean, val partial: Boolean = false) : ChatRow {
         override val key get() = "thought/${item.id}"
     }
     data class ThoughtPart(override val key: String, val text: String, val last: Boolean) : ChatRow
-    /** "Thinking…" at the end of the running turn: no call runs, so the model is at work. */
+    /** "Thinking…" at the end of the running turn: its call came back and nothing new is written yet. */
     data class Thinking(override val key: String) : ChatRow
 
     /** What a turn still running does: works, or waits for you. */
@@ -118,6 +119,7 @@ sealed interface ChatRow {
  * The rows of [turns]: what you said, when the turn started, its work under a header (open while it
  * runs, folded once it settles unless [opened] says otherwise) and its answer outside the fold.
  * [live] is the newest turn's state while it runs; [now] times it; [time] says when a turn started.
+ * [thinking] is what the agent's screen shows it thinking now, not yet in its transcript.
  */
 fun chatRows(
     turns: List<ChatTurn>,
@@ -125,6 +127,7 @@ fun chatRows(
     live: ChatRow.Live?,
     opened: Map<String, Boolean>,
     now: Long,
+    thinking: String? = null,
     time: (Long) -> String?,
 ): List<ChatRow> {
     val rows = mutableListOf<ChatRow>()
@@ -146,8 +149,10 @@ fun chatRows(
             started?.let { rows += ChatRow.Time("time/${turn.key}", it) }
             rows += workRows(turn.work, steps, quiet = false, opened)
         }
-        // While it works, its newest thought is live; with no call running, the model is thinking.
-        val newest = (turn.answer.lastOrNull() ?: turn.work.lastOrNull()).takeIf { running == ChatRow.Live.Working }
+        // While it works, the thought its screen shows streaming, or else its newest thought, is live.
+        val working = running == ChatRow.Live.Working
+        val streaming = thinking?.takeIf { working }
+        val newest = (turn.answer.lastOrNull() ?: turn.work.lastOrNull()).takeIf { working && streaming == null }
         turn.answer.forEach { item ->
             when (item) {
                 is ChatItem.Reasoning -> rows += thoughtRows(item, opened, live = item === newest)
@@ -155,16 +160,20 @@ fun chatRows(
                 else -> {}
             }
         }
-        if (newest != null && newest !is ChatItem.Reasoning && (newest as? ChatItem.Tool)?.state != ToolState.Running) {
-            rows += ChatRow.Thinking("thinking/${turn.key}")
+        when {
+            streaming != null -> rows += thoughtRows(ChatItem.Reasoning("live/${turn.key}", streaming), opened, live = true, partial = true)
+            // A call came back and nothing new is written: the model is at work. Not after its words,
+            // which may be its answer while a hook still runs.
+            newest is ChatItem.Tool && newest.state != ToolState.Running ->
+                rows += ChatRow.Thinking("thinking/${turn.key}")
         }
     }
     return rows
 }
 
 /** A thought's row, and its pieces when opened by hand ([opened] by its row's key). */
-private fun thoughtRows(item: ChatItem.Reasoning, opened: Map<String, Boolean>, live: Boolean = false): List<ChatRow> {
-    val head = ChatRow.Thought(item, open = false, live = live)
+private fun thoughtRows(item: ChatItem.Reasoning, opened: Map<String, Boolean>, live: Boolean = false, partial: Boolean = false): List<ChatRow> {
+    val head = ChatRow.Thought(item, open = false, live = live, partial = partial)
     if (opened[head.key] != true) return listOf(head)
     val parts = com.makefunstuff.herdr.core.chat.Thinking.chunks(item.text)
     return listOf(head.copy(open = true)) + parts.mapIndexed { i, text -> ChatRow.ThoughtPart("${head.key}/$i", text, last = i == parts.lastIndex) }
@@ -250,7 +259,8 @@ private fun ThoughtHead(row: ChatRow.Thought, onToggle: () -> Unit) {
                 color = if (row.live) c.working else c.muted,
                 maxLines = 1,
             )
-            Text(" · $size", style = MaterialTheme.typography.labelMedium, color = c.faint, maxLines = 1)
+            // Only part of a thought still streaming is on screen: its length isn't known yet.
+            if (!row.partial) Text(" · $size", style = MaterialTheme.typography.labelMedium, color = c.faint, maxLines = 1)
             Spacer(Modifier.weight(1f))
             Icon(if (row.open) HerdrIcons.ChevronDown else HerdrIcons.ChevronRight, null, Modifier.size(14.dp), tint = c.faint)
         }

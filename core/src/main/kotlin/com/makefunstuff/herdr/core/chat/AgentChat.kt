@@ -47,6 +47,11 @@ class AgentChat(private val host: HostSession, val paneId: String, private val s
         val turns: List<Turn> = emptyList(),
         /** The model it answers with and how full its context is, as the transcript says. */
         val use: ModelUse? = null,
+        /**
+         * What the agent's screen shows it thinking right now, while it works: pi and omp draw a thought
+         * as it streams but write it to the transcript only with the call or words it led to ([Thinking.onScreen]).
+         */
+        val thinking: String? = null,
     )
 
     private val _state = MutableStateFlow(State())
@@ -159,6 +164,20 @@ class AgentChat(private val host: HostSession, val paneId: String, private val s
             val status = agent?.agentStatus ?: host.state.value.snapshot?.pane(paneId)?.agentStatus ?: AgentStatus.Unknown
             val source = _state.value.source
             val blocked = status == AgentStatus.Blocked
+            // pi and omp stream their thoughts only to the screen: read it while they work.
+            val streams = status == AgentStatus.Working && source == Source.Transcript && agent?.agent in STREAMS_THINKING
+            if (streams) {
+                val thinking = try {
+                    Thinking.onScreen(host.awaitApi(10_000).readPane(paneId, source = "visible", lines = 200, ansi = true).text)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Throwable) {
+                    null
+                }
+                if (thinking != _state.value.thinking) _state.update { it.copy(thinking = thinking) }
+            } else if (_state.value.thinking != null) {
+                _state.update { it.copy(thinking = null) }
+            }
             if (blocked || source == Source.Screen) {
                 try {
                     val api = host.awaitApi(10_000)
@@ -182,10 +201,16 @@ class AgentChat(private val host: HostSession, val paneId: String, private val s
                 when {
                     blocked -> 1_200L
                     source == Source.Screen && status == AgentStatus.Working -> 1_500L
+                    streams -> 1_000L
                     source == Source.Screen -> 3_000L
                     else -> 700L
                 },
             )
         }
+    }
+
+    private companion object {
+        /** The agents that draw their reasoning on screen as it streams, in italics over the editor. */
+        val STREAMS_THINKING = setOf("pi", "omp")
     }
 }

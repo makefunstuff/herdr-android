@@ -70,6 +70,57 @@ class ReasoningTest {
     }
 
     @Test
+    fun onlyPiSplitsThinkTagsAndATagInWordsStaysWords() {
+        val text = "<thinking> is a tag some models use. It wraps reasoning."
+        val claude = read(
+            "claude",
+            """{"type":"user","uuid":"u1","message":{"role":"user","content":"what is <thinking>?"}}""",
+            """{"type":"assistant","uuid":"a1","message":{"role":"assistant","content":[{"type":"text","text":"$text"}]}}""",
+            """{"type":"assistant","uuid":"a2","message":{"role":"assistant","content":[{"type":"text","text":"<think>\nnot claude's\n</think>\nWords."}]}}""",
+        )
+        assertEquals(listOf(text, "<think>\nnot claude's\n</think>\nWords."), claude.filterIsInstance<ChatItem.Agent>().map { it.text })
+        assertTrue(thoughts(claude).isEmpty())
+        val codex = read("codex", """{"type":"event_msg","payload":{"type":"agent_message","message":"$text"}}""")
+        assertEquals(listOf(text), codex.filterIsInstance<ChatItem.Agent>().map { it.text })
+        val pi = read("pi", """{"type":"message","id":"m1","message":{"role":"assistant","content":[{"type":"text","text":"$text"}]}}""")
+        assertEquals(listOf(text), pi.filterIsInstance<ChatItem.Agent>().map { it.text })
+    }
+
+    @Test
+    fun piDrawsItsThoughtOnScreenBeforeItWritesIt() {
+        fun screen(name: String) = javaClass.getResource("/screens/$name")!!.readText()
+        // A real pi screen (llama.cpp), cut while its thought was the newest thing over the editor.
+        assertEquals(
+            "Everything is running and building. Final summary for the user:\n\n" +
+                "- Creatures are now \"live\": bigger (0.42 base radius), bobbing with sine motion, glowing amber with eyes, soft bloom.\n" +
+                "- Build passes, dev server running at http://localhost:5173/.\n\n" +
+                "Keep it concise.",
+            Thinking.onScreen(screen("pi-thinking.ansi")),
+        )
+        // The whole screen: its answer and an error came after the thought, so nothing is thinking now.
+        assertNull(Thinking.onScreen(screen("pi-done.ansi")))
+        // A loader line between the thought and the editor doesn't hide it.
+        val loader = screen("pi-thinking.ansi").lines().let { l -> (l.take(11) + "\u001b[38;2;1;2;3m⠙\u001b[0m Working..." + l.drop(11)).joinToString("\n") }
+        assertEquals("Keep it concise.", Thinking.onScreen(loader)?.substringAfterLast("\n\n"))
+        // Plain text has no italics: nothing to read.
+        assertNull(Thinking.onScreen("just words\n────────────\n> \n────────────\nfooter"))
+    }
+
+    @Test
+    fun longThoughtsAlwaysCutIntoSmallPieces() {
+        // No paragraph breaks at all, and a fence never closed: still pieces of at most three times the size, and nothing lost.
+        val flat = "word ".repeat(20_000)
+        val pieces = Thinking.chunks(flat, 1_000)
+        assertTrue(pieces.size > 20 && pieces.all { it.length <= 3_000 })
+        assertEquals(flat.split(" ").count { it.isNotEmpty() }, pieces.sumOf { p -> p.split(Regex("\\s+")).count { it.isNotEmpty() } })
+        val drafted = "Plan:\n\n```kotlin\n" + (1..2_000).joinToString("\n") { "val x$it = $it" } + "\n\nmore"
+        val parts = Thinking.chunks(drafted, 1_000)
+        assertTrue(parts.size > 5 && parts.all { it.length <= 3_100 })
+        // Each piece cut inside the fence closes it and the next opens it again.
+        assertTrue(parts.drop(1).dropLast(1).all { it.startsWith("```kotlin") && it.endsWith("```") })
+    }
+
+    @Test
     fun theThoughtBeforeTheAnswerStaysWithTheAnswer() {
         val items = read(
             "claude",
@@ -91,11 +142,17 @@ class ReasoningTest {
     @Test
     fun thinkingText() {
         assertEquals(null to "plain", Thinking.split("plain"))
-        assertEquals("still going" to "", Thinking.split("<think>still going"))
-        assertNull(Thinking.split("<think>\n\n</think>\n\nHi").first)
+        assertEquals("Reasoning." to "Hi", Thinking.split("<think>\nReasoning.\n</think>\n\nHi"))
+        assertEquals(null to "Hi", Thinking.split("<think>\n\n</think>\n\nHi"))
+        // Words that only start with a tag, or never close it, are words.
+        assertNull(Thinking.split("<think> tags wrap reasoning; close them with </think>.").first)
+        assertNull(Thinking.split("<think>\nstill going").first)
+        assertNull(Thinking.split("<thinking> is a tag some models use.").first)
         assertEquals("Assessing the build", Thinking.preview("\n**Assessing the build**\nmore"))
-        assertEquals("b\nc", Thinking.tail("a\n\nb\nc", 2))
+        assertEquals("b c", Thinking.tail("a\n\nb\nc", 2))
         assertEquals("HostState has updatedAt", Thinking.tail("- `HostState` has **updatedAt**", 1))
+        val newest = Thinking.tail("word ".repeat(100) + "the newest", 3, chars = 40)
+        assertTrue(newest.startsWith("…word") && newest.endsWith("the newest") && newest.length <= 41)
         assertEquals("3 words", Thinking.size("one two  three"))
         assertEquals("1.2k words", Thinking.size("w ".repeat(1_234)))
         assertEquals("2k words", Thinking.size("w ".repeat(2_000)))

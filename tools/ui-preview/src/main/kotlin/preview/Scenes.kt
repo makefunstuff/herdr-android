@@ -227,6 +227,13 @@ fun scenes(): List<Scene> = listOf(
     Scene("chat-thinking-wait", route = Routes.agent(DEVBOX, APP_AGENT), setup = {
         host(DEVBOX).transcripts = host(DEVBOX).transcripts + (Demo.APP_SESSION to Demo.appTranscriptWaiting())
     }),
+    // pi (here on a local model) streams its thought to its screen and writes it only with its next call:
+    // the chat reads it off the screen, in italics over the editor, while it works.
+    Scene("chat-pi-thinking", route = Routes.agent(DEVBOX, APP_AGENT), setup = {
+        host(DEVBOX).snapshot = Demo.devbox(appKind = "pi")
+        host(DEVBOX).transcripts = host(DEVBOX).transcripts + (Demo.APP_SESSION to Demo.resource("pi-app.jsonl"))
+        host(DEVBOX).screens = host(DEVBOX).screens + (APP_AGENT to Demo.resource("screen-pi-app.ansi"))
+    }),
     Scene("chat-away", route = Routes.agent(DEVBOX, APP_AGENT), setup = { looked = mapOf("$DEVBOX/$APP_AGENT" to Demo.NOW - 44 * 60_000) }),
     Scene("chat-new-messages", route = Routes.agent(DEVBOX, APP_AGENT), setup = {
         host(DEVBOX).transcripts = host(DEVBOX).transcripts + (Demo.APP_SESSION to Demo.appTranscriptDone())

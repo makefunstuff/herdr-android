@@ -412,16 +412,16 @@ object Demo {
     private const val EVAL_SESSION = "0199a3c4-1d2e-7f30-8a4b-5c6d7e8f9a0b"
 
     /**
-     * devbox's session. [home]: as herdr-projects runs its agents, each named for its task (`sw-<repo>-<n>`),
+     * devbox's session. [appKind]: the agent at work in herdr-android (pi, for `chat-pi-thinking`). [home]: as herdr-projects runs its agents, each named for its task (`sw-<repo>-<n>`),
      * so the Agents screen ties them to the board's tasks; and one more, at work on AND-6 in the
      * workspace the board opened for it.
      */
-    fun devbox(appStatus: String = "working", home: Boolean = false, apiStatus: String = "blocked", reviewer: Boolean = false): JsonObject = snapshot(
+    fun devbox(appStatus: String = "working", home: Boolean = false, apiStatus: String = "blocked", reviewer: Boolean = false, appKind: String = "claude"): JsonObject = snapshot(
         *listOfNotNull(
             Ws(
                 "w1", "herdr-android", "/home/demo/src/herdr-android",
                 listOf(
-                    Pane(APP_AGENT, agent = Agent("claude", appStatus, APP_SESSION, "Show when each machine last answered", name = "sw-herdr-android-9".takeIf { home })),
+                    Pane(APP_AGENT, agent = Agent(appKind, appStatus, APP_SESSION, "Show when each machine last answered", name = "sw-herdr-android-9".takeIf { home })),
                     Pane(APP_SHELL, label = "shell"),
                 ) + listOfNotNull(if (reviewer) Pane("w1:p3", agent = Agent("codex", "idle", "0199a3e1-4f5a-7b60-8c7d-9e0f1a2b3c4d", "Review the last-answered change")) else null),
                 repo = "herdr-android",

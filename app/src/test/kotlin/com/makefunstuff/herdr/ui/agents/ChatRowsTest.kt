@@ -25,8 +25,8 @@ class ChatRowsTest {
         keepsOpen = !answer,
     )
 
-    private fun rows(turns: List<ChatTurn>, live: ChatRow.Live? = null, opened: Map<String, Boolean> = emptyMap()) =
-        chatRows(turns, steps, live, opened, now = 200_000) { "t$it" }
+    private fun rows(turns: List<ChatTurn>, live: ChatRow.Live? = null, opened: Map<String, Boolean> = emptyMap(), thinking: String? = null) =
+        chatRows(turns, steps, live, opened, now = 200_000, thinking = thinking) { "t$it" }
 
     @Test fun aSettledTurnFoldsItsWorkAndKeepsItsAnswerOut() {
         val r = rows(listOf(turn("u1", 1_000, 157_000, failed = 1)))
@@ -108,5 +108,24 @@ class ChatRowsTest {
         assertTrue(r.none { it is ChatRow.Thinking })
         // Settled, nothing is live.
         assertTrue(rows(listOf(thinking(answered = false))).filterIsInstance<ChatRow.Thought>().none { it.live })
+    }
+
+    @Test fun noThinkingLineUnderItsWords() {
+        // Answered 10 s ago and still reported working (a hook runs): its words end the turn.
+        val r = rows(listOf(turn("u1", 1_000, 190_000)), live = ChatRow.Live.Working, opened = mapOf("u1" to true))
+        assertTrue(r.none { it is ChatRow.Thinking })
+        assertEquals("u1/a", r.last().key)
+    }
+
+    @Test fun theThoughtOnScreenIsLiveUntilTheTranscriptHasIt() {
+        val r = rows(listOf(thinking(answered = false)), live = ChatRow.Live.Working, thinking = "Now the card.")
+        val live = r.last() as ChatRow.Thought
+        assertEquals("thought/live/u1", live.key)
+        assertTrue(live.live && live.partial)
+        assertEquals("Now the card.", live.item.text)
+        // The transcript's thoughts are settled ones then.
+        assertTrue(r.filterIsInstance<ChatRow.Thought>().filter { !it.partial }.none { it.live })
+        // Not once the turn settled.
+        assertTrue(rows(listOf(thinking(answered = false)), thinking = "Now the card.").none { it is ChatRow.Thought && it.partial })
     }
 }

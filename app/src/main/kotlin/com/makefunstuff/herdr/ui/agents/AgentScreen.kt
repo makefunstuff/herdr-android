@@ -360,11 +360,11 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
         status == AgentStatus.Blocked -> ChatRow.Live.Blocked
         else -> null
     }
-    val rows = remember(turns, steps, live, opened.toMap(), machineNow, state.pending, state.source, state.screen, state.truncated) {
+    val rows = remember(turns, steps, live, opened.toMap(), machineNow, state.pending, state.source, state.screen, state.truncated, state.thinking) {
         buildList {
             if (state.truncated) add(ChatRow.Info("truncated", "Earlier messages aren't loaded"))
             when (state.source) {
-                AgentChat.Source.Transcript -> addAll(chatRows(turns, steps, live, opened, machineNow) { at -> clock(at - ahead, now, zone) })
+                AgentChat.Source.Transcript -> addAll(chatRows(turns, steps, live, opened, machineNow, state.thinking) { at -> clock(at - ahead, now, zone) })
                 AgentChat.Source.Screen -> {
                     add(ChatRow.Info("screen-note", "No transcript for this agent, so this is its screen"))
                     // TUIs pad with blank rows; one blank line is enough on a phone.

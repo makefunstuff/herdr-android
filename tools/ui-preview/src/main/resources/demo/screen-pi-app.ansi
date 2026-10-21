@@ -1,0 +1,25 @@
+ [0m[3m[38;2;150;160;164mThe snapshot lands in `onSnapshot`. I'll stamp `updatedAt` there, from[0m     
+ [0m[3m[38;2;150;160;164mthe phone's clock, so a machine with a fast clock doesn't look fresher[0m     
+ [0m[3m[38;2;150;160;164mthan it is.[0m                                                                
+
+[0m[48;2;37;65;49m                                                                            [0m
+[0m[48;2;37;65;49m [0m[38;2;222;224;225m[48;2;37;65;49medit core/…/host/HostSession.kt[0m[48;2;37;65;49m                                            [0m
+[0m[48;2;37;65;49m [0m[38;2;110;200;130m[48;2;37;65;49m+ val updatedAt: Long?[0m[48;2;37;65;49m                                                     [0m
+[0m[48;2;37;65;49m                                                                            [0m
+
+ [0m[3m[38;2;150;160;164mNow the card. MachineCard shows the state's label; it should add the[0m       
+ [0m[3m[38;2;150;160;164mtime under it, the way the rest of the app says a time.[0m                    
+
+[0m[38;2;167;152;215m- [0m[0m[3m[38;2;150;160;164mThere's ago() in ui/common/Time.kt, "2 min ago": use that, not a[0m           
+   [0m[3m[38;2;150;160;164mnew formatter.[0m
+[0m[38;2;167;152;215m- [0m[0m[3m[38;2;150;160;164mOnly show it when the snapshot has a time; a machine that never[0m            
+   [0m[3m[38;2;150;160;164manswered shows nothing rather than "never".[0m
+
+ [0m[3m[38;2;150;160;164mThen run the core tests, since HostState's constructor changed and[0m         
+ [0m[3m[38;2;150;160;164mHostSessionTest builds one.[0m                                                
+
+[0m[38;2;151;118;229m────────────────────────────────────────────────────────────────────────────[0m
+[0m[7m [0m
+[0m[38;2;151;118;229m────────────────────────────────────────────────────────────────────────────[0m
+[0m[38;2;126;136;142m/home/demo/src/herdr-android[0m
+[0m[38;2;126;136;142m↑20k ↓1.2k R61k 31.2%/262k (auto)                 (llama.cpp) strata-35b • high[0m
