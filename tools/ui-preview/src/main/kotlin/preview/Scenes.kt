@@ -320,6 +320,8 @@ fun scenes(): List<Scene> = listOf(
     // A task's whole card, tall: what shows at a glance, the rest folded under More. With its agent on the machine
     // (home): Open agent; a task at work whose message is its agent's status bar; the board with that task's card.
     Scene("task-tall", route = Routes.board(DEVBOX), heightDp = 1800, actions = { tapText("Show when each machine last answered") }),
+    Scene("task-more", route = Routes.board(DEVBOX), heightDp = 1800, actions = { tapText("Show when each machine last answered"); tapText("More") }),
+    Scene("task-open-agent", route = Routes.board(DEVBOX), setup = { home() }, actions = { tapText("Show when each machine last answered"); tapText("Open agent") }),
     Scene("task-agent", route = Routes.board(DEVBOX), setup = { home() }, actions = { tapText("Show when each machine last answered") }),
     Scene("task-working", route = Routes.board(DEVBOX), heightDp = 1200, actions = { tapText("Rate-limit the export endpoint per tenant") }),
     Scene("board-tall", route = Routes.board(DEVBOX), heightDp = 2000),

@@ -32,6 +32,8 @@ import androidx.navigation.NavController
 import com.makefunstuff.herdr.LocalPanes
 import com.makefunstuff.herdr.Routes
 import com.makefunstuff.herdr.core.home.BoardGroup
+import com.makefunstuff.herdr.core.home.Home
+import com.makefunstuff.herdr.core.home.HomeAgent
 import com.makefunstuff.herdr.ui.common.EmptyState
 import com.makefunstuff.herdr.ui.common.LocalContainer
 import com.makefunstuff.herdr.ui.design.BarIcon
@@ -58,6 +60,8 @@ fun BoardsScreen(nav: NavController) {
     val container = LocalContainer.current
     val panes = LocalPanes.current
     val hosts by container.hosts.hosts.collectAsStateWithLifecycle()
+    // Each task's agent on its machine: its chat opens from the card.
+    val agents = remember(hosts) { HomeAgent.of(hosts) }
     val boards = rememberBoards()
     val problems = rememberBoardProblems()
     val readNow = remember { Channel<Unit>(Channel.CONFLATED) }
@@ -132,7 +136,11 @@ fun BoardsScreen(nav: NavController) {
                             Text("No open tasks", style = MaterialTheme.typography.bodyMedium, color = Herdr.colors.muted, modifier = Modifier.padding(start = Space.xs))
                         }
                         items(g.tasks, key = { "${g.machineId}/${it.id}" }) { t ->
-                            TaskRow(t, onOpen = { panes.openBoard(nav, g.machineId, t.id, alone = true) }, onMenu = { panes.openBoard(nav, g.machineId, t.id, alone = true) })
+                            val live = agents.firstOrNull { it.machineId == g.machineId && Home.taskOf(it, listOf(t)) != null }?.agent
+                            TaskRow(
+                                t, onOpen = { panes.openBoard(nav, g.machineId, t.id, alone = true) }, onMenu = { panes.openBoard(nav, g.machineId, t.id, alone = true) },
+                                onAgent = live?.let { a -> { panes.open(nav, Routes.agent(g.machineId, a.paneId)) } },
+                            )
                         }
                         if (g.done > 0) item(key = "done/${g.machineId}") {
                             Text(
