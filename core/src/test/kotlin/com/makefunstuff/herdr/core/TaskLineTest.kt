@@ -14,6 +14,8 @@ class TaskLineTest {
         assertEquals("", TaskLine.clean(bar))
         assertEquals("", TaskLine.line(bar))
         assertEquals("", TaskLine.clean("↑12k ↓3.4k 41%/200k"))
+        assertEquals("", TaskLine.clean("↑1.6M ↓807k R64M 73.6%/197k (auto) (anthropic) claude-opus-5-5 • low"))
+        assertEquals("", TaskLine.clean("/home/demo/src/app ↑90k ↓12k 12%/200k gpt-6.1-sol • high"))
     }
 
     @Test
@@ -27,6 +29,12 @@ class TaskLineTest {
             "p95 latency ↓40% and errors ↓12 per hour",
             "Bundle size ↓120k • ready for review",
             "Context 73%/200k, tokens ↑1.2M so far, compacting next",
+            "Errors ↓12, latency ↓40%",
+            "Latency ↓30ms, errors ↓12",
+            "Coverage ↑3% ↓0 flaky",
+            "Tests ↑12 passing ↓0 failing",
+            "Done ↑2 ↓1 merged",
+            "Tokens ↑1.6M ↓807k so far",
         )) assertEquals(m, TaskLine.clean(m))
         // Labels a person writes stay with their words.
         assertEquals("Logs: nothing unusual, tests pass", TaskLine.clean("Logs: nothing unusual, tests pass"))

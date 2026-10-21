@@ -10,8 +10,15 @@ import com.makefunstuff.herdr.core.chat.ModelUse
  * line ending in where the work was kept. Those parts say nothing at a glance and are left out.
  */
 object TaskLine {
-    /** A token counter (`↑1.6M`, `↓807k`, `R64M`, `W12k`) or a context gauge (`73.6%/197k`). */
-    private val COUNTER = Regex("""(?:[↑↓]\s?\d[\d.,]*[kKmMbB]?|\b[RW]\d[\d.,]*[kKmMbB]\b|\b\d+(?:\.\d+)?%/\d[\d.,]*[kKmM]?\b)""")
+    /**
+     * A token counter as a status bar prints it, sized in thousands or millions (`↑1.6M`, `↓807k`, `R64M`, `W12k`),
+     * or a context gauge (`73.6%/197k`). A person's `↓12`, `↑3%` or `↓30ms` is none of these.
+     */
+    private const val GAUGE = """(?:(?:[↑↓]|\b[RW])\d+(?:[.,]\d+)?[kKmM]\b|\b\d+(?:\.\d+)?%/\d+(?:[.,]\d+)?[kKmM]?\b)"""
+    private val COUNTER = Regex(GAUGE)
+
+    /** Two of them side by side, as only a status bar has them. */
+    private val RUN = Regex("""$GAUGE\s+$GAUGE""")
 
     /** "Kept: <path> (unmerged work on <branch>)" and "Report: <path>", the board's notes on where things are: only with a path after them. */
     private val WHERE = Regex("""\b(?:Kept|Report):\s+(?:~/|/)\S+(?:\s+\([^)]*\))?\.?""")
@@ -45,13 +52,14 @@ object TaskLine {
     fun line(msg: String): String = Markdown.plain(clean(msg)).trim()
 
     /**
-     * Whether [s] reads as an agent's terminal status bar: at least two counters (`↑1.6M ↓807k`, `73.6%/197k`) and,
-     * once they, its paths and its `(tags)` are gone, hardly a word left. A sentence with numbers in it keeps its words.
+     * Whether [s] reads as an agent's terminal status bar: sized counters side by side (`↑1.6M ↓807k`,
+     * `R64M 73.6%/197k`) and, once they, its paths and its `(tags)` are gone, two words at most (a model and an
+     * effort). A person's line with numbers in it (`Errors ↓12, latency ↓40%`) keeps its words.
      */
     fun isStatusBar(s: String): Boolean {
-        if (COUNTER.findAll(s).count() < 2) return false
+        if (!RUN.containsMatchIn(s)) return false
         val left = BAR_LEFT.replace(COUNTER.replace(PATH.replace(s, " "), " "), " ")
-        return left.split(Regex("""\s+""")).count { w -> w.count { it.isLetter() } >= 2 } <= 3
+        return left.split(Regex("""\s+""")).count { w -> w.count { it.isLetter() } >= 2 } <= 2
     }
 
     /**
