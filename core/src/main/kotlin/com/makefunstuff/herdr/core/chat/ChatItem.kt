@@ -10,6 +10,13 @@ sealed interface ChatItem {
     /** The agent's reply text, in Markdown. */
     data class Agent(override val id: String, val text: String) : ChatItem
 
+    /**
+     * What the agent thought before it acted or answered, as far as its transcript keeps it: Claude's
+     * thinking, Codex's reasoning summary (or the raw reasoning of an open model), pi's thinking from
+     * any provider. Never in the transcript when the model keeps it to itself, so it is then not shown.
+     */
+    data class Reasoning(override val id: String, val text: String) : ChatItem
+
     /** A tool call or action: [summary] is the one line worth showing (a command, a path, a query). */
     data class Tool(
         override val id: String,

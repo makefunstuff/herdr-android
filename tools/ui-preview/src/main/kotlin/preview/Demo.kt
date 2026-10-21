@@ -284,6 +284,46 @@ object Demo {
     /** devbox's app agent once its second ask is done, a failed test run on the way. */
     fun appTranscriptDone(): String = resource("claude-app.jsonl").trimEnd() + "\n" + appMore()
 
+    /** A thinking block as Claude Code writes one: its own line, before the words or the call it led to. */
+    private fun thinking(uuid: Int, at: String, text: String): String =
+        """{"type": "assistant", "uuid": "00000000-0000-4000-8000-${"%012d".format(uuid)}", "timestamp": "$at", "cwd": "/home/demo/src/herdr-android", """ +
+            """"message": {"role": "assistant", "model": "claude-opus-5-5", "content": [{"type": "thinking", "thinking": ${kotlinx.serialization.json.JsonPrimitive(text)}, "signature": "sig"}]}}"""
+
+    private val THOUGHT_FIX = "The test failed because `HostSessionTest` still builds `HostState` with the old constructor. " +
+        "I could give `updatedAt` a default, but then a snapshot without a time would look fresh, which is the bug the user wants to see."
+
+    /** What it thought before its answer: what it checked, and why the card counts from the snapshot. */
+    val THOUGHT_ANSWER = """
+        |**Checking the result before I answer**
+        |
+        |The second run passes: 52 tests, none failed. The card reads `state.updatedAt` and formats it with `ago()`, so it says "2 min ago" and moves on by itself while the list recomposes every minute.
+        |
+        |Where does the time come from? From the moment the snapshot *arrives* on the phone, not from the machine's clock. That's the right one here: the user asked when each machine last answered, and a machine whose clock runs fast would otherwise look fresher than it is. I should say that in one line.
+        |
+        |Things I didn't change, worth knowing:
+        |
+        |- a machine that never answered has no `updatedAt`, so its card shows nothing rather than "never";
+        |- the jump host's machines get their own time, since each has its own session.
+        |
+        |I won't mention the failed run in detail; it was my own missing parameter, fixed in the test. Keep the answer short: what it shows, where the time comes from, that the tests pass.
+        |""".trimMargin().trim()
+
+    /** devbox's app agent once its second ask is done, with its thinking on the way and before its answer. */
+    fun appTranscriptReasoning(): String {
+        val more = appMore().trimEnd().lines()
+        val fix = more.indexOfFirst { "One test still builds" in it }
+        val lines = more.take(fix) + thinking(90, "2026-10-17T07:40:50.000Z", THOUGHT_FIX) + more.subList(fix, more.lastIndex) +
+            thinking(91, "2026-10-17T07:41:44.000Z", THOUGHT_ANSWER) + more.last()
+        return resource("claude-app.jsonl").trimEnd() + "\n" + lines.joinToString("\n") + "\n"
+    }
+
+    /** devbox's app agent once its edit came back, before it wrote anything more: the model is at work. */
+    fun appTranscriptWaiting(): String = resource("claude-app.jsonl").trimEnd() + "\n" + appMore(1)
+
+    /** devbox's app agent thinking right now: its edit came back, and the newest line is a thought. */
+    fun appTranscriptThinking(): String = resource("claude-app.jsonl").trimEnd() + "\n" + appMore(1) +
+        thinking(92, "2026-10-17T07:41:50.000Z", "`HostState` has `updatedAt` now. Next the card: it should read the time and say it the way the rest of the app does.\n\nThere's `ago()` in `ui/common/Time.kt`, which says \"2 min ago\". I'll use that rather than a new formatter, and only show it when the snapshot has a time.") + "\n"
+
     /** Then a third ask, typed at the desk, and the agent starting on it: two new messages for a chat scrolled up. */
     val APP_NEXT = """
         |{"type": "user", "uuid": "00000000-0000-4000-8000-000000000040", "timestamp": "2026-10-17T07:41:56.000Z", "cwd": "/home/demo/src/herdr-android", "message": {"role": "user", "content": "Make it amber when a machine hasn't answered for an hour."}}
@@ -372,16 +412,16 @@ object Demo {
     private const val EVAL_SESSION = "0199a3c4-1d2e-7f30-8a4b-5c6d7e8f9a0b"
 
     /**
-     * devbox's session. [home]: as herdr-projects runs its agents, each named for its task (`sw-<repo>-<n>`),
+     * devbox's session. [appKind]: the agent at work in herdr-android (pi, for `chat-pi-thinking`). [home]: as herdr-projects runs its agents, each named for its task (`sw-<repo>-<n>`),
      * so the Agents screen ties them to the board's tasks; and one more, at work on AND-6 in the
      * workspace the board opened for it.
      */
-    fun devbox(appStatus: String = "working", home: Boolean = false, apiStatus: String = "blocked", reviewer: Boolean = false): JsonObject = snapshot(
+    fun devbox(appStatus: String = "working", home: Boolean = false, apiStatus: String = "blocked", reviewer: Boolean = false, appKind: String = "claude"): JsonObject = snapshot(
         *listOfNotNull(
             Ws(
                 "w1", "herdr-android", "/home/demo/src/herdr-android",
                 listOf(
-                    Pane(APP_AGENT, agent = Agent("claude", appStatus, APP_SESSION, "Show when each machine last answered", name = "sw-herdr-android-9".takeIf { home })),
+                    Pane(APP_AGENT, agent = Agent(appKind, appStatus, APP_SESSION, "Show when each machine last answered", name = "sw-herdr-android-9".takeIf { home })),
                     Pane(APP_SHELL, label = "shell"),
                 ) + listOfNotNull(if (reviewer) Pane("w1:p3", agent = Agent("codex", "idle", "0199a3e1-4f5a-7b60-8c7d-9e0f1a2b3c4d", "Review the last-answered change")) else null),
                 repo = "herdr-android",

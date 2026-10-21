@@ -10,7 +10,7 @@ import com.makefunstuff.herdr.core.activity.Turn
  * One turn of the chat as the herdr web UI's work block shows it: what you said, everything the
  * agent did on the way (tool calls, the narration between them, quiet markers) folded under one
  * "Worked for 2m 36s · 1 edit · 1 command" header, and what it said after its last action, outside
- * the fold, as its answer.
+ * the fold, as its answer (with the reasoning that led to it, above it).
  */
 data class ChatTurn(
     /** Stays the same while the turn grows: its first item's id. */
@@ -18,7 +18,8 @@ data class ChatTurn(
     /** What started it, when the chat shows it (not before the first message, or after a cut). */
     val user: ChatItem.User?,
     val work: List<ChatItem>,
-    val answer: List<ChatItem.Agent>,
+    /** What came after its last action: its words ([ChatItem.Agent]) and the reasoning between them ([ChatItem.Reasoning]). */
+    val answer: List<ChatItem>,
     /** When it started and its last activity, on the machine's clock in ms; 0 when unknown. */
     val at: Long,
     val end: Long,
@@ -31,6 +32,9 @@ data class ChatTurn(
     /** A header only for a turn that did something: words alone show as they are. */
     val hasWork: Boolean get() = work.any { it is ChatItem.Tool }
     val took: Long? get() = if (at > 0 && end >= at) end - at else null
+
+    /** It said something after its last action, not only thought. */
+    val answered: Boolean get() = answer.any { it is ChatItem.Agent }
 }
 
 /** How many of each kind of call a turn made, as the header counts them. */
@@ -77,9 +81,9 @@ object ChatTurns {
     }
 
     private fun turn(user: ChatItem.User?, parts: List<ChatItem>, steps: Steps): ChatTurn {
-        // Everything up to the last action is work; the words after it are the answer.
-        val lastAction = parts.indexOfLast { it !is ChatItem.Agent }
-        val answer = parts.drop(lastAction + 1).filterIsInstance<ChatItem.Agent>()
+        // Everything up to the last action is work; the words (and thoughts) after it are the answer.
+        val lastAction = parts.indexOfLast { it !is ChatItem.Agent && it !is ChatItem.Reasoning }
+        val answer = parts.drop(lastAction + 1)
         val work = parts.take(lastAction + 1)
         val tools = work.filterIsInstance<ChatItem.Tool>()
         val start = user?.let { steps.turn(it.id) }
@@ -107,7 +111,7 @@ object ChatTurns {
             end = end,
             counts = counts,
             failed = failed,
-            keepsOpen = answer.isEmpty() && work.any { it is ChatItem.Agent },
+            keepsOpen = answer.none { it is ChatItem.Agent } && work.any { it is ChatItem.Agent },
         )
     }
 
@@ -154,7 +158,7 @@ object ChatTurns {
      * reached the transcript yet (that turn would reopen, timed from its old start).
      */
     fun mayBeRunning(turn: ChatTurn, now: Long): Boolean =
-        turn.answer.isEmpty() || turn.end <= 0 || now - turn.end < SETTLED_MS
+        !turn.answered || turn.end <= 0 || now - turn.end < SETTLED_MS
 
     /**
      * How far the machine's clock is ahead of the phone's at least, from [turns] (timed on the

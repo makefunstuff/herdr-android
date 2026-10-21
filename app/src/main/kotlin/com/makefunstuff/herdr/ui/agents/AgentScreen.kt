@@ -360,11 +360,11 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
         status == AgentStatus.Blocked -> ChatRow.Live.Blocked
         else -> null
     }
-    val rows = remember(turns, steps, live, opened.toMap(), machineNow, state.pending, state.source, state.screen, state.truncated) {
+    val rows = remember(turns, steps, live, opened.toMap(), machineNow, state.pending, state.source, state.screen, state.truncated, state.thinking) {
         buildList {
             if (state.truncated) add(ChatRow.Info("truncated", "Earlier messages aren't loaded"))
             when (state.source) {
-                AgentChat.Source.Transcript -> addAll(chatRows(turns, steps, live, opened, machineNow) { at -> clock(at - ahead, now, zone) })
+                AgentChat.Source.Transcript -> addAll(chatRows(turns, steps, live, opened, machineNow, state.thinking) { at -> clock(at - ahead, now, zone) })
                 AgentChat.Source.Screen -> {
                     add(ChatRow.Info("screen-note", "No transcript for this agent, so this is its screen"))
                     // TUIs pad with blank rows; one blank line is enough on a phone.
@@ -379,7 +379,8 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
     val liveHead = rows.any { it is ChatRow.Head && it.live != null }
     val typing = typingInShortWindow()
     // The newest turn's header says it works; with the strip hidden for the keyboard and no such header, a line under the chat does.
-    val workingLine = status == AgentStatus.Working && typing && !liveHead
+    val thinking = rows.any { it is ChatRow.Thinking || (it is ChatRow.Thought && it.live) }
+    val workingLine = status == AgentStatus.Working && typing && !liveHead && !thinking
     val atBottom by remember(workingLine) { derivedStateOf { listState.firstVisibleItemIndex <= if (workingLine) 1 else 0 } }
     // Stay pinned to the newest message unless the reader scrolled up.
     LaunchedEffect(rows.lastOrNull()?.key, rows.size, status) {
@@ -545,7 +546,7 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
                     ) {
                         if (workingLine) item(key = "working") { WorkingLine(activity) }
                         items(rows.asReversed(), key = { it.key }) { row ->
-                            ChatRowView(row, onToggle = { head -> opened[head.turn] = !head.open })
+                            ChatRowView(row, onToggle = { head -> opened[head.turn] = !head.open }, onThought = { t -> opened[t.key] = !t.open })
                         }
                     } }
                 }

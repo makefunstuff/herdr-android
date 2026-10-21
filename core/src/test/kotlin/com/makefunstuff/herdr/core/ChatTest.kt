@@ -400,11 +400,12 @@ class TranscriptTest {
         val user = items[0] as ChatItem.User
         assertEquals("make it nicer", user.text)
         assertEquals(1, user.images)
-        assertEquals("Looking.", (items[1] as ChatItem.Agent).text)
-        val tool = items[2] as ChatItem.Tool
+        assertEquals("hm", (items[1] as ChatItem.Reasoning).text)
+        assertEquals("Looking.", (items[2] as ChatItem.Agent).text)
+        val tool = items[3] as ChatItem.Tool
         assertEquals("/x/game.js", tool.summary)
         assertEquals(ToolState.Failed, tool.state)
-        assertIs<ChatItem.Notice>(items[3])
+        assertIs<ChatItem.Notice>(items[4])
     }
 }
 

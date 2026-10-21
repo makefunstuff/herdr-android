@@ -18,9 +18,14 @@ class HerdrApi(private val connection: ApiCaller) {
     suspend fun agents(): List<AgentInfo> =
         HerdrJson.decodeFromJsonElement(connection.call("agent.list")["agents"] ?: JsonArray(emptyList()))
 
-    suspend fun readPane(paneId: String, source: String = "recent", lines: Int = 80): PaneRead =
+    suspend fun readPane(paneId: String, source: String = "recent", lines: Int = 80, ansi: Boolean = false): PaneRead =
         HerdrJson.decodeFromJsonElement(
-            connection.call("pane.read", params("pane_id" to paneId, "source" to source, "lines" to lines))["read"]
+            connection.call(
+                "pane.read",
+                // [ansi]: the text with its colours and styles, as the terminal draws it.
+                if (ansi) params("pane_id" to paneId, "source" to source, "lines" to lines, "format" to "ansi", "strip_ansi" to false)
+                else params("pane_id" to paneId, "source" to source, "lines" to lines),
+            )["read"]
                 ?: JsonObject(emptyMap()),
         )
 

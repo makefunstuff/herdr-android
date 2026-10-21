@@ -1,0 +1,16 @@
+[0m[48;2;37;65;49m [0m[38;2;157;165;169m[48;2;37;65;49mTook 0.0s[0m[48;2;37;65;49m                                                                  [0m
+[0m[48;2;37;65;49m                                                                            [0m
+
+ [0m[3m[38;2;150;160;164mEverything is running and building. Final summary for the user:[0m            
+                                                                            
+ [0m[38;2;167;152;215m- [0m[3m[38;2;150;160;164mCreatures are now "live": bigger (0.42 base radius), bobbing with sine   [0m
+   [0m[3m[38;2;150;160;164mmotion, glowing amber with eyes, soft bloom.[0m                             
+ [0m[38;2;167;152;215m- [0m[3m[38;2;150;160;164mBuild passes, dev server running at [0m[3m[4m[38;2;150;160;164mhttp://localhost:5173/[0m[3m[38;2;150;160;164m.[0m              
+                                                                            
+ [0m[3m[38;2;150;160;164mKeep it concise.[0m                                                           
+
+[0m[38;2;151;118;229m────────────────────────────────────────────────────────────────────────────[0m
+[0m[7m [0m                                                                           
+[0m[38;2;151;118;229m────────────────────────────────────────────────────────────────────────────[0m
+[0m[38;2;126;136;142m/data/jpl/Work/fastlocal-interesting-test[0m
+[0m[38;2;126;136;142m↑43k ↓55k R1.7M 28.3%/262k (auto)             (llama.cpp) flint-nvfp4 • high[0m

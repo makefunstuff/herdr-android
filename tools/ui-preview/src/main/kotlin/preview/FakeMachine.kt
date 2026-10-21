@@ -252,7 +252,11 @@ class FakeMachine(
             "session.snapshot" -> obj("snapshot" to snapshot)
             "events.subscribe" -> obj()
             "agent.list" -> obj("agents" to snapshot["agents"])
-            "pane.read" -> obj("read" to obj("pane_id" to pane, "text" to Shell.plain(screens[pane].orEmpty()), "revision" to 1))
+            // `format: ansi` keeps the colours and styles (pi's thoughts are in italics).
+            "pane.read" -> {
+                val ansi = p["format"]?.jsonPrimitive?.content == "ansi"
+                obj("read" to obj("pane_id" to pane, "text" to screens[pane].orEmpty().let { if (ansi) it else Shell.plain(it) }, "revision" to 1))
+            }
             "pane.get" -> obj("pane" to list("panes").first { it["pane_id"]?.jsonPrimitive?.content == pane })
             "pane.layout" -> {
                 val tab = list("panes").first { it["pane_id"]?.jsonPrimitive?.content == pane }["tab_id"]
