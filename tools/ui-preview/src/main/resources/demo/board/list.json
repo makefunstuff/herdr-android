@@ -63,7 +63,7 @@
     "state": "working",
     "stage": "reviewing",
     "app": "claude",
-    "msg": "Reviewer is running the load test",
+    "msg": "~/.herdr/worktrees/api-server/work-5-rate-limit-export ↑1.6M ↓807k R64M 73.6%/197k (auto) (anthropic) claude-opus-5-5 • low",
     "pr": "https://github.com/demo/api-server/pull/5",
     "reviewRound": 1
   },
@@ -89,7 +89,7 @@
     "state": "done",
     "stage": "done",
     "app": "claude",
-    "msg": "Merged",
+    "msg": "Merged: https://github.com/demo/herdr-android/pull/3. Kept: ~/.herdr/worktrees/herdr-android/work-2-native-chat-views (unmerged work on work/2-native-chat-views)",
     "pr": "https://github.com/demo/herdr-android/pull/3"
   }
 ]

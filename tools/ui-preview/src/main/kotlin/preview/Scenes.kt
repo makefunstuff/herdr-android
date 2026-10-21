@@ -317,6 +317,12 @@ fun scenes(): List<Scene> = listOf(
     Scene("board", route = Routes.board(DEVBOX)),
     Scene("task", route = Routes.board(DEVBOX), actions = { tapText("Show when each machine last answered") }),
     Scene("task-review-failed", route = Routes.board(DEVBOX), actions = { tapText("Rewrite the install page") }),
+    // A task's whole card, tall: what shows at a glance, the rest folded under More. With its agent on the machine
+    // (home): Open agent; a task at work whose message is its agent's status bar; the board with that task's card.
+    Scene("task-tall", route = Routes.board(DEVBOX), heightDp = 1800, actions = { tapText("Show when each machine last answered") }),
+    Scene("task-agent", route = Routes.board(DEVBOX), setup = { home() }, actions = { tapText("Show when each machine last answered") }),
+    Scene("task-working", route = Routes.board(DEVBOX), heightDp = 1200, actions = { tapText("Rate-limit the export endpoint per tenant") }),
+    Scene("board-tall", route = Routes.board(DEVBOX), heightDp = 2000),
     Scene("task-actions", route = Routes.board(DEVBOX), actions = { longPressText("Rewrite the install page") }),
     Scene("task-talkback", route = Routes.board(DEVBOX), actions = { talkback("Rewrite the install page") }),
     // A task at work offers watches: tell me once its checks pass, once it's done.
@@ -503,6 +509,8 @@ fun scenes(): List<Scene> = listOf(
     // The Board tab in the middle: a task tapped there opens on the right.
     Scene("wide-boards", widthDp = 1280, heightDp = 800, setup = { home() }, actions = { tapLabel("Board, 4 need you"); tapText("Taking the Coordinator screenshot") }),
     Scene("wide-terminal", route = Routes.terminal(DEVBOX, APP_SHELL), widthDp = 840, heightDp = 940),
+    // The board on the right with a task's card open beside the chat.
+    Scene("wide-card", widthDp = 1280, heightDp = 800, setup = { home() }, actions = { tapLabel("Board, 4 need you"); tapText("Add app screenshots to the README") }),
     Scene("wide-task", route = Routes.coordinator(DEVBOX), widthDp = 1280, heightDp = 800, setup = { home() }, actions = { tapText("Taking the Coordinator screenshot") }),
     // A board opened as its own screen on a phone, the window then made wide: a notification's link to one of its
     // tasks moves the board to the right, with that task open.

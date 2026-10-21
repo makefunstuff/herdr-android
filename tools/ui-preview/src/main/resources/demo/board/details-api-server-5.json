@@ -3,7 +3,7 @@
     "id": "API-5",
     "title": "Rate-limit the export endpoint per tenant",
     "stage": "reviewing",
-    "msg": "Reviewer is running the load test",
+    "msg": "~/.herdr/worktrees/api-server/work-5-rate-limit-export ↑1.6M ↓807k R64M 73.6%/197k (auto) (anthropic) claude-opus-5-5 • low",
     "description": ""
   },
   "failure": null,
@@ -13,7 +13,10 @@
   "research": false,
   "plan": "",
   "pr": "https://github.com/demo/api-server/pull/5",
-  "branch": "",
-  "worktree": "",
-  "limits": {}
+  "branch": "work/5-rate-limit-export",
+  "worktree": "~/.herdr/worktrees/api-server/work-5-rate-limit-export",
+  "limits": {
+    "time": {"limit": "none", "used": "1h 12m"},
+    "tokens": {"limit": "none", "used": 2407000}
+  }
 }
