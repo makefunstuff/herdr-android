@@ -212,6 +212,21 @@ fun scenes(): List<Scene> = listOf(
         host(DEVBOX).snapshot = Demo.devbox(appStatus = "done")
         host(DEVBOX).transcripts = host(DEVBOX).transcripts + (Demo.APP_SESSION to Demo.appTranscriptDone())
     }),
+    // The agent's reasoning: folded to a line above the answer it led to, opened by a tap; live while it thinks.
+    Scene("chat-reasoning", route = Routes.agent(DEVBOX, APP_AGENT), setup = {
+        host(DEVBOX).snapshot = Demo.devbox(appStatus = "done")
+        host(DEVBOX).transcripts = host(DEVBOX).transcripts + (Demo.APP_SESSION to Demo.appTranscriptReasoning())
+    }),
+    Scene("chat-reasoning-open", route = Routes.agent(DEVBOX, APP_AGENT), setup = {
+        host(DEVBOX).snapshot = Demo.devbox(appStatus = "done")
+        host(DEVBOX).transcripts = host(DEVBOX).transcripts + (Demo.APP_SESSION to Demo.appTranscriptReasoning())
+    }, actions = { tapExact("Thought") }),
+    Scene("chat-thinking", route = Routes.agent(DEVBOX, APP_AGENT), setup = {
+        host(DEVBOX).transcripts = host(DEVBOX).transcripts + (Demo.APP_SESSION to Demo.appTranscriptThinking())
+    }),
+    Scene("chat-thinking-wait", route = Routes.agent(DEVBOX, APP_AGENT), setup = {
+        host(DEVBOX).transcripts = host(DEVBOX).transcripts + (Demo.APP_SESSION to Demo.appTranscriptWaiting())
+    }),
     Scene("chat-away", route = Routes.agent(DEVBOX, APP_AGENT), setup = { looked = mapOf("$DEVBOX/$APP_AGENT" to Demo.NOW - 44 * 60_000) }),
     Scene("chat-new-messages", route = Routes.agent(DEVBOX, APP_AGENT), setup = {
         host(DEVBOX).transcripts = host(DEVBOX).transcripts + (Demo.APP_SESSION to Demo.appTranscriptDone())

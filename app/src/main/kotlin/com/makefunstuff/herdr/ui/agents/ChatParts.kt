@@ -95,6 +95,18 @@ sealed interface ChatRow {
         override val key get() = "head/$turn"
     }
 
+    /**
+     * The agent's reasoning, folded to its first line and its length; [open], it follows as
+     * [ThoughtPart] rows, a piece each, so a long one scrolls as smoothly as the rest. [live] while
+     * it is the newest thing in the running turn: the agent may still be at it.
+     */
+    data class Thought(val item: ChatItem.Reasoning, val open: Boolean, val live: Boolean) : ChatRow {
+        override val key get() = "thought/${item.id}"
+    }
+    data class ThoughtPart(override val key: String, val text: String, val last: Boolean) : ChatRow
+    /** "Thinking…" at the end of the running turn: no call runs, so the model is at work. */
+    data class Thinking(override val key: String) : ChatRow
+
     /** What a turn still running does: works, or waits for you. */
     enum class Live { Working, Blocked }
 
@@ -129,18 +141,37 @@ fun chatRows(
                 else -> turn.took?.let { "Worked for ${ChatTurns.duration(it)}" } ?: "Worked"
             }
             rows += ChatRow.Head(turn.key, title, turn.counts.summary, turn.failed, running, open, started)
-            if (open) rows += workRows(turn.work, steps, quiet = running == null)
+            if (open) rows += workRows(turn.work, steps, quiet = running == null, opened)
         } else {
             started?.let { rows += ChatRow.Time("time/${turn.key}", it) }
-            rows += workRows(turn.work, steps, quiet = false)
+            rows += workRows(turn.work, steps, quiet = false, opened)
         }
-        turn.answer.forEach { rows += ChatRow.Agent(it) }
+        // While it works, its newest thought is live; with no call running, the model is thinking.
+        val newest = (turn.answer.lastOrNull() ?: turn.work.lastOrNull()).takeIf { running == ChatRow.Live.Working }
+        turn.answer.forEach { item ->
+            when (item) {
+                is ChatItem.Reasoning -> rows += thoughtRows(item, opened, live = item === newest)
+                is ChatItem.Agent -> rows += ChatRow.Agent(item)
+                else -> {}
+            }
+        }
+        if (newest != null && newest !is ChatItem.Reasoning && (newest as? ChatItem.Tool)?.state != ToolState.Running) {
+            rows += ChatRow.Thinking("thinking/${turn.key}")
+        }
     }
     return rows
 }
 
+/** A thought's row, and its pieces when opened by hand ([opened] by its row's key). */
+private fun thoughtRows(item: ChatItem.Reasoning, opened: Map<String, Boolean>, live: Boolean = false): List<ChatRow> {
+    val head = ChatRow.Thought(item, open = false, live = live)
+    if (opened[head.key] != true) return listOf(head)
+    val parts = com.makefunstuff.herdr.core.chat.Thinking.chunks(item.text)
+    return listOf(head.copy(open = true)) + parts.mapIndexed { i, text -> ChatRow.ThoughtPart("${head.key}/$i", text, last = i == parts.lastIndex) }
+}
+
 /** A turn's work as rows: runs of tool calls as one group, narration and markers between them. */
-private fun workRows(items: List<ChatItem>, steps: ChatTurns.Steps, quiet: Boolean): List<ChatRow> {
+private fun workRows(items: List<ChatItem>, steps: ChatTurns.Steps, quiet: Boolean, opened: Map<String, Boolean>): List<ChatRow> {
     val rows = mutableListOf<ChatRow>()
     val run = mutableListOf<ChatItem.Tool>()
     fun flush() {
@@ -152,6 +183,7 @@ private fun workRows(items: List<ChatItem>, steps: ChatTurns.Steps, quiet: Boole
             is ChatItem.Tool -> run += item
             is ChatItem.Agent -> { flush(); rows += ChatRow.Agent(item, quiet) }
             is ChatItem.Notice -> { flush(); rows += ChatRow.Notice(item) }
+            is ChatItem.Reasoning -> { flush(); rows += thoughtRows(item, opened) }
             is ChatItem.User -> { flush(); rows += ChatRow.User(item) }
         }
     }
@@ -160,7 +192,7 @@ private fun workRows(items: List<ChatItem>, steps: ChatTurns.Steps, quiet: Boole
 }
 
 @Composable
-fun ChatRowView(row: ChatRow, onToggle: (ChatRow.Head) -> Unit = {}) {
+fun ChatRowView(row: ChatRow, onToggle: (ChatRow.Head) -> Unit = {}, onThought: (ChatRow.Thought) -> Unit = {}) {
     when (row) {
         is ChatRow.User -> UserBubble(row.item, row.pending)
         is ChatRow.Agent ->
@@ -173,6 +205,96 @@ fun ChatRowView(row: ChatRow, onToggle: (ChatRow.Head) -> Unit = {}) {
         is ChatRow.Info -> NoticeLine(row.text)
         is ChatRow.Time -> TimeLine(row.text)
         is ChatRow.Head -> TurnHead(row) { onToggle(row) }
+        is ChatRow.Thought -> ThoughtHead(row) { onThought(row) }
+        is ChatRow.ThoughtPart -> ThoughtText(row)
+        is ChatRow.Thinking -> ThinkingLine()
+    }
+}
+
+/** A pulse for what runs now, as the working dot breathes. */
+@Composable
+private fun pulse(): Float {
+    val pulse = rememberInfiniteTransition(label = "thinking")
+    val alpha by pulse.animateFloat(0.35f, 1f, infiniteRepeatable(tween(700), RepeatMode.Reverse), label = "alpha")
+    return alpha
+}
+
+/** The start of a thought's own column: its rows hang off a hairline there, as a quote does. */
+private val THOUGHT_INDENT = 22.dp
+
+/**
+ * A thought folded to one quiet row: `Thought · 312 words` over its first line in faint italics,
+ * tapped to read it all. Live, it says `Thinking…` and shows its last lines instead.
+ */
+@Composable
+private fun ThoughtHead(row: ChatRow.Thought, onToggle: () -> Unit) {
+    val c = Herdr.colors
+    val text = row.item.text
+    val size = remember(text) { com.makefunstuff.herdr.core.chat.Thinking.size(text) }
+    val preview = remember(text, row.live) {
+        if (row.live) com.makefunstuff.herdr.core.chat.Thinking.tail(text, 3) else com.makefunstuff.herdr.core.chat.Thinking.preview(text)
+    }
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(Radius.m))
+            .clickable(onClickLabel = if (row.open) "Fold the reasoning" else "Read the reasoning", onClick = onToggle)
+            .padding(horizontal = Space.xs, vertical = 6.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(16.dp), contentAlignment = Alignment.Center) {
+                Icon(HerdrIcons.Brain, null, Modifier.size(14.dp).alpha(if (row.live) pulse() else 1f), tint = if (row.live) c.working else c.faint)
+            }
+            Spacer(Modifier.width(6.dp))
+            Text(
+                if (row.live) "Thinking…" else "Thought",
+                style = MaterialTheme.typography.labelLarge,
+                color = if (row.live) c.working else c.muted,
+                maxLines = 1,
+            )
+            Text(" · $size", style = MaterialTheme.typography.labelMedium, color = c.faint, maxLines = 1)
+            Spacer(Modifier.weight(1f))
+            Icon(if (row.open) HerdrIcons.ChevronDown else HerdrIcons.ChevronRight, null, Modifier.size(14.dp), tint = c.faint)
+        }
+        if (!row.open && preview.isNotEmpty()) {
+            Text(
+                preview,
+                style = MaterialTheme.typography.bodySmall.copy(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic),
+                color = c.faint,
+                maxLines = if (row.live) 3 else 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(start = THOUGHT_INDENT, top = 2.dp),
+            )
+        }
+    }
+}
+
+/** A piece of an opened thought: quiet, small, off the hairline that joins its pieces. */
+@Composable
+private fun ThoughtText(row: ChatRow.ThoughtPart) {
+    val line = Herdr.colors.line
+    MarkdownText(
+        row.text,
+        Modifier.fillMaxWidth()
+            .drawBehind {
+                // Up through the list's gap above, so the pieces read as one column.
+                val x = (Space.xs + 8.dp).toPx()
+                drawLine(line, androidx.compose.ui.geometry.Offset(x, -Space.m.toPx()), androidx.compose.ui.geometry.Offset(x, size.height), 1.dp.toPx())
+            }
+            .padding(start = Space.xs + THOUGHT_INDENT, end = Space.s, bottom = if (row.last) Space.xs else 0.dp),
+        style = MaterialTheme.typography.bodySmall,
+        color = Herdr.colors.muted,
+    )
+}
+
+/** "Thinking…" under the running turn while the model is at work and no call runs. */
+@Composable
+private fun ThinkingLine() {
+    val c = Herdr.colors
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = Space.xs, vertical = 4.dp)) {
+        Box(Modifier.size(16.dp), contentAlignment = Alignment.Center) {
+            Icon(HerdrIcons.Brain, null, Modifier.size(14.dp).alpha(pulse()), tint = c.working)
+        }
+        Spacer(Modifier.width(6.dp))
+        Text("Thinking…", style = MaterialTheme.typography.bodySmall, color = c.muted, maxLines = 1)
     }
 }
 

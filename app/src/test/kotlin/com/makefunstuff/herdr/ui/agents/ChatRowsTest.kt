@@ -45,7 +45,8 @@ class ChatRowsTest {
         assertEquals("Working for 3m", head.title)
         assertTrue(head.open)
         // Its narration speaks in the agent's voice while it runs.
-        assertEquals(listOf("head/u2", "u2/n", "tools/u2/t"), r.dropWhile { it.key != "head/u2" }.map { it.key })
+        // Its call came back and nothing new is written yet: the model is thinking.
+        assertEquals(listOf("head/u2", "u2/n", "tools/u2/t", "thinking/u2"), r.dropWhile { it.key != "head/u2" }.map { it.key })
         assertFalse((r.first { it.key == "u2/n" } as ChatRow.Agent).quiet)
         assertEquals("Needs you", rows(listOf(turn("u1", 1_000, 2_000, answer = false)), live = ChatRow.Live.Blocked).filterIsInstance<ChatRow.Head>().single().title)
     }
@@ -71,5 +72,41 @@ class ChatRowsTest {
     @Test fun onlyMessagesCountAsNew() {
         val r = rows(listOf(turn("u1", 1_000, 8_000)), opened = mapOf("u1" to true))
         assertEquals(listOf("u1", "u1/a"), r.filter { it.isMessage }.map { it.key })
+    }
+
+    private fun thinking(answered: Boolean) = ChatTurn(
+        key = "u1",
+        user = ChatItem.User("u1", "Fix it"),
+        work = listOf(ChatItem.Reasoning("u1/r0", "Read the file first."), ChatItem.Tool("u1/t", "Read", "/x/a.kt", state = ToolState.Done)),
+        answer = listOfNotNull(ChatItem.Reasoning("u1/r1", "**It's a typo**\n\nIn the second line."), ChatItem.Agent("u1/a", "Fixed.").takeIf { answered }),
+        at = 1_000,
+        end = 190_000,
+        counts = WorkCounts(reads = 1),
+        failed = 0,
+        keepsOpen = false,
+    )
+
+    @Test fun aThoughtFoldsAboveTheAnswerItLedTo() {
+        val r = rows(listOf(thinking(answered = true)))
+        assertEquals(listOf("u1", "head/u1", "thought/u1/r1", "u1/a"), r.map { it.key })
+        val thought = r[2] as ChatRow.Thought
+        assertFalse(thought.open)
+        assertFalse(thought.live)
+        assertFalse(thought.isMessage)
+        // Opened by hand: its pieces follow it as rows of their own; the one in the work stays folded with it.
+        val open = rows(listOf(thinking(answered = true)), opened = mapOf("thought/u1/r1" to true))
+        assertEquals(listOf("u1", "head/u1", "thought/u1/r1", "thought/u1/r1/0", "u1/a"), open.map { it.key })
+        assertTrue((open[2] as ChatRow.Thought).open)
+        assertEquals(listOf("thought/u1/r0", "tools/u1/t"), rows(listOf(thinking(answered = true)), opened = mapOf("u1" to true)).map { it.key }.drop(2).take(2))
+    }
+
+    @Test fun theNewestThoughtOfAWorkingTurnIsLive() {
+        val r = rows(listOf(thinking(answered = false)), live = ChatRow.Live.Working)
+        assertTrue(r.filterIsInstance<ChatRow.Thought>().single { it.item.id == "u1/r1" }.live)
+        assertFalse(r.filterIsInstance<ChatRow.Thought>().single { it.item.id == "u1/r0" }.live)
+        // The live thought says it thinks; no second line does.
+        assertTrue(r.none { it is ChatRow.Thinking })
+        // Settled, nothing is live.
+        assertTrue(rows(listOf(thinking(answered = false))).filterIsInstance<ChatRow.Thought>().none { it.live })
     }
 }

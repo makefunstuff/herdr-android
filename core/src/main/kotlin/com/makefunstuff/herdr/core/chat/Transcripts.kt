@@ -59,6 +59,21 @@ abstract class Transcript {
         version++
     }
 
+    /**
+     * The agent's words [text] as item [id], and the reasoning a model put in front of them in
+     * `<think>` tags (open models whose server doesn't split it off) as its own item before them.
+     */
+    protected fun say(id: String, text: String) {
+        val (thought, words) = Thinking.split(text)
+        thought?.let { put(ChatItem.Reasoning("$id/think", it)) }
+        words.takeIf { it.isNotEmpty() }?.let { put(ChatItem.Agent(id, it)) }
+    }
+
+    /** Reasoning [text] as item [id], when there is any: a model that keeps it to itself leaves an empty block. */
+    protected fun thought(id: String, text: String?) {
+        text?.trim()?.takeIf { it.isNotEmpty() }?.let { put(ChatItem.Reasoning(id, it)) }
+    }
+
     protected fun finishTool(id: String, output: String?, failed: Boolean) {
         val tool = entries[id] as? ChatItem.Tool ?: return
         entries[id] = tool.copy(output = output?.let(::clip), state = if (failed) ToolState.Failed else ToolState.Done)
@@ -210,7 +225,9 @@ class ClaudeTranscript : Transcript() {
         val content = message["content"] as? JsonArray ?: return
         content.filterIsInstance<JsonObject>().forEachIndexed { i, block ->
             when (block.str("type")) {
-                "text" -> block.str("text")?.trim()?.takeIf { it.isNotEmpty() }?.let { put(ChatItem.Agent("$uuid/$i", it)) }
+                "text" -> block.str("text")?.trim()?.takeIf { it.isNotEmpty() }?.let { say("$uuid/$i", it) }
+                // Empty when the model returned only its signature; `redacted_thinking` is never readable.
+                "thinking" -> thought("$uuid/$i", block.str("thinking"))
                 "tool_use" -> {
                     val id = block.str("id") ?: return@forEachIndexed
                     val name = block.str("name").orEmpty()
@@ -245,7 +262,7 @@ class CodexTranscript : Transcript() {
                     if (text.isNotEmpty() && !isInjected(text)) put(ChatItem.User("u${seq++}", text))
                 }
                 "agent_message" -> if (!itemMode) {
-                    payload.str("message")?.trim()?.takeIf { it.isNotEmpty() }?.let { put(ChatItem.Agent("a${seq++}", it)) }
+                    payload.str("message")?.trim()?.takeIf { it.isNotEmpty() }?.let { say("a${seq++}", it) }
                 }
                 "turn_aborted" -> {
                     settleTools()
@@ -282,7 +299,9 @@ class CodexTranscript : Transcript() {
                 val images = content.count { (it as? JsonObject)?.str("type")?.contains("image", ignoreCase = true) == true }
                 if ((text.isNotEmpty() || images > 0) && !isInjected(text)) put(ChatItem.User(id, text, images))
             }
-            "AgentMessage" -> textOf(item["content"]).trim().takeIf { it.isNotEmpty() }?.let { put(ChatItem.Agent(id, it)) }
+            "AgentMessage" -> textOf(item["content"]).trim().takeIf { it.isNotEmpty() }?.let { say(id, it) }
+            // The raw reasoning when the model shares it (open models), else the summary Codex asked for; often neither.
+            "Reasoning" -> thought(id, reasoning(item.arr("raw_content")).ifBlank { reasoning(item.arr("summary_text")) })
             "CommandExecution" -> {
                 val command = commandLine(item["command"])
                 val output = item.str("aggregated_output") ?: item.str("formatted_output") ?: item.str("stdout")
@@ -323,8 +342,13 @@ class CodexTranscript : Transcript() {
         }
     }
 
+    /** Reasoning parts, as strings or `{type: summary_text|reasoning_text, text}` blocks, one paragraph each. */
+    private fun reasoning(parts: JsonArray?): String =
+        parts.orEmpty().mapNotNull { it.str() ?: (it as? JsonObject)?.str("text") }.map { it.trim() }.filter { it.isNotEmpty() }.joinToString("\n\n")
+
     private fun legacyCall(payload: JsonObject) {
         when (payload.str("type")) {
+            "reasoning" -> thought(payload.str("id") ?: "r${seq++}", reasoning(payload.arr("content")).ifBlank { reasoning(payload.arr("summary")) })
             "function_call", "custom_tool_call" -> {
                 val callId = payload.str("call_id") ?: return
                 val name = payload.str("name").orEmpty()
@@ -384,7 +408,9 @@ class PiTranscript : Transcript() {
                 val content = message["content"] as? JsonArray ?: JsonArray(emptyList())
                 content.filterIsInstance<JsonObject>().forEachIndexed { i, block ->
                     when (block.str("type")) {
-                        "text" -> block.str("text")?.trim()?.takeIf { it.isNotEmpty() }?.let { put(ChatItem.Agent("$id/$i", it)) }
+                        "text" -> block.str("text")?.trim()?.takeIf { it.isNotEmpty() }?.let { say("$id/$i", it) }
+                        // pi keeps any provider's reasoning (Anthropic thinking, OpenAI-style `reasoning_content`) here.
+                        "thinking" -> if (!block.bool("redacted")) thought("$id/$i", block.str("thinking"))
                         "toolCall" -> {
                             val callId = block.str("id") ?: return@forEachIndexed
                             val name = block.str("name").orEmpty()
