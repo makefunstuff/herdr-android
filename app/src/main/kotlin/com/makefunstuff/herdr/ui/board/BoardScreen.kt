@@ -247,7 +247,7 @@ fun BoardScreen(nav: NavController, machineId: String, openTask: String? = null,
 
     // Each task's agent on this machine, by the names herdr-projects gives them: its chat opens from the card.
     val agents = remember(state) { HomeAgent.of(listOf(state)) }
-    fun agentOf(t: BoardTask): AgentInfo? = agents.firstOrNull { Home.taskOf(it, listOf(t)) != null }?.agent
+    fun agentOf(t: BoardTask): AgentInfo? = Home.agentOf(agents, t)?.agent
     fun openAgent(paneId: String) {
         val route = Routes.agent(machineId, paneId)
         // From the right pane the chat opens in the middle, beside this board and its open card.

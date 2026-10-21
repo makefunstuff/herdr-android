@@ -92,6 +92,15 @@ data class Home(
             t.machine.isEmpty() && !t.archived && LiveItems.belongs(agent.agent.name.orEmpty(), agent.workspace, t.id, t.name)
         }
 
+        /**
+         * The agent at work on [t] among [agents]: its worker before its reviewer (`sw-<repo>-<n>-r`, `…-r-0042`),
+         * which matches the task's names too while both are open. Null when none is.
+         */
+        fun agentOf(agents: List<HomeAgent>, t: BoardTask): HomeAgent? =
+            agents.filter { taskOf(it, listOf(t)) != null }.minByOrNull { if (REVIEWER.containsMatchIn(it.agent.name.orEmpty())) 1 else 0 }
+
+        private val REVIEWER = Regex("""-r(?:-\d+)?$""")
+
         /** The order tasks wait in: ready to merge first, then what failed, plans and choices, questions, the rest. */
         val ORDER = listOf(
             BoardStatus.Approval, BoardStatus.ReviewFailed, BoardStatus.Error, BoardStatus.PlanReady, BoardStatus.PickOne,

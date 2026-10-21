@@ -13,17 +13,17 @@ object TaskLine {
     /** A token counter (`↑1.6M`, `↓807k`, `R64M`, `W12k`) or a context gauge (`73.6%/197k`). */
     private val COUNTER = Regex("""(?:[↑↓]\s?\d[\d.,]*[kKmMbB]?|\b[RW]\d[\d.,]*[kKmMbB]\b|\b\d+(?:\.\d+)?%/\d[\d.,]*[kKmM]?\b)""")
 
-    /** "Kept: <path> (unmerged work on <branch>)" and "Report: <path>", the board's notes on where things are. */
-    private val WHERE = Regex("""\b(?:Kept|Report|Worktree|Branch|Logs?):\s+\S+(?:\s+\([^)]*\))?\.?""", RegexOption.IGNORE_CASE)
+    /** "Kept: <path> (unmerged work on <branch>)" and "Report: <path>", the board's notes on where things are: only with a path after them. */
+    private val WHERE = Regex("""\b(?:Kept|Report):\s+(?:~/|/)\S+(?:\s+\([^)]*\))?\.?""")
 
-    /** A path on the machine: `~/…`, `/home/…`, or any absolute one at least two folders deep. */
-    private val PATH = Regex("""(?<![\w:/])(?:~|/[\w.-]+)(?:/[\w.@+-]+)+/?""")
+    /** A path in someone's home on the machine: `~/…`, `/home/<user>/…`, `/Users/<user>/…`; not a route (`/api/v1`) nor a link's target. */
+    private val PATH = Regex("""(?<![\w:/])(?<!\]\()(?:~|/home/[\w.-]+|/Users/[\w.-]+|/root)(?:/[\w.@+-]+)+/?""")
+
+    /** What is left of a status bar once its paths, counters and `(tags)` are gone: a model and an effort at most. */
+    private val BAR_LEFT = Regex("""\([^)]*\)|[•|·]""")
 
     /** A GitHub pull request link, said as "PR #12". */
     private val PULL = Regex("""<?https?://github\.com/[\w.-]+/[\w.-]+/pull/(\d+)(?:[/?#][^\s>)]*[^\s>).,;])?>?""")
-
-    /** The tail of an agent's status bar: `(auto)`, `(strata)`, `model • low`. */
-    private val BAR_TAIL = Regex("""\s*(?:\([\w .-]+\)\s*)+(?:\S+\s*•\s*\S+)?\s*$""")
 
     /** The whole message, cleaned: Markdown kept, the noise taken out. Empty when nothing human is left. */
     fun clean(msg: String): String {
@@ -44,13 +44,14 @@ object TaskLine {
     /** One plain line for a card: the cleaned message without Markdown, its first line. */
     fun line(msg: String): String = Markdown.plain(clean(msg)).trim()
 
-    /** Whether [s] reads as an agent's terminal status bar: token counters, or a path with a context gauge. */
+    /**
+     * Whether [s] reads as an agent's terminal status bar: at least two counters (`↑1.6M ↓807k`, `73.6%/197k`) and,
+     * once they, its paths and its `(tags)` are gone, hardly a word left. A sentence with numbers in it keeps its words.
+     */
     fun isStatusBar(s: String): Boolean {
-        val counters = COUNTER.findAll(s).count()
-        if (counters >= 2) return true
-        if (counters == 1 && (PATH.containsMatchIn(s) || '•' in s)) return true
-        // A path and the bar's own tail, without counters.
-        return PATH.containsMatchIn(s) && BAR_TAIL.containsMatchIn(s) && '•' in s
+        if (COUNTER.findAll(s).count() < 2) return false
+        val left = BAR_LEFT.replace(COUNTER.replace(PATH.replace(s, " "), " "), " ")
+        return left.split(Regex("""\s+""")).count { w -> w.count { it.isLetter() } >= 2 } <= 3
     }
 
     /**

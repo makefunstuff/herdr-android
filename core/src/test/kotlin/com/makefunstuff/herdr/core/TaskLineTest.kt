@@ -21,6 +21,17 @@ class TaskLineTest {
         assertEquals("Reading the task and planning the card cleanup", TaskLine.line("Reading the task and planning the card cleanup"))
         assertEquals("Review found 2 problems", TaskLine.line("Review found 2 problems"))
         assertFalse(TaskLine.isStatusBar("Scored 73% of the 64k needle set"))
+        // Arrows with numbers in a sentence are words about numbers, not a status bar.
+        for (m in listOf(
+            "Throughput ↑1.2k req/s, latency ↓30ms after the cache",
+            "p95 latency ↓40% and errors ↓12 per hour",
+            "Bundle size ↓120k • ready for review",
+            "Context 73%/200k, tokens ↑1.2M so far, compacting next",
+        )) assertEquals(m, TaskLine.clean(m))
+        // Labels a person writes stay with their words.
+        assertEquals("Logs: nothing unusual, tests pass", TaskLine.clean("Logs: nothing unusual, tests pass"))
+        assertEquals("Branch: main is green, merging next", TaskLine.clean("Branch: main is green, merging next"))
+        assertEquals("Kept: the old API for one release", TaskLine.clean("Kept: the old API for one release"))
         // A count, a fraction and a relative path are words, not noise.
         assertEquals("file:// 4/27 pages clean, see app/…/MachinesScreen.kt", TaskLine.clean("file:// 4/27 pages clean, see app/…/MachinesScreen.kt"))
     }
@@ -45,6 +56,12 @@ class TaskLineTest {
     fun pathsShrinkToTheirName() {
         assertEquals("Edited Main.kt and its test", TaskLine.clean("Edited /home/jpl/src/app/Main.kt and its test"))
         assertEquals("Wrote report.md", TaskLine.clean("Wrote ~/.herdr-projects/reports/x/5/report.md"))
+        // A route is not a path on the machine, and a link's target stays whole.
+        assertEquals("Moved from /api/v1/users to /api/v2/users", TaskLine.clean("Moved from /api/v1/users to /api/v2/users"))
+        assertEquals(
+            "See the [report](~/.herdr-projects/reports/x/5/report.md) for details",
+            TaskLine.clean("See the [report](~/.herdr-projects/reports/x/5/report.md) for details"),
+        )
         // A link stays a link.
         assertEquals("See https://example.com/a/b for more", TaskLine.clean("See https://example.com/a/b for more"))
     }

@@ -136,7 +136,7 @@ fun BoardsScreen(nav: NavController) {
                             Text("No open tasks", style = MaterialTheme.typography.bodyMedium, color = Herdr.colors.muted, modifier = Modifier.padding(start = Space.xs))
                         }
                         items(g.tasks, key = { "${g.machineId}/${it.id}" }) { t ->
-                            val live = agents.firstOrNull { it.machineId == g.machineId && Home.taskOf(it, listOf(t)) != null }?.agent
+                            val live = Home.agentOf(agents.filter { it.machineId == g.machineId }, t)?.agent
                             TaskRow(
                                 t, onOpen = { panes.openBoard(nav, g.machineId, t.id, alone = true) }, onMenu = { panes.openBoard(nav, g.machineId, t.id, alone = true) },
                                 onAgent = live?.let { a -> { panes.open(nav, Routes.agent(g.machineId, a.paneId)) } },
