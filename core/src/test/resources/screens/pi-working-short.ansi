@@ -1,0 +1,27 @@
+ [0m[38;2;79;142;179m█▀[0m [0m[38;2;234;182;93m█[0m [0m[38;2;126;136;142mescape[0m[38;2;157;165;169m interrupt · [0m[38;2;126;136;142mctrl+c/ctrl+d[0m[38;2;157;165;169m clear/exit · [0m[38;2;126;136;142m/[0m[38;2;157;165;169m commands · [0m[38;2;126;136;142m![0m[38;2;157;165;169m bash · [0m[38;2;126;136;142mctrl+o[0m[38;2;157;165;169m more[0m                                   
+ [0m[38;2;126;136;142mPress ctrl+o to show full startup help and loaded resources.[0m                                                           
+                                                                                                                        
+ [0m[38;2;126;136;142mPi can explain its own features and look up its docs. Ask it how to use or extend Pi.[0m                                  
+
+[0m[38;2;205;154;34m[Skills][0m                                                                                                                
+[0m[38;2;126;136;142m  course-builder, diagnose-crash, herdr, herdr-projects, omarchy, teacher[0m                                               
+
+[0m[38;2;205;154;34m[Extensions][0m                                                                                                            
+[0m[38;2;126;136;142m  herdr-agent-state.ts, homelab-tools.ts, orca-agent-status.ts, orca-prefill.ts, orca-titlebar-spinner.ts[0m               
+
+[0m[38;2;205;154;34m[Skill conflicts][0m                                                                                                       
+[0m[38;2;205;154;34m  ~/.agents/skills/guided-coding/SKILL.md[0m                                                                               
+[0m[38;2;205;154;34m    description is required[0m                                                                                             
+
+[0m[48;2;33;59;73m                                                                                                                        [0m
+[0m[48;2;33;59;73m [0m[38;2;222;224;225m[48;2;33;59;73mWithout using any tools: think carefully about whether 1001 is prime, check divisors step by step, then answer in one  [0m
+[0m[48;2;33;59;73m [0m[38;2;222;224;225m[48;2;33;59;73msentence.[0m[48;2;33;59;73m                                                                                                              [0m
+[0m[48;2;33;59;73m                                                                                                                        [0m
+
+ [0m[3m[38;2;150;160;164m1001 = 7 × 11 × 13. Not prime. Check divisors up to sqrt[0m                                                               
+
+[0m[38;2;151;118;229m── ⠙[0m [0m[38;2;151;118;229mWorking ───────────────────────────────────────────────────────────────────────────────────────────────────────────[0m
+[0m[7m [0m                                                                                                                       
+[0m[38;2;151;118;229m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[0m
+[0m[38;2;126;136;142m/home/demo/src/trip-planner[0m
+[0m[38;2;126;136;142m0.4%/1.0M (auto)                                                                        (deepseek) deepseek-flash • high[0m

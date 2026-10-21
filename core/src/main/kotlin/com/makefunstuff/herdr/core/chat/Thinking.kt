@@ -107,8 +107,9 @@ object Thinking {
      */
     fun onScreen(ansi: String): String? {
         val lines = styled(ansi)
-        val rules = lines.indices.filter { RULE.matches(lines[it].text.trim()) }
-        // pi's editor sits between two rules, with its footer under the second.
+        val rules = lines.indices.filter { isRule(lines[it].text) }
+        // pi's editor sits between two rules, with its footer under the second; while it works, its
+        // spinner sits in the first one (`── ⠴ Working ───…`).
         var i = (if (rules.size >= 2) rules[rules.size - 2] else rules.lastOrNull() ?: lines.size) - 1
         while (i >= 0 && (lines[i].text.isBlank() || isLoader(lines[i]))) i--
         val end = i
@@ -130,6 +131,12 @@ object Thinking {
     }
 
     private class Line(val text: String, val italic: Boolean)
+
+    /** A border across the pane: starts and ends with `─`, maybe a label in it (`── ⠴ Working ──────`). */
+    private fun isRule(line: String): Boolean {
+        val t = line.trim()
+        return t.length >= 10 && t.first() in RULE_CHARS && t.last() in RULE_CHARS && t.count { it in RULE_CHARS } * 2 >= t.length
+    }
 
     private fun isLoader(line: Line): Boolean {
         val t = line.text.trim()
@@ -197,6 +204,6 @@ object Thinking {
     private val SPACE = Regex("\\s+")
     private val MARKS = Regex("\\*\\*|__|`")
     private val LEAD = Regex("^(#{1,6}|[-*+]|\\d+\\.)\\s+")
-    private val RULE = Regex("[─━]{10,}")
+    private const val RULE_CHARS = "─━"
     private val ITEM = Regex("^\\s*([-*+•]|\\d+[.)])\\s")
 }

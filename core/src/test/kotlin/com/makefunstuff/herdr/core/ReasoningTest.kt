@@ -7,6 +7,7 @@ import com.makefunstuff.herdr.core.chat.Transcript
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -99,9 +100,16 @@ class ReasoningTest {
         )
         // The whole screen: its answer and an error came after the thought, so nothing is thinking now.
         assertNull(Thinking.onScreen(screen("pi-done.ansi")))
-        // A loader line between the thought and the editor doesn't hide it.
-        val loader = screen("pi-thinking.ansi").lines().let { l -> (l.take(11) + "\u001b[38;2;1;2;3m⠙\u001b[0m Working..." + l.drop(11)).joinToString("\n") }
-        assertEquals("Keep it concise.", Thinking.onScreen(loader)?.substringAfterLast("\n\n"))
+        // pi 1.3 at work (deepseek, thinking high), read once a second as the chat reads it: its spinner
+        // sits in the editor's top border (`── ⠴ Working ───`).
+        val thinking = assertNotNull(Thinking.onScreen(screen("pi-working-thinking.ansi")))
+        assertTrue(thinking.startsWith("day trips base. Weigh: A wins for train efficiency"))
+        assertTrue(thinking.endsWith("and finish Days 6–7 in Osaka with a 45-minute ¥580 day trip to Nara; budget about ¥20"))
+        assertTrue("Two sentences only, no lists." in thinking)
+        assertEquals("1001 = 7 × 11 × 13. Not prime. Check divisors up to sqrt", Thinking.onScreen(screen("pi-working-short.ansi")))
+        // Only your prompt so far, or its answer streaming after the thought: nothing is thinking.
+        assertNull(Thinking.onScreen(screen("pi-working-asked.ansi")))
+        assertNull(Thinking.onScreen(screen("pi-working-answering.ansi")))
         // Plain text has no italics: nothing to read.
         assertNull(Thinking.onScreen("just words\n────────────\n> \n────────────\nfooter"))
     }
