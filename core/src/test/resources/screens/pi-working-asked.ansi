@@ -1,0 +1,27 @@
+[0m[38;2;126;136;142m  herdr-agent-state.ts, homelab-tools.ts, orca-agent-status.ts, orca-prefill.ts, orca-titlebar-spinner.ts[0m               
+
+[0m[38;2;205;154;34m[Skill conflicts][0m                                                                                                       
+[0m[38;2;205;154;34m  ~/.agents/skills/guided-coding/SKILL.md[0m                                                                               
+[0m[38;2;205;154;34m    description is required[0m                                                                                             
+
+[0m[48;2;33;59;73m                                                                                                                        [0m
+[0m[48;2;33;59;73m [0m[38;2;222;224;225m[48;2;33;59;73mWithout using any tools: think carefully about whether 1001 is prime, check divisors step by step, then answer in one  [0m
+[0m[48;2;33;59;73m [0m[38;2;222;224;225m[48;2;33;59;73msentence.[0m[48;2;33;59;73m                                                                                                              [0m
+[0m[48;2;33;59;73m                                                                                                                        [0m
+
+ [0m[3m[38;2;150;160;164m1001 = 7 × 11 × 13. Not prime. Check divisors up to sqrt(1001) ≈ 31.6. 7 divides: 7×143 = 1001, 143 = 11×13. So 1001 = [0m
+ [0m[3m[38;2;150;160;164m7·11·13. Answer in one sentence.[0m                                                                                       
+
+ No — 1001 is not prime: checking primes up to √1001 ≈ 31.6 shows 7 divides it (1001 = 7 × 143, and 143 = 11 × 13), so  
+ 1001 = 7 × 11 × 13.                                                                                                    
+
+[0m[48;2;33;59;73m                                                                                                                        [0m
+[0m[48;2;33;59;73m [0m[38;2;222;224;225m[48;2;33;59;73mWithout tools: think at length — plan a 7-day itinerary across 3 Japanese cities with train times, budget per day, and [0m
+[0m[48;2;33;59;73m [0m[38;2;222;224;225m[48;2;33;59;73mweigh at least 4 alternatives before deciding. Then reply in two sentences only.[0m[48;2;33;59;73m                                       [0m
+[0m[48;2;33;59;73m                                                                                                                        [0m
+
+[0m[38;2;151;118;229m── ⠏[0m [0m[38;2;151;118;229mWorking ───────────────────────────────────────────────────────────────────────────────────────────────────────────[0m
+[0m[7m [0m                                                                                                                       
+[0m[38;2;151;118;229m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[0m
+[0m[38;2;126;136;142m/home/demo/src/trip-planner[0m
+[0m[38;2;126;136;142m↑3.7k ↓129 R1.2k CH23.5% 0.5%/1.0M (auto)                                               (deepseek) deepseek-flash • high[0m
