@@ -19,6 +19,26 @@ class TaskLineTest {
     }
 
     @Test
+    fun everyShapeOfPisFooterIsNoise() {
+        // The board's msg when an agent stops without a summary: the last two lines of its screen, pi's footer.
+        for (bar in listOf(
+            // From real tasks: the cache hit and the cost are there whenever the model caches its prompt.
+            "work-20-public-container-image-and-sel (work/20-public-container-image-and-sel) ↑1.3M ↓353k R41M CH99.8% 19.3%/1.0M (auto) (deepseek) deepseek-flash • high",
+            "work-10-terminal-extras-and-layouts (work/10-terminal-extras-and-layouts) ↑551k ↓183k R21M W105k CH99.6% \$0.845 10.5%/1.0M (auto) (anthropic) claude-opus-5-5 • low",
+            "~/.herdr/worktrees/x/work-3 (work/3-x)   0.4%/1.0M (auto)           (deepseek) deepseek-flash • high",
+            "↑1.6M ↓807k R64M 73.6%/197k (auto) qwen3-coder • thinking off",
+            "↑850 ↓120 2.1%/197k (auto) (strata) model • low",
+            "~/… ↑3.2k ↓640 1.4%/197k (auto) (strata) model • low",
+            "↑1.6M ↓807k R64M 73.6%/197k (auto) auto • low → claude-opus-5-5 • high",
+            "↑1.6M ↓807k R64M W12k CH95.0% \$1.234 73.6%/197k (auto) (anthropic) claude-opus-5-5 • high",
+            "~/src/app (main) • fix login ↑12k ↓3k \$0.120 (sub) ?/200k claude-opus-5-5",
+            "~/src/app ↑12k 4.0%/200k",
+        )) assertEquals("", TaskLine.line(bar), bar)
+        // A line that only ends in a gauge is a person's.
+        assertEquals("Usage at 40%/200k now", TaskLine.line("Usage at 40%/200k now"))
+    }
+
+    @Test
     fun wordsAreKept() {
         assertEquals("Reading the task and planning the card cleanup", TaskLine.line("Reading the task and planning the card cleanup"))
         assertEquals("Review found 2 problems", TaskLine.line("Review found 2 problems"))
