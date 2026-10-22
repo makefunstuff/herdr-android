@@ -1,5 +1,6 @@
 package com.makefunstuff.herdr.ui.agents
 
+import com.makefunstuff.herdr.core.board.TaskLine
 import com.makefunstuff.herdr.core.chat.OptionRole
 
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -42,7 +43,6 @@ import com.makefunstuff.herdr.core.api.AgentStatus
 import com.makefunstuff.herdr.core.board.BoardAction
 import com.makefunstuff.herdr.core.board.BoardTask
 import com.makefunstuff.herdr.core.chat.BlockedPrompt
-import com.makefunstuff.herdr.core.chat.Markdown
 import com.makefunstuff.herdr.core.home.AgentRow
 import com.makefunstuff.herdr.core.home.HomeAgent
 import com.makefunstuff.herdr.core.home.Waiting
@@ -267,7 +267,7 @@ fun TaskCard(
 ) {
     val c = Herdr.colors
     val t = w.task
-    val says = remember(t.msg) { Markdown.plain(t.msg) }
+    val says = remember(t.msg) { TaskLine.line(t.msg) }
     val actions = listOfNotNull(answer?.takeIf { busy == null }?.let { CustomAccessibilityAction(it.second) { onAnswer(); true } })
     WaitingCard(selected, onOpen, null, "Open task", actions) {
         CardHead(

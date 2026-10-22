@@ -80,6 +80,12 @@ import com.makefunstuff.herdr.core.board.BoardTask
 import com.makefunstuff.herdr.core.board.Finding
 import com.makefunstuff.herdr.core.board.Review
 import com.makefunstuff.herdr.core.board.TaskDetails
+import com.makefunstuff.herdr.core.api.AgentInfo
+import com.makefunstuff.herdr.core.board.TaskLine
+import com.makefunstuff.herdr.core.chat.ModelUse
+import com.makefunstuff.herdr.ui.design.AgentMark
+import com.makefunstuff.herdr.ui.design.SecondaryButton
+import androidx.compose.foundation.layout.PaddingValues
 import com.makefunstuff.herdr.core.host.HostSession
 import com.makefunstuff.herdr.ui.common.MarkdownText
 import com.makefunstuff.herdr.ui.common.Pill
@@ -246,7 +252,17 @@ private fun nextStep(t: BoardTask): String? = when (t.status) {
     else -> null
 }
 
-/** A task, full screen: status and next step first, then everything `details <id>` knows in sections. Kept current while open. */
+/** Who works on a task, and how to reach its agent: its live chat when its pane is on the machine. */
+data class TaskAgent(
+    /** "claude · Opus 5.5"; empty while the task has had no agent. */
+    val who: String,
+    /** Its agent's status on the machine in words ("working"); empty when its pane is gone. */
+    val live: String = "",
+    /** Opens its agent's chat; null when no pane of its agent is on the machine. */
+    val onOpen: (() -> Unit)? = null,
+)
+
+/** A task, full screen: what matters at a glance first, the rest folded under More. Kept current while open. */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun TaskDetailScreen(
@@ -265,6 +281,9 @@ fun TaskDetailScreen(
     onQuick: ((TaskDetails) -> Unit)? = null,
     /** Opens the timeline of what its agents did. */
     onActivity: (() -> Unit)? = null,
+    /** Its agent on the machine, when one of its panes is there: its status, its model, and a way to its chat. */
+    live: AgentInfo? = null,
+    onOpenAgent: (() -> Unit)? = null,
 ) {
     BackHandler(enabled = backEnabled, onBack = onBack)
     val owner = LocalLifecycleOwner.current
@@ -285,8 +304,30 @@ fun TaskDetailScreen(
             }
         }
     }
-    TaskDetailContent(t, details, problem, busy, onBack, onAction, onPick, onMore, onCode, onQuick, onActivity)
+    // Read once a task: the agents its settings give it (for the model), and finished work's closing note.
+    val workers by produceState(emptyList<String>(), t.id) {
+        value = runCatching { session.awaitBoard().agents(t.id).workers }.getOrDefault(emptyList())
+    }
+    val finished = t.status in setOf(BoardStatus.Approval, BoardStatus.ReviewFailed, BoardStatus.Done, BoardStatus.Stopped)
+    val note by produceState("", t.id, finished) {
+        if (finished) value = runCatching { session.awaitBoard().facts(t).note }.getOrDefault("")
+    }
+    val agent = details?.agent?.ifEmpty { null } ?: t.agent
+    val model = live?.tokens?.get("model")?.takeIf { it.isNotBlank() }
+    val who = when {
+        agent.isEmpty() -> ""
+        model != null -> "$agent · ${ModelUse.name(model) ?: model}"
+        else -> TaskLine.who(agent, workers)
+    }
+    val reach = TaskAgent(who, live?.statusLabel.orEmpty(), onOpenAgent.takeIf { live != null })
+    TaskDetailContent(t, details, problem, busy, onBack, onAction, onPick, onMore, onCode, onQuick, onActivity, reach, note)
 }
+
+/** The actions a task's card offers beside its primary one, as buttons: telling, stopping, retrying. */
+private val CardActions = setOf(
+    BoardAction.Tell, BoardAction.Stop, BoardAction.Retry, BoardAction.Fix, BoardAction.Review, BoardAction.Finish,
+    BoardAction.ApproveAnyway, BoardAction.SendPlanBack, BoardAction.Delegate,
+)
 
 /** The screen itself, from data alone: what [TaskDetailScreen] draws once it has read `details`. */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -303,9 +344,13 @@ fun TaskDetailContent(
     onCode: ((TaskDetails) -> Unit)? = null,
     onQuick: ((TaskDetails) -> Unit)? = null,
     onActivity: (() -> Unit)? = null,
+    agent: TaskAgent = TaskAgent(d?.agent?.ifEmpty { null } ?: t.agent),
+    /** The agent's closing note, for finished work. */
+    note: String = "",
 ) {
     val context = LocalContext.current
     val primary = BoardActions.primary(t)
+    val others = BoardActions.forTask(t).filter { it != primary && it in CardActions }.take(3)
     val color = t.status.color()
     val c = Herdr.colors
     Scaffold(
@@ -316,7 +361,7 @@ fun TaskDetailContent(
             }
         },
         bottomBar = {
-            if (primary != null || busy != null) Column(
+            if (primary != null || others.isNotEmpty() || busy != null) Column(
                 Modifier.fillMaxWidth().background(c.ground).navigationBarsPadding().padding(horizontal = Space.screen, vertical = Space.m),
                 verticalArrangement = Arrangement.spacedBy(Space.s),
             ) {
@@ -326,6 +371,14 @@ fun TaskDetailContent(
                         color = c.accent, trackColor = c.line,
                     )
                     Text("$it…", style = MaterialTheme.typography.labelMedium, color = c.muted)
+                }
+                if (others.isNotEmpty()) Row(horizontalArrangement = Arrangement.spacedBy(Space.s)) {
+                    others.forEach { a ->
+                        SecondaryButton(onClick = { onAction(a) }, modifier = Modifier.weight(1f), enabled = busy == null) {
+                            Icon(a.icon(), null, Modifier.size(18.dp))
+                            Text(a.short(), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
                 }
                 if (primary != null) {
                     if (primary.destructive) DangerButton(primary.label, Modifier.fillMaxWidth().heightIn(min = 52.dp), enabled = busy == null) { onAction(primary) }
@@ -339,48 +392,49 @@ fun TaskDetailContent(
             verticalArrangement = Arrangement.spacedBy(Space.l),
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(Space.s)) {
-                Text(t.title, style = MaterialTheme.typography.headlineMedium)
+                Text(t.title, style = MaterialTheme.typography.headlineSmall)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(Space.s), verticalArrangement = Arrangement.spacedBy(Space.xs)) {
                     StatusBadge(t.status.label, color)
                     if (t.research) Pill("research")
-                    if (t.agent.isNotEmpty()) Pill(t.agent)
                     if (t.pinned) Pill("pinned")
-                    d?.branch?.takeIf { it.isNotEmpty() }?.let { Pill(it) }
                 }
             }
-            // Status and next step.
+            // Status: the next step, the board's one line (its noise taken out), progress.
             val step = nextStep(t)
-            val doing = d?.msg?.ifEmpty { t.msg } ?: t.msg
-            if (step != null || doing.isNotEmpty() || t.progress != null) QuietCard(
+            val doing = remember(d?.msg, t.msg) { TaskLine.clean(d?.msg?.ifEmpty { t.msg } ?: t.msg) }
+            val failing = d?.failure?.title?.startsWith(doing.trim().trimEnd('.'), ignoreCase = true) == true
+            if (step != null || doing.isNotEmpty() || t.progress != null || t.eta != null) QuietCard(
                 padded = true,
                 color = if (t.needsYou) c.tint(color).compositeOver(c.ground) else c.card,
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(Space.s)) {
                     Text(if (t.needsYou) "Needs you" else "Status", style = MaterialTheme.typography.titleSmall, color = color, modifier = Modifier.semantics { heading() })
                     if (step != null) Text(step, style = MaterialTheme.typography.bodyLarge)
-                    if (doing.isNotEmpty() && d?.failure?.title?.startsWith(doing.trim().trimEnd('.'), ignoreCase = true) != true) MarkdownText(doing, style = MaterialTheme.typography.bodyMedium, color = c.muted)
-                    t.progress?.let { p ->
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Progress(p, color, Modifier.weight(1f))
-                            Text("$p%" + (t.eta?.let { " · ${it}m left" } ?: ""), style = MaterialTheme.typography.labelMedium, color = c.faint, modifier = Modifier.padding(start = Space.m))
-                        }
+                    if (doing.isNotEmpty() && !failing) Preview(doing, "status", lines = 3, color = c.muted)
+                    if (t.progress != null || t.eta != null) Row(verticalAlignment = Alignment.CenterVertically) {
+                        t.progress?.let { Progress(it, color, Modifier.weight(1f)) } ?: Spacer(Modifier.weight(1f))
+                        Text(
+                            listOfNotNull(t.progress?.let { "$it%" }, t.eta?.let { "${it}m left" }).joinToString(" · "),
+                            style = MaterialTheme.typography.labelMedium, color = c.faint, modifier = Modifier.padding(start = Space.m),
+                        )
                     }
-                    if (d?.queue?.isNotEmpty() == true) Text(d.queue, style = MaterialTheme.typography.bodySmall, color = c.muted)
-                    if (d != null && d.waitsFor.isNotEmpty()) Text("Waits for: ${d.waitsFor.joinToString(", ")}", style = MaterialTheme.typography.bodySmall, color = c.muted)
+                    if (d != null && d.waitsFor.isNotEmpty()) Text("Waits for ${d.waitsFor.joinToString(", ")}", style = MaterialTheme.typography.bodySmall, color = c.muted)
                 }
             }
             problem?.let { ErrorMessage(it) }
-            if (d == null && problem == null) LoadingState("Reading the task")
-            if (d != null) {
-                d.failure?.let { f ->
-                    Card(f.title.ifEmpty { "Something went wrong" }, BoardStatus.Error.color()) {
-                        if (f.detail.isNotEmpty()) MarkdownText(f.detail, style = MaterialTheme.typography.bodyMedium)
-                        if (f.next.isNotEmpty()) {
-                            Text("Next step", style = MaterialTheme.typography.titleSmall, color = c.muted, modifier = Modifier.padding(top = Space.xs))
-                            MarkdownText(f.next, style = MaterialTheme.typography.bodyMedium)
-                        }
+            d?.failure?.let { f ->
+                Card(f.title.ifEmpty { "Something went wrong" }, BoardStatus.Error.color()) {
+                    if (f.detail.isNotEmpty()) Preview(f.detail, "failure", lines = 6)
+                    if (f.next.isNotEmpty()) {
+                        Text("Next step", style = MaterialTheme.typography.titleSmall, color = c.muted, modifier = Modifier.padding(top = Space.xs))
+                        MarkdownText(f.next, style = MaterialTheme.typography.bodyMedium)
                     }
                 }
+            }
+            // Who works on it, how its review went, and the way to its agent.
+            if (agent.who.isNotEmpty() || d?.reviews?.isNotEmpty() == true) AgentPart(t, agent, d?.reviews.orEmpty(), onActivity)
+            if (d == null && problem == null) LoadingState("Reading the task")
+            if (d != null) {
                 if (d.attempts.isNotEmpty()) Section(if (t.status == BoardStatus.PickOne) "Pick one of ${d.attempts.size}" else "Attempts", startOpen = true) {
                     d.attempts.forEach { a ->
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -395,63 +449,180 @@ fun TaskDetailContent(
                     if (d.comparison.isNotEmpty()) MarkdownText(d.comparison, style = MaterialTheme.typography.bodyMedium, color = c.muted)
                 }
                 if (d.plan.isNotEmpty()) Section("Plan", startOpen = t.status == BoardStatus.PlanReady) { MarkdownText(d.plan, style = MaterialTheme.typography.bodyMedium) }
-                if (d.reviews.isNotEmpty()) Section("Reviews · ${d.reviews.size}", startOpen = true) {
-                    d.reviews.asReversed().forEachIndexed { i, r -> ReviewView(r, startOpen = i == 0) }
-                }
-                if (onActivity != null && t.status != BoardStatus.Todo) Section("Activity", startOpen = true) {
-                    QuietCard(onClick = onActivity, onClickLabel = "Follow what its agents did", padded = true) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(HerdrIcons.Activity, null, tint = Herdr.colors.muted, modifier = Modifier.size(20.dp))
-                            Column(Modifier.weight(1f).padding(start = Space.m)) {
-                                Text("Activity timeline", style = MaterialTheme.typography.labelLarge, color = Herdr.colors.accent)
-                                Text(
-                                    if (t.status == BoardStatus.Working || t.status == BoardStatus.Reviewing) "Live: each step its agents take, as they take it"
-                                    else "Each step its agents took: commands, edits, tests, reviews",
-                                    style = MaterialTheme.typography.bodySmall, color = Herdr.colors.muted, maxLines = 2,
-                                )
-                            }
-                            Icon(HerdrIcons.ChevronRight, null, tint = Herdr.colors.faint, modifier = Modifier.size(20.dp))
-                        }
-                    }
-                }
-                if (d.worktree.isNotEmpty() && onCode != null) Section("Code", startOpen = true) {
-                    QuietCard(onClick = { onCode(d) }, onClickLabel = "Read the task's code and changes", padded = true) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(HerdrIcons.GitCompare, null, tint = Herdr.colors.muted, modifier = Modifier.size(20.dp))
-                            Column(Modifier.weight(1f).padding(start = Space.m)) {
-                                Text("Changes and files", style = MaterialTheme.typography.labelLarge, color = Herdr.colors.accent)
-                                Text(
-                                    listOf(d.branch, d.worktree).filter { it.isNotEmpty() }.joinToString(" · "),
-                                    style = MaterialTheme.typography.bodySmall, color = Herdr.colors.muted, maxLines = 2, overflow = TextOverflow.Ellipsis,
-                                )
-                            }
-                            Icon(HerdrIcons.ChevronRight, null, tint = Herdr.colors.faint, modifier = Modifier.size(20.dp))
-                        }
-                    }
-                    if (onQuick != null) QuietCard(Modifier.padding(top = Space.s), onClick = { onQuick(d) }, onClickLabel = "Run a quick command in the task's worktree", padded = true) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(HerdrIcons.Zap, null, tint = Herdr.colors.muted, modifier = Modifier.size(20.dp))
-                            Column(Modifier.weight(1f).padding(start = Space.m)) {
-                                Text("Quick commands", style = MaterialTheme.typography.labelLarge, color = Herdr.colors.accent)
-                                Text("Its project's scripts and AI commands, run in its worktree", style = MaterialTheme.typography.bodySmall, color = Herdr.colors.muted, maxLines = 2)
-                            }
-                            Icon(HerdrIcons.ChevronRight, null, tint = Herdr.colors.faint, modifier = Modifier.size(20.dp))
-                        }
-                    }
-                }
-                if (d.pr.isNotEmpty() || d.reportLink.isNotEmpty()) Section("Links", startOpen = true) {
-                    if (d.pr.isNotEmpty()) LinkRow("Pull request", d.pr.substringAfter("github.com/")) { context.openUrl(d.pr) }
+                if (d.pr.isNotEmpty() || d.reportLink.isNotEmpty()) Column(verticalArrangement = Arrangement.spacedBy(Space.s)) {
+                    if (d.pr.isNotEmpty()) LinkRow("Pull request" + (prNumber(d.pr)?.let { " #$it" } ?: ""), d.pr.substringAfter("github.com/")) { context.openUrl(d.pr) }
                     if (d.reportLink.isNotEmpty()) LinkRow("Research report", d.reportLink.substringAfter("://")) { context.openUrl(d.reportLink) }
                 }
-                if (d.description.isNotEmpty()) Section("Description", startOpen = true, collapseLong = true) { MarkdownText(d.description, style = MaterialTheme.typography.bodyMedium) }
-                if (d.handovers.isNotEmpty()) Section("Handovers · ${d.handovers.size}", startOpen = false) { d.handovers.forEach { MarkdownText("↪ $it", style = MaterialTheme.typography.bodyMedium) } }
-                if (d.time != null || d.tokens != null) Section("Limits and usage", startOpen = false) {
-                    d.time?.let { UsageRow("Time", it.used.ifEmpty { "0s" }, it.limit.ifEmpty { "none" }) }
-                    d.tokens?.let { UsageRow("Tokens", it.used.ifEmpty { "0" }, it.limit.ifEmpty { "none" }) }
+                MorePart(t, d, note, onCode, onQuick, onActivity.takeIf { agent.who.isEmpty() })
+            }
+        }
+    }
+}
+
+private fun prNumber(pr: String): String? = pr.substringAfterLast('/').takeIf { "/pull/" in pr && it.all(Char::isDigit) && it.isNotEmpty() }
+
+/** An action's label on a button of the card: "Tell", "Stop", "Retry". */
+private fun BoardAction.short(): String = when (this) {
+    BoardAction.Tell -> "Tell"
+    BoardAction.Stop -> "Stop"
+    BoardAction.Fix -> "Send failure"
+    BoardAction.Review -> "Send back"
+    BoardAction.Finish -> "Finish"
+    BoardAction.ApproveAnyway -> "Approve anyway"
+    BoardAction.SendPlanBack -> "Send back"
+    BoardAction.Delegate -> "Start"
+    else -> label.removeSuffix("…")
+}
+
+/**
+ * Who works on the task (its agent and model) and the last review's verdict, with the way to its agent:
+ * Open agent while its pane is on the machine, else what its agents did.
+ */
+@Composable
+private fun AgentPart(t: BoardTask, agent: TaskAgent, reviews: List<Review>, onActivity: (() -> Unit)?) {
+    val c = Herdr.colors
+    val last = reviews.maxByOrNull { it.round }
+    var showReview by rememberSaveable(t.id, "review") { mutableStateOf(t.status == BoardStatus.ReviewFailed) }
+    QuietCard(padded = true, modifier = Modifier.animateContentSize()) {
+        Column(verticalArrangement = Arrangement.spacedBy(Space.m)) {
+            if (agent.who.isNotEmpty()) Row(verticalAlignment = Alignment.CenterVertically) {
+                AgentMark(agent.who.substringBefore(" · "), size = 28.dp)
+                Column(Modifier.weight(1f).padding(start = Space.m)) {
+                    Text(agent.who, style = MaterialTheme.typography.titleSmall, color = c.strong, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        when {
+                            agent.live.isNotEmpty() -> "Its agent · ${agent.live}"
+                            t.status == BoardStatus.Working || t.status == BoardStatus.Reviewing -> "Its agent"
+                            else -> "Its agent's chat is closed"
+                        },
+                        style = MaterialTheme.typography.bodySmall, color = c.muted,
+                    )
+                }
+            }
+            if (last != null) {
+                val passed = last.pass == true && last.error.isEmpty()
+                val n = last.findings.size
+                Row(
+                    Modifier.fillMaxWidth().heightIn(min = 40.dp).clip(RoundedCornerShape(Radius.m))
+                        .clickable(onClickLabel = if (showReview) "Hide the review" else "Show the review") { showReview = !showReview },
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(if (passed) HerdrIcons.CircleCheck else HerdrIcons.CircleAlert, null, tint = if (passed) c.done else c.red, modifier = Modifier.size(20.dp))
+                    Text(
+                        (if (passed) "Review passed" else if (last.error.isNotEmpty()) "Review failed to run" else "Review failed") +
+                            (if (n > 0) " · $n finding${if (n == 1) "" else "s"}" else "") +
+                            (last.by.takeIf { it.isNotEmpty() }?.let { " · by ${it.substringAfterLast('/')}" } ?: ""),
+                        style = MaterialTheme.typography.bodyMedium, color = c.text, modifier = Modifier.weight(1f).padding(start = Space.s),
+                    )
+                    Icon(if (showReview) HerdrIcons.ChevronUp else HerdrIcons.ChevronDown, null, tint = c.muted, modifier = Modifier.size(20.dp))
+                }
+                if (showReview) reviews.asReversed().forEachIndexed { i, r -> ReviewView(r, startOpen = i == 0) }
+            }
+            when {
+                // Amber when nothing else on the card is: the bottom's primary action keeps it otherwise.
+                agent.onOpen != null && BoardActions.primary(t) == null -> PrimaryButton(onClick = agent.onOpen, modifier = Modifier.fillMaxWidth()) {
+                    Icon(HerdrIcons.MessageSquare, null, Modifier.size(18.dp))
+                    Text("Open agent")
+                }
+                agent.onOpen != null -> SecondaryButton(onClick = agent.onOpen, modifier = Modifier.fillMaxWidth()) {
+                    Icon(HerdrIcons.MessageSquare, null, Modifier.size(18.dp), tint = Herdr.colors.accent)
+                    Text("Open agent")
+                }
+                agent.who.isNotEmpty() && onActivity != null && t.status != BoardStatus.Todo -> SecondaryButton(onClick = onActivity, modifier = Modifier.fillMaxWidth()) {
+                    Icon(HerdrIcons.Activity, null, Modifier.size(18.dp))
+                    Text("What its agents did")
                 }
             }
         }
     }
+}
+
+/**
+ * Everything else, folded away: the closing note and the description as short previews, the code and
+ * quick commands, handovers, and the paths, branch, time and token counters.
+ */
+@Composable
+private fun MorePart(
+    t: BoardTask,
+    d: TaskDetails,
+    note: String,
+    onCode: ((TaskDetails) -> Unit)?,
+    onQuick: ((TaskDetails) -> Unit)?,
+    onActivity: (() -> Unit)?,
+) {
+    val c = Herdr.colors
+    val any = note.isNotEmpty() || d.description.isNotEmpty() || d.handovers.isNotEmpty() || d.worktree.isNotEmpty() || d.branch.isNotEmpty() ||
+        d.time != null || d.tokens != null || d.queue.isNotEmpty() || onActivity != null
+    if (!any) return
+    Section("More", startOpen = false, key = "more-${t.id}") {
+        Column(verticalArrangement = Arrangement.spacedBy(Space.l)) {
+            if (note.isNotEmpty()) Labeled("Closing note") { Preview(note, "note-${t.id}", lines = 4) }
+            if (d.description.isNotEmpty()) Labeled("Description") { Preview(d.description, "desc-${t.id}", lines = 4) }
+            if (d.worktree.isNotEmpty() && onCode != null) Column(verticalArrangement = Arrangement.spacedBy(Space.s)) {
+                NavCard(HerdrIcons.GitCompare, "Changes and files", "Read the task's code and changes") { onCode(d) }
+                if (onQuick != null) NavCard(HerdrIcons.Zap, "Quick commands", "Its project's scripts, run in its worktree") { onQuick(d) }
+            }
+            if (onActivity != null && t.status != BoardStatus.Todo) NavCard(HerdrIcons.Activity, "Activity timeline", "Each step its agents took") { onActivity() }
+            if (d.handovers.isNotEmpty()) Labeled("Handovers") { d.handovers.forEach { MarkdownText("↪ $it", style = MaterialTheme.typography.bodySmall, color = c.muted) } }
+            if (d.queue.isNotEmpty()) Labeled("Queue") { Text(d.queue, style = MaterialTheme.typography.bodySmall, color = c.muted) }
+            if (d.branch.isNotEmpty() || d.worktree.isNotEmpty() || d.time != null || d.tokens != null) Labeled("Details") {
+                if (d.branch.isNotEmpty()) InfoLine("Branch", d.branch, mono = true)
+                if (d.worktree.isNotEmpty()) InfoLine("Worktree", d.worktree, mono = true)
+                d.time?.let { UsageRow("Time", it.used.ifEmpty { "0s" }, it.limit.ifEmpty { "none" }) }
+                d.tokens?.let { UsageRow("Tokens", it.used.toLongOrNull()?.let(ModelUse::tokens) ?: it.used.ifEmpty { "0" }, it.limit.ifEmpty { "none" }) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun Labeled(label: String, content: @Composable () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(Space.xs)) {
+        Text(label, style = MaterialTheme.typography.labelLarge, color = Herdr.colors.muted, modifier = Modifier.semantics { heading() })
+        content()
+    }
+}
+
+@Composable
+private fun NavCard(icon: ImageVector, title: String, detail: String, onClick: () -> Unit) {
+    QuietCard(onClick = onClick, onClickLabel = title, padded = true) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, null, tint = Herdr.colors.muted, modifier = Modifier.size(20.dp))
+            Column(Modifier.weight(1f).padding(start = Space.m)) {
+                Text(title, style = MaterialTheme.typography.labelLarge, color = Herdr.colors.accent)
+                Text(detail, style = MaterialTheme.typography.bodySmall, color = Herdr.colors.muted, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
+            Icon(HerdrIcons.ChevronRight, null, tint = Herdr.colors.faint, modifier = Modifier.size(20.dp))
+        }
+    }
+}
+
+/** The first lines of a long Markdown text, about [lines] of them, and "Show all" to read the rest. Short text shows whole. */
+@Composable
+private fun Preview(source: String, key: String, lines: Int, color: Color = Color.Unspecified) {
+    val short = remember(source, lines) { previewOf(source, lines) }
+    var all by rememberSaveable(key) { mutableStateOf(false) }
+    Column(Modifier.animateContentSize()) {
+        MarkdownText(if (all || short == null) source else short, style = MaterialTheme.typography.bodyMedium, color = color)
+        if (short != null) QuietButton(onClick = { all = !all }, color = Herdr.colors.accent, contentPadding = PaddingValues(horizontal = 0.dp, vertical = 6.dp)) {
+            Text(if (all) "Show less" else "Show all")
+        }
+    }
+}
+
+/** [source] cut to about [lines] lines (of some 60 characters) at a line's end, or null when it is that short already. */
+internal fun previewOf(source: String, lines: Int): String? {
+    val text = source.trim()
+    val budget = lines * 60
+    val rows = text.lines()
+    if (text.length <= budget + 40 && rows.size <= lines + 1) return null
+    val out = StringBuilder()
+    for (row in rows) {
+        if (out.isNotEmpty() && (out.length + row.length > budget || out.lines().size >= lines)) break
+        if (out.isNotEmpty()) out.append('\n')
+        out.append(if (row.length > budget) row.take(budget).substringBeforeLast(' ') + "…" else row)
+    }
+    return out.toString().trimEnd() + if (out.endsWith("…")) "" else " …"
 }
 
 @Composable
@@ -485,8 +656,8 @@ private fun Card(title: String, color: Color, content: @Composable () -> Unit) {
 
 /** A titled part of the task that folds away: a 48dp heading row with a chevron, its content under it. */
 @Composable
-private fun Section(title: String, startOpen: Boolean = true, collapseLong: Boolean = false, content: @Composable () -> Unit) {
-    var open by rememberSaveable(title) { mutableStateOf(startOpen) }
+private fun Section(title: String, startOpen: Boolean = true, key: String = title, content: @Composable () -> Unit) {
+    var open by rememberSaveable(key) { mutableStateOf(startOpen) }
     Column(verticalArrangement = Arrangement.spacedBy(Space.s), modifier = Modifier.animateContentSize()) {
         Row(
             Modifier.fillMaxWidth().heightIn(min = 48.dp)

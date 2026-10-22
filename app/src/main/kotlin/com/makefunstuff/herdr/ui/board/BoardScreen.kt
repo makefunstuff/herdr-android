@@ -1,6 +1,10 @@
 package com.makefunstuff.herdr.ui.board
 
 import com.makefunstuff.herdr.core.board.BoardActions
+import com.makefunstuff.herdr.core.board.TaskLine
+import com.makefunstuff.herdr.core.api.AgentInfo
+import com.makefunstuff.herdr.core.home.Home
+import com.makefunstuff.herdr.core.home.HomeAgent
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import com.makefunstuff.herdr.ui.design.approves
@@ -70,7 +74,6 @@ import com.makefunstuff.herdr.ui.common.LocalGuard
 import com.makefunstuff.herdr.core.board.BoardFilter
 import com.makefunstuff.herdr.core.board.BoardStatus
 import com.makefunstuff.herdr.core.board.BoardTask
-import com.makefunstuff.herdr.core.chat.Markdown
 import com.makefunstuff.herdr.core.push.Alerts
 import com.makefunstuff.herdr.ui.common.EmptyState
 import com.makefunstuff.herdr.ui.common.LocalContainer
@@ -242,6 +245,14 @@ fun BoardScreen(nav: NavController, machineId: String, openTask: String? = null,
         }
     }
 
+    // Each task's agent on this machine, by the names herdr-projects gives them: its chat opens from the card.
+    val agents = remember(state) { HomeAgent.of(listOf(state)) }
+    fun agentOf(t: BoardTask): AgentInfo? = Home.agentOf(agents, t)?.agent
+    fun openAgent(paneId: String) {
+        val route = Routes.agent(machineId, paneId)
+        // From the right pane the chat opens in the middle, beside this board and its open card.
+        if (pane != null) panes.open(nav, route) else nav.navigate(route)
+    }
     val repos = remember(tasks) { tasks.map { it.repo }.distinct().sorted() }
     // Finished work waiting for a yes: the review cards go through it one task at a time.
     val waiting = remember(tasks) { tasks.count { Approvals.waits(it) } }
@@ -368,7 +379,8 @@ fun BoardScreen(nav: NavController, machineId: String, openTask: String? = null,
                                     CustomAccessibilityAction("Open its review card") { openReview(t); true }.takeIf { Approvals.waits(t) },
                                     CustomAccessibilityAction("More actions") { actionsFor = t; true },
                                 )
-                            TaskRow(t, onOpen = { openId = t.id }, onMenu = { actionsFor = t }, actions = actions)
+                            val live = agentOf(t)
+                            TaskRow(t, onOpen = { openId = t.id }, onMenu = { actionsFor = t }, actions = actions, onAgent = live?.let { a -> { openAgent(a.paneId) } })
                         }
                     }
                 } }
@@ -381,11 +393,13 @@ fun BoardScreen(nav: NavController, machineId: String, openTask: String? = null,
     val middle by nav.currentBackStackEntryAsState()
     val middleCloses = pane != null && middle?.destination?.route != Routes.AGENTS
     if (openId != null && open != null) {
+        val live = agentOf(open)
         TaskDetailScreen(session, open, onBack = { if (alone && pane == null && openId == openTask) nav.popBackStack() else openId = null }, busy = busy, onAction = { a -> choose(open, a) }, onPick = { letter -> perform(open, BoardAction.Pick, letter = letter) },
             onMore = { actionsFor = open }, backEnabled = !middleCloses,
             onCode = { d -> nav.navigate(Routes.codeAt(CodeSpot(machineId, d.worktree, task = open.id, taskName = open.name), CheckoutTab.Changes)) },
             onQuick = { d -> quick = QuickPlace(machineId, d.worktree, label = open.name, task = open.id, taskName = open.name) },
-            onActivity = if (open.machine.isEmpty()) ({ nav.navigate(Routes.activity(machineId, task = open.id, name = open.name)) }) else null)
+            onActivity = if (open.machine.isEmpty()) ({ nav.navigate(Routes.activity(machineId, task = open.id, name = open.name)) }) else null,
+            live = live, onOpenAgent = live?.let { a -> { openAgent(a.paneId) } })
     }
     quick?.let { place -> QuickSheets(nav, place, onDismiss = { quick = null }) }
     actionsFor?.let { t ->
@@ -437,15 +451,23 @@ internal fun Progress(p: Int, color: Color, modifier: Modifier = Modifier) {
  * agent, the title, what it is doing, progress and its pull request. Tasks that need you get a wider stripe.
  */
 @Composable
-internal fun TaskRow(t: BoardTask, onOpen: () -> Unit, onMenu: () -> Unit, actions: List<CustomAccessibilityAction> = emptyList()) {
+internal fun TaskRow(
+    t: BoardTask,
+    onOpen: () -> Unit,
+    onMenu: () -> Unit,
+    actions: List<CustomAccessibilityAction> = emptyList(),
+    /** Opens its agent's chat, while its agent's pane is on the machine. */
+    onAgent: (() -> Unit)? = null,
+) {
     val c = Herdr.colors
     val color = t.status.color()
     val quiet = t.status == BoardStatus.Done || t.status == BoardStatus.Archived
-    val doing = remember(t.msg) { Markdown.plain(t.msg) }
+    val doing = remember(t.msg) { TaskLine.line(t.msg) }
     QuietCard(
         Modifier.semantics(mergeDescendants = true) {
             contentDescription = "${t.name}, ${t.status.label}${if (t.needsYou) ", needs you" else ""}, ${t.title}"
-            if (actions.isNotEmpty()) customActions = actions
+            val all = actions + listOfNotNull(onAgent?.let { o -> CustomAccessibilityAction("Open agent") { o(); true } })
+            if (all.isNotEmpty()) customActions = all
         },
         onClick = onOpen,
         onLongClick = onMenu,
@@ -460,7 +482,8 @@ internal fun TaskRow(t: BoardTask, onOpen: () -> Unit, onMenu: () -> Unit, actio
                     StatusBadge(t.status.label, color)
                     if (t.research) { Spacer(Modifier.width(Space.xs)); Pill("research") }
                     Spacer(Modifier.weight(1f))
-                    if (t.agent.isNotEmpty()) Text(
+                    if (onAgent != null) AgentChip(t.agent, onAgent)
+                    else if (t.agent.isNotEmpty()) Text(
                         t.agent, style = MaterialTheme.typography.labelMedium, color = c.faint, maxLines = 1, overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.padding(start = Space.s).widthIn(max = 120.dp),
                     )
@@ -493,5 +516,22 @@ internal fun TaskRow(t: BoardTask, onOpen: () -> Unit, onMenu: () -> Unit, actio
                 }
             }
         }
+    }
+}
+
+/** The card's way to its agent: the agent's name with a chat glyph, in amber, a tap target of its own. */
+@Composable
+private fun AgentChip(agent: String, onClick: () -> Unit) {
+    val c = Herdr.colors
+    Row(
+        Modifier.padding(start = Space.s).clip(HerdrShapes.Pill).background(c.accentTint)
+            .clickable(onClickLabel = "Open agent", onClick = onClick).padding(horizontal = Space.s, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(HerdrIcons.MessageSquare, null, tint = c.accent, modifier = Modifier.size(14.dp))
+        Text(
+            agent.ifEmpty { "agent" }, style = MaterialTheme.typography.labelMedium, color = c.accent, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(start = Space.xs).widthIn(max = 110.dp),
+        )
     }
 }

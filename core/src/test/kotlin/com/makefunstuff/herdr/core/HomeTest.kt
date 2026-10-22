@@ -50,6 +50,15 @@ class HomeTest {
     private fun board(vararg tasks: BoardTask, machine: String = "devbox") = HomeBoard(machine, machine, tasks.toList())
 
     @Test
+    fun aTasksAgentIsItsWorkerBeforeItsReviewer() {
+        val reviewer = agent("w1:p2", "working", name = "sw-herdr-android-9-r")
+        val worker = agent("w1:p1", "idle", name = "sw-herdr-android-9")
+        assertEquals("w1:p1", Home.agentOf(listOf(reviewer, worker), approve)?.agent?.paneId)
+        assertEquals("w1:p2", Home.agentOf(listOf(reviewer, agent("w2:p1", "idle", name = "other")), approve)?.agent?.paneId)
+        assertEquals(null, Home.agentOf(listOf(agent("w2:p1", "idle", name = "other")), approve))
+    }
+
+    @Test
     fun anAgentAndItsTaskShowOnce() {
         val home = Home.of(
             listOf(

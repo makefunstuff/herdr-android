@@ -31,7 +31,9 @@
     }
   ],
   "agent": "claude",
-  "handovers": [],
+  "handovers": [
+    {"from": "codex", "to": "claude", "why": "codex hit its 5-hour limit", "words": "claude took over from codex at 14:02: codex hit its 5-hour limit"}
+  ],
   "research": false,
   "plan": "",
   "pr": "https://github.com/demo/herdr-android/pull/9",
