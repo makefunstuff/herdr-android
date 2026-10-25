@@ -1,5 +1,7 @@
 package com.makefunstuff.herdr.core.chat
 
+import com.makefunstuff.herdr.core.code.FileDiff
+
 /** One entry in an agent conversation, as the chat view shows it. */
 sealed interface ChatItem {
     val id: String
@@ -17,7 +19,11 @@ sealed interface ChatItem {
      */
     data class Reasoning(override val id: String, val text: String) : ChatItem
 
-    /** A tool call or action: [summary] is the one line worth showing (a command, a path, a query). */
+    /**
+     * A tool call or action: [summary] is the one line worth showing (a command, a path, a query).
+     * [diffs]: what an edit changes, read from its arguments ([EditCalls]); empty for any other call,
+     * or an edit in a shape the app doesn't know, which shows its raw [input] instead.
+     */
     data class Tool(
         override val id: String,
         val name: String,
@@ -25,6 +31,7 @@ sealed interface ChatItem {
         val input: String? = null,
         val output: String? = null,
         val state: ToolState = ToolState.Running,
+        val diffs: List<FileDiff> = emptyList(),
     ) : ChatItem
 
     /** A quiet marker in the timeline: interrupted, compacted, a slash command. */

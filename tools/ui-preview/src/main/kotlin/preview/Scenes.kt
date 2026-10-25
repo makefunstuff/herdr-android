@@ -204,6 +204,13 @@ fun scenes(): List<Scene> = listOf(
     Scene("prompt-question", route = Routes.agent(DEVBOX, API_AGENT), setup = { host(DEVBOX).screens += API_AGENT to Demo.resource("screen-claude-question.txt") }),
     Scene("prompt-checks", route = Routes.agent(DEVBOX, API_AGENT), setup = { host(DEVBOX).screens += API_AGENT to Demo.resource("screen-claude-checks.txt") }),
     Scene("chat-codex", route = Routes.agent(DEVBOX, SITE_AGENT)),
+    // An edit opened: its file and its lines removed and added, while Claude's runs; Codex's patch of a page; a
+    // whole new file, folded to its first lines until "Show all".
+    Scene("chat-edit", route = Routes.agent(DEVBOX, APP_AGENT), actions = { tapExact("Edit") }),
+    Scene("chat-codex-edit", route = Routes.agent(DEVBOX, SITE_AGENT), actions = { tapText("Worked for"); tapExact("Edit") }),
+    Scene("chat-edit-long", route = Routes.agent(DEVBOX, APP_AGENT), setup = {
+        host(DEVBOX).transcripts = host(DEVBOX).transcripts + (Demo.APP_SESSION to Demo.appTranscriptWrite())
+    }, actions = { tapExact("Write") }),
     // Chats you can skim: a settled turn opened from its "Worked for" header; a turn done with a failed test run on
     // the way, counted in red on its folded header; back after 44 minutes away, what happened since in three lines;
     // scrolled up while the agent wrote two more messages, the pill that counts them.

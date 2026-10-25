@@ -324,6 +324,43 @@ object Demo {
     fun appTranscriptThinking(): String = resource("claude-app.jsonl").trimEnd() + "\n" + appMore(1) +
         thinking(92, "2026-10-17T07:41:50.000Z", "`HostState` has `updatedAt` now. Next the card: it should read the time and say it the way the rest of the app does.\n\nThere's `ago()` in `ui/common/Time.kt`, which says \"2 min ago\". I'll use that rather than a new formatter, and only show it when the snapshot has a time.") + "\n"
 
+    /** devbox's app agent writing a whole new file once its edit came back: a long edit, folded in the chat. */
+    fun appTranscriptWrite(): String {
+        val file = """
+            |package com.makefunstuff.herdr.core.host
+            |
+            |/**
+            | * When a machine last answered, as its card says it: "just now", "2 min ago", "3 h ago".
+            | * Counted from when its snapshot arrived on the phone, not from the machine's own clock.
+            | */
+            |object LastAnswered {
+            |    private const val MINUTE = 60_000L
+            |    private const val HOUR = 60 * MINUTE
+            |
+            |    fun of(updatedAt: Long?, now: Long): String? {
+            |        val at = updatedAt ?: return null
+            |        val ago = (now - at).coerceAtLeast(0)
+            |        return when {
+            |            ago < MINUTE -> "just now"
+            |            ago < HOUR -> "${'$'}{ago / MINUTE} min ago"
+            |            else -> "${'$'}{ago / HOUR} h ago"
+            |        }
+            |    }
+            |
+            |    /** An hour without an answer: the card turns amber. */
+            |    fun stale(updatedAt: Long?, now: Long): Boolean =
+            |        updatedAt != null && now - updatedAt > HOUR
+            |}
+            |""".trimMargin()
+        val input = kotlinx.serialization.json.buildJsonObject {
+            put("file_path", kotlinx.serialization.json.JsonPrimitive("/home/demo/src/herdr-android/core/src/main/kotlin/com/makefunstuff/herdr/core/host/LastAnswered.kt"))
+            put("content", kotlinx.serialization.json.JsonPrimitive(file))
+        }
+        return resource("claude-app.jsonl").trimEnd() + "\n" + appMore(1) +
+            """{"type": "assistant", "uuid": "00000000-0000-4000-8000-000000000050", "timestamp": "2026-10-17T07:40:20.000Z", "cwd": "/home/demo/src/herdr-android", """ +
+            """"message": {"role": "assistant", "content": [{"type": "tool_use", "id": "toolu_00000050", "name": "Write", "input": $input}]}}""" + "\n"
+    }
+
     /** Then a third ask, typed at the desk, and the agent starting on it: two new messages for a chat scrolled up. */
     val APP_NEXT = """
         |{"type": "user", "uuid": "00000000-0000-4000-8000-000000000040", "timestamp": "2026-10-17T07:41:56.000Z", "cwd": "/home/demo/src/herdr-android", "message": {"role": "user", "content": "Make it amber when a machine hasn't answered for an hour."}}

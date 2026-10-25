@@ -195,7 +195,7 @@ private fun Line(
     }
 }
 
-private fun highlight(row: CodeRow, language: Language?, c: HerdrColors): AnnotatedString {
+internal fun highlight(row: CodeRow, language: Language?, c: HerdrColors): AnnotatedString {
     val shown = if (row.text.length > LONGEST_SHOWN) row.text.take(LONGEST_SHOWN) else row.text
     // Tabs as four spaces: a phone has no room for eight.
     val text = shown.replace("\t", "    ")

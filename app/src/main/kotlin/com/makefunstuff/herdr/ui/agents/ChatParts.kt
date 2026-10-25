@@ -401,6 +401,7 @@ private fun ToolRow(tool: ChatItem.Tool, line: ToolLine?) {
     var open by rememberSaveable(tool.id) { mutableStateOf(false) }
     // The object worth reading: a path from the repo (`core/…/host/HostState.kt`), or the call's own words.
     val text = line?.text ?: tool.summary.lineSequence().firstOrNull().orEmpty()
+    val diffs = line?.diffs ?: tool.diffs
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(Radius.m)).clickable { open = !open }.padding(horizontal = Space.xs, vertical = 6.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             ToolStateIcon(tool.state)
@@ -413,10 +414,11 @@ private fun ToolRow(tool: ChatItem.Tool, line: ToolLine?) {
             )
             Spacer(Modifier.width(Space.s))
             Text(
-                if (open) tool.summary.lineSequence().firstOrNull().orEmpty() else text,
+                // Opened, the call's own words; an edit's diff names its files whole.
+                if (open && diffs.isEmpty()) tool.summary.lineSequence().firstOrNull().orEmpty() else text,
                 style = if (line?.isPath == true || looksLikeCode(text)) CodeStyle.copy(fontSize = 12.sp, lineHeight = 18.sp) else MaterialTheme.typography.bodySmall,
                 color = Herdr.colors.text,
-                maxLines = if (open) 4 else 1,
+                maxLines = if (open && diffs.isEmpty()) 4 else 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f, fill = false),
             )
@@ -428,14 +430,22 @@ private fun ToolRow(tool: ChatItem.Tool, line: ToolLine?) {
             }
         }
         if (open) {
-            val input = tool.input?.takeIf { it.trim() != tool.summary.trim() }
+            // An edit as its diff; only a call in a shape the app doesn't know shows its raw arguments.
+            val input = tool.input?.takeIf { it.trim() != tool.summary.trim() && diffs.isEmpty() }
             if (input != null) {
                 Spacer(Modifier.size(6.dp))
                 SelectionContainer { CodeBlock(input, maxLines = 30) }
             }
-            Spacer(Modifier.size(6.dp))
-            SelectionContainer {
-                CodeBlock(tool.output ?: if (tool.state == ToolState.Running) "Running…" else "(no output)", maxLines = 40)
+            diffs.forEachIndexed { i, f ->
+                Spacer(Modifier.size(6.dp))
+                EditDiff(f, "${tool.id}/$i")
+            }
+            // An edit's result only says it was made; a failed one says why.
+            if (diffs.isEmpty() || tool.state == ToolState.Failed) {
+                Spacer(Modifier.size(6.dp))
+                SelectionContainer {
+                    CodeBlock(tool.output ?: if (tool.state == ToolState.Running) "Running…" else "(no output)", maxLines = 40)
+                }
             }
         }
     }

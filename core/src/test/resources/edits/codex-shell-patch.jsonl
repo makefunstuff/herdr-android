@@ -1,0 +1,1 @@
+{"timestamp":"2025-06-01T10:00:00.000Z","type":"response_item","payload":{"type":"function_call","name":"shell","call_id":"call_shell","arguments":"{\"command\": [\"apply_patch\", \"*** Begin Patch\\n*** Update File: src/main.rs\\n@@ fn main() {\\n-    println!(\\\"hi\\\");\\n+    println!(\\\"hello\\\");\\n }\\n*** End Patch\\n\"], \"workdir\": \"/home/demo/cli\"}"}}
