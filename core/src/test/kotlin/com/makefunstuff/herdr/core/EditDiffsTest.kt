@@ -1,6 +1,7 @@
 package com.makefunstuff.herdr.core
 
 import com.makefunstuff.herdr.core.activity.ActivityLog
+import com.makefunstuff.herdr.core.activity.Diffs
 import com.makefunstuff.herdr.core.chat.ChatItem
 import com.makefunstuff.herdr.core.chat.ChatTurns
 import com.makefunstuff.herdr.core.chat.EditCalls
@@ -12,6 +13,7 @@ import com.makefunstuff.herdr.core.code.FileDiff
 import kotlinx.serialization.json.jsonObject
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
@@ -145,6 +147,34 @@ class EditDiffsTest {
         val f = exec.diffs.single()
         assertEquals("/home/demo/site/README.md", f.path)
         assertEquals(listOf("-Run `npm start`.", "+Run `npm run dev`, then open \"localhost:4321\"."), lines(f))
+        // The script does more than the patch: it is no edit alone, so its row keeps its own line and its script.
+        assertFalse(EditCalls.isEdit(exec.name))
+        assertTrue(exec.summary.startsWith("text(await tools.apply_patch("), exec.summary)
+        assertTrue("git diff --check" in exec.input.orEmpty(), exec.input)
+    }
+
+    @Test
+    fun aPatchOnlyWrittenSomewhereIsNoEdit() {
+        fun of(name: String, json: String) = EditCalls.of(name, TranscriptJson.parseToJsonElement(json).jsonObject)
+        // A heredoc that writes a patch as a test's fixture.
+        val fixture = "cat > fx.txt <<'EOF'\n*** Begin Patch\n*** Update File: a.kt\n-x\n+y\n*** End Patch\nEOF\nwc -l fx.txt"
+        val command = kotlinx.serialization.json.buildJsonObject { put("command", kotlinx.serialization.json.JsonPrimitive(fixture)) }
+        assertEquals(null, EditCalls.of("Bash", command))
+        assertEquals(null, EditCalls.applied(fixture))
+        // One applied by the shell is: its diff, with the command and its output still shown beside it.
+        val applied = of("Bash", """{"command":"apply_patch <<'EOF'\n*** Begin Patch\n*** Update File: a.kt\n-x\n+y\n*** End Patch\nEOF"}""")!!.single()
+        assertEquals(listOf("-x", "+y"), lines(applied))
+        assertFalse(EditCalls.isEdit("Bash"))
+        assertTrue(EditCalls.isEdit("apply_patch") && EditCalls.isEdit("Edit") && EditCalls.isEdit("edit"))
+    }
+
+    @Test
+    fun aLongReplacementSaysWhatItLeftOut() {
+        val old = (1..400).joinToString("\n") { "line $it" }
+        val f = Diffs.replaced("a.txt", old, "gone")!!
+        assertEquals(300, f.removed)
+        assertEquals("100 more removed lines", f.hunks.single().lines.single { it.kind == DiffLine.Kind.Note }.text)
+        assertEquals("+gone", lines(f).last())
     }
 
     @Test

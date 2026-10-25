@@ -347,9 +347,11 @@ class CodexTranscript : Transcript() {
                 val raw = payload.str("arguments") ?: payload.str("input").orEmpty()
                 val args = runCatching { TranscriptJson.parseToJsonElement(raw) as? JsonObject }.getOrNull()
                 // The patch as the call's text (`apply_patch`), or in a script that applies it (`exec`).
-                val diffs = (args?.let { EditCalls.of(name, it) } ?: EditCalls.patch(raw)).orEmpty()
+                val edit = EditCalls.isEdit(name)
+                val diffs = (args?.let { EditCalls.of(name, it) } ?: if (edit) EditCalls.patch(raw) else EditCalls.applied(raw)).orEmpty()
                 val summary = when {
-                    args == null && diffs.isNotEmpty() -> diffs.joinToString(", ") { it.path }
+                    // A script that applies a patch may do more: its own first line.
+                    args == null && edit && diffs.isNotEmpty() -> diffs.joinToString(", ") { it.path }
                     args == null -> raw.lineSequence().firstOrNull { it.isNotBlank() }.orEmpty()
                     args["command"] != null || args["cmd"] != null -> commandLine(args["command"] ?: args["cmd"])
                     else -> ToolSummary.of(name, args)

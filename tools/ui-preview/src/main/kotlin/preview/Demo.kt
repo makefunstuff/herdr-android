@@ -361,6 +361,18 @@ object Demo {
             """"message": {"role": "assistant", "content": [{"type": "tool_use", "id": "toolu_00000050", "name": "Write", "input": $input}]}}""" + "\n"
     }
 
+    /**
+     * devbox's website agent in an older Codex, whose rollout keeps raw calls: one `exec` script that
+     * applies a patch and then checks the links, as Codex's code mode writes it.
+     */
+    fun siteTranscriptExec(): String = """
+        |{"timestamp": "2026-10-16T09:20:00.000Z", "type": "turn_context", "payload": {"cwd": "/home/demo/src/website", "model": "gpt-5.5", "effort": "medium"}}
+        |{"timestamp": "2026-10-16T09:20:00.000Z", "type": "event_msg", "payload": {"type": "user_message", "message": "Say where to unpack it in Manual install, then check the links again."}}
+        |{"timestamp": "2026-10-16T09:20:09.000Z", "type": "response_item", "payload": {"type": "custom_tool_call", "status": "completed", "call_id": "call_exec", "name": "exec", "input": "text(await tools.apply_patch(\"*** Begin Patch\\n*** Update File: /home/demo/src/website/content/docs/install.md\\n@@ ## Manual install\\n-Unpack the archive anywhere on your PATH.\\n+Unpack the archive into `~/.local/bin`, which is on your PATH.\\n*** End Patch\"));\ntext(await tools.exec_command({cmd:\"npm run check-links\"}));\n"}}
+        |{"timestamp": "2026-10-16T09:20:14.000Z", "type": "response_item", "payload": {"type": "custom_tool_call_output", "call_id": "call_exec", "output": "{\"output\": \"Success. Updated the following files:\\nM content/docs/install.md\\n\\n> check-links\\nChecked 38 links, 0 broken\\n\", \"metadata\": {\"exit_code\": 0, \"duration_seconds\": 4.2}}"}}
+        |{"timestamp": "2026-10-16T09:20:20.000Z", "type": "event_msg", "payload": {"type": "agent_message", "message": "Manual install now says to unpack into `~/.local/bin`. All 38 links still resolve."}}
+        |""".trimMargin()
+
     /** Then a third ask, typed at the desk, and the agent starting on it: two new messages for a chat scrolled up. */
     val APP_NEXT = """
         |{"type": "user", "uuid": "00000000-0000-4000-8000-000000000040", "timestamp": "2026-10-17T07:41:56.000Z", "cwd": "/home/demo/src/herdr-android", "message": {"role": "user", "content": "Make it amber when a machine hasn't answered for an hour."}}
@@ -445,7 +457,7 @@ object Demo {
 
     const val APP_SESSION = "3f6c2a1e-8b7d-4c2a-9e51-0a1b2c3d4e5f"
     private const val API_SESSION = "9d2e4b7a-1c3f-4e6a-8b90-5f4e3d2c1b0a"
-    private const val SITE_SESSION = "0199a3b2-7c41-7e10-9a2b-3c4d5e6f7a8b"
+    const val SITE_SESSION = "0199a3b2-7c41-7e10-9a2b-3c4d5e6f7a8b"
     private const val EVAL_SESSION = "0199a3c4-1d2e-7f30-8a4b-5c6d7e8f9a0b"
 
     /**

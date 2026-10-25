@@ -137,8 +137,10 @@ object Diffs {
             val removed = if (old.isEmpty()) emptyList() else old.removeSuffix("\n").split('\n')
             val addedLines = if (new.isEmpty()) emptyList() else new.removeSuffix("\n").split('\n')
             val half = maxOf(budget / 2, 1)
-            val rows = removed.take(half).map { DiffLine(DiffLine.Kind.Removed, null, null, it) } +
-                addedLines.take(half).map { DiffLine(DiffLine.Kind.Added, null, null, it) }
+            fun more(lines: List<String>, what: String) =
+                if (lines.size > half) listOf(DiffLine(DiffLine.Kind.Note, null, null, "${lines.size - half} more $what lines")) else emptyList()
+            val rows = removed.take(half).map { DiffLine(DiffLine.Kind.Removed, null, null, it) } + more(removed, "removed") +
+                addedLines.take(half).map { DiffLine(DiffLine.Kind.Added, null, null, it) } + more(addedLines, "added")
             budget -= rows.size
             Hunk("@@ @@", 0, 0, rows)
         }

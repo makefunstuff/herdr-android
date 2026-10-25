@@ -208,6 +208,10 @@ fun scenes(): List<Scene> = listOf(
     // whole new file, folded to its first lines until "Show all".
     Scene("chat-edit", route = Routes.agent(DEVBOX, APP_AGENT), actions = { tapExact("Edit") }),
     Scene("chat-codex-edit", route = Routes.agent(DEVBOX, SITE_AGENT), actions = { tapText("Worked for"); tapExact("Edit") }),
+    // A script that applies a patch and runs a check: its diff, and its script and output beside it.
+    Scene("chat-codex-exec", route = Routes.agent(DEVBOX, SITE_AGENT), setup = {
+        host(DEVBOX).transcripts = host(DEVBOX).transcripts + (Demo.SITE_SESSION to Demo.siteTranscriptExec())
+    }, actions = { tapText("Worked for"); tapExact("Run") }),
     Scene("chat-edit-long", route = Routes.agent(DEVBOX, APP_AGENT), setup = {
         host(DEVBOX).transcripts = host(DEVBOX).transcripts + (Demo.APP_SESSION to Demo.appTranscriptWrite())
     }, actions = { tapExact("Write") }),

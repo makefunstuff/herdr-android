@@ -55,6 +55,7 @@ import com.makefunstuff.herdr.core.chat.ToolState
 import com.makefunstuff.herdr.core.chat.Away
 import com.makefunstuff.herdr.core.chat.ChatTurn
 import com.makefunstuff.herdr.core.chat.ChatTurns
+import com.makefunstuff.herdr.core.chat.EditCalls
 import com.makefunstuff.herdr.core.chat.ToolLine
 import com.makefunstuff.herdr.ui.code.AddedRemoved
 import androidx.compose.ui.draw.shadow
@@ -402,6 +403,8 @@ private fun ToolRow(tool: ChatItem.Tool, line: ToolLine?) {
     // The object worth reading: a path from the repo (`core/…/host/HostState.kt`), or the call's own words.
     val text = line?.text ?: tool.summary.lineSequence().firstOrNull().orEmpty()
     val diffs = line?.diffs ?: tool.diffs
+    // An edit's diff is all it did; a command or a script that applies a patch keeps its words and output too.
+    val onlyDiff = diffs.isNotEmpty() && EditCalls.isEdit(tool.name)
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(Radius.m)).clickable { open = !open }.padding(horizontal = Space.xs, vertical = 6.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             ToolStateIcon(tool.state)
@@ -415,10 +418,10 @@ private fun ToolRow(tool: ChatItem.Tool, line: ToolLine?) {
             Spacer(Modifier.width(Space.s))
             Text(
                 // Opened, the call's own words; an edit's diff names its files whole.
-                if (open && diffs.isEmpty()) tool.summary.lineSequence().firstOrNull().orEmpty() else text,
+                if (open && !onlyDiff) tool.summary.lineSequence().firstOrNull().orEmpty() else text,
                 style = if (line?.isPath == true || looksLikeCode(text)) CodeStyle.copy(fontSize = 12.sp, lineHeight = 18.sp) else MaterialTheme.typography.bodySmall,
                 color = Herdr.colors.text,
-                maxLines = if (open && diffs.isEmpty()) 4 else 1,
+                maxLines = if (open && !onlyDiff) 4 else 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f, fill = false),
             )
@@ -431,7 +434,7 @@ private fun ToolRow(tool: ChatItem.Tool, line: ToolLine?) {
         }
         if (open) {
             // An edit as its diff; only a call in a shape the app doesn't know shows its raw arguments.
-            val input = tool.input?.takeIf { it.trim() != tool.summary.trim() && diffs.isEmpty() }
+            val input = tool.input?.takeIf { it.trim() != tool.summary.trim() && !onlyDiff }
             if (input != null) {
                 Spacer(Modifier.size(6.dp))
                 SelectionContainer { CodeBlock(input, maxLines = 30) }
@@ -441,7 +444,7 @@ private fun ToolRow(tool: ChatItem.Tool, line: ToolLine?) {
                 EditDiff(f, "${tool.id}/$i")
             }
             // An edit's result only says it was made; a failed one says why.
-            if (diffs.isEmpty() || tool.state == ToolState.Failed) {
+            if (!onlyDiff || tool.state == ToolState.Failed) {
                 Spacer(Modifier.size(6.dp))
                 SelectionContainer {
                     CodeBlock(tool.output ?: if (tool.state == ToolState.Running) "Running…" else "(no output)", maxLines = 40)

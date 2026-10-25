@@ -30,16 +30,29 @@ object EditCalls {
     private val NEW = listOf("new_string", "newText", "new_str", "new_text")
     private val WHOLE = listOf("content", "file_text", "new_source")
 
-    /** The files tool [name] changes with [input], as diffs; null when it isn't an edit in a shape the app knows. */
+    /**
+     * The files tool [name] changes with [input], as diffs; null when it isn't an edit in a shape the
+     * app knows. Another tool's patch counts only when it applies it (a command or a script that runs
+     * `apply_patch`): a command that only writes one somewhere edits nothing.
+     */
     fun of(name: String, input: JsonObject): List<FileDiff>? =
         fields(name, input) ?: input.values.firstNotNullOfOrNull { v ->
             // A patch as an argument (`{"input": "*** Begin Patch…"}`), or in a command (`["apply_patch", "*** Begin Patch…"]`).
             val texts = (v as? JsonArray)?.mapNotNull { it.str() } ?: listOfNotNull(v.str())
-            texts.firstOrNull { BEGIN in it }?.let(::patch)
+            if (isEdit(name)) texts.firstOrNull { BEGIN in it }?.let(::patch) else applied(texts.joinToString("\n"))
         }
 
+    /**
+     * Whether tool [name] is an edit and nothing else, so its diff says all it did. A command or a
+     * script that applies a patch may do more: its own words and output still show with the diff.
+     */
+    fun isEdit(name: String): Boolean = Tools.kind(name) == StepKind.Edit
+
+    /** The patch a command or a script [text] applies (`apply_patch <<'PATCH'`, `tools.apply_patch("…")`); null when it applies none. */
+    fun applied(text: String): List<FileDiff>? = if ("apply_patch" in text) patch(text) else null
+
     private fun fields(name: String, input: JsonObject): List<FileDiff>? {
-        if (Tools.kind(name) != StepKind.Edit) return null
+        if (!isEdit(name)) return null
         val path = PATH.firstNotNullOfOrNull { input.str(it)?.takeIf { p -> p.isNotBlank() } } ?: return null
         // A virtual path (omp's `xd://propose` hands in a plan) is no file.
         if ("://" in path && !path.startsWith("file://")) return null
