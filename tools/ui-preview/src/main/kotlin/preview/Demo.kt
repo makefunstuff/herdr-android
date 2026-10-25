@@ -324,6 +324,55 @@ object Demo {
     fun appTranscriptThinking(): String = resource("claude-app.jsonl").trimEnd() + "\n" + appMore(1) +
         thinking(92, "2026-10-17T07:41:50.000Z", "`HostState` has `updatedAt` now. Next the card: it should read the time and say it the way the rest of the app does.\n\nThere's `ago()` in `ui/common/Time.kt`, which says \"2 min ago\". I'll use that rather than a new formatter, and only show it when the snapshot has a time.") + "\n"
 
+    /** devbox's app agent writing a whole new file once its edit came back: a long edit, folded in the chat. */
+    fun appTranscriptWrite(): String {
+        val file = """
+            |package com.makefunstuff.herdr.core.host
+            |
+            |/**
+            | * When a machine last answered, as its card says it: "just now", "2 min ago", "3 h ago".
+            | * Counted from when its snapshot arrived on the phone, not from the machine's own clock.
+            | */
+            |object LastAnswered {
+            |    private const val MINUTE = 60_000L
+            |    private const val HOUR = 60 * MINUTE
+            |
+            |    fun of(updatedAt: Long?, now: Long): String? {
+            |        val at = updatedAt ?: return null
+            |        val ago = (now - at).coerceAtLeast(0)
+            |        return when {
+            |            ago < MINUTE -> "just now"
+            |            ago < HOUR -> "${'$'}{ago / MINUTE} min ago"
+            |            else -> "${'$'}{ago / HOUR} h ago"
+            |        }
+            |    }
+            |
+            |    /** An hour without an answer: the card turns amber. */
+            |    fun stale(updatedAt: Long?, now: Long): Boolean =
+            |        updatedAt != null && now - updatedAt > HOUR
+            |}
+            |""".trimMargin()
+        val input = kotlinx.serialization.json.buildJsonObject {
+            put("file_path", kotlinx.serialization.json.JsonPrimitive("/home/demo/src/herdr-android/core/src/main/kotlin/com/makefunstuff/herdr/core/host/LastAnswered.kt"))
+            put("content", kotlinx.serialization.json.JsonPrimitive(file))
+        }
+        return resource("claude-app.jsonl").trimEnd() + "\n" + appMore(1) +
+            """{"type": "assistant", "uuid": "00000000-0000-4000-8000-000000000050", "timestamp": "2026-10-17T07:40:20.000Z", "cwd": "/home/demo/src/herdr-android", """ +
+            """"message": {"role": "assistant", "content": [{"type": "tool_use", "id": "toolu_00000050", "name": "Write", "input": $input}]}}""" + "\n"
+    }
+
+    /**
+     * devbox's website agent in an older Codex, whose rollout keeps raw calls: one `exec` script that
+     * applies a patch and then checks the links, as Codex's code mode writes it.
+     */
+    fun siteTranscriptExec(): String = """
+        |{"timestamp": "2026-10-16T09:20:00.000Z", "type": "turn_context", "payload": {"cwd": "/home/demo/src/website", "model": "gpt-5.5", "effort": "medium"}}
+        |{"timestamp": "2026-10-16T09:20:00.000Z", "type": "event_msg", "payload": {"type": "user_message", "message": "Say where to unpack it in Manual install, then check the links again."}}
+        |{"timestamp": "2026-10-16T09:20:09.000Z", "type": "response_item", "payload": {"type": "custom_tool_call", "status": "completed", "call_id": "call_exec", "name": "exec", "input": "text(await tools.apply_patch(\"*** Begin Patch\\n*** Update File: /home/demo/src/website/content/docs/install.md\\n@@ ## Manual install\\n-Unpack the archive anywhere on your PATH.\\n+Unpack the archive into `~/.local/bin`, which is on your PATH.\\n*** End Patch\"));\ntext(await tools.exec_command({cmd:\"npm run check-links\"}));\n"}}
+        |{"timestamp": "2026-10-16T09:20:14.000Z", "type": "response_item", "payload": {"type": "custom_tool_call_output", "call_id": "call_exec", "output": "{\"output\": \"Success. Updated the following files:\\nM content/docs/install.md\\n\\n> check-links\\nChecked 38 links, 0 broken\\n\", \"metadata\": {\"exit_code\": 0, \"duration_seconds\": 4.2}}"}}
+        |{"timestamp": "2026-10-16T09:20:20.000Z", "type": "event_msg", "payload": {"type": "agent_message", "message": "Manual install now says to unpack into `~/.local/bin`. All 38 links still resolve."}}
+        |""".trimMargin()
+
     /** Then a third ask, typed at the desk, and the agent starting on it: two new messages for a chat scrolled up. */
     val APP_NEXT = """
         |{"type": "user", "uuid": "00000000-0000-4000-8000-000000000040", "timestamp": "2026-10-17T07:41:56.000Z", "cwd": "/home/demo/src/herdr-android", "message": {"role": "user", "content": "Make it amber when a machine hasn't answered for an hour."}}
@@ -408,7 +457,7 @@ object Demo {
 
     const val APP_SESSION = "3f6c2a1e-8b7d-4c2a-9e51-0a1b2c3d4e5f"
     private const val API_SESSION = "9d2e4b7a-1c3f-4e6a-8b90-5f4e3d2c1b0a"
-    private const val SITE_SESSION = "0199a3b2-7c41-7e10-9a2b-3c4d5e6f7a8b"
+    const val SITE_SESSION = "0199a3b2-7c41-7e10-9a2b-3c4d5e6f7a8b"
     private const val EVAL_SESSION = "0199a3c4-1d2e-7f30-8a4b-5c6d7e8f9a0b"
 
     /**

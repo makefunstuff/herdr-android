@@ -5,6 +5,7 @@ import com.makefunstuff.herdr.core.activity.StepKind
 import com.makefunstuff.herdr.core.activity.StepState
 import com.makefunstuff.herdr.core.activity.Tools
 import com.makefunstuff.herdr.core.activity.Turn
+import com.makefunstuff.herdr.core.code.FileDiff
 
 /**
  * One turn of the chat as the herdr web UI's work block shows it: what you said, everything the
@@ -49,8 +50,17 @@ data class WorkCounts(val edits: Int = 0, val reads: Int = 0, val commands: Int 
     private fun count(n: Int, one: String, many: String) = if (n <= 0) null else "$n ${if (n == 1) one else many}"
 }
 
-/** A tool call's row: the object worth reading (paths short, from the repo) and what an edit changed. */
-data class ToolLine(val text: String, val isPath: Boolean, val added: Int? = null, val removed: Int? = null)
+/**
+ * A tool call's row: the object worth reading (paths short, from the repo) and what an edit changed,
+ * its `+12 −2` and its [diffs] to show opened.
+ */
+data class ToolLine(
+    val text: String,
+    val isPath: Boolean,
+    val added: Int? = null,
+    val removed: Int? = null,
+    val diffs: List<FileDiff> = emptyList(),
+)
 
 object ChatTurns {
     /**
@@ -122,28 +132,39 @@ object ChatTurns {
     fun line(tool: ChatItem.Tool, all: Steps): ToolLine {
         val steps = all.of(tool.id)
         val paths = steps.filter { it.kind == StepKind.Read || it.kind == StepKind.Edit }.mapNotNull { it.path }.distinct()
-        val diffs = steps.mapNotNull { it.diff }
-        val added = diffs.takeIf { it.isNotEmpty() }?.sumOf { it.added }
-        val removed = diffs.takeIf { it.isNotEmpty() }?.sumOf { it.removed }
+        // The result's diff, with its line numbers, before the one read from the call; a failed call changed nothing.
+        val diffs = steps.mapNotNull { it.diff }.ifEmpty { tool.diffs.map { relative(it, paths) } }
+        val counted = diffs.takeIf { it.isNotEmpty() && tool.state != ToolState.Failed && steps.none { it.failed } }
+        val added = counted?.sumOf { it.added }
+        val removed = counted?.sumOf { it.removed }
         val first = tool.summary.lineSequence().firstOrNull().orEmpty().trim()
         return when {
             paths.isNotEmpty() && (first.isEmpty() || looksLikePath(first) || paths.any { first.endsWith(it) }) ->
-                ToolLine(paths.joinToString(", ") { shortPath(it) }, true, added, removed)
-            looksLikePath(first) -> ToolLine(shortPath(first), true, added, removed)
-            else -> ToolLine(first, false, added, removed)
+                ToolLine(paths.joinToString(", ") { shortPath(it) }, true, added, removed, diffs)
+            looksLikePath(first) -> ToolLine(shortPath(first), true, added, removed, diffs)
+            else -> ToolLine(first, false, added, removed, diffs)
         }
+    }
+
+    /** [diff] with its paths as the steps name them (from the repo) when they are the same files. */
+    private fun relative(diff: FileDiff, paths: List<String>): FileDiff {
+        fun of(path: String?) = path?.let { p -> paths.firstOrNull { p == it || p.endsWith("/$it") } ?: p }
+        return diff.copy(oldPath = of(diff.oldPath), newPath = of(diff.newPath))
     }
 
     private fun looksLikePath(text: String) = ' ' !in text && '/' in text && (text.startsWith("/") || text.startsWith("~") || text.startsWith("./") || '.' in text.substringAfterLast('/'))
 
     private val HOME = Regex("""^/(?:home|Users)/[^/]+(?=/|$)|^/root(?=/|$)""")
 
+    /** [path] whole, with home as `~`. */
+    fun homePath(path: String): String = path.removePrefix("file://").replace(HOME, "~")
+
     /**
      * A path a phone can show: from the repo when it is in it (the reader gives those already), home
      * as `~`, and a deep one as its first folder and its last two parts: `core/…/host/HostState.kt`.
      */
     fun shortPath(path: String): String {
-        val p = path.removePrefix("file://").replace(HOME, "~").removePrefix("./")
+        val p = homePath(path).removePrefix("./")
         val parts = p.split('/')
         if (parts.size <= 4) return p
         return parts.first() + "/…/" + parts.takeLast(2).joinToString("/")

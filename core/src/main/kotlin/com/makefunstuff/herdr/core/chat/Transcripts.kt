@@ -1,6 +1,7 @@
 package com.makefunstuff.herdr.core.chat
 
 import com.makefunstuff.herdr.core.activity.ActivityLog
+import com.makefunstuff.herdr.core.activity.Diffs
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -222,7 +223,7 @@ class ClaudeTranscript : Transcript() {
                     val id = block.str("id") ?: return@forEachIndexed
                     val name = block.str("name").orEmpty()
                     val input = block.obj("input") ?: JsonObject(emptyMap())
-                    put(ChatItem.Tool(id, name, ToolSummary.of(name, input), ToolSummary.detail(input)))
+                    put(ChatItem.Tool(id, name, ToolSummary.of(name, input), ToolSummary.detail(input), diffs = EditCalls.of(name, input).orEmpty()))
                 }
             }
         }
@@ -310,7 +311,8 @@ class CodexTranscript : Transcript() {
                     val kind = (change as? JsonObject)?.str("type")
                     (when (kind) { "add" -> "+ "; "delete" -> "− "; else -> "" }) + path
                 } ?: item.str("stdout")?.lines()?.drop(1)?.joinToString(", ") { it.trim() }.orEmpty()
-                put(ChatItem.Tool(id, "edit", summary, null, item.str("stdout")?.ifBlank { null }, state))
+                val diffs = changes?.entries?.mapNotNull { (path, change) -> (change as? JsonObject)?.let { Diffs.codexChange(path, it) } }.orEmpty()
+                put(ChatItem.Tool(id, "edit", summary, null, item.str("stdout")?.ifBlank { null }, state, diffs))
             }
             "McpToolCall" -> {
                 val args = item.obj("arguments") ?: JsonObject(emptyMap())
@@ -344,12 +346,17 @@ class CodexTranscript : Transcript() {
                 val name = payload.str("name").orEmpty()
                 val raw = payload.str("arguments") ?: payload.str("input").orEmpty()
                 val args = runCatching { TranscriptJson.parseToJsonElement(raw) as? JsonObject }.getOrNull()
+                // The patch as the call's text (`apply_patch`), or in a script that applies it (`exec`).
+                val edit = EditCalls.isEdit(name)
+                val diffs = (args?.let { EditCalls.of(name, it) } ?: if (edit) EditCalls.patch(raw) else EditCalls.applied(raw)).orEmpty()
                 val summary = when {
+                    // A script that applies a patch may do more: its own first line.
+                    args == null && edit && diffs.isNotEmpty() -> diffs.joinToString(", ") { it.path }
                     args == null -> raw.lineSequence().firstOrNull { it.isNotBlank() }.orEmpty()
                     args["command"] != null || args["cmd"] != null -> commandLine(args["command"] ?: args["cmd"])
                     else -> ToolSummary.of(name, args)
                 }
-                put(ChatItem.Tool(callId, name, summary, raw.takeIf { it.length > summary.length }?.let(Transcript::clip)))
+                put(ChatItem.Tool(callId, name, summary, raw.takeIf { it.length > summary.length }?.let(Transcript::clip), diffs = diffs))
             }
             "function_call_output", "custom_tool_call_output" -> {
                 val callId = payload.str("call_id") ?: return
@@ -416,7 +423,7 @@ class PiTranscript : Transcript() {
                             val callId = block.str("id") ?: return@forEachIndexed
                             val name = block.str("name").orEmpty()
                             val args = block.obj("arguments") ?: JsonObject(emptyMap())
-                            put(ChatItem.Tool(callId, name, ToolSummary.of(name, args), ToolSummary.detail(args)))
+                            put(ChatItem.Tool(callId, name, ToolSummary.of(name, args), ToolSummary.detail(args), diffs = EditCalls.of(name, args).orEmpty()))
                         }
                     }
                 }

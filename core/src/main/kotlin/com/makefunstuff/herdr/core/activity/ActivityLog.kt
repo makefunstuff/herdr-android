@@ -310,7 +310,7 @@ class ClaudeActivity(prefix: String = "") : ActivityLog(prefix) {
         val new = input?.str("new_string")
         if (old != null || new != null) return Diffs.replaced(path, old.orEmpty(), new.orEmpty())
         val edits = input?.arr("edits")?.filterIsInstance<JsonObject>().orEmpty()
-        if (edits.isNotEmpty()) return Diffs.replaced(path, edits.joinToString("\n") { it.str("old_string").orEmpty() }, edits.joinToString("\n") { it.str("new_string").orEmpty() })
+        if (edits.isNotEmpty()) return Diffs.replaced(path, edits.map { it.str("old_string").orEmpty() to it.str("new_string").orEmpty() })
         return null
     }
 }
@@ -400,11 +400,7 @@ class CodexActivity(prefix: String = "") : ActivityLog(prefix) {
                 for ((file, change) in changes) {
                     val c = change as? JsonObject ?: continue
                     val path = short(file)
-                    val diff = when (c.str("type")) {
-                        "add" -> c.str("content")?.let { Diffs.added(path, it) } ?: c.str("unified_diff")?.let { Diffs.unified(path, it, FileChange.Added) }
-                        "delete" -> c.str("unified_diff")?.let { Diffs.unified(path, it, FileChange.Deleted) }
-                        else -> c.str("unified_diff")?.let { Diffs.unified(path, it) }
-                    }
+                    val diff = Diffs.codexChange(path, c)
                     val word = when (c.str("type")) { "add" -> "Added "; "delete" -> "Deleted "; else -> "" }
                     step(Step("$id/$file", StepKind.Edit, word + path, start, end, state, path = path, diff = diff, tool = "apply_patch", note = diff?.let { "+${it.added} −${it.removed}" }))
                 }

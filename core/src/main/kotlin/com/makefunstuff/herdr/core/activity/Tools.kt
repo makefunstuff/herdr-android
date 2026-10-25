@@ -5,6 +5,8 @@ import com.makefunstuff.herdr.core.code.FileChange
 import com.makefunstuff.herdr.core.code.FileDiff
 import com.makefunstuff.herdr.core.code.Hunk
 import com.makefunstuff.herdr.core.code.UnifiedDiff
+import com.makefunstuff.herdr.core.chat.str
+import kotlinx.serialization.json.JsonObject
 
 /** Which kind of step a harness's tool is, by its name (and, for a shell, by what it runs). */
 object Tools {
@@ -12,7 +14,7 @@ object Tools {
     private val SEARCH = setOf("grep", "glob", "ls", "find", "search", "list", "list_files", "listfiles", "rg", "file_search", "codebase_search")
     private val EDIT = setOf(
         "edit", "multiedit", "write", "notebookedit", "apply_patch", "applypatch", "str_replace", "str_replace_editor", "create", "write_file", "edit_file",
-        "patch", "replace",
+        "patch", "replace", "str_replace_based_edit_tool",
     )
     private val WEB = setOf("webfetch", "websearch", "web_search", "web_fetch", "fetch", "browser", "web", "search_web", "web search")
     private val PLAN = setOf("todowrite", "todo", "update_plan", "exitplanmode", "enterplanmode", "plan", "todo_write")
@@ -115,14 +117,47 @@ object Diffs {
         return FileDiff(null, path, FileChange.Added, false, listOf(Hunk("@@ -0,0 +1,${lines.size} @@", 0, 1, shown + note)))
     }
 
+    /** A deleted file: every line of what it held removed. */
+    fun deleted(path: String, content: String): FileDiff {
+        val lines = if (content.isEmpty()) emptyList() else content.removeSuffix("\n").split('\n')
+        val shown = lines.take(MAX_LINES).mapIndexed { i, l -> DiffLine(DiffLine.Kind.Removed, i + 1, null, l) }
+        val note = if (lines.size > MAX_LINES) listOf(DiffLine(DiffLine.Kind.Note, null, null, "${lines.size - MAX_LINES} more lines")) else emptyList()
+        val hunks = if (lines.isEmpty()) emptyList() else listOf(Hunk("@@ -1,${lines.size} +0,0 @@", 1, 0, shown + note))
+        return FileDiff(path, null, FileChange.Deleted, false, hunks)
+    }
+
     /** A replacement without line numbers (an edit's old and new text). */
-    fun replaced(path: String, old: String, new: String): FileDiff? {
-        if (old.isEmpty() && new.isEmpty()) return null
-        val removed = if (old.isEmpty()) emptyList() else old.removeSuffix("\n").split('\n')
-        val addedLines = if (new.isEmpty()) emptyList() else new.removeSuffix("\n").split('\n')
-        val rows = removed.take(MAX_LINES / 2).map { DiffLine(DiffLine.Kind.Removed, null, null, it) } +
-            addedLines.take(MAX_LINES / 2).map { DiffLine(DiffLine.Kind.Added, null, null, it) }
-        return FileDiff(path, path, FileChange.Modified, false, listOf(Hunk("@@ @@", 0, 0, rows)))
+    fun replaced(path: String, old: String, new: String): FileDiff? = replaced(path, listOf(old to new))
+
+    /** Replacements without line numbers (a multi-edit's old and new texts), a hunk each. */
+    fun replaced(path: String, edits: List<Pair<String, String>>): FileDiff? {
+        var budget = MAX_LINES
+        val hunks = edits.filter { (old, new) -> old.isNotEmpty() || new.isNotEmpty() }.mapNotNull { (old, new) ->
+            if (budget <= 0) return@mapNotNull null
+            val removed = if (old.isEmpty()) emptyList() else old.removeSuffix("\n").split('\n')
+            val addedLines = if (new.isEmpty()) emptyList() else new.removeSuffix("\n").split('\n')
+            val half = maxOf(budget / 2, 1)
+            fun more(lines: List<String>, what: String) =
+                if (lines.size > half) listOf(DiffLine(DiffLine.Kind.Note, null, null, "${lines.size - half} more $what lines")) else emptyList()
+            val rows = removed.take(half).map { DiffLine(DiffLine.Kind.Removed, null, null, it) } + more(removed, "removed") +
+                addedLines.take(half).map { DiffLine(DiffLine.Kind.Added, null, null, it) } + more(addedLines, "added")
+            budget -= rows.size
+            Hunk("@@ @@", 0, 0, rows)
+        }
+        return if (hunks.isEmpty()) null else FileDiff(path, path, FileChange.Modified, false, hunks)
+    }
+
+    /**
+     * One file of Codex's `FileChange` item: `{type: add|delete|update, content | unified_diff, move_path}`.
+     * An update whose diff came back empty has nothing to show.
+     */
+    fun codexChange(path: String, change: JsonObject): FileDiff? = when (change.str("type")) {
+        "add" -> change.str("content")?.let { added(path, it) } ?: change.str("unified_diff")?.let { unified(path, it, FileChange.Added) }
+        "delete" -> change.str("content")?.let { deleted(path, it) } ?: change.str("unified_diff")?.let { unified(path, it, FileChange.Deleted) }
+        else -> change.str("unified_diff")?.takeIf { it.isNotBlank() }?.let { unified(path, it) }?.let { f ->
+            val moved = change.str("move_path")
+            if (moved.isNullOrEmpty()) f else f.copy(newPath = moved, change = FileChange.Renamed)
+        }
     }
 
     /** Hunks in the unified format without a file header (codex's `unified_diff`), or a whole `git diff`. */
