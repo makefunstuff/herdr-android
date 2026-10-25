@@ -274,13 +274,16 @@ class MachineTest {
         // an installed herdr or touching any session on the test machine.
         if (!File("/proc/self/exe").exists() || !File("/bin/bash").canExecute()) return
         val dir = kotlin.io.path.createTempDirectory("herdr-named-server").toFile()
+        // A copy of bash, not of sleep: where sleep is one multi-call coreutils binary (Ubuntu 26.04's
+        // Rust coreutils), a copy run under another name exits at once ("unknown program 'herdr'").
+        // `; :` keeps bash from handing its process over to sleep, so the process stays this binary.
         val binary = File(dir, "custom/herdr").apply {
             parentFile.mkdirs()
-            File("/bin/sleep").copyTo(this)
+            File("/bin/bash").copyTo(this)
             setExecutable(true)
         }
         val process = ProcessBuilder(
-            "/bin/bash", "-c", "exec -a \"\$1 --session named-review server\" \"\$1\" 30", "sh", binary.path,
+            "/bin/bash", "-c", "exec -a \"\$1 --session named-review server\" \"\$1\" -c 'sleep 30; :'", "sh", binary.path,
         ).start()
         try {
             val machine = Machine("id", "box", "h", user = "u", session = "named-review")
