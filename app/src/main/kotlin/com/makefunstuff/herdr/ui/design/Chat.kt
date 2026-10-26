@@ -17,6 +17,7 @@ import androidx.compose.foundation.text.selection.LocalTextSelectionColors
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -48,6 +49,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
 import com.makefunstuff.herdr.ui.theme.Pretendard
 import com.makefunstuff.herdr.core.chat.Completions
+import com.makefunstuff.herdr.core.chat.Dictation
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -120,6 +122,11 @@ val ReplyBubbleShape = RoundedCornerShape(12.dp)
  * [completion] draws what the word at the cursor completes to, over all of that: a `/command` at
  * the start of the message or an `@path` ([Completions.at]); what it accepts replaces the word,
  * with a space after it, and the cursor goes there.
+ *
+ * [voice] puts the mic beside Send ([ComposerMic]): while it hears, the box gives way to the words
+ * as they come ([HeardText]) and the left of the controls to the time and how to cancel
+ * ([RecordingInfo]); Send waits. The words then go into the draft, with [VoiceTake] over them until
+ * sent. A refused microphone, or a recognizer that failed, says so over the card ([MicNotice]).
  */
 @Composable
 fun ChatComposer(
@@ -143,6 +150,7 @@ fun ChatComposer(
     attached: Boolean = false,
     focusRequester: FocusRequester? = null,
     completion: (@Composable (query: Completions.Query, accept: (String) -> Unit) -> Unit)? = null,
+    voice: ComposerVoice? = null,
 ) {
     val c = Herdr.colors
     val view = LocalView.current
@@ -151,8 +159,10 @@ fun ChatComposer(
     val ownFocus = remember { FocusRequester() }
     val focusRequester = focusRequester ?: ownFocus
     val keyboard = LocalSoftwareKeyboardController.current
-    val canSend = enabled && !sending && !holdSend && (draft.isNotBlank() || attached)
-    val showStop = stop != null && draft.isBlank() && !attached && !sending
+    val voiceState = voice?.let { it.dictation.state.collectAsState().value } ?: Dictation.State.Idle
+    val hearing = voiceState.hearing
+    val canSend = enabled && !sending && !holdSend && !hearing && (draft.isNotBlank() || attached)
+    val showStop = stop != null && draft.isBlank() && !attached && !sending && !hearing
     val card = RoundedCornerShape(Radius.xxl)
     val fade = Space.xxl
 
@@ -210,19 +220,29 @@ fun ChatComposer(
             if (above != null) {
                 Box(Modifier.padding(bottom = Space.s).then(if (room != Dp.Infinity) Modifier.heightIn(max = room * 0.6f) else Modifier)) { above() }
             }
+            if (voice != null && (voiceState is Dictation.State.NoMic || voiceState is Dictation.State.Failed)) {
+                Box(Modifier.padding(bottom = Space.s)) { MicNotice(voice.dictation, voiceState) }
+            }
             Column(
                 Modifier.fillMaxWidth()
                     .shadow(6.dp, card, ambientColor = c.shadow, spotColor = c.shadow)
                     .clip(card).background(c.card).border(1.dp, if (focused && enabled) c.accent else c.line, card)
                     // A tap anywhere on the card that is not a control puts the cursor in the box.
-                    .pointerInput(enabled) {
+                    .pointerInput(enabled, hearing) {
                         detectTapGestures {
-                            if (enabled) { focusRequester.requestFocus(); keyboard?.show() }
+                            if (enabled && !hearing) { focusRequester.requestFocus(); keyboard?.show() }
                         }
                     },
             ) {
                 attachments?.invoke()
-                CompositionLocalProvider(LocalTextSelectionColors provides TextSelectionColors(c.accent, c.accent.copy(alpha = 0.32f))) {
+                val take = voice?.take
+                if (take != null && !hearing) VoiceTake(take, voice.onDropTake)
+                when (voiceState) {
+                    is Dictation.State.Recording -> HeardText(voiceState.text)
+                    is Dictation.State.Finishing -> HeardText(voiceState.text)
+                    else -> {}
+                }
+                if (!hearing) CompositionLocalProvider(LocalTextSelectionColors provides TextSelectionColors(c.accent, c.accent.copy(alpha = 0.32f))) {
                     BasicTextField(
                         value = value,
                         onValueChange = { field = it; if (it.text != draft) onDraft(it.text) },
@@ -265,9 +285,12 @@ fun ChatComposer(
                     Modifier.fillMaxWidth().padding(start = Space.xs, end = Space.xxs, bottom = Space.xxs),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    leading?.invoke(this)
-                    Spacer(Modifier.weight(1f))
-                    if (status != null) {
+                    if (voice != null && hearing) RecordingInfo(voice.dictation, voiceState)
+                    else {
+                        leading?.invoke(this)
+                        Spacer(Modifier.weight(1f))
+                    }
+                    if (status != null && !hearing) {
                         Text(
                             status,
                             style = MaterialTheme.typography.labelMedium,
@@ -278,6 +301,8 @@ fun ChatComposer(
                         )
                     }
                     trailing?.invoke(this)
+                    // Always in this place, so a finger holding it through every state keeps it.
+                    if (voice != null) ComposerMic(voice.dictation, voiceState, enabled = enabled)
                     when {
                         showStop -> ComposerAction(ComposerActionKind.Stop, "Stop", enabled = enabled, onClick = { stop?.invoke() })
                         sending -> ComposerAction(ComposerActionKind.Sending, "Sending…", enabled = false, onClick = {})

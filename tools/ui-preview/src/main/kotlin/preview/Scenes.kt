@@ -267,6 +267,22 @@ fun scenes(): List<Scene> = listOf(
     Scene("chat-files", route = Routes.agent(DEVBOX, APP_AGENT), actions = { type("Look at @mach") }),
     Scene("chat-model", route = Routes.agent(DEVBOX, APP_AGENT), actions = { tapLabel("Model Opus 5.5, context 62% full") }),
     Scene("quick-replies", route = Routes.COMPOSER, setup = { replies() }),
+    // Voice messages: the mic held while you speak (the words as they come, the time, slide to cancel), slid away
+    // far enough that letting go cancels, tapped to go on hands-free; then the words in the box to check before
+    // Send; the microphone refused, and why it is needed; and a message sent by voice, with its mic in the chat.
+    Scene("chat-voice-recording", route = Routes.agent(DEVBOX, APP_AGENT), actions = { hold("Record a voice message", 0.5f to 0.5f) }),
+    Scene("chat-voice-cancel", route = Routes.agent(DEVBOX, APP_AGENT), actions = { hold("Record a voice message", 0.5f to 0.5f, -2.5f to 0.6f) }),
+    Scene("chat-voice-tap", route = Routes.agent(DEVBOX, APP_AGENT), actions = { tapLabel("Record a voice message") }),
+    Scene("chat-voice-review", route = Routes.agent(DEVBOX, APP_AGENT), actions = {
+        tapLabel("Record a voice message")
+        tapLabel("Finish voice message")
+    }),
+    Scene("chat-voice-denied", route = Routes.agent(DEVBOX, APP_AGENT), setup = {
+        mic = PreviewMic.Setup(allowed = false, answer = false)
+    }, actions = { tapLabel("Record a voice message") }),
+    Scene("chat-voice-sent", route = Routes.agent(DEVBOX, APP_AGENT), setup = {
+        voiceSent = mapOf(com.makefunstuff.herdr.data.DraftStore.agent(DEVBOX, APP_AGENT) to listOf(Demo.voiceSent()))
+    }),
     // The chats' own text size (Settings → Text size), larger than the phone's.
     Scene("chat-large-text", route = Routes.agent(DEVBOX, APP_AGENT), setup = { textSizes = com.makefunstuff.herdr.data.TextSizeStore.Sizes(chat = 1.3f) }),
 

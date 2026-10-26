@@ -142,6 +142,8 @@ class AppContainer(app: Application) {
     val seen = com.makefunstuff.herdr.data.SeenStore(java.io.File(app.filesDir, "seen.json"))
     /** When each agent's chat was last on screen, for its "While you were away" card. */
     val looked = com.makefunstuff.herdr.data.LookedStore(java.io.File(app.filesDir, "looked.json"))
+    /** The messages sent as voice messages, which the chats show with a mic. */
+    val voice = com.makefunstuff.herdr.data.VoiceStore(java.io.File(app.filesDir, "voice.json"))
     /** The messages held while an agent worked, and the quick replies over its composer. */
     val composer = com.makefunstuff.herdr.data.ComposerStore(java.io.File(app.filesDir, "composer.json"))
     /** The chats' and the terminal's text sizes (the terminal's from before taken from its old setting). */

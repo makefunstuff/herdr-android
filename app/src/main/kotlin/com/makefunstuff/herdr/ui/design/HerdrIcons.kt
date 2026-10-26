@@ -118,6 +118,8 @@ object HerdrIcons {
     val MessageSquare: ImageVector by lazy { lucide("MessageSquare", "M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z") }
     val MessageSquarePlus: ImageVector by lazy { lucide("MessageSquarePlus", "M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z", "M12 8v6", "M9 11h6") }
     val MessagesSquare: ImageVector by lazy { lucide("MessagesSquare", "M16 10a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 14.286V4a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z", "M20 9a2 2 0 0 1 2 2v10.286a.71.71 0 0 1-1.212.502l-2.202-2.202A2 2 0 0 0 17.172 19H10a2 2 0 0 1-2-2v-1") }
+    val Mic: ImageVector by lazy { lucide("Mic", "M12 19v3", "M19 10v2a7 7 0 0 1-14 0v-2", "M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1 -6 0v-7a3 3 0 0 1 3 -3Z") }
+    val MicOff: ImageVector by lazy { lucide("MicOff", "M12 19v3", "M15 9.34V5a3 3 0 0 0-5.68-1.33", "M16.95 16.95A7 7 0 0 1 5 12v-2", "M18.89 13.23A7.12 7.12 0 0 0 19 12v-2", "m2 2 20 20", "M9 9v3a3 3 0 0 0 5.12 2.12") }
     val Minimize2: ImageVector by lazy { lucide("Minimize2", "m14 10 7-7", "M20 10h-6V4", "m3 21 7-7", "M4 14h6v6") }
     val Minus: ImageVector by lazy { lucide("Minus", "M5 12h14") }
     val Monitor: ImageVector by lazy { lucide("Monitor", "M4 3h16a2 2 0 0 1 2 2v10a2 2 0 0 1 -2 2h-16a2 2 0 0 1 -2 -2v-10a2 2 0 0 1 2 -2Z", "M8 21L16 21", "M12 17L12 21") }
@@ -281,6 +283,8 @@ object HerdrIcons {
             "messagesquare" to { MessageSquare },
             "messagesquareplus" to { MessageSquarePlus },
             "messagessquare" to { MessagesSquare },
+            "mic" to { Mic },
+            "micoff" to { MicOff },
             "minimize2" to { Minimize2 },
             "monitor" to { Monitor },
             "moon" to { Moon },

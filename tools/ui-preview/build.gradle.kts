@@ -47,6 +47,7 @@ val androidOnly = listOf(
     "com/makefunstuff/herdr/ui/terminal/TerminalView.kt",
     "com/makefunstuff/herdr/ui/common/Attach.kt",
     "com/makefunstuff/herdr/ui/common/CodeScanner.kt",
+    "com/makefunstuff/herdr/ui/common/Mic.kt",
     "com/makefunstuff/herdr/ui/images/ImageCodec.kt",
     "com/makefunstuff/herdr/ui/preview/PageView.kt",
     "com/makefunstuff/herdr/core/ssh/SshConnector.kt",
