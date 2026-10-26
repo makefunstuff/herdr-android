@@ -128,6 +128,10 @@ class SceneData {
     var keyBar: com.makefunstuff.herdr.data.KeyBarStore.Saved? = null
     /** The terminal's selection once "Select text" starts one, in viewport cells (anchor, cursor): what a drag would select. */
     var selection: Pair<com.makefunstuff.herdr.ui.terminal.CellPoint, com.makefunstuff.herdr.ui.terminal.CellPoint>? = null
+    /** The phone's microphone and what its speech recognition hears, for voice messages (PreviewMic). */
+    var mic: PreviewMic.Setup = PreviewMic.Setup()
+    /** The messages sent as voice messages (VoiceStore), by DraftStore key, as saved before the app opens. */
+    var voiceSent: Map<String, List<com.makefunstuff.herdr.core.chat.Spoken.Sent>> = emptyMap()
     fun host(id: String): FakeMachine = hosts.getValue(id)
 }
 
@@ -177,11 +181,13 @@ fun render(scene: Scene, dark: Boolean, file: File) {
     PreviewBubbles.allowed = data.bubblesAllowed
     PreviewScanner.code = data.scanned
     PreviewTerminal.selection = data.selection
+    PreviewMic.set(data.mic)
     PreviewScanner.hostKeys = data.reachable
     PreviewUnlock.screenLock = data.screenLock
     PreviewUnlock.answer = data.unlockAnswer
     synchronized(PreviewUnlock.asked) { PreviewUnlock.asked.clear() }
     data.looked.forEach { (key, at) -> com.makefunstuff.herdr.data.LookedStore(context.filesDir.resolve("looked.json")).mark(key.substringBefore('/'), key.substringAfter('/'), at) }
+    data.voiceSent.forEach { (chat, sent) -> sent.forEach { com.makefunstuff.herdr.data.VoiceStore(context.filesDir.resolve("voice.json")).add(chat, it.text, it.at) } }
     data.composer?.let { context.filesDir.resolve("composer.json").writeText(Json.encodeToString(com.makefunstuff.herdr.data.ComposerStore.State.serializer(), it)) }
     data.keyBar?.let { context.filesDir.resolve("key-bar.json").writeText(Json.encodeToString(com.makefunstuff.herdr.data.KeyBarStore.Saved.serializer(), it)) }
     data.textSizes?.let { context.filesDir.resolve("text-sizes.json").writeText(Json.encodeToString(com.makefunstuff.herdr.data.TextSizeStore.Sizes.serializer(), it)) }
@@ -309,6 +315,22 @@ fun ComposeUiTest.drag(label: String, vararg points: Pair<Float, Float>, within:
         // In small steps, as a finger moves.
         at.zipWithNext().forEach { (a, b) -> for (i in 1..8) moveTo(a + (b - a) * (i / 8f), delayMillis = 16) }
         up()
+    }
+    settle()
+}
+
+/**
+ * A finger on the element whose content description starts with [label], down on the first of
+ * [points] and through the others as [drag] does, but still down when the shot is taken: a hold.
+ */
+fun ComposeUiTest.hold(label: String, vararg points: Pair<Float, Float>) {
+    node(hasContentDescription(label, substring = true)).performTouchInput {
+        val at = points.map { (x, y) -> androidx.compose.ui.geometry.Offset(x * width, y * height) }
+        down(at.first())
+        at.zipWithNext().forEach { (a, b) -> for (i in 1..8) moveTo(a + (b - a) * (i / 8f), delayMillis = 16) }
+        // Held long enough that letting go would finish, not leave it hearing as a tap does.
+        advanceEventTime(1_000)
+        moveBy(androidx.compose.ui.geometry.Offset.Zero)
     }
     settle()
 }

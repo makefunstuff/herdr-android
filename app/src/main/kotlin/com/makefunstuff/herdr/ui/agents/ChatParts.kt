@@ -78,7 +78,8 @@ import com.makefunstuff.herdr.ui.theme.Space
 sealed interface ChatRow {
     val key: String
 
-    data class User(val item: ChatItem.User, val pending: Boolean = false) : ChatRow {
+    /** What you said; [voice] when it went as a voice message (its words, with a mic under them). */
+    data class User(val item: ChatItem.User, val pending: Boolean = false, val voice: Boolean = false) : ChatRow {
         override val key get() = if (pending) "pending/${item.id}" else item.id
     }
     /** The agent's words: its answer, or ([quiet]) narration inside a settled turn's work. */
@@ -204,7 +205,7 @@ private fun workRows(items: List<ChatItem>, steps: ChatTurns.Steps, quiet: Boole
 @Composable
 fun ChatRowView(row: ChatRow, onToggle: (ChatRow.Head) -> Unit = {}, onThought: (ChatRow.Thought) -> Unit = {}) {
     when (row) {
-        is ChatRow.User -> UserBubble(row.item, row.pending)
+        is ChatRow.User -> UserBubble(row.item, row.pending, row.voice)
         is ChatRow.Agent ->
             // Narration in a settled turn is a quiet row again, under the answer's voice.
             if (row.quiet) MarkdownText(row.item.text, Modifier.fillMaxWidth().padding(horizontal = Space.xs), style = MaterialTheme.typography.bodySmall, color = Herdr.colors.muted)
@@ -310,7 +311,7 @@ private fun ThinkingLine() {
 }
 
 @Composable
-private fun UserBubble(item: ChatItem.User, pending: Boolean) {
+private fun UserBubble(item: ChatItem.User, pending: Boolean, voice: Boolean) {
     var expanded by rememberSaveable(item.id) { mutableStateOf(false) }
     // The pictures it names show as pictures, over the words.
     val split = remember(item.text) { Images.split(item.text) }
@@ -349,6 +350,14 @@ private fun UserBubble(item: ChatItem.User, pending: Boolean) {
                         fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.padding(top = 6.dp).clickable { expanded = !expanded },
                     )
+                }
+                if (voice) {
+                    // Sent as a voice message: the words heard, marked as such.
+                    Row(Modifier.padding(top = 6.dp).alpha(0.7f), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(HerdrIcons.Mic, null, Modifier.size(12.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Voice message", style = MaterialTheme.typography.labelSmall)
+                    }
                 }
                 if (pending) Text("Sending…", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(top = 4.dp))
             }

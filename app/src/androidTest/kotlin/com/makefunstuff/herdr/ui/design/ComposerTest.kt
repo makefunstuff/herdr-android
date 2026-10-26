@@ -141,6 +141,70 @@ class ComposerTest {
         assertEquals(0, sent)
     }
 
+    /** A phone that hears "run the tests again" once it is told to stop. */
+    private class HeardMic(val allowed: Boolean = true) : com.makefunstuff.herdr.core.chat.Dictation.Mic {
+        lateinit var dictation: com.makefunstuff.herdr.core.chat.Dictation
+        var asked = 0
+        override fun allowed() = allowed
+        override fun ask() { asked++ }
+        override fun settings() {}
+        override fun listen() {}
+        override fun stop() = dictation.segment("run the tests again")
+        override fun cancel() {}
+    }
+
+    @Test fun voiceMessageGoesIntoTheDraftToCheckBeforeSending() {
+        var draft by mutableStateOf("")
+        var take by mutableStateOf<Long?>(null)
+        var sent = 0
+        val mic = HeardMic()
+        var now = 0L
+        val dictation = com.makefunstuff.herdr.core.chat.Dictation(mic, { now }) { text, millis ->
+            draft = com.makefunstuff.herdr.core.chat.Dictation.append(draft, text)
+            take = millis
+        }.also { mic.dictation = it }
+        rule.setContent {
+            HerdrTheme {
+                ChatComposer(
+                    draft, { draft = it }, "Message claude…", onSend = { sent++ },
+                    voice = ComposerVoice(dictation, take) { draft = ""; take = null },
+                )
+            }
+        }
+        // A tap starts it: the box gives way to what it hears, Send waits, and an X cancels.
+        rule.onNodeWithContentDescription("Record a voice message").atLeast48()
+        rule.onNodeWithContentDescription("Record a voice message").performClick()
+        rule.onNodeWithText("Listening…").assertIsDisplayed()
+        rule.onNodeWithText("Tap the mic to finish").assertIsDisplayed()
+        rule.onNodeWithContentDescription("Cancel voice message").assertIsDisplayed()
+        rule.onNodeWithContentDescription("Send").assertIsNotEnabled()
+        // The next tap finishes: the words wait in the box, marked as a voice message.
+        now = 4_000
+        rule.onNodeWithContentDescription("Finish voice message").performClick()
+        rule.waitForIdle()
+        assertEquals("run the tests again", draft)
+        rule.onNodeWithText("Voice message · 0:04").assertIsDisplayed()
+        field.performTextInput(", then push")
+        rule.onNodeWithContentDescription("Send").assertIsEnabled().performClick()
+        assertEquals(1, sent)
+        // Its X takes the words out again.
+        rule.onNodeWithContentDescription("Discard voice message").performClick()
+        assertEquals("", draft)
+    }
+
+    @Test fun aRefusedMicrophoneIsExplained() {
+        val mic = HeardMic(allowed = false)
+        val dictation = com.makefunstuff.herdr.core.chat.Dictation(mic, { 0L }) { _, _ -> }.also { mic.dictation = it }
+        rule.setContent { HerdrTheme { ChatComposer("", {}, "Message claude…", onSend = {}, voice = ComposerVoice(dictation, null) {}) } }
+        rule.onNodeWithContentDescription("Record a voice message").performClick()
+        assertEquals(1, mic.asked)
+        dictation.answered(granted = false, forever = true)
+        rule.onNodeWithText("The microphone is off").assertIsDisplayed()
+        rule.onNodeWithText("Open settings").assertIsDisplayed()
+        rule.onNodeWithText("Not now").performClick()
+        rule.onNodeWithText("The microphone is off").assertDoesNotExist()
+    }
+
     @Test fun stopOnlyWhileNothingIsTyped() {
         var draft by mutableStateOf("")
         rule.setContent {
