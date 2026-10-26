@@ -182,7 +182,13 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
     // A voice message: its words go into the draft, marked as spoken (how long, and the words) until sent.
     var voiceTake by rememberSaveable(chatKey) { mutableStateOf<Long?>(null) }
     var voiceWords by rememberSaveable(chatKey) { mutableStateOf("") }
+    // The draft as it was before the first words went in: what the X on the voice message leaves.
+    var voiceBefore by rememberSaveable(chatKey) { mutableStateOf("") }
     val dictation = rememberDictation { text, millis ->
+        if (voiceTake == null) {
+            voiceBefore = draft
+            voiceWords = ""
+        }
         draft = Dictation.append(draft, text)
         voiceTake = (voiceTake ?: 0L) + millis
         voiceWords = Dictation.join(voiceWords, text)
@@ -300,10 +306,11 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
         // Sent as spoken, so the chat shows it with a mic; taken back if it doesn't go.
         val voiced = reply == null && voiceTake != null
         val at = container.clock()
+        // Kept with the same time as the held copy, so discarding that takes its mark back too.
         if (voiced) container.voice.add(chatKey, text, at)
         // While it works, the words wait above the composer rather than land in the middle of its turn.
         if (Held.holds(status, named = agent != null)) {
-            container.composer.hold(chatKey, text, container.clock())
+            container.composer.hold(chatKey, text, at)
             if (reply == null) {
                 draft = DraftStore.afterSend(draft, typed)
                 tray.sent(pictures)
@@ -496,8 +503,8 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
                         attachments = { ComposerTray(tray) },
                         voice = dictation?.let { d ->
                             ComposerVoice(d, voiceTake) {
-                                // Taken out again, unless they were changed so much they are yours now.
-                                if (voiceWords.isNotEmpty() && draft.contains(voiceWords)) draft = draft.replace(voiceWords, "").trim()
+                                // Taken out again, only while they stand as heard at the end of the draft: changed, they are yours now.
+                                Dictation.drop(draft, voiceBefore, voiceWords)?.let { draft = it }
                                 voiceTake = null
                                 voiceWords = ""
                             }
@@ -530,7 +537,11 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
                                         held, status, kind ?: name,
                                         canSend = Held.canSend(status, heldSending || sending),
                                         onSendNow = ::sendHeld,
-                                        onDiscard = { container.composer.drop(chatKey, it.id) },
+                                        onDiscard = {
+                                            container.composer.drop(chatKey, it.id)
+                                            // A voice message that never went: no mark left to land on a later one like it.
+                                            container.voice.drop(chatKey, it.text, it.at)
+                                        },
                                         // While it asks something, the question comes first: the rows fold into their caption.
                                         folded = status == AgentStatus.Blocked && !heldOpen,
                                         onUnfold = { heldOpen = true },

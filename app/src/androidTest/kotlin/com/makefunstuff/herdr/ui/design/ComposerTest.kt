@@ -167,7 +167,11 @@ class ComposerTest {
             HerdrTheme {
                 ChatComposer(
                     draft, { draft = it }, "Message claude…", onSend = { sent++ },
-                    voice = ComposerVoice(dictation, take) { draft = ""; take = null },
+                    // As the agent's chat does: the words out again only while they stand as heard.
+                    voice = ComposerVoice(dictation, take) {
+                        com.makefunstuff.herdr.core.chat.Dictation.drop(draft, "", "run the tests again")?.let { draft = it }
+                        take = null
+                    },
                 )
             }
         }
@@ -184,12 +188,20 @@ class ComposerTest {
         rule.waitForIdle()
         assertEquals("run the tests again", draft)
         rule.onNodeWithText("Voice message · 0:04").assertIsDisplayed()
+        // Its X takes the words out again.
+        rule.onNodeWithContentDescription("Discard voice message").performClick()
+        rule.waitForIdle()
+        assertEquals("", draft)
+        rule.onNodeWithText("Voice message · 0:04").assertDoesNotExist()
+        // Again, and edited: Send takes it, and the X leaves your words alone.
+        rule.onNodeWithContentDescription("Record a voice message").performClick()
+        rule.onNodeWithContentDescription("Finish voice message").performClick()
+        rule.waitForIdle()
         field.performTextInput(", then push")
         rule.onNodeWithContentDescription("Send").assertIsEnabled().performClick()
         assertEquals(1, sent)
-        // Its X takes the words out again.
         rule.onNodeWithContentDescription("Discard voice message").performClick()
-        assertEquals("", draft)
+        assertEquals("run the tests again, then push", draft)
     }
 
     @Test fun aRefusedMicrophoneIsExplained() {

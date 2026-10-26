@@ -43,9 +43,14 @@ fun rememberDictation(onText: (text: String, millis: Long) -> Unit): Dictation? 
     val latest = rememberUpdatedState(onText)
     val mic = remember(context) { AndroidMic(context) }
     val dictation = remember(mic) { Dictation(mic, System::currentTimeMillis) { text, millis -> latest.value(text, millis) }.also { mic.dictation = it } }
+    val asked = remember(context) { context.getSharedPreferences("mic", Context.MODE_PRIVATE) }
     val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        // Refused with Android no longer showing its question: only the settings can allow it now.
-        val forever = !granted && context.activity()?.shouldShowRequestPermissionRationale(Manifest.permission.RECORD_AUDIO) == false
+        // Refused, and Android won't ask again: only the settings can allow it now. Android says so
+        // only by no longer wanting a reason shown, which is also the case before it ever asked and
+        // after its question was closed unanswered the first time: those still offer Allow.
+        val rationale = context.activity()?.shouldShowRequestPermissionRationale(Manifest.permission.RECORD_AUDIO) == true
+        val forever = !granted && !rationale && asked.getBoolean(REFUSED, false)
+        if (!granted && rationale) asked.edit().putBoolean(REFUSED, true).apply()
         dictation.answered(granted, forever)
     }
     mic.ask = { ask.launch(Manifest.permission.RECORD_AUDIO) }
@@ -58,6 +63,9 @@ fun rememberDictation(onText: (text: String, millis: Long) -> Unit): Dictation? 
     }
     return dictation
 }
+
+/** Set once the microphone was refused with Android ready to ask again: a later refusal without that is for good. */
+private const val REFUSED = "refused"
 
 private fun onDevice(context: Context): Boolean =
     Build.VERSION.SDK_INT >= 31 && SpeechRecognizer.isOnDeviceRecognitionAvailable(context)

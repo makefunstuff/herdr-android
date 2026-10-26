@@ -236,6 +236,19 @@ class Dictation(
             else -> "$draft $text"
         }
 
+        /**
+         * [draft] without the words a voice message put after [before] (the draft as it was before
+         * them): [before] again while the draft is still exactly that and [words], else null (the words
+         * were changed, or more was typed after them: they are yours now, and nothing is taken out).
+         */
+        fun drop(draft: String, before: String, words: String): String? {
+            if (words.isEmpty()) return null
+            // An empty box takes the words alone (see [append]).
+            if (before.isBlank()) return "".takeIf { draft.trim() == words }
+            if (!draft.startsWith(before)) return null
+            return before.takeIf { draft.substring(before.length).trim() == words }
+        }
+
         /** How long you spoke: `0:07`, `1:05`. */
         fun elapsed(millis: Long): String {
             val s = (millis / 1000).coerceAtLeast(0)

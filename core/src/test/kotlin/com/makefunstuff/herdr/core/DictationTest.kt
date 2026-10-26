@@ -194,6 +194,23 @@ class DictationTest {
         assertEquals("Also:\nrun it", Dictation.append("Also:\n", "run it"))
     }
 
+    @Test fun discardingTakesOutOnlyTheWordsHeard() {
+        fun spoken(before: String, words: String) = Dictation.drop(Dictation.append(before, words), before, words)
+        // What was typed stays whole, also where it holds the same words.
+        assertEquals("Check yesterday's logs", spoken("Check yesterday's logs", "yes"))
+        assertEquals("Do not run the tests\n- step one\n", spoken("Do not run the tests\n- step one\n", "run the tests"))
+        assertEquals("", spoken("", "ship it"))
+        assertEquals("", spoken("  ", "ship it"))
+        // Two takes in a row go together.
+        val two = Dictation.append(Dictation.append("Also:", "run it"), "then push")
+        assertEquals("Also:", Dictation.drop(two, "Also:", Dictation.join("run it", "then push")))
+        // Changed, or typed after: they are yours now.
+        assertEquals(null, Dictation.drop("Also: run it twice", "Also:", "run it"))
+        assertEquals(null, Dictation.drop("Also: ran it", "Also:", "run it"))
+        assertEquals(null, Dictation.drop("Al: run it", "Also:", "run it"))
+        assertEquals(null, Dictation.drop("Also:", "Also:", ""))
+    }
+
     @Test fun elapsed() {
         assertEquals("0:00", Dictation.elapsed(0))
         assertEquals("0:07", Dictation.elapsed(7_900))
