@@ -188,9 +188,19 @@ class HostSession(
      * Copies a file from the phone to this machine (see [Attachments]) and returns its path there,
      * for the message to name it.
      */
-    suspend fun upload(fileName: String, input: java.io.InputStream, stamp: String = Attachments.stamp()): String {
+    suspend fun upload(fileName: String, input: java.io.InputStream, stamp: String = Attachments.stamp()): String =
+        copy(Attachments.uploadCommand(Attachments.safeName(fileName), stamp), fileName, input)
+
+    /**
+     * Copies a voice message from the phone into the agent's folder [cwd] on this machine (see
+     * [VoiceClips.uploadCommand]) and returns its path there, for the message to name it.
+     */
+    suspend fun uploadVoice(cwd: String?, fileName: String, input: java.io.InputStream, stamp: String = Attachments.stamp()): String =
+        copy(VoiceClips.uploadCommand(cwd, fileName, stamp), fileName, input)
+
+    private suspend fun copy(command: String, fileName: String, input: java.io.InputStream): String {
         val conn = awaitConnection()
-        val result = conn.runWithInput(Attachments.uploadCommand(Attachments.safeName(fileName), stamp), input)
+        val result = conn.runWithInput(command, input)
         val path = result.stdout.trim()
         if (result.exitStatus != 0 || path.isEmpty()) {
             throw IOException(result.stderr.trim().ifEmpty { "Couldn't copy $fileName to ${machine.label}" })
@@ -202,9 +212,14 @@ class HostSession(
      * A picture named in a message ([Images.split]), read back from this machine to show it in the
      * chat: its bytes, or an error when it isn't there any more or is larger than [Images.MAX_FETCH_BYTES].
      */
-    suspend fun fetchImage(path: String): ByteArray {
+    suspend fun fetchImage(path: String): ByteArray = fetch(Images.fetchCommand(path), path)
+
+    /** A voice message named in a message ([VoiceClips.split]), read back from this machine to play it. */
+    suspend fun fetchVoice(path: String): ByteArray = fetch(VoiceClips.fetchCommand(path), path)
+
+    private suspend fun fetch(command: String, path: String): ByteArray {
         val conn = awaitConnection()
-        val result = conn.run(Images.fetchCommand(path), timeoutSeconds = 60)
+        val result = conn.run(command, timeoutSeconds = 60)
         if (result.exitStatus != 0 || result.stdout.isBlank()) throw IOException("${path.substringAfterLast('/')} isn't on ${machine.label} any more")
         return java.util.Base64.getMimeDecoder().decode(result.stdout.trim())
     }

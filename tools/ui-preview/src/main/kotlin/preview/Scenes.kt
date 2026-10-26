@@ -35,6 +35,12 @@ private fun SceneData.pictures() {
     drafts[com.makefunstuff.herdr.data.DraftStore.agent(DEVBOX, APP_AGENT)] = "The Board card jumps when a machine reconnects. Keep it where it was?"
 }
 
+/** The app agent's second ask sent as a voice message (7 s), its recording kept on the phone. */
+private fun SceneData.voiceSent() {
+    host(DEVBOX).transcripts = host(DEVBOX).transcripts + (Demo.APP_SESSION to Demo.appTranscriptWithVoice())
+    voiceSent = listOf(SceneClip(7_000, Demo.VOICE))
+}
+
 /** A message sent to the app agent while it worked, held over its composer. */
 private fun SceneData.held() {
     val key = com.makefunstuff.herdr.data.DraftStore.agent(DEVBOX, APP_AGENT)
@@ -267,21 +273,32 @@ fun scenes(): List<Scene> = listOf(
     Scene("chat-files", route = Routes.agent(DEVBOX, APP_AGENT), actions = { type("Look at @mach") }),
     Scene("chat-model", route = Routes.agent(DEVBOX, APP_AGENT), actions = { tapLabel("Model Opus 5.5, context 62% full") }),
     Scene("quick-replies", route = Routes.COMPOSER, setup = { replies() }),
-    // Voice messages: the mic held while you speak (the words as they come, the time, slide to cancel), slid away
-    // far enough that letting go cancels, tapped to go on hands-free; then the words in the box to check before
-    // Send; the microphone refused, and why it is needed; and a message sent by voice, with its mic in the chat.
+    // Voice messages: the mic held while you speak (how loud, the time, slide to cancel), slid away far enough
+    // that letting go cancels, tapped to go on hands-free; then the recording in the composer, copied into the
+    // agent's folder and ready to send (and one that couldn't be copied, to try again); the microphone refused,
+    // and why it is needed; a message sent as a voice message, in the chat and playing; and one held while it works.
     Scene("chat-voice-recording", route = Routes.agent(DEVBOX, APP_AGENT), actions = { hold("Record a voice message", 0.5f to 0.5f) }),
     Scene("chat-voice-cancel", route = Routes.agent(DEVBOX, APP_AGENT), actions = { hold("Record a voice message", 0.5f to 0.5f, -2.5f to 0.6f) }),
     Scene("chat-voice-tap", route = Routes.agent(DEVBOX, APP_AGENT), actions = { tapLabel("Record a voice message") }),
-    Scene("chat-voice-review", route = Routes.agent(DEVBOX, APP_AGENT), actions = {
+    Scene("chat-voice-ready", route = Routes.agent(DEVBOX, APP_AGENT), actions = {
         tapLabel("Record a voice message")
         tapLabel("Finish voice message")
+    }),
+    Scene("chat-voice-failed", route = Routes.agent(DEVBOX, APP_AGENT), setup = {
+        host(DEVBOX).voiceFails = true
+        voice = mapOf(com.makefunstuff.herdr.data.DraftStore.agent(DEVBOX, APP_AGENT) to listOf(SceneClip(12_000)))
+        drafts[com.makefunstuff.herdr.data.DraftStore.agent(DEVBOX, APP_AGENT)] = "and keep it short"
     }),
     Scene("chat-voice-denied", route = Routes.agent(DEVBOX, APP_AGENT), setup = {
         mic = PreviewMic.Setup(allowed = false, answer = false)
     }, actions = { tapLabel("Record a voice message") }),
-    Scene("chat-voice-sent", route = Routes.agent(DEVBOX, APP_AGENT), setup = {
-        voiceSent = mapOf(com.makefunstuff.herdr.data.DraftStore.agent(DEVBOX, APP_AGENT) to listOf(Demo.voiceSent()))
+    Scene("chat-voice-sent", route = Routes.agent(DEVBOX, APP_AGENT), setup = { voiceSent() }),
+    Scene("chat-voice-playing", route = Routes.agent(DEVBOX, APP_AGENT), setup = { voiceSent() }, actions = { tapLabel("Play voice message") }),
+    Scene("chat-voice-held", route = Routes.agent(DEVBOX, APP_AGENT), setup = {
+        val key = com.makefunstuff.herdr.data.DraftStore.agent(DEVBOX, APP_AGENT)
+        composer = com.makefunstuff.herdr.data.ComposerStore.State(
+            held = mapOf(key to listOf(com.makefunstuff.herdr.core.chat.HeldMessage("held-voice", "@${Demo.VOICE}", Demo.NOW - 40_000))),
+        )
     }),
     // The chats' own text size (Settings → Text size), larger than the phone's.
     Scene("chat-large-text", route = Routes.agent(DEVBOX, APP_AGENT), setup = { textSizes = com.makefunstuff.herdr.data.TextSizeStore.Sizes(chat = 1.3f) }),

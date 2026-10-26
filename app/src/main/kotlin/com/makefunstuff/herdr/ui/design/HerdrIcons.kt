@@ -134,6 +134,7 @@ object HerdrIcons {
     val PictureInPicture2: ImageVector by lazy { lucide("PictureInPicture2", "M21 9V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v10c0 1.1.9 2 2 2h4", "M14 13h6a2 2 0 0 1 2 2v3a2 2 0 0 1 -2 2h-6a2 2 0 0 1 -2 -2v-3a2 2 0 0 1 2 -2Z") }
     val Pin: ImageVector by lazy { lucide("Pin", "M12 17v5", "M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z") }
     val PinOff: ImageVector by lazy { lucide("PinOff", "M12 17v5", "M15 9.34V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H7.89", "m2 2 20 20", "M9 9v1.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h11") }
+    val Pause: ImageVector by lazy { lucide("Pause", "M15 3h3a1 1 0 0 1 1 1v16a1 1 0 0 1 -1 1h-3a1 1 0 0 1 -1 -1v-16a1 1 0 0 1 1 -1Z", "M6 3h3a1 1 0 0 1 1 1v16a1 1 0 0 1 -1 1h-3a1 1 0 0 1 -1 -1v-16a1 1 0 0 1 1 -1Z") }
     val Play: ImageVector by lazy { lucide("Play", "M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z") }
     val Plug: ImageVector by lazy { lucide("Plug", "M12 22v-5", "M15 8V2", "M17 8a1 1 0 0 1 1 1v4a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V9a1 1 0 0 1 1-1z", "M9 8V2") }
     val Plus: ImageVector by lazy { lucide("Plus", "M5 12h14", "M12 5v14") }
@@ -296,6 +297,7 @@ object HerdrIcons {
             "pictureinpicture2" to { PictureInPicture2 },
             "pin" to { Pin },
             "pinoff" to { PinOff },
+            "pause" to { Pause },
             "play" to { Play },
             "plug" to { Plug },
             "plus" to { Plus },

@@ -6,43 +6,38 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.MediaRecorder
 import android.net.Uri
 import android.os.Build
-import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.provider.Settings
-import android.speech.RecognitionListener
-import android.speech.RecognizerIntent
-import android.speech.SpeechRecognizer
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
-import com.makefunstuff.herdr.core.chat.Dictation
-import com.makefunstuff.herdr.core.chat.Dictation.Problem
+import androidx.lifecycle.compose.LifecycleStartEffect
+import com.makefunstuff.herdr.core.chat.Recorder
+import com.makefunstuff.herdr.core.chat.Recorder.Problem
+import com.makefunstuff.herdr.data.VoiceStore
+import java.io.File
+import kotlin.math.sqrt
 
 /**
- * Voice messages for a chat's composer: the phone's own speech recognition, on the phone when it
- * can (Android 12 and newer with an on-device recognizer), else the phone's recognizer told to
- * prefer offline. [onText] gets the words heard and how long you spoke. Null on a phone without
- * speech recognition: the composer shows no mic.
+ * Voice messages for a chat's composer: the phone's microphone records what you say to a small
+ * audio file in [store] (Ogg Opus, which every harness that takes audio reads; AAC on Android 9,
+ * which has no Opus encoder), and [onClip] gets it. Nothing is turned into text on the phone.
  *
  * The microphone is asked for on first use, from the screen; refused, the composer explains why it
  * is needed, and once Android stops asking it offers the app's page in the phone's settings.
  */
 @Composable
-fun rememberDictation(onText: (text: String, millis: Long) -> Unit): Dictation? {
+fun rememberRecorder(store: VoiceStore, onClip: (Recorder.Clip) -> Unit): Recorder {
     val context = LocalContext.current
-    val available = remember(context) { SpeechRecognizer.isRecognitionAvailable(context) || onDevice(context) }
-    if (!available) return null
-    val latest = rememberUpdatedState(onText)
-    val mic = remember(context) { AndroidMic(context) }
-    val dictation = remember(mic) { Dictation(mic, System::currentTimeMillis) { text, millis -> latest.value(text, millis) }.also { mic.dictation = it } }
+    val latest = rememberUpdatedState(onClip)
+    val mic = remember(context) { AndroidMic(context, store) }
+    val recorder = remember(mic) { Recorder(mic, System::currentTimeMillis) { latest.value(it) }.also { mic.recorder = it } }
     val asked = remember(context) { context.getSharedPreferences("mic", Context.MODE_PRIVATE) }
     val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         // Refused, and Android won't ask again: only the settings can allow it now. Android says so
@@ -51,24 +46,22 @@ fun rememberDictation(onText: (text: String, millis: Long) -> Unit): Dictation? 
         val rationale = context.activity()?.shouldShowRequestPermissionRationale(Manifest.permission.RECORD_AUDIO) == true
         val forever = !granted && !rationale && asked.getBoolean(REFUSED, false)
         if (!granted && rationale) asked.edit().putBoolean(REFUSED, true).apply()
-        dictation.answered(granted, forever)
+        recorder.answered(granted, forever)
     }
     mic.ask = { ask.launch(Manifest.permission.RECORD_AUDIO) }
-    DisposableEffect(mic) {
-        onDispose {
-            // Off the screen (or the app put away with it): nothing is heard any more.
-            dictation.cancel()
-            mic.close()
+    // The app put away, or the chat left, while it records: what was said so far is kept and waits in
+    // the composer (Android gives an app in the background only silence).
+    LifecycleStartEffect(recorder) {
+        onStopOrDispose {
+            recorder.stop()
+            mic.cancel()
         }
     }
-    return dictation
+    return recorder
 }
 
 /** Set once the microphone was refused with Android ready to ask again: a later refusal without that is for good. */
 private const val REFUSED = "refused"
-
-private fun onDevice(context: Context): Boolean =
-    Build.VERSION.SDK_INT >= 31 && SpeechRecognizer.isOnDeviceRecognitionAvailable(context)
 
 private tailrec fun Context.activity(): Activity? = when (this) {
     is Activity -> this
@@ -76,16 +69,12 @@ private tailrec fun Context.activity(): Activity? = when (this) {
     else -> null
 }
 
-/** [Dictation.Mic] on Android's [SpeechRecognizer], made when first needed and kept while the chat is open. */
-private class AndroidMic(private val context: Context) : Dictation.Mic {
-    lateinit var dictation: Dictation
+/** [Recorder.Mic] on Android's [MediaRecorder], one per recording. */
+private class AndroidMic(private val context: Context, private val store: VoiceStore) : Recorder.Mic {
+    lateinit var recorder: Recorder
     var ask: () -> Unit = {}
-    private var recognizer: SpeechRecognizer? = null
-    /** On the phone's own recognizer, after the on-device one couldn't do the language. */
-    private var online = !onDevice(context)
-    /** Started again too soon after a stretch (some recognizers are still busy then): once more, a moment later. */
-    private var retried = false
-    private val main = Handler(Looper.getMainLooper())
+    private var media: MediaRecorder? = null
+    private var file: File? = null
 
     override fun allowed() = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
 
@@ -100,75 +89,64 @@ private class AndroidMic(private val context: Context) : Dictation.Mic {
         }
     }
 
-    override fun listen() {
-        val r = recognizer ?: make().also { recognizer = it }
-        runCatching { r.startListening(intent()) }.onFailure { dictation.failed(Problem.Other) }
+    override fun start(): Boolean {
+        cancel()
+        val opus = Build.VERSION.SDK_INT >= 29
+        val target = store.newFile(if (opus) "ogg" else "aac")
+        @Suppress("DEPRECATION")
+        val r = if (Build.VERSION.SDK_INT >= 31) MediaRecorder(context) else MediaRecorder()
+        return try {
+            r.setAudioSource(MediaRecorder.AudioSource.MIC)
+            if (opus) {
+                r.setOutputFormat(MediaRecorder.OutputFormat.OGG)
+                r.setAudioEncoder(MediaRecorder.AudioEncoder.OPUS)
+                r.setAudioSamplingRate(48_000)
+                r.setAudioEncodingBitRate(24_000)
+            } else {
+                r.setOutputFormat(MediaRecorder.OutputFormat.AAC_ADTS)
+                r.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+                r.setAudioSamplingRate(44_100)
+                r.setAudioEncodingBitRate(48_000)
+            }
+            r.setAudioChannels(1)
+            r.setOutputFile(target.path)
+            r.setOnErrorListener { _, _, _ -> recorder.failed(Problem.Audio) }
+            r.prepare()
+            r.start()
+            media = r
+            file = target
+            true
+        } catch (e: Exception) {
+            r.release()
+            target.delete()
+            false
+        }
     }
 
-    override fun stop() { recognizer?.stopListening() }
+    // MediaRecorder's loudest sample since it was last asked, as a level that follows the ear.
+    override fun level(): Float = media?.let { runCatching { sqrt(it.maxAmplitude / 32767f) }.getOrNull() } ?: 0f
+
+    override fun stop(): String? {
+        val r = media ?: return null
+        val f = file
+        media = null
+        file = null
+        // stop() throws when nothing was written yet: no recording then.
+        val ok = runCatching { r.stop() }.isSuccess
+        r.release()
+        if (!ok || f == null || f.length() == 0L) {
+            f?.delete()
+            return null
+        }
+        return f.path
+    }
 
     override fun cancel() {
-        main.removeCallbacksAndMessages(null)
-        recognizer?.cancel()
-    }
-
-    fun close() {
-        main.removeCallbacksAndMessages(null)
-        recognizer?.destroy()
-        recognizer = null
-    }
-
-    private fun make(): SpeechRecognizer {
-        val r = if (!online && Build.VERSION.SDK_INT >= 31) SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
-        else SpeechRecognizer.createSpeechRecognizer(context)
-        r.setRecognitionListener(Listener())
-        return r
-    }
-
-    private fun intent() = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
-        .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-        .putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-        .putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
-        .putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
-        .putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-
-    private inner class Listener : RecognitionListener {
-        override fun onReadyForSpeech(params: Bundle?) { retried = false }
-        override fun onBeginningOfSpeech() {}
-        override fun onRmsChanged(rmsdB: Float) = dictation.level(rmsdB)
-        override fun onBufferReceived(buffer: ByteArray?) {}
-        override fun onEndOfSpeech() {}
-        override fun onEvent(eventType: Int, params: Bundle?) {}
-        override fun onPartialResults(partialResults: Bundle?) { best(partialResults)?.let(dictation::partial) }
-        override fun onResults(results: Bundle?) = dictation.segment(best(results).orEmpty())
-
-        override fun onError(error: Int) {
-            // The on-device recognizer without the phone's language: the phone's own one, from now on.
-            if (!online && (error == SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED || error == SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE)) {
-                online = true
-                close()
-                listen()
-                return
-            }
-            if (error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY && !retried) {
-                retried = true
-                main.postDelayed({ listen() }, 250)
-                return
-            }
-            dictation.failed(
-                when (error) {
-                    SpeechRecognizer.ERROR_NO_MATCH, SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> Problem.NoSpeech
-                    SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> Problem.Busy
-                    SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT, SpeechRecognizer.ERROR_SERVER,
-                    SpeechRecognizer.ERROR_SERVER_DISCONNECTED -> Problem.Network
-                    SpeechRecognizer.ERROR_AUDIO -> Problem.Audio
-                    SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> Problem.NoPermission
-                    SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED, SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE -> Problem.Language
-                    else -> Problem.Other
-                },
-            )
-        }
-
-        private fun best(b: Bundle?): String? = b?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
+        val r = media ?: return
+        media = null
+        runCatching { r.stop() }
+        r.release()
+        file?.delete()
+        file = null
     }
 }

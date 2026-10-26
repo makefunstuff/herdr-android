@@ -49,7 +49,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
 import com.makefunstuff.herdr.ui.theme.Pretendard
 import com.makefunstuff.herdr.core.chat.Completions
-import com.makefunstuff.herdr.core.chat.Dictation
+import com.makefunstuff.herdr.core.chat.Recorder
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -123,10 +123,10 @@ val ReplyBubbleShape = RoundedCornerShape(12.dp)
  * the start of the message or an `@path` ([Completions.at]); what it accepts replaces the word,
  * with a space after it, and the cursor goes there.
  *
- * [voice] puts the mic beside Send ([ComposerMic]): while it hears, the box gives way to the words
- * as they come ([HeardText]) and the left of the controls to the time and how to cancel
- * ([RecordingInfo]); Send waits. The words then go into the draft, with [VoiceTake] over them until
- * sent. A refused microphone, or a recognizer that failed, says so over the card ([MicNotice]).
+ * [recorder] puts the mic beside Send ([ComposerMic]): while it records, the box gives way to how
+ * loud you are ([RecordingLevel]) and the left of the controls to the time and how to cancel
+ * ([RecordingInfo]); Send waits. The recording then waits in [attachments] until sent. A refused
+ * microphone, or a recording that failed, says so over the card ([MicNotice]).
  */
 @Composable
 fun ChatComposer(
@@ -150,7 +150,7 @@ fun ChatComposer(
     attached: Boolean = false,
     focusRequester: FocusRequester? = null,
     completion: (@Composable (query: Completions.Query, accept: (String) -> Unit) -> Unit)? = null,
-    voice: ComposerVoice? = null,
+    recorder: Recorder? = null,
 ) {
     val c = Herdr.colors
     val view = LocalView.current
@@ -159,8 +159,8 @@ fun ChatComposer(
     val ownFocus = remember { FocusRequester() }
     val focusRequester = focusRequester ?: ownFocus
     val keyboard = LocalSoftwareKeyboardController.current
-    val voiceState = voice?.let { it.dictation.state.collectAsState().value } ?: Dictation.State.Idle
-    val hearing = voiceState.hearing
+    val voiceState = recorder?.let { it.state.collectAsState().value } ?: Recorder.State.Idle
+    val hearing = voiceState.recording
     val canSend = enabled && !sending && !holdSend && !hearing && (draft.isNotBlank() || attached)
     val showStop = stop != null && draft.isBlank() && !attached && !sending && !hearing
     val card = RoundedCornerShape(Radius.xxl)
@@ -220,8 +220,8 @@ fun ChatComposer(
             if (above != null) {
                 Box(Modifier.padding(bottom = Space.s).then(if (room != Dp.Infinity) Modifier.heightIn(max = room * 0.6f) else Modifier)) { above() }
             }
-            if (voice != null && (voiceState is Dictation.State.NoMic || voiceState is Dictation.State.Failed)) {
-                Box(Modifier.padding(bottom = Space.s)) { MicNotice(voice.dictation, voiceState) }
+            if (recorder != null && (voiceState is Recorder.State.NoMic || voiceState is Recorder.State.Failed)) {
+                Box(Modifier.padding(bottom = Space.s)) { MicNotice(recorder, voiceState) }
             }
             Column(
                 Modifier.fillMaxWidth()
@@ -235,13 +235,7 @@ fun ChatComposer(
                     },
             ) {
                 attachments?.invoke()
-                val take = voice?.take
-                if (take != null && !hearing) VoiceTake(take, voice.onDropTake)
-                when (voiceState) {
-                    is Dictation.State.Recording -> HeardText(voiceState.text)
-                    is Dictation.State.Finishing -> HeardText(voiceState.text)
-                    else -> {}
-                }
+                if (voiceState is Recorder.State.Recording) RecordingLevel(voiceState.level)
                 if (!hearing) CompositionLocalProvider(LocalTextSelectionColors provides TextSelectionColors(c.accent, c.accent.copy(alpha = 0.32f))) {
                     BasicTextField(
                         value = value,
@@ -285,7 +279,7 @@ fun ChatComposer(
                     Modifier.fillMaxWidth().padding(start = Space.xs, end = Space.xxs, bottom = Space.xxs),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    if (voice != null && hearing) RecordingInfo(voice.dictation, voiceState)
+                    if (recorder != null && hearing) RecordingInfo(recorder, voiceState)
                     else {
                         leading?.invoke(this)
                         Spacer(Modifier.weight(1f))
@@ -302,7 +296,7 @@ fun ChatComposer(
                     }
                     trailing?.invoke(this)
                     // Always in this place, so a finger holding it through every state keeps it.
-                    if (voice != null) ComposerMic(voice.dictation, voiceState, enabled = enabled)
+                    if (recorder != null) ComposerMic(recorder, voiceState, enabled = enabled)
                     when {
                         showStop -> ComposerAction(ComposerActionKind.Stop, "Stop", enabled = enabled, onClick = { stop?.invoke() })
                         sending -> ComposerAction(ComposerActionKind.Sending, "Sending…", enabled = false, onClick = {})

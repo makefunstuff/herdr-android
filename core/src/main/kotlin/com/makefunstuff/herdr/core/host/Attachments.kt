@@ -54,4 +54,36 @@ object Attachments {
         val head = (if (command.isNotEmpty()) command.trimEnd() + " " else "") + mentions + m
         return if (rest.isEmpty()) "$head " else "$head $rest"
     }
+
+    // `@"path with spaces"` or `@path`, at the start or after white space (an e-mail address isn't one).
+    private val mentionRegex = Regex("(?<=^|\\s)@(\"([^\"\\n]+)\"|(\\S+))")
+
+    /**
+     * Takes the mentions of files on the machine that [accept] takes out of [text]: the paths (in
+     * order), and the words left. Only a full path (`/…` or `~/…`) counts, as only that one can be
+     * read back; any other mention stays in the words.
+     */
+    fun split(text: String, accept: (String) -> Boolean): Pair<List<String>, String> {
+        val paths = ArrayList<String>()
+        val rest = mentionRegex.replace(text) { m ->
+            val path = m.groupValues[2].ifEmpty { m.groupValues[3] }
+            if ((path.startsWith("/") || path.startsWith("~/")) && accept(path)) {
+                paths += path
+                ""
+            } else m.value
+        }
+        if (paths.isEmpty()) return emptyList<String>() to text
+        // The space a mention leaves goes with it; the lines the words keep stay.
+        val words = rest.lines().joinToString("\n") { it.replace(Regex("[ \\t]{2,}"), " ").trim() }.trim()
+        return paths to words
+    }
+
+    /**
+     * Prints the file at [path] on the machine as base64, when it is a file of at most [maxBytes];
+     * otherwise prints nothing and fails. A path under `~/` is the home folder's.
+     */
+    fun fetchCommand(path: String, maxBytes: Long): String {
+        val file = if (path.startsWith("~/")) "\"\$HOME\"/" + HerdrCommands.quote(path.removePrefix("~/")) else HerdrCommands.quote(path)
+        return "f=$file && [ -f \"\$f\" ] && [ \"\$(wc -c < \"\$f\")\" -le $maxBytes ] && base64 < \"\$f\""
+    }
 }

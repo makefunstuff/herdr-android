@@ -67,10 +67,12 @@ import com.makefunstuff.herdr.core.chat.AgentCommand
 import com.makefunstuff.herdr.core.chat.AgentCommands
 import com.makefunstuff.herdr.core.chat.Completions
 import com.makefunstuff.herdr.core.chat.Held
-import com.makefunstuff.herdr.core.chat.Dictation
-import com.makefunstuff.herdr.core.chat.Spoken
-import com.makefunstuff.herdr.ui.design.ComposerVoice
-import com.makefunstuff.herdr.ui.common.rememberDictation
+import com.makefunstuff.herdr.ui.common.rememberRecorder
+import com.makefunstuff.herdr.ui.voice.ChatVoice
+import com.makefunstuff.herdr.ui.voice.ComposerClips
+import com.makefunstuff.herdr.ui.voice.LocalChatVoice
+import com.makefunstuff.herdr.ui.voice.rememberClipPlayer
+import com.makefunstuff.herdr.ui.voice.rememberVoiceTray
 import com.makefunstuff.herdr.core.chat.HeldMessage
 import com.makefunstuff.herdr.core.chat.ModelPill
 import com.makefunstuff.herdr.core.usage.UsageRules
@@ -179,23 +181,6 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
     val composerState by container.composer.state.collectAsStateWithLifecycle()
     val held = composerState.held[chatKey].orEmpty()
     val replies = composerState.replies
-    // A voice message: its words go into the draft, marked as spoken (how long, and the words) until sent.
-    var voiceTake by rememberSaveable(chatKey) { mutableStateOf<Long?>(null) }
-    var voiceWords by rememberSaveable(chatKey) { mutableStateOf("") }
-    // The draft as it was before the first words went in: what the X on the voice message leaves.
-    var voiceBefore by rememberSaveable(chatKey) { mutableStateOf("") }
-    val dictation = rememberDictation { text, millis ->
-        if (voiceTake == null) {
-            voiceBefore = draft
-            voiceWords = ""
-        }
-        draft = Dictation.append(draft, text)
-        voiceTake = (voiceTake ?: 0L) + millis
-        voiceWords = Dictation.join(voiceWords, text)
-    }
-    // The words all gone (sent, or deleted by hand): no longer a voice message.
-    LaunchedEffect(draft.isBlank()) { if (draft.isBlank()) { voiceTake = null; voiceWords = "" } }
-    val spoken = container.voice.sent.collectAsStateWithLifecycle().value[chatKey].orEmpty()
     var heldSending by remember { mutableStateOf(false) }
     var heldOpen by remember { mutableStateOf(false) }
     var modelSheet by remember { mutableStateOf(false) }
@@ -209,6 +194,13 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
     var commandsFailed by remember(machineId, kind, cwd) { mutableStateOf<String?>(null) }
     var filesFailed by remember(machineId, cwd) { mutableStateOf<String?>(null) }
     val lister = remember(session) { AgentCommands.Client { command, timeout -> session.awaitConnection().run(command, timeout) } }
+    // Voice messages: the recording itself waits in the composer, copied into the agent's folder,
+    // until the message goes; the agent gets the file. One player for the chat's and the composer's.
+    val voiceTray = rememberVoiceTray(chatKey, machineId, session, host.online, cwd)
+    val player = rememberClipPlayer()
+    val recorder = rememberRecorder(container.voice) { clip ->
+        if (!voiceTray.add(clip)) context.toast("A message takes at most ${com.makefunstuff.herdr.data.VoiceStore.MAX_CLIPS} voice messages")
+    }
 
     // The clock the turns are timed by: ticking each second while the agent works.
     var now by remember { mutableLongStateOf(container.clock()) }
@@ -298,23 +290,19 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
     fun send(reply: String? = null) {
         val typed = reply ?: draft
         val pictures = if (reply == null) tray.images else emptyList()
-        // The pictures are named in front of what you typed.
-        val text = if (reply == null) tray.message(typed) else reply
-        if (text.isEmpty() || sending || (reply == null && tray.waiting)) return
+        val clips = if (reply == null) voiceTray.clips else emptyList()
+        // The pictures and voice messages are named in front of what you typed.
+        val text = if (reply == null) voiceTray.message(tray.message(typed)) else reply
+        if (text.isEmpty() || sending || (reply == null && (tray.waiting || voiceTray.waiting))) return
         // You wrote: what happened while you were away is behind you.
         awayHidden = true
-        // Sent as spoken, so the chat shows it with a mic; taken back if it doesn't go.
-        val voiced = reply == null && voiceTake != null
-        val at = container.clock()
-        // Kept with the same time as the held copy, so discarding that takes its mark back too.
-        if (voiced) container.voice.add(chatKey, text, at)
         // While it works, the words wait above the composer rather than land in the middle of its turn.
         if (Held.holds(status, named = agent != null)) {
-            container.composer.hold(chatKey, text, at)
+            container.composer.hold(chatKey, text, container.clock())
             if (reply == null) {
                 draft = DraftStore.afterSend(draft, typed)
                 tray.sent(pictures)
-                voiceTake = null
+                voiceTray.sent(clips)
             }
             return
         }
@@ -340,13 +328,12 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
                 if (reply == null) {
                     draft = DraftStore.afterSend(draft, typed)
                     tray.sent(pictures)
-                    voiceTake = null
+                    voiceTray.sent(clips)
                 }
                 telling = null
                 amending = false
             }.onFailure {
                 if (!blocked || tell != null) chat.dropPending(text)
-                if (voiced) container.voice.drop(chatKey, text, at)
                 context.toast(it.message ?: "Couldn't send")
             }
             sending = false
@@ -389,17 +376,12 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
         status == AgentStatus.Blocked -> ChatRow.Live.Blocked
         else -> null
     }
-    // The messages that went as voice messages, by the phone's clock (the turns are timed on the machine's).
-    val voiced = remember(turns, spoken, ahead) {
-        Spoken.marks(spoken, turns.mapNotNull { t -> t.user?.let { it to if (t.at > 0) t.at - ahead else 0L } })
-    }
-    val rows = remember(turns, steps, live, opened.toMap(), machineNow, state.pending, state.source, state.screen, state.truncated, state.thinking, voiced, spoken) {
+    val rows = remember(turns, steps, live, opened.toMap(), machineNow, state.pending, state.source, state.screen, state.truncated, state.thinking) {
         buildList {
             if (state.truncated) add(ChatRow.Info("truncated", "Earlier messages aren't loaded"))
             when (state.source) {
                 AgentChat.Source.Transcript -> addAll(
-                    chatRows(turns, steps, live, opened, machineNow, state.thinking) { at -> clock(at - ahead, now, zone) }
-                        .map { if (it is ChatRow.User && it.item.id in voiced) it.copy(voice = true) else it },
+                    chatRows(turns, steps, live, opened, machineNow, state.thinking) { at -> clock(at - ahead, now, zone) },
                 )
                 AgentChat.Source.Screen -> {
                     add(ChatRow.Info("screen-note", "No transcript for this agent, so this is its screen"))
@@ -410,7 +392,7 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
                 AgentChat.Source.Loading -> {}
             }
             state.pending.forEachIndexed { i, p ->
-                add(ChatRow.User(ChatItem.User("$i", p.text), pending = true, voice = Spoken.isSpoken(spoken, p.text, p.sentAt)))
+                add(ChatRow.User(ChatItem.User("$i", p.text), pending = true))
             }
         }
     }
@@ -436,7 +418,7 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
 
     val imeUp = WindowInsets.isImeVisible
     // The quick replies, when on: for an empty box, while the agent isn't asking something.
-    val chips = replies.on && replies.shown.isNotEmpty() && agent != null && draft.isEmpty() && tray.isEmpty && status != AgentStatus.Blocked && !typing
+    val chips = replies.on && replies.shown.isNotEmpty() && agent != null && draft.isEmpty() && tray.isEmpty && voiceTray.isEmpty && status != AgentStatus.Blocked && !typing
     val guardState by container.guard.state.collectAsStateWithLifecycle()
     Scaffold(
         containerColor = Herdr.colors.ground,
@@ -488,7 +470,7 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
                         },
                         onSend = ::send,
                         sending = sending,
-                        holdSend = attach.uploading || tray.waiting,
+                        holdSend = attach.uploading || tray.waiting || voiceTray.waiting,
                         status = when {
                             sending -> "Sending…"
                             !host.online -> "Not connected"
@@ -500,16 +482,12 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
                             ComposerIconButton(HerdrIcons.Plus, "Attach files", enabled = !attach.uploading, onClick = { attachMenu = true })
                             pill?.let { ModelPillButton(it) { modelSheet = true } }
                         },
-                        attachments = { ComposerTray(tray) },
-                        voice = dictation?.let { d ->
-                            ComposerVoice(d, voiceTake) {
-                                // Taken out again, only while they stand as heard at the end of the draft: changed, they are yours now.
-                                Dictation.drop(draft, voiceBefore, voiceWords)?.let { draft = it }
-                                voiceTake = null
-                                voiceWords = ""
-                            }
+                        attachments = {
+                            ComposerTray(tray)
+                            ComposerClips(voiceTray, player)
                         },
-                        attached = !tray.isEmpty,
+                        recorder = recorder,
+                        attached = !tray.isEmpty || !voiceTray.isEmpty,
                         stop = if (status == AgentStatus.Working) ({ keys(listOf("esc")) }) else null,
                         floating = true,
                         focusRequester = composerFocus,
@@ -537,11 +515,7 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
                                         held, status, kind ?: name,
                                         canSend = Held.canSend(status, heldSending || sending),
                                         onSendNow = ::sendHeld,
-                                        onDiscard = {
-                                            container.composer.drop(chatKey, it.id)
-                                            // A voice message that never went: no mark left to land on a later one like it.
-                                            container.voice.drop(chatKey, it.text, it.at)
-                                        },
+                                        onDiscard = { container.composer.drop(chatKey, it.id) },
                                         // While it asks something, the question comes first: the rows fold into their caption.
                                         folded = status == AgentStatus.Blocked && !heldOpen,
                                         onUnfold = { heldOpen = true },
@@ -586,7 +560,10 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
                     rows.isEmpty() -> Box(Modifier.padding(bottom = bottom)) {
                         EmptyState("No messages yet", "Send a prompt to get started.", icon = HerdrIcons.MessagesSquare)
                     }
-                    else -> CompositionLocalProvider(LocalChatImages provides ChatImages(machineId, session, container.images, host.online)) { LazyColumn(
+                    else -> CompositionLocalProvider(
+                        LocalChatImages provides ChatImages(machineId, session, container.images, host.online),
+                        LocalChatVoice provides ChatVoice(machineId, session, container.voice, host.online, player),
+                    ) { LazyColumn(
                         state = listState,
                         reverseLayout = true,
                         // The composer floats over the list's end: its height stays free under the newest entry.

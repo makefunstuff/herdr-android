@@ -78,6 +78,8 @@ class FakeMachine(
     var quick: FakeQuick? = null,
     /** Pictures on it by their path there (the files they are), for a chat that reads one back (`Images.fetchCommand`). */
     var pictures: Map<String, java.io.File> = emptyMap(),
+    /** Set to make copying a voice message there fail (`VoiceClips.uploadCommand`), as a full disk would. */
+    var voiceFails: Boolean = false,
     /** What `herdr-agent-commands` prints there (AgentCommands.listCommand): the person's and the projects' own commands and skills. */
     var agentCommands: String = "",
     /** What listens on its ports, as the dev servers' probe prints it (`DevServers.command`): `L` lines. */
@@ -153,6 +155,11 @@ class FakeMachine(
             // The composer's completions: an agent's own commands, and the files in its folder.
             "herdr-agent-commands" in w -> ok(agentCommands)
             "herdr-agent-files" in w -> ok(code?.filesIn(w.last()).orEmpty())
+            // A voice message (HostSession.uploadVoice): into the agent's folder, its path there printed.
+            "/.herdr-voice;" in command -> if (voiceFails) CommandResult(1, "", "No space left on device") else ok(
+                Shell.words(command.removePrefix("d=").substringBefore("/.herdr-voice;")).first() + "/.herdr-voice/" +
+                    Shell.words(command.substringAfterLast("\"\$d\"/")).first(),
+            )
             "herdr-android/uploads/" in command -> ok("/home/demo/.cache/herdr-android/uploads/20261017-091204-3f2a/" + Shell.words(command.substringAfterLast("\"/")).first())
             else -> ok("")
         }

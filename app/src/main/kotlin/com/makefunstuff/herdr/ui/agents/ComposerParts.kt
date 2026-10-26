@@ -22,6 +22,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
+import androidx.compose.runtime.remember
+import com.makefunstuff.herdr.core.host.VoiceClips
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -112,8 +114,11 @@ fun HeldList(
                             Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(start = Space.l),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
+                            // A voice message by its mic, not by the path of its file.
+                            val voice = remember(m.text) { VoiceClips.split(m.text) }
+                            if (voice.paths.isNotEmpty()) Icon(HerdrIcons.Mic, null, tint = c.accent, modifier = Modifier.padding(end = Space.s).size(16.dp))
                             Text(
-                                "“${m.text}”",
+                                if (voice.paths.isNotEmpty() && voice.text.isEmpty()) "Voice message" else "“${voice.text}”",
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = c.strong,
                                 maxLines = 2,

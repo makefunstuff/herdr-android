@@ -128,12 +128,17 @@ class SceneData {
     var keyBar: com.makefunstuff.herdr.data.KeyBarStore.Saved? = null
     /** The terminal's selection once "Select text" starts one, in viewport cells (anchor, cursor): what a drag would select. */
     var selection: Pair<com.makefunstuff.herdr.ui.terminal.CellPoint, com.makefunstuff.herdr.ui.terminal.CellPoint>? = null
-    /** The phone's microphone and what its speech recognition hears, for voice messages (PreviewMic). */
+    /** The phone's microphone, for voice messages (PreviewMic). */
     var mic: PreviewMic.Setup = PreviewMic.Setup()
-    /** The messages sent as voice messages (VoiceStore), by DraftStore key, as saved before the app opens. */
-    var voiceSent: Map<String, List<com.makefunstuff.herdr.core.chat.Spoken.Sent>> = emptyMap()
+    /** Voice messages waiting in a chat's composer (VoiceStore), by DraftStore key, as saved before the app opens. */
+    var voice: Map<String, List<SceneClip>> = emptyMap()
+    /** Voice messages sent from this phone and kept on it (VoiceStore), so the chat plays them. */
+    var voiceSent: List<SceneClip> = emptyList()
     fun host(id: String): FakeMachine = hosts.getValue(id)
 }
+
+/** A voice message in a scene: how long it is, and its path on [machine] once copied there (null: not yet). */
+data class SceneClip(val millis: Long, val remote: String? = null, val machine: String = Demo.DEVBOX)
 
 class SceneContext(val container: AppContainer, val nav: NavHostController, val data: SceneData) {
     /** Makes the app read [machineId]'s snapshot again now, as an event from herdr would. */
@@ -187,7 +192,18 @@ fun render(scene: Scene, dark: Boolean, file: File) {
     PreviewUnlock.answer = data.unlockAnswer
     synchronized(PreviewUnlock.asked) { PreviewUnlock.asked.clear() }
     data.looked.forEach { (key, at) -> com.makefunstuff.herdr.data.LookedStore(context.filesDir.resolve("looked.json")).mark(key.substringBefore('/'), key.substringAfter('/'), at) }
-    data.voiceSent.forEach { (chat, sent) -> sent.forEach { com.makefunstuff.herdr.data.VoiceStore(context.filesDir.resolve("voice.json")).add(chat, it.text, it.at) } }
+    if (data.voice.isNotEmpty() || data.voiceSent.isNotEmpty()) {
+        val voice = com.makefunstuff.herdr.data.VoiceStore(context.filesDir.resolve("voice-clips.json"), context.filesDir.resolve("voice"), context.filesDir.resolve("sent-voice"))
+        fun add(key: String, id: String, clip: SceneClip) {
+            val file = voice.newFile("ogg").apply { writeBytes(PreviewMic.RECORDING) }
+            voice.add(key, com.makefunstuff.herdr.data.VoiceClip(id, file.path, clip.millis))
+            clip.remote?.let { voice.uploaded(key, id, clip.machine, it) }
+        }
+        data.voice.forEach { (key, clips) -> clips.forEachIndexed { i, clip -> add(key, "clip-$i", clip) } }
+        // Sent: copied, then gone from the composer, leaving the kept copy and how long it is.
+        data.voiceSent.forEachIndexed { i, clip -> add("sent", "sent-$i", clip) }
+        voice.sent("sent", voice.current("sent"))
+    }
     data.composer?.let { context.filesDir.resolve("composer.json").writeText(Json.encodeToString(com.makefunstuff.herdr.data.ComposerStore.State.serializer(), it)) }
     data.keyBar?.let { context.filesDir.resolve("key-bar.json").writeText(Json.encodeToString(com.makefunstuff.herdr.data.KeyBarStore.Saved.serializer(), it)) }
     data.textSizes?.let { context.filesDir.resolve("text-sizes.json").writeText(Json.encodeToString(com.makefunstuff.herdr.data.TextSizeStore.Sizes.serializer(), it)) }

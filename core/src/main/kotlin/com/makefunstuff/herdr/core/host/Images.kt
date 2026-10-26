@@ -1,6 +1,5 @@
 package com.makefunstuff.herdr.core.host
 
-import com.makefunstuff.herdr.core.ssh.HerdrCommands
 import kotlin.math.max
 import kotlin.math.roundToInt
 
@@ -23,36 +22,17 @@ object Images {
     /** A message's pictures ([paths], in order) and its words without their mentions ([text]). */
     data class Split(val paths: List<String>, val text: String)
 
-    // `@"path with spaces"` or `@path`, at the start or after white space (an e-mail address isn't one).
-    private val mentionRegex = Regex("(?<=^|\\s)@(\"([^\"\\n]+)\"|(\\S+))")
-
     /**
      * Takes the mentions of pictures out of [text]. Only a picture on the machine by its full path
      * (`/…` or `~/…`) counts, as only that one can be shown; any other mention stays in the words.
      */
-    fun split(text: String): Split {
-        val paths = ArrayList<String>()
-        val rest = mentionRegex.replace(text) { m ->
-            val path = m.groupValues[2].ifEmpty { m.groupValues[3] }
-            if ((path.startsWith("/") || path.startsWith("~/")) && isImage(path)) {
-                paths += path
-                ""
-            } else m.value
-        }
-        if (paths.isEmpty()) return Split(emptyList(), text)
-        // The space a mention leaves goes with it; the lines the words keep stay.
-        val words = rest.lines().joinToString("\n") { it.replace(Regex("[ \\t]{2,}"), " ").trim() }.trim()
-        return Split(paths, words)
-    }
+    fun split(text: String): Split = Attachments.split(text, ::isImage).let { (paths, words) -> Split(paths, words) }
 
     /**
      * Prints the picture at [path] on the machine as base64, when it is a file of at most [maxBytes];
      * otherwise prints nothing and fails. A path under `~/` is the home folder's.
      */
-    fun fetchCommand(path: String, maxBytes: Long = MAX_FETCH_BYTES): String {
-        val file = if (path.startsWith("~/")) "\"\$HOME\"/" + HerdrCommands.quote(path.removePrefix("~/")) else HerdrCommands.quote(path)
-        return "f=$file && [ -f \"\$f\" ] && [ \"\$(wc -c < \"\$f\")\" -le $maxBytes ] && base64 < \"\$f\""
-    }
+    fun fetchCommand(path: String, maxBytes: Long = MAX_FETCH_BYTES): String = Attachments.fetchCommand(path, maxBytes)
 }
 
 /**

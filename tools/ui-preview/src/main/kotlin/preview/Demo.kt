@@ -281,11 +281,20 @@ object Demo {
      */
     fun appMore(lines: Int = Int.MAX_VALUE): String = resource("claude-app-more.jsonl").trimEnd().lines().take(lines).joinToString("\n") + "\n"
 
-    /** The app agent's second message, as the phone kept it: sent by voice at 07:39 (`chat-voice-sent`). */
-    fun voiceSent() = com.makefunstuff.herdr.core.chat.Spoken.Sent(
-        "Nice. Also show when each machine last answered, like \"2 min ago\".",
-        LocalDateTime.of(2026, 10, 17, 7, 39).toInstant(ZoneOffset.UTC).toEpochMilli(),
-    )
+    /** The app agent's second ask as a voice message: the recording, in its folder's `.herdr-voice` (`VoiceClips`). */
+    const val VOICE = "/home/demo/src/herdr-android/.herdr-voice/voice-message-20261017-073855-5c1e.ogg"
+
+    /**
+     * devbox's app agent with its second ask sent as a voice message (`chat-voice-*`): the message is
+     * the recording alone, and Claude Code, which can't listen to audio, says it ran whisper on it first.
+     */
+    fun appTranscriptWithVoice(): String = resource("claude-app.jsonl")
+        .replace("\"Nice. Also show when each machine last answered, like \\\"2 min ago\\\".\"", "\"@$VOICE\"")
+        .replace(
+            "Sure \\u2014 `HostState` has no timestamp yet",
+            "I can't listen to audio, so I ran `whisper` on your voice message: you'd like each machine to show when it last answered, " +
+                "like \\\"2 min ago\\\". `HostState` has no timestamp yet",
+        )
 
     /** devbox's app agent once its second ask is done, a failed test run on the way. */
     fun appTranscriptDone(): String = resource("claude-app.jsonl").trimEnd() + "\n" + appMore()

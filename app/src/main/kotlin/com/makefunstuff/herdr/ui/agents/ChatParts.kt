@@ -62,6 +62,8 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import com.makefunstuff.herdr.core.host.Images
+import com.makefunstuff.herdr.core.host.VoiceClips
+import com.makefunstuff.herdr.ui.voice.MessageVoice
 import com.makefunstuff.herdr.ui.images.MessageImages
 import com.makefunstuff.herdr.ui.common.CodeBlock
 import com.makefunstuff.herdr.ui.common.MarkdownText
@@ -78,8 +80,8 @@ import com.makefunstuff.herdr.ui.theme.Space
 sealed interface ChatRow {
     val key: String
 
-    /** What you said; [voice] when it went as a voice message (its words, with a mic under them). */
-    data class User(val item: ChatItem.User, val pending: Boolean = false, val voice: Boolean = false) : ChatRow {
+    /** What you said. */
+    data class User(val item: ChatItem.User, val pending: Boolean = false) : ChatRow {
         override val key get() = if (pending) "pending/${item.id}" else item.id
     }
     /** The agent's words: its answer, or ([quiet]) narration inside a settled turn's work. */
@@ -205,7 +207,7 @@ private fun workRows(items: List<ChatItem>, steps: ChatTurns.Steps, quiet: Boole
 @Composable
 fun ChatRowView(row: ChatRow, onToggle: (ChatRow.Head) -> Unit = {}, onThought: (ChatRow.Thought) -> Unit = {}) {
     when (row) {
-        is ChatRow.User -> UserBubble(row.item, row.pending, row.voice)
+        is ChatRow.User -> UserBubble(row.item, row.pending)
         is ChatRow.Agent ->
             // Narration in a settled turn is a quiet row again, under the answer's voice.
             if (row.quiet) MarkdownText(row.item.text, Modifier.fillMaxWidth().padding(horizontal = Space.xs), style = MaterialTheme.typography.bodySmall, color = Herdr.colors.muted)
@@ -311,10 +313,11 @@ private fun ThinkingLine() {
 }
 
 @Composable
-private fun UserBubble(item: ChatItem.User, pending: Boolean, voice: Boolean) {
+private fun UserBubble(item: ChatItem.User, pending: Boolean) {
     var expanded by rememberSaveable(item.id) { mutableStateOf(false) }
-    // The pictures it names show as pictures, over the words.
-    val split = remember(item.text) { Images.split(item.text) }
+    // The voice messages and pictures it names show as themselves, over the words.
+    val voice = remember(item.text) { VoiceClips.split(item.text) }
+    val split = remember(voice.text) { Images.split(voice.text) }
     val text = split.text
     val long = text.length > 600 || text.count { it == '\n' } > 12
     Row(Modifier.fillMaxWidth().padding(start = 48.dp), horizontalArrangement = Arrangement.End) {
@@ -327,6 +330,7 @@ private fun UserBubble(item: ChatItem.User, pending: Boolean, voice: Boolean) {
             modifier = Modifier.alpha(if (pending) 0.6f else 1f).animateContentSize(),
         ) {
             Column(Modifier.padding(horizontal = Space.l, vertical = Space.m)) {
+                if (voice.paths.isNotEmpty()) MessageVoice(voice.paths, Modifier.padding(bottom = if (text.isEmpty() && split.paths.isEmpty()) 0.dp else Space.s))
                 if (split.paths.isNotEmpty()) MessageImages(split.paths, Modifier.padding(bottom = if (text.isEmpty()) 0.dp else Space.s))
                 if (text.isNotEmpty()) SelectionContainer {
                     Text(
@@ -350,14 +354,6 @@ private fun UserBubble(item: ChatItem.User, pending: Boolean, voice: Boolean) {
                         fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.padding(top = 6.dp).clickable { expanded = !expanded },
                     )
-                }
-                if (voice) {
-                    // Sent as a voice message: the words heard, marked as such.
-                    Row(Modifier.padding(top = 6.dp).alpha(0.7f), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(HerdrIcons.Mic, null, Modifier.size(12.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text("Voice message", style = MaterialTheme.typography.labelSmall)
-                    }
                 }
                 if (pending) Text("Sending…", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(top = 4.dp))
             }
