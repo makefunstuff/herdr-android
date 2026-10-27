@@ -18,18 +18,27 @@ object Hearing {
      * One way to start hearing: the [onDevice] recognizer or the phone's regular one, asked for a
      * language ([withLanguage], the one [language] picks for that recognizer) or in its own.
      */
-    data class Attempt(val onDevice: Boolean, val withLanguage: Boolean = true)
+    data class Attempt(val onDevice: Boolean, val withLanguage: Boolean = true) {
+        /**
+         * The last way left: the regular recognizer in its own language, asked as plainly as Gboard
+         * does (no language, online allowed). Every other way is told to prefer hearing on the phone.
+         */
+        val plain: Boolean get() = !onDevice && !withLanguage
+        val offline: Boolean get() = !plain
+    }
 
     /**
      * What to try after [attempt] failed with Android's [error], or null: it fails, and says why.
      * [asked]: a language was asked for (a language error without one is the recognizer's own).
      *
-     * A language error: the same recognizer once more, in its own language. The on-device
-     * recognizer failing for any other reason than hearing nothing or having no microphone: the
-     * regular one, with the language again (it may have one the on-device one hasn't).
+     * A language error: the same recognizer once more, in its own language; for the regular one
+     * also when it was in its own already, as the [Attempt.plain] request, so the regular recognizer
+     * always ends on that. The on-device recognizer failing for any other reason than hearing nothing
+     * or having no microphone: the regular one, with the language again (it may have one the
+     * on-device one hasn't).
      */
     fun next(attempt: Attempt, error: Int, asked: Boolean): Attempt? = when {
-        isLanguage(error) && attempt.withLanguage && asked -> attempt.copy(withLanguage = false)
+        isLanguage(error) && attempt.withLanguage && (asked || !attempt.onDevice) -> attempt.copy(withLanguage = false)
         attempt.onDevice && error !in KEEP_ON_DEVICE -> Attempt(onDevice = false)
         else -> null
     }

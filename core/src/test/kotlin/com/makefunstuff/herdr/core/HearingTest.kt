@@ -6,6 +6,7 @@ import com.makefunstuff.herdr.core.chat.Hearing.Attempt
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /** The language a recognizer is asked for, and what is tried when one fails, against fake phones. */
 class HearingTest {
@@ -78,17 +79,19 @@ class HearingTest {
     /**
      * A phone's two recognizers: each with the languages it has, null when it can't say; [onDeviceFails]
      * with that error whatever it is asked; asked for no language, the on-device one hears in its own,
-     * the regular one when [regularDefault] (the one chosen for voice typing).
+     * the regular one when [regularDefault] (the one chosen for voice typing), and asked plainly (not
+     * offline) when [plainWorks].
      */
     private class FakePhone(
         val onDevice: List<String>?,
         val regular: List<String>?,
         val onDeviceFails: Int? = null,
         val regularDefault: Boolean = true,
+        val plainWorks: Boolean = true,
         val hasOnDevice: Boolean = true,
     )
 
-    /** Starts hearing [phone] in [phoneLanguages] as the app does: each attempt started, as `on-device:en-US` or `regular:-`. */
+    /** Starts hearing [phone] in [phoneLanguages] as the app does: each attempt started, as `on-device:en-US`, `regular:-` or `regular:- online` (plain). */
     private fun hear(phone: FakePhone, phoneLanguages: List<String>, app: List<String> = emptyList()): List<String> {
         val tried = mutableListOf<String>()
         var attempt: Attempt? = Attempt(onDevice = phone.hasOnDevice)
@@ -99,10 +102,14 @@ class HearingTest {
                 attempt = Hearing.next(attempt, Errors.LANGUAGE_UNAVAILABLE, asked = false)
                 continue
             }
-            tried += "${if (attempt.onDevice) "on-device" else "regular"}:${language ?: "-"}"
+            tried += "${if (attempt.onDevice) "on-device" else "regular"}:${language ?: "-"}${if (attempt.offline) "" else " online"}"
             val error = when {
                 attempt.onDevice && phone.onDeviceFails != null -> phone.onDeviceFails
-                language == null -> if (attempt.onDevice || phone.regularDefault) null else Errors.LANGUAGE_UNAVAILABLE
+                language == null -> when {
+                    attempt.onDevice -> null
+                    attempt.plain -> if (phone.plainWorks) null else Errors.LANGUAGE_UNAVAILABLE
+                    else -> if (phone.regularDefault) null else Errors.LANGUAGE_UNAVAILABLE
+                }
                 supported != null && language in supported -> null
                 else -> Errors.LANGUAGE_NOT_SUPPORTED
             } ?: return tried + "heard"
@@ -123,16 +130,41 @@ class HearingTest {
         assertEquals(listOf("regular:-", "heard"), hear(pixel, listOf("et-EE")))
         // One that can't say is tried.
         assertEquals(listOf("on-device:-", "heard"), hear(FakePhone(onDevice = null, regular = google), listOf("et-EE")))
+        // The regular one's own refused offline: asked plainly.
+        val offlineOnly = FakePhone(onDevice = listOf("en-US"), regular = google, regularDefault = false)
+        assertEquals(listOf("regular:-", "regular:- online", "heard"), hear(offlineOnly, listOf("et-EE")))
     }
 
     @Test fun aLanguageErrorTriesOnceWithoutTheLanguage() {
-        // It said it had ru-EE but hasn't: once more in its own.
+        // It said it had ru-EE but hasn't: once more in its own, plainly (the regular one's last way).
         val liar = FakePhone(onDevice = null, regular = null, hasOnDevice = false)
-        assertEquals(listOf("regular:ru-EE", "regular:-", "heard"), hear(liar, listOf("en-EE"), app = listOf("ru-EE")))
-        // Not even its own: it fails, once.
-        val none = FakePhone(onDevice = null, regular = null, hasOnDevice = false, regularDefault = false)
-        assertEquals(listOf("regular:ru-EE", "regular:-", "failed"), hear(none, listOf("en-EE"), app = listOf("ru-EE")))
-        assertEquals(listOf("regular:-", "failed"), hear(none, listOf("en-EE")))
+        assertEquals(listOf("regular:ru-EE", "regular:- online", "heard"), hear(liar, listOf("en-EE"), app = listOf("ru-EE")))
+        // Not even plainly: it fails, once.
+        val none = FakePhone(onDevice = null, regular = null, hasOnDevice = false, regularDefault = false, plainWorks = false)
+        assertEquals(listOf("regular:ru-EE", "regular:- online", "failed"), hear(none, listOf("en-EE"), app = listOf("ru-EE")))
+        assertEquals(listOf("regular:-", "regular:- online", "failed"), hear(none, listOf("en-EE")))
+    }
+
+    @Test fun theRegularRecognizerAlwaysEndsOnThePlainRequest() {
+        // Every phone whose regular recognizer turns down all but the plain request: each ends on it.
+        val plainOnly = { onDevice: List<String>?, regular: List<String>?, has: Boolean, fails: Int? ->
+            FakePhone(onDevice, regular, onDeviceFails = fails, regularDefault = false, hasOnDevice = has)
+        }
+        val everywhere = listOf("en-EE", "et-EE", "ru-EE")
+        val cases = listOf(
+            // The on-device one fails and the regular one doesn't say (slow, or Android 12 and older).
+            plainOnly(listOf("en-US"), null, true, Errors.CLIENT) to everywhere,
+            // No on-device recognizer, and the regular one doesn't say.
+            plainOnly(null, null, false, null) to everywhere,
+            // The on-device one without the language downloaded.
+            plainOnly(null, null, true, Errors.LANGUAGE_UNAVAILABLE) to everywhere,
+            // No language matches.
+            plainOnly(listOf("en-US"), google, true, null) to listOf("et-EE"),
+        )
+        for ((phone, languages) in cases) for (language in languages) {
+            val tried = hear(phone, listOf(language))
+            assertEquals(listOf("regular:- online", "heard"), tried.takeLast(2), "$language: $tried")
+        }
     }
 
     @Test fun anOnDeviceRecognizerThatFailsGivesWayToTheRegularOne() {
@@ -165,6 +197,13 @@ class HearingTest {
     @Test fun theRegularRecognizerFailingForAnyOtherReasonFails() {
         assertNull(Hearing.next(Attempt(onDevice = false), Errors.NETWORK, asked = true))
         assertNull(Hearing.next(Attempt(onDevice = false, withLanguage = false), Errors.LANGUAGE_NOT_SUPPORTED, asked = false))
-        assertNull(Hearing.next(Attempt(onDevice = false), Errors.LANGUAGE_NOT_SUPPORTED, asked = false))
+    }
+
+    @Test fun aRegularRecognizerInItsOwnLanguageIsAskedPlainlyAfterALanguageError() {
+        val plain = Attempt(onDevice = false, withLanguage = false)
+        assertEquals(plain, Hearing.next(Attempt(onDevice = false), Errors.LANGUAGE_UNAVAILABLE, asked = false))
+        assertEquals(plain, Hearing.next(Attempt(onDevice = false), Errors.LANGUAGE_NOT_SUPPORTED, asked = true))
+        assertTrue(plain.plain && !plain.offline)
+        assertTrue(Attempt(onDevice = false).offline && Attempt(onDevice = true, withLanguage = false).offline)
     }
 }

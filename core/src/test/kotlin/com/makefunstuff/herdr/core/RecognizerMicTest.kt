@@ -107,6 +107,44 @@ class RecognizerMicTest {
         assertEquals("regular start -", log.last())
     }
 
+    /** The reviewer's three ways to the regular recognizer in its own language: each ends on the plain request. */
+    @Test fun theRegularRecognizerInItsOwnEndsOnThePlainRequest() {
+        fun endsPlain(setUp: () -> Unit, run: (RecognizerMic, Dictation) -> Unit) {
+            log.clear()
+            phone.made.clear()
+            setUp()
+            val (mic, d) = mic()
+            run(mic, d)
+            assertEquals("regular start -", log.last(), "$log")
+            mic.error(Errors.LANGUAGE_UNAVAILABLE)
+            assertEquals("regular start - online", log.last(), "$log")
+            assertIs<State.Recording>(d.state.value)
+            d.segment("heard")
+            d.stop()
+            d.segment("")
+            assertEquals("heard", sent.last())
+            mic.close()
+        }
+        // On a Pixel: the on-device recognizer fails, the regular one doesn't answer in time.
+        endsPlain({}) { mic, d ->
+            d.down()
+            last().answer!!(google)
+            mic.error(Errors.CLIENT)
+            pass(RecognizerMic.CHECK_MS)
+        }
+        // Android 12 and older: the regular one can't be asked.
+        endsPlain({ phone.canBeAsked = false }) { mic, d ->
+            d.down()
+            mic.error(Errors.CLIENT)
+        }
+        // A phone in Estonian: no language matches.
+        endsPlain({ phone.canBeAsked = true; phone.languages = listOf("et-EE") }) { _, d ->
+            d.down()
+            last().answer!!(listOf("en-US"))
+            last().answer!!(google)
+        }
+    }
+
     @Test fun aRecognizerThatCantBeAskedStartsInItsOwnAtOnce() {
         phone.canBeAsked = false
         val (_, d) = mic(onDevice = false)
