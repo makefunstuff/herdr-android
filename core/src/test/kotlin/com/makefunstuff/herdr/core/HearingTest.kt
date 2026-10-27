@@ -36,6 +36,22 @@ class HearingTest {
         assertEquals("zh-Hans-CN", Hearing.best("zh-Hans-SG", google))
     }
 
+    @Test fun chineseWithoutAScriptIsWrittenAsItsCountryWritesIt() {
+        assertEquals("zh-Hant-TW", Hearing.best("zh-TW", google))
+        assertEquals("zh-Hant-TW", Hearing.best("zh-HK", google))
+        assertEquals("zh-Hans-CN", Hearing.best("zh-CN", google))
+        // Google's recognizer names Mandarin cmn.
+        assertEquals("cmn-Hant-TW", Hearing.best("zh-Hant-TW", listOf("cmn-Hans-CN", "cmn-Hant-TW", "yue-Hant-HK")))
+    }
+
+    @Test fun regionalPreferencesAndVariantsAreLeftOut() {
+        assertEquals("en-GB", Hearing.best("en-GB-u-nu-latn", google))
+        assertEquals("en-GB", Hearing.best("en-GB-u-mu-celsius", google))
+        assertEquals("en-GB", Hearing.best("en-GB-u-fw-mon-mu-celsius", google))
+        assertEquals("de-DE", Hearing.best("de-DE-1996", google))
+        assertEquals("en-US", Hearing.best("en-EE-x-test", google))
+    }
+
     @Test fun aLanguageNoRecognizerHasIsNone() {
         assertNull(Hearing.best("et-EE", google))
         assertNull(Hearing.best("", google))

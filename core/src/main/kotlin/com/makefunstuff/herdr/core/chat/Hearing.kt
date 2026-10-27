@@ -80,18 +80,28 @@ object Hearing {
         "hi" to "IN", "ja" to "JP", "ko" to "KR", "nb" to "NO", "sv" to "SE", "uk" to "UA", "vi" to "VN", "zh" to "CN",
     )
 
-    /** A language tag's parts, lowercase language and uppercase region: `en_us` and `en-US` are the same. */
+    /**
+     * A language tag's parts, lowercase language and script, uppercase region: `en_us` and `en-US`
+     * are the same. What follows them is left out (variants, and extensions such as Android 14's
+     * regional preferences, `en-GB-u-mu-celsius`); Chinese without a script gets the one its country
+     * writes (`zh-TW` is `zh-Hant-TW`).
+     */
     private data class Tag(val language: String, val script: String?, val region: String?) {
         companion object {
-            /** Old codes some recognizers still give, as the new ones. */
-            private val RENAMED = mapOf("iw" to "he", "in" to "id", "ji" to "yi")
+            /** Old codes some recognizers still give, as the new ones; Google's recognizer names Mandarin `cmn`. */
+            private val RENAMED = mapOf("iw" to "he", "in" to "id", "ji" to "yi", "cmn" to "zh")
+            private val TRADITIONAL = setOf("TW", "HK", "MO")
 
             fun of(tag: String): Tag? {
-                val parts = tag.trim().split('-', '_').filter { it.isNotEmpty() }
-                val language = parts.firstOrNull()?.lowercase()?.takeIf { it.all(Char::isLetter) } ?: return null
-                val script = parts.drop(1).firstOrNull { it.length == 4 && it.all(Char::isLetter) }?.lowercase()
-                val region = parts.drop(1).firstOrNull { (it.length == 2 && it.all(Char::isLetter)) || (it.length == 3 && it.all(Char::isDigit)) }?.uppercase()
-                return Tag(RENAMED[language] ?: language, script, region)
+                val parts = tag.trim().split('-', '_').filter { it.isNotEmpty() }.takeWhile { it.length > 1 }
+                val first = parts.firstOrNull()?.lowercase()?.takeIf { it.length in 2..3 && it.all(Char::isLetter) } ?: return null
+                val language = RENAMED[first] ?: first
+                var rest = parts.drop(1)
+                val script = rest.firstOrNull()?.takeIf { it.length == 4 && it.all(Char::isLetter) }?.lowercase()
+                if (script != null) rest = rest.drop(1)
+                val region = rest.firstOrNull()?.takeIf { (it.length == 2 && it.all(Char::isLetter)) || (it.length == 3 && it.all(Char::isDigit)) }?.uppercase()
+                val written = script ?: if (language == "zh" && region != null) (if (region in TRADITIONAL) "hant" else "hans") else null
+                return Tag(language, written, region)
             }
         }
     }
