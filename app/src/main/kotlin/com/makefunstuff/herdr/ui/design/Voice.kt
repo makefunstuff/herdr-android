@@ -60,8 +60,26 @@ import com.makefunstuff.herdr.ui.theme.Space
 /**
  * A voice message in [ChatComposer]: [dictation] hears you, and [take] is how long you spoke (ms)
  * while its words wait in the draft for you to check them; [onDropTake] takes those words out again.
+ * [cursor] is where the words go in.
  */
-class ComposerVoice(val dictation: Dictation, val take: Long?, val onDropTake: () -> Unit)
+class ComposerVoice(val dictation: Dictation, val take: Long?, val cursor: ComposerCursor? = null, val onDropTake: () -> Unit)
+
+/**
+ * Where the composer's cursor stands in the draft, kept up by [ChatComposer]: the screen puts the
+ * words heard in there ([Dictation.insert]) and says where the cursor goes after them ([place]).
+ */
+class ComposerCursor {
+    /** The cursor's place (the end of a selection); -1 before the box was shown. */
+    var at = -1
+        internal set
+    private var placed: Dictation.Inserted? = null
+
+    /** The draft is about to become [inserted]'s text: the cursor goes where it says. */
+    fun place(inserted: Dictation.Inserted) { placed = inserted }
+
+    /** Where [ChatComposer] puts the cursor in [draft] (changed from outside), if it was [place]d for it. */
+    internal fun placedIn(draft: String): Int? = placed?.takeIf { it.text == draft }?.cursor
+}
 
 /** Whether the composer hears you now (or makes text of the last words): the box gives way to what it hears. */
 val Dictation.State.hearing: Boolean get() = this is Dictation.State.Recording || this is Dictation.State.Finishing
@@ -243,30 +261,48 @@ fun VoiceTake(millis: Long, onDrop: () -> Unit) {
 }
 
 /**
- * Over the composer when the mic can't be used: the microphone refused (why it is needed, and Allow,
- * or Open settings once Android won't ask again), or what went wrong while it heard.
+ * Over the composer when the mic can't be used: while Android asks for the microphone, why it is
+ * needed; refused, that again with Allow, or Open settings once Android won't ask again; or what
+ * went wrong while it heard.
  */
 @Composable
 fun MicNotice(dictation: Dictation, state: Dictation.State) {
     val c = Herdr.colors
     val shape = RoundedCornerShape(Radius.xl)
     val noMic = state as? Dictation.State.NoMic
+    val asking = state == Dictation.State.Asking
     Surface(
         color = c.card,
         border = BorderStroke(1.dp, c.line),
         shape = shape,
         modifier = Modifier.fillMaxWidth().shadow(6.dp, shape, ambientColor = c.shadow, spotColor = c.shadow),
     ) {
-        Column(Modifier.padding(start = Space.l, end = Space.s, top = Space.m)) {
-            Row(Modifier.padding(end = Space.s)) {
+        Column(Modifier.padding(start = Space.l, end = Space.s, top = Space.m, bottom = if (asking) Space.m else 0.dp)) {
+            Row(Modifier.padding(end = Space.s).semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite }) {
                 Icon(
-                    if (noMic != null) HerdrIcons.MicOff else HerdrIcons.CircleAlert, null,
-                    tint = if (noMic != null) c.muted else c.notice,
+                    when {
+                        asking -> HerdrIcons.Mic
+                        noMic != null -> HerdrIcons.MicOff
+                        else -> HerdrIcons.CircleAlert
+                    },
+                    null,
+                    tint = when {
+                        asking -> c.accent
+                        noMic != null -> c.muted
+                        else -> c.notice
+                    },
                     modifier = Modifier.padding(top = 2.dp).size(16.dp),
                 )
                 Spacer(Modifier.width(Space.s))
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Space.xxs)) {
-                    if (noMic != null) {
+                    if (asking) {
+                        Text("Allow the microphone", style = MaterialTheme.typography.bodyLarge, color = c.strong)
+                        Text(
+                            "So you can speak your message. The phone turns what you say into text in the box; only the text is sent, once you send it.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = c.muted,
+                        )
+                    } else if (noMic != null) {
                         Text("The microphone is off", style = MaterialTheme.typography.bodyLarge, color = c.strong)
                         Text(
                             if (noMic.forever) "Voice messages need it to hear you. Allow it under Permissions in the phone's settings for herdr."
@@ -279,7 +315,8 @@ fun MicNotice(dictation: Dictation, state: Dictation.State) {
                     }
                 }
             }
-            Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+            // While Android's own question is up, its buttons answer it.
+            if (!asking) Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
                 when {
                     noMic == null -> QuietButton(onClick = dictation::dismiss) { Text("OK") }
                     noMic.forever -> {
