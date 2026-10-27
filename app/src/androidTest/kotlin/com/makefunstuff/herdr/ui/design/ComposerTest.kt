@@ -20,8 +20,10 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextInputSelection
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.withKeyDown
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.test.platform.app.InstrumentationRegistry
@@ -204,12 +206,53 @@ class ComposerTest {
         assertEquals("run the tests again, then push", draft)
     }
 
+    @Test fun spokenWordsGoInWhereTheCursorStands() {
+        var draft by mutableStateOf("Please now")
+        val cursor = ComposerCursor()
+        val mic = HeardMic()
+        val dictation = com.makefunstuff.herdr.core.chat.Dictation(mic, { 0L }) { text, _ ->
+            // As rememberVoiceDraft does.
+            val inserted = com.makefunstuff.herdr.core.chat.Dictation.insert(draft, cursor.at, text)
+            cursor.place(inserted)
+            draft = inserted.text
+        }.also { mic.dictation = it }
+        rule.setContent {
+            HerdrTheme { ChatComposer(draft, { draft = it }, "Message claude…", onSend = {}, voice = ComposerVoice(dictation, null, cursor) {}) }
+        }
+        field.performTextInputSelection(TextRange(6))
+        rule.onNodeWithContentDescription("Record a voice message").performClick()
+        rule.onNodeWithContentDescription("Finish voice message").performClick()
+        rule.waitForIdle()
+        assertEquals("Please run the tests again now", draft)
+        // The cursor stands right after them: typing goes on from there.
+        field.performTextInput(" and")
+        assertEquals("Please run the tests again and now", draft)
+    }
+
+    @Test fun coordinatorTakesVoiceMessages() {
+        var draft by mutableStateOf("")
+        val mic = HeardMic()
+        val dictation = com.makefunstuff.herdr.core.chat.Dictation(mic, { 0L }) { text, _ -> draft = text }.also { mic.dictation = it }
+        rule.setContent {
+            HerdrTheme { CoordinatorComposer(draft, { draft = it }, true, "Tell the Coordinator…", false, {}, {}, voice = ComposerVoice(dictation, null) {}) }
+        }
+        rule.onNodeWithContentDescription("Record a voice message").performClick()
+        // While it hears, the row is the recording's.
+        rule.onNodeWithText("Start agents").assertDoesNotExist()
+        rule.onNodeWithContentDescription("Finish voice message").performClick()
+        rule.waitForIdle()
+        assertEquals("run the tests again", draft)
+        rule.onNodeWithText("Start agents").assertIsDisplayed()
+    }
+
     @Test fun aRefusedMicrophoneIsExplained() {
         val mic = HeardMic(allowed = false)
         val dictation = com.makefunstuff.herdr.core.chat.Dictation(mic, { 0L }) { _, _ -> }.also { mic.dictation = it }
         rule.setContent { HerdrTheme { ChatComposer("", {}, "Message claude…", onSend = {}, voice = ComposerVoice(dictation, null) {}) } }
         rule.onNodeWithContentDescription("Record a voice message").performClick()
         assertEquals(1, mic.asked)
+        // While Android asks, the composer says why.
+        rule.onNodeWithText("Allow the microphone").assertIsDisplayed()
         dictation.answered(granted = false, forever = true)
         rule.onNodeWithText("The microphone is off").assertIsDisplayed()
         rule.onNodeWithText("Open settings").assertIsDisplayed()

@@ -101,8 +101,11 @@ private class AndroidMic(private val context: Context) : Dictation.Mic {
     }
 
     override fun listen() {
-        val r = recognizer ?: make().also { recognizer = it }
-        runCatching { r.startListening(intent()) }.onFailure { dictation.failed(Problem.Other) }
+        // The phone's recognizer gone (turned off, or its app removed since the screen opened): said, not thrown.
+        runCatching {
+            val r = recognizer ?: make().also { recognizer = it }
+            r.startListening(intent())
+        }.onFailure { dictation.failed(Problem.Unavailable) }
     }
 
     override fun stop() { recognizer?.stopListening() }
@@ -125,7 +128,9 @@ private class AndroidMic(private val context: Context) : Dictation.Mic {
         return r
     }
 
+    // In the phone's language (or the one chosen for this app in its settings).
     private fun intent() = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+        .putExtra(RecognizerIntent.EXTRA_LANGUAGE, context.resources.configuration.locales[0].toLanguageTag())
         .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
         .putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
         .putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
@@ -155,18 +160,7 @@ private class AndroidMic(private val context: Context) : Dictation.Mic {
                 main.postDelayed({ listen() }, 250)
                 return
             }
-            dictation.failed(
-                when (error) {
-                    SpeechRecognizer.ERROR_NO_MATCH, SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> Problem.NoSpeech
-                    SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> Problem.Busy
-                    SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT, SpeechRecognizer.ERROR_SERVER,
-                    SpeechRecognizer.ERROR_SERVER_DISCONNECTED -> Problem.Network
-                    SpeechRecognizer.ERROR_AUDIO -> Problem.Audio
-                    SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> Problem.NoPermission
-                    SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED, SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE -> Problem.Language
-                    else -> Problem.Other
-                },
-            )
+            dictation.failed(Dictation.problem(error))
         }
 
         private fun best(b: Bundle?): String? = b?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
