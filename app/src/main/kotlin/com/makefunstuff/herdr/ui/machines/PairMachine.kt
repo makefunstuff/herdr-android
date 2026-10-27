@@ -143,7 +143,7 @@ fun PairMachineScreen(nav: NavController, onType: () -> Unit) {
                     it.viaMachineId == null && it.user == f.offer.user && it.host == reached.address && it.port == f.offer.port
                 }
                 val paired = Pairing.pair(f.offer, reached, container.identity.get(), same?.id ?: MachineStore.newId())
-                val machine = same?.let { paired.copy(label = it.label, herdrPath = it.herdrPath, enabled = it.enabled) } ?: paired
+                val machine = same?.let { paired.copy(label = it.label, herdrPath = it.herdrPath, enabled = it.enabled, allowHostScripts = it.allowHostScripts) } ?: paired
                 container.machines.upsert(machine)
                 Toasts.show("${machine.label} added", error = false)
                 nav.navigate(Routes.machine(machine.id)) { popUpTo(Routes.EDIT) { inclusive = true } }
