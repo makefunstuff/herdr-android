@@ -36,8 +36,11 @@ class RecognizerMic(private val phone: Phone, onDevice: Boolean) : Dictation.Mic
          * False when it can't be asked (Android 12 and older): [answer] never comes.
          */
         fun languages(answer: (List<String>?) -> Unit): Boolean
-        /** Starts hearing in [language], null for its own. */
-        fun start(language: String?)
+        /**
+         * Starts hearing in [language], null for its own; [offline]: told to prefer hearing on the
+         * phone, else asked plainly, as Gboard does.
+         */
+        fun start(language: String?, offline: Boolean)
         fun stop()
         fun cancel()
         fun destroy()
@@ -124,13 +127,15 @@ class RecognizerMic(private val phone: Phone, onDevice: Boolean) : Dictation.Mic
         val app = phone.appLanguages()
         val phoneLanguages = phone.phoneLanguages()
         val language = if (attempt.withLanguage) Hearing.language(app, phoneLanguages, supported) else null
-        phone.log("listen: ${if (attempt.onDevice) "on-device" else "regular"}, language ${language ?: "its own"} (phone $phoneLanguages, app $app, it has ${supported?.size ?: "?"})")
+        phone.log("listen: ${if (attempt.onDevice) "on-device" else "regular"}, language ${language ?: "its own"}${if (attempt.onDevice || attempt.withLanguage) "" else ", online too"} (phone $phoneLanguages, app $app, it has ${supported?.size ?: "?"})")
         if (!Hearing.starts(attempt, supported, language)) {
             failed(Errors.LANGUAGE_UNAVAILABLE, asked = false)
             return
         }
         this.language = language
-        r.start(language)
+        // The last way left (the regular recognizer, in its own language after a language error) asks
+        // as plainly as Gboard and other apps whose voice input works on the same phone: no language, no offline.
+        r.start(language, offline = attempt.onDevice || attempt.withLanguage)
     }
 
     /** What went wrong after [Hearing.next]: tried at once another way while it still hears, else said. [asked]: a language was asked for. */

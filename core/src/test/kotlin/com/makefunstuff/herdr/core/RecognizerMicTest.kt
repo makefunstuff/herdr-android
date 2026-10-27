@@ -16,7 +16,7 @@ import kotlin.test.assertTrue
 class RecognizerMicTest {
     private val google = listOf("en-GB", "en-US", "de-DE", "ru-RU")
 
-    /** One of the fake phone's recognizers: what it was told, as `make on-device`, `start en-US`, `start -`. */
+    /** One of the fake phone's recognizers: what it was told, as `make on-device`, `start en-US`, `start -` (`online`: not told to prefer offline). */
     private inner class FakeRecognizer(val onDevice: Boolean, val canBeAsked: Boolean) : RecognizerMic.Recognizer {
         var answer: ((List<String>?) -> Unit)? = null
         override fun languages(answer: (List<String>?) -> Unit): Boolean {
@@ -25,7 +25,7 @@ class RecognizerMicTest {
             this.answer = answer
             return true
         }
-        override fun start(language: String?) { log += "${name()} start ${language ?: "-"}" }
+        override fun start(language: String?, offline: Boolean) { log += "${name()} start ${language ?: "-"}${if (offline) "" else " online"}" }
         override fun stop() { log += "${name()} stop" }
         override fun cancel() { log += "${name()} cancel" }
         override fun destroy() { log += "${name()} destroy" }
@@ -129,7 +129,8 @@ class RecognizerMicTest {
         last().answer!!(google)
         assertEquals("regular start en-US", log.last())
         mic.error(Errors.LANGUAGE_NOT_SUPPORTED)
-        assertEquals("regular start -", log.last())
+        // The last way left asks as plainly as Gboard: no language, not offline.
+        assertEquals("regular start - online", log.last())
         assertIs<State.Recording>(d.state.value)
         // And again: it fails, with the language's message.
         mic.error(Errors.LANGUAGE_NOT_SUPPORTED)
@@ -177,6 +178,24 @@ class RecognizerMicTest {
         d.stop()
         d.segment("ship it")
         assertEquals(listOf("ship it"), sent)
+    }
+
+    @Test fun everyLanguageTurnedDownEndsAsPlainlyAsAppsThatWorkOnThePhone() {
+        val (mic, d) = mic()
+        d.down()
+        last().answer!!(google)
+        mic.error(Errors.LANGUAGE_NOT_SUPPORTED)
+        assertEquals("on-device start -", log.last())
+        mic.error(Errors.LANGUAGE_UNAVAILABLE)
+        last().answer!!(google)
+        assertEquals("regular start en-US", log.last())
+        mic.error(Errors.LANGUAGE_NOT_SUPPORTED)
+        // The regular recognizer, no language, not offline: what Gboard and slopbot's mic ask for.
+        assertEquals("regular start - online", log.last())
+        d.partial("works now")
+        d.stop()
+        d.segment("works now")
+        assertEquals(listOf("works now"), sent)
     }
 
     @Test fun failingWhileFinishingSaysSoAndTheOtherWayIsKeptForNextTime() {

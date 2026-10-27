@@ -131,7 +131,7 @@ private class AndroidPhone(private val context: Context) : RecognizerMic.Phone {
             return true
         }
 
-        override fun start(language: String?) = r.startListening(intent(language))
+        override fun start(language: String?, offline: Boolean) = r.startListening(intent(language, offline))
         override fun stop() = r.stopListening()
         override fun cancel() = r.cancel()
         override fun destroy() = r.destroy()
@@ -140,7 +140,7 @@ private class AndroidPhone(private val context: Context) : RecognizerMic.Phone {
     @RequiresApi(33)
     private fun check(r: SpeechRecognizer, onDevice: Boolean, answer: (List<String>?) -> Unit) {
         r.checkRecognitionSupport(
-            intent(null), ContextCompat.getMainExecutor(context),
+            intent(null, offline = true), ContextCompat.getMainExecutor(context),
             object : RecognitionSupportCallback {
                 override fun onSupportResult(support: RecognitionSupport) = answer(
                     // On the phone only what is downloaded hears; the regular one also has what it hears online.
@@ -152,11 +152,11 @@ private class AndroidPhone(private val context: Context) : RecognizerMic.Phone {
         )
     }
 
-    private fun intent(language: String?) = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+    private fun intent(language: String?, offline: Boolean) = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
         .apply { if (language != null) putExtra(RecognizerIntent.EXTRA_LANGUAGE, language) }
+        .apply { if (offline) putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true) }
         .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
         .putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-        .putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
         .putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
         .putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
 
