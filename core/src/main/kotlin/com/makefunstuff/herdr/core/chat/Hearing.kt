@@ -33,12 +33,14 @@ object Hearing {
      *
      * A language error: the same recognizer once more, in its own language; for the regular one
      * also when it was in its own already, as the [Attempt.plain] request, so the regular recognizer
-     * always ends on that. The on-device recognizer failing for any other reason than hearing nothing
-     * or having no microphone: the regular one, with the language again (it may have one the
-     * on-device one hasn't).
+     * always ends on that. The regular one told to prefer offline that couldn't reach its server:
+     * the plain request too, once. The on-device recognizer failing for any other reason than
+     * hearing nothing or having no microphone: the regular one, with the language again (it may
+     * have one the on-device one hasn't).
      */
     fun next(attempt: Attempt, error: Int, asked: Boolean): Attempt? = when {
         isLanguage(error) && attempt.withLanguage && (asked || !attempt.onDevice) -> attempt.copy(withLanguage = false)
+        !attempt.onDevice && !attempt.plain && error in NETWORK -> attempt.copy(withLanguage = false)
         attempt.onDevice && error !in KEEP_ON_DEVICE -> Attempt(onDevice = false)
         else -> null
     }
@@ -51,6 +53,8 @@ object Hearing {
      */
     fun starts(attempt: Attempt, supported: List<String>?, language: String?): Boolean =
         !(attempt.onDevice && attempt.withLanguage && language == null && !supported.isNullOrEmpty())
+
+    private val NETWORK = setOf(Errors.NETWORK, Errors.NETWORK_TIMEOUT, Errors.SERVER, Errors.SERVER_DISCONNECTED)
 
     /** Errors the on-device recognizer is still right after: nothing was said, or the microphone isn't allowed. */
     private val KEEP_ON_DEVICE = setOf(Errors.NO_MATCH, Errors.SPEECH_TIMEOUT, Errors.INSUFFICIENT_PERMISSIONS)

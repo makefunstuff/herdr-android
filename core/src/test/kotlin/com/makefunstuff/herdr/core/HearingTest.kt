@@ -201,8 +201,18 @@ class HearingTest {
     }
 
     @Test fun theRegularRecognizerFailingForAnyOtherReasonFails() {
-        assertNull(Hearing.next(Attempt(onDevice = false), Errors.NETWORK, asked = true))
+        assertNull(Hearing.next(Attempt(onDevice = false), Errors.AUDIO, asked = true))
+        assertNull(Hearing.next(Attempt(onDevice = false, withLanguage = false), Errors.NETWORK, asked = false))
         assertNull(Hearing.next(Attempt(onDevice = false, withLanguage = false), Errors.LANGUAGE_NOT_SUPPORTED, asked = false))
+    }
+
+    @Test fun aRegularRecognizerThatCouldntReachItsServerIsAskedPlainlyOnce() {
+        val plain = Attempt(onDevice = false, withLanguage = false)
+        for (error in listOf(Errors.NETWORK, Errors.NETWORK_TIMEOUT, Errors.SERVER, Errors.SERVER_DISCONNECTED)) {
+            assertEquals(plain, Hearing.next(Attempt(onDevice = false), error, asked = true))
+            assertEquals(plain, Hearing.next(Attempt(onDevice = false), error, asked = false))
+            assertNull(Hearing.next(plain, error, asked = false))
+        }
     }
 
     @Test fun aRegularRecognizerInItsOwnLanguageIsAskedPlainlyAfterALanguageError() {

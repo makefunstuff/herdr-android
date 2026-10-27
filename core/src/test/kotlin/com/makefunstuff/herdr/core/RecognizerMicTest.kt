@@ -178,6 +178,16 @@ class RecognizerMicTest {
         assertEquals(1, log.count { it.contains("start") }, "$log")
     }
 
+    @Test fun aServerErrorOfferedOfflineIsTriedPlainlyOnce() {
+        val (mic, d) = mic(onDevice = false)
+        d.down()
+        last().answer!!(google)
+        mic.error(Errors.SERVER)
+        assertEquals("regular start - online", log.last())
+        mic.error(Errors.SERVER)
+        assertEquals(State.Failed(Dictation.message(Dictation.Problem.Network)), d.state.value)
+    }
+
     @Test fun aLanguageErrorIsTriedOnceInTheRecognizersOwn() {
         val (mic, d) = mic(onDevice = false)
         d.down()
