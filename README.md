@@ -398,3 +398,11 @@ It needs JDK 17, no Android SDK, and takes about 15 minutes for all 200 scenes (
 - `host/herdr-push/`: the watcher that runs on a machine and pushes to the phone (Python 3; core carries it as a resource, and its tests run it).
 - `host/herdr-usage/`: the AI providers' usage reader, run on a machine for its usage page and herdr-push's warnings (Python 3; core carries it, and its tests run it).
 - `host/herdr-quick/`: the AI quick commands' durable worker (Node.js and pi-durable; core carries it, and the app copies it to a machine as it runs one).
+
+## Contributing
+
+Bug reports, ideas and pull requests are welcome: [`CONTRIBUTING.md`](CONTRIBUTING.md) says how to build and run the app, run the tests and the screen previews, and send a change.
+
+## License
+
+[MIT](LICENSE). The design tokens, icons, fonts, agent marks and the herdr logo it uses keep their own licences, listed in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
