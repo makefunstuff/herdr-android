@@ -51,6 +51,7 @@ object HerdrUsage {
         private val run: suspend (command: String, timeoutSeconds: Long) -> CommandResult,
         private val runWithInput: suspend (command: String, input: String, timeoutSeconds: Long) -> CommandResult,
         private val label: String,
+        private val allowInstall: Boolean = true,
     ) {
         /** Everything: limits, spend, and what the agents used this week. [fresh] asks the providers again now. */
         suspend fun read(fresh: Boolean = false): UsageReport = ask(listOfNotNull("read", "--fresh".takeIf { fresh }), 150)
@@ -61,6 +62,7 @@ object HerdrUsage {
         private suspend fun ask(args: List<String>, timeout: Long): UsageReport {
             var r = run(command(*args.toTypedArray()), timeout)
             if (r.exitStatus == MISSING_EXIT || (r.exitStatus != NO_PYTHON_EXIT && outdated(r))) {
+                if (!allowInstall) return UsageReport(at = 0L)
                 install()
                 r = run(command(*args.toTypedArray()), timeout)
             }

@@ -62,7 +62,7 @@ class PushHosts(
             val machine = machines.get(machineId)?.takeIf { it.enabled } ?: return
             val st = store.state.value
             val m = st.machine(machineId)
-            val wanted = st.on && st.endpoint != null && !m.off
+            val wanted = st.on && st.endpoint != null && !m.off && machine.allowHostScripts
             if (!wanted && m.sentTo == null) return
             _busy.update { it + machine.id }
             try {
@@ -94,6 +94,7 @@ class PushHosts(
                 return
             }
         }
+        if (!session.machine.allowHostScripts) return
         client.install()
         // herdr-usage beside it: herdr-push reads the providers' limits with it, to warn near one.
         runCatching {

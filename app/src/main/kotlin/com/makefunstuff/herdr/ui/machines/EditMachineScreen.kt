@@ -66,6 +66,7 @@ import com.makefunstuff.herdr.ui.design.QuietCard
 import com.makefunstuff.herdr.ui.design.SecondaryButton
 import com.makefunstuff.herdr.ui.design.SectionHeading
 import com.makefunstuff.herdr.ui.design.StatusBadge
+import com.makefunstuff.herdr.ui.design.SwitchRow
 import com.makefunstuff.herdr.ui.manage.ConfirmDialog
 import com.makefunstuff.herdr.ui.theme.Herdr
 import com.makefunstuff.herdr.ui.theme.Space
@@ -106,6 +107,7 @@ private fun MachineForm(nav: NavController, id: String?, onScan: (() -> Unit)?) 
     var label by remember { mutableStateOf(existing?.label ?: "") }
     var session by remember { mutableStateOf(existing?.session ?: "default") }
     var herdrPath by remember { mutableStateOf(existing?.herdrPath ?: "") }
+    var allowHostScripts by remember { mutableStateOf(existing?.allowHostScripts ?: true) }
     var viaId by remember { mutableStateOf(existing?.viaMachineId) }
     var pinnedKey by remember { mutableStateOf(existing?.hostKey) }
     var test by remember { mutableStateOf<TestResult?>(null) }
@@ -134,6 +136,7 @@ private fun MachineForm(nav: NavController, id: String?, onScan: (() -> Unit)?) 
             viaMachineId = viaId,
             herdrPath = herdrPath.trim().ifEmpty { null },
             enabled = existing?.enabled ?: true,
+            allowHostScripts = allowHostScripts,
         )
     }
 
@@ -258,6 +261,14 @@ private fun MachineForm(nav: NavController, id: String?, onScan: (() -> Unit)?) 
                 label = "herdr path",
                 hint = "Leave empty to find it automatically",
             )
+            QuietCard(padded = true) {
+                SwitchRow(
+                    label = "Allow host scripts",
+                    detail = "Allow copying helper scripts (herdr-usage, herdr-push) to this host. Turn off for zero-touch environments.",
+                    checked = allowHostScripts,
+                    onChange = { allowHostScripts = it },
+                )
+            }
 
             when (val t = test) {
                 null -> {}
