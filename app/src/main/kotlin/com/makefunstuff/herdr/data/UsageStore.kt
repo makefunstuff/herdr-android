@@ -64,6 +64,7 @@ class UsageStore(
      */
     suspend fun read(session: HostSession, fresh: Boolean = false): UsageReport? {
         val id = session.machine.id
+        if (!session.machine.allowHostScripts) return null
         val mine = synchronized(_reading) {
             if (id in _reading.value) false else { _reading.value = _reading.value + id; true }
         }
@@ -74,6 +75,7 @@ class UsageStore(
                 run = { cmd, t -> conn.run(cmd, t) },
                 runWithInput = { cmd, input, t -> conn.runWithInput(cmd, input.byteInputStream(), t) },
                 label = session.machine.label,
+                allowInstall = session.machine.allowHostScripts,
             )
             val r = client.read(fresh)
             put(id, r)

@@ -537,4 +537,19 @@ class UsageTest {
             dir.deleteRecursively()
         }
     }
+
+    @Test
+    fun clientDoesNotInstallWhenDisallowed() = runBlocking {
+        var installed = false
+        val client = HerdrUsage.Client(
+            run = { _, _ -> CommandResult(HerdrUsage.MISSING_EXIT, "", "") },
+            runWithInput = { _, _, _ -> installed = true; CommandResult(0, "", "") },
+            label = "testbox",
+            allowInstall = false,
+        )
+        val r = client.read()
+        assertEquals(0L, r.at)
+        assertTrue(r.providers.isEmpty())
+        assertTrue(!installed)
+    }
 }

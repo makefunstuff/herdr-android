@@ -20,6 +20,8 @@ data class Machine(
     /** Explicit herdr binary path on the host; empty means search the usual places. */
     val herdrPath: String? = null,
     val enabled: Boolean = true,
+    /** Whether herdr may copy helper scripts (herdr-usage, herdr-push, etc.) to this host. */
+    val allowHostScripts: Boolean = true,
 ) {
     val target: String get() = if (port == 22) "$user@$host" else "$user@$host:$port"
 
