@@ -45,6 +45,12 @@ class HearingTest {
         assertEquals("cmn-Hant-TW", Hearing.best("zh-Hant-TW", listOf("cmn-Hans-CN", "cmn-Hant-TW", "yue-Hant-HK")))
     }
 
+    @Test fun oldAndOtherNamesForTheSameLanguageMatch() {
+        assertEquals("no-NO", Hearing.best("nb-NO", listOf("no-NO")))
+        assertEquals("tl-PH", Hearing.best("fil-PH", listOf("tl-PH")))
+        assertEquals("id-ID", Hearing.best("in-ID", listOf("id-ID")))
+    }
+
     @Test fun regionalPreferencesAndVariantsAreLeftOut() {
         assertEquals("en-GB", Hearing.best("en-GB-u-nu-latn", google))
         assertEquals("en-GB", Hearing.best("en-GB-u-mu-celsius", google))

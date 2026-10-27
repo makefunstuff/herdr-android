@@ -97,8 +97,11 @@ object Hearing {
      */
     private data class Tag(val language: String, val script: String?, val region: String?) {
         companion object {
-            /** Old codes some recognizers still give, as the new ones; Google's recognizer names Mandarin `cmn`. */
-            private val RENAMED = mapOf("iw" to "he", "in" to "id", "ji" to "yi", "cmn" to "zh")
+            /**
+             * Old codes some recognizers still give, as the new ones; Google's recognizer names Mandarin
+             * `cmn`, Norwegian `no` (the phone `nb`) and Filipino `tl` (the phone `fil`).
+             */
+            private val RENAMED = mapOf("iw" to "he", "in" to "id", "ji" to "yi", "cmn" to "zh", "no" to "nb", "tl" to "fil")
             private val TRADITIONAL = setOf("TW", "HK", "MO")
 
             fun of(tag: String): Tag? {

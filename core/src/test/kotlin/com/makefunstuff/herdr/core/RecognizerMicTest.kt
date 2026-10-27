@@ -161,6 +161,23 @@ class RecognizerMicTest {
         assertIs<State.Idle>(d.state.value)
     }
 
+    @Test fun cancelledAndTappedAgainBeforeTheAnswerStartsOnce() {
+        val (_, d) = mic()
+        d.down()
+        val first = last().answer!!
+        d.cancel()
+        d.down()
+        val second = last().answer!!
+        first(google)
+        assertTrue(log.none { it.contains("start") }, "$log")
+        second(google)
+        assertEquals(1, log.count { it.contains("start") }, "$log")
+        assertEquals("on-device start en-US", log.last())
+        // The first question's time running out starts nothing either.
+        pass(RecognizerMic.CHECK_MS)
+        assertEquals(1, log.count { it.contains("start") }, "$log")
+    }
+
     @Test fun aLanguageErrorIsTriedOnceInTheRecognizersOwn() {
         val (mic, d) = mic(onDevice = false)
         d.down()

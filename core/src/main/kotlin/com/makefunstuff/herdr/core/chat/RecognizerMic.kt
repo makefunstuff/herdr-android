@@ -53,6 +53,8 @@ class RecognizerMic(private val phone: Phone, onDevice: Boolean) : Dictation.Mic
         private set
     /** Whether [recognizer] was asked which languages it has, and its answer: null when it couldn't say. */
     private var checked = false
+    /** The question to the recognizer still waiting for its answer: an older one's answer (asked, cancelled, asked again) starts nothing. */
+    private var asking: Any? = null
     private var supported: List<String>? = null
     /** The language [recognizer] was last asked for, null for its own. */
     private var language: String? = null
@@ -83,6 +85,7 @@ class RecognizerMic(private val phone: Phone, onDevice: Boolean) : Dictation.Mic
         phone.cancelLater()
         recognizer?.destroy()
         recognizer = null
+        asking = null
         checked = false
         supported = null
     }
@@ -103,10 +106,13 @@ class RecognizerMic(private val phone: Phone, onDevice: Boolean) : Dictation.Mic
 
     /** Asks [r] which languages it has, and starts it with the answer; false when it can't be asked. */
     private fun check(r: Recognizer): Boolean {
+        val question = Any()
+        asking = question
         var answered = false
         fun answer(languages: List<String>?) {
-            if (answered) return
+            if (answered || asking !== question) return
             answered = true
+            asking = null
             checked = true
             supported = languages
             // Put away, or the recording cancelled or finished, while it was asked: nothing to start.
@@ -115,6 +121,7 @@ class RecognizerMic(private val phone: Phone, onDevice: Boolean) : Dictation.Mic
         }
         if (!runCatching { r.languages(::answer) }.getOrDefault(false)) {
             answered = true
+            asking = null
             checked = true
             return false
         }
