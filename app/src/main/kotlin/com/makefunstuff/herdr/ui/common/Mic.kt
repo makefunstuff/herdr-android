@@ -137,7 +137,7 @@ private class AndroidPhone(private val context: Context) : RecognizerMic.Phone {
     override fun log(line: String) { Log.i(TAG, line) }
 
     private inner class Listener : RecognitionListener {
-        override fun onReadyForSpeech(params: Bundle?) = mic.ready()
+        override fun onReadyForSpeech(params: Bundle?) {}
         override fun onBeginningOfSpeech() {}
         override fun onRmsChanged(rmsdB: Float) = mic.dictation.level(rmsdB)
         override fun onBufferReceived(buffer: ByteArray?) {}

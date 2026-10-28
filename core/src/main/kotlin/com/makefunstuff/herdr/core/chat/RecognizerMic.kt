@@ -30,7 +30,7 @@ class RecognizerMic(private val phone: Phone) : Dictation.Mic {
         fun log(line: String)
     }
 
-    /** The phone's recognizer; what it hears comes back through [ready], [error] and [dictation]. */
+    /** The phone's recognizer; what it hears comes back through [error] and [dictation]. */
     interface Recognizer {
         fun start()
         fun stop()
@@ -40,7 +40,10 @@ class RecognizerMic(private val phone: Phone) : Dictation.Mic {
 
     lateinit var dictation: Dictation
     private var recognizer: Recognizer? = null
-    /** Started again too soon after a stretch (some recognizers are still busy then): once more, a moment later. */
+    /**
+     * This start was tried once more already: a recognizer started again too soon after a stretch
+     * can be busy, or fail as its client, for a moment. Each [listen] may be retried once.
+     */
     private var retried = false
     /** What the recognizer failed with when the dialog took over: said if the dialog fails too. */
     private var handedOver = Problem.Other
@@ -50,6 +53,11 @@ class RecognizerMic(private val phone: Phone) : Dictation.Mic {
     override fun settings() = phone.settings()
 
     override fun listen() {
+        retried = false
+        start()
+    }
+
+    private fun start() {
         // The phone's recognizer gone (turned off, or its app removed since the screen opened): the dialog, not a throw.
         val r = runCatching { recognizer ?: phone.recognizer().also { recognizer = it } }.getOrNull()
         if (r == null) {
@@ -75,15 +83,23 @@ class RecognizerMic(private val phone: Phone) : Dictation.Mic {
         recognizer = null
     }
 
-    /** The recognizer is ready for speech. */
-    fun ready() { retried = false }
-
-    /** The recognizer stopped with Android's `SpeechRecognizer.ERROR_*` [error]. */
+    /**
+     * The recognizer stopped with Android's `SpeechRecognizer.ERROR_*` [error]. Busy or failing as
+     * its client while it still hears: started once more a moment later (as pi-android does); finished
+     * by then, or again, it fails as any other error.
+     */
     fun error(error: Int) {
         phone.log("error $error")
-        if (error == Errors.RECOGNIZER_BUSY && !retried) {
+        if (error in HICCUPS && !retried && dictation.state.value is Dictation.State.Recording) {
             retried = true
-            phone.later(BUSY_MS) { if (dictation.state.value is Dictation.State.Recording) listen() }
+            phone.later(RETRY_MS) {
+                when (dictation.state.value) {
+                    is Dictation.State.Recording -> start()
+                    // Finished in the meantime: nothing more will come from this start.
+                    is Dictation.State.Finishing -> failed(error, Dictation.problem(error))
+                    else -> {}
+                }
+            }
             return
         }
         failed(error, Dictation.problem(error))
@@ -120,7 +136,10 @@ class RecognizerMic(private val phone: Phone) : Dictation.Mic {
 
     companion object {
         /** How long to wait before starting a busy recognizer again. */
-        const val BUSY_MS = 250L
+        const val RETRY_MS = 250L
+
+        /** Errors a recognizer started again too soon gives for a moment. */
+        private val HICCUPS = setOf(Errors.RECOGNIZER_BUSY, Errors.CLIENT)
 
         /** Errors the recognizer is right after, which the dialog wouldn't help: nothing was said, or the microphone isn't allowed. */
         private val KEEP = setOf(Errors.NO_MATCH, Errors.SPEECH_TIMEOUT, Errors.INSUFFICIENT_PERMISSIONS)

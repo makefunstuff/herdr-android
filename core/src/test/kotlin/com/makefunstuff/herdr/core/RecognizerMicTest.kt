@@ -93,7 +93,7 @@ class RecognizerMicTest {
     }
 
     @Test fun everyOtherFailureBeforeAnyWordsOpensTheDialog() {
-        for (error in listOf(Errors.LANGUAGE_UNAVAILABLE, Errors.NETWORK, Errors.SERVER, Errors.CLIENT, Errors.AUDIO, Errors.SERVER_DISCONNECTED)) {
+        for (error in listOf(Errors.LANGUAGE_UNAVAILABLE, Errors.NETWORK, Errors.NETWORK_TIMEOUT, Errors.SERVER, Errors.AUDIO, Errors.SERVER_DISCONNECTED, Errors.TOO_MANY_REQUESTS)) {
             log.clear()
             val (mic, d) = mic()
             d.down()
@@ -169,11 +169,73 @@ class RecognizerMicTest {
         d.down()
         mic.error(Errors.RECOGNIZER_BUSY)
         assertEquals(listOf("make", "start"), log)
-        pass(RecognizerMic.BUSY_MS)
+        pass(RecognizerMic.RETRY_MS)
         assertEquals(listOf("make", "start", "start"), log)
         // Busy again: the dialog.
         mic.error(Errors.RECOGNIZER_BUSY)
         assertEquals("dialog", log.last())
+    }
+
+    @Test fun aClientHiccupAfterAPauseIsStartedOnceMoreNotTheDialog() {
+        val (mic, d) = mic()
+        d.down()
+        d.up(heldFor = 100)
+        mic.error(Errors.SPEECH_TIMEOUT)
+        mic.error(Errors.CLIENT)
+        pass(RecognizerMic.RETRY_MS)
+        assertEquals(listOf("make", "start", "start", "start"), log)
+        assertIs<State.Recording>(d.state.value)
+        mic.error(Errors.CLIENT)
+        assertEquals("dialog", log.last())
+    }
+
+    @Test fun busyAfterStoppingOpensTheDialogAtOnce() {
+        val (mic, d) = mic()
+        d.down()
+        d.up(heldFor = 1_000)
+        assertIs<State.Finishing>(d.state.value)
+        mic.error(Errors.RECOGNIZER_BUSY)
+        assertEquals("dialog", log.last())
+        assertIs<State.Away>(d.state.value)
+        // No hang on Transcribing, no "Didn't catch that".
+        pass(Dictation.FINISH_MS + 1_500)
+        d.tick()
+        assertIs<State.Away>(d.state.value)
+    }
+
+    @Test fun busyAndThenStoppedBeforeTheRetryOpensTheDialog() {
+        val (mic, d) = mic()
+        d.down()
+        mic.error(Errors.RECOGNIZER_BUSY)
+        d.stop()
+        pass(RecognizerMic.RETRY_MS)
+        assertEquals(listOf("make", "start", "stop", "dialog"), log)
+        assertIs<State.Away>(d.state.value)
+    }
+
+    @Test fun busyAfterStoppingWithWordsKeepsThem() {
+        val (mic, d) = mic()
+        d.down()
+        d.partial("almost there")
+        d.stop()
+        mic.error(Errors.RECOGNIZER_BUSY)
+        assertTrue("dialog" !in log)
+        assertEquals("almost there", sent.single().first)
+    }
+
+    @Test fun eachTapMayBeRetriedOnceAgain() {
+        val (mic, d) = mic()
+        d.down()
+        mic.error(Errors.RECOGNIZER_BUSY)
+        pass(RecognizerMic.RETRY_MS)
+        d.cancel()
+        log.clear()
+        d.down()
+        mic.error(Errors.RECOGNIZER_BUSY)
+        assertEquals(listOf("start"), log)
+        pass(RecognizerMic.RETRY_MS)
+        assertEquals(listOf("start", "start"), log)
+        assertIs<State.Recording>(d.state.value)
     }
 
     @Test fun cancelledWhileBusyNothingStartsLater() {
@@ -181,7 +243,7 @@ class RecognizerMicTest {
         d.down()
         mic.error(Errors.RECOGNIZER_BUSY)
         d.cancel()
-        pass(RecognizerMic.BUSY_MS)
+        pass(RecognizerMic.RETRY_MS)
         assertEquals(listOf("make", "start", "cancel"), log)
     }
 
