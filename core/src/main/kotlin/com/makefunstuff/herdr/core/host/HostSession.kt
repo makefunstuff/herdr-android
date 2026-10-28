@@ -38,6 +38,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.supervisorScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.IOException
 
@@ -415,10 +418,14 @@ class HostSession(
 
     /** Reads each workspace's integration metadata (workspace.get); the snapshot doesn't carry it. */
     private suspend fun loadWorkspaceMeta(herdr: HerdrApi, snapshot: SessionSnapshot) {
-        val meta = coroutineScope {
+        // Concurrency limited to 4 to avoid exceeding OpenSSH default MaxSessions (10) on multiplexed links.
+        val semaphore = Semaphore(4)
+        val meta = supervisorScope {
             snapshot.workspaces.map { ws ->
                 async {
-                    ws.workspaceId to runCatching { herdr.workspace(ws.workspaceId).tokens }.getOrDefault(emptyMap())
+                    semaphore.withPermit {
+                        ws.workspaceId to runCatching { herdr.workspace(ws.workspaceId).tokens }.getOrDefault(emptyMap())
+                    }
                 }
             }.awaitAll().toMap()
         }

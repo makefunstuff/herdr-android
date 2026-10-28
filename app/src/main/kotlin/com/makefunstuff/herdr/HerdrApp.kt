@@ -39,7 +39,9 @@ import com.makefunstuff.herdr.push.Wakes
 import com.makefunstuff.herdr.share.Widgets
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
@@ -188,8 +190,13 @@ class AppContainer(app: Application) {
         val cm = app.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
         runCatching {
             cm?.registerDefaultNetworkCallback(object : ConnectivityManager.NetworkCallback() {
+                private var retryJob: Job? = null
                 override fun onAvailable(network: Network) {
-                    hosts.retryAll()
+                    retryJob?.cancel()
+                    retryJob = scope.launch {
+                        delay(300)
+                        hosts.retryAll()
+                    }
                 }
             })
         }

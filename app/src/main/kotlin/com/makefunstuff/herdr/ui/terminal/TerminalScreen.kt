@@ -262,6 +262,7 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
 
     /** A key of the bar: sent with the sticky modifiers, or the bar's own (a modifier, the F-keys, the keyboard). */
     fun press(key: BarKey) {
+        if (autoReconnecting) return
         when (key) {
             is BarKey.Send -> {
                 stream?.send(key.bytes(sticky.mods))
@@ -499,8 +500,8 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
                     },
                     update = { v ->
                         v.setColors(termPalette, hc.termSelection.toArgb())
-                        v.onInput = { text -> stream?.send(text) }
-                        v.onScroll = { lines -> if (lines != 0) stream?.scroll(lines > 0, kotlin.math.abs(lines)) }
+                        v.onInput = { text -> if (!autoReconnecting) stream?.send(text) }
+                        v.onScroll = { lines -> if (!autoReconnecting && lines != 0) stream?.scroll(lines > 0, kotlin.math.abs(lines)) }
                         if (v.fitToView != !keepHost) v.fitToView = !keepHost
                         v.keepScreenOn = bar.keepScreenOn
                         if (kotlin.math.abs(v.fontSizeSp - sizes.terminal) > 0.01f) v.setFontSizeSp(sizes.terminal)
