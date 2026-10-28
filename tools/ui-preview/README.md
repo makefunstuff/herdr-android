@@ -7,9 +7,12 @@ Renders the app's real screens to PNGs on the desktop JVM, in dark and light, wi
 ./gradlew -p tools/ui-preview render -Ponly=board,chat      # some scenes (both themes)
 ./gradlew -p tools/ui-preview render -Ponly=board-light     # one shot
 ./gradlew -p tools/ui-preview render -Pout=/tmp/shots       # somewhere else
+./gradlew -p tools/ui-preview render -Pshard=2/4            # every 4th scene from the 2nd, as CI does
 ```
 
-Needs JDK 17 and, the first time, network for Gradle to fetch Compose Desktop. Every scene takes about 3 s per theme, so all of them take about 15 minutes (`-Ponly` renders just some); nothing runs after it exits. Each scene is saved as `<scene>.png` (dark) and `<scene>-light.png`, 824×1784 px (a 412×892 dp phone at 2×). The same code and data give the same pixels every run. A scene that throws prints `FAIL <name>` and the task fails.
+Needs JDK 17 and, the first time, network for Gradle to fetch Compose Desktop. Every scene takes about 3 to 4 s per theme, so all of them take about half an hour (`-Ponly` renders just some); nothing runs after it exits. Each scene is saved as `<scene>.png` (dark) and `<scene>-light.png`, 824×1784 px (a 412×892 dp phone at 2×). The same code and data give the same pixels every run. A scene that throws prints `FAIL <name>` and the task fails. A shot that takes over 2 minutes is stuck (the slowest take about 25 s): it prints `HANG <name>` and what every thread was doing, and the task fails at once.
+
+In CI the Android workflow's four `render (k/4)` jobs each render a quarter of the scenes (`-Pshard=k/4`), about 10 minutes apiece, and the `screens` job puts their shots together as the `herdr-screens-<run>` artifact; it fails when any of them did. Each job stops after 25 minutes at most.
 
 ## How it works
 

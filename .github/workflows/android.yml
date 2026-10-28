@@ -9,14 +9,23 @@ permissions:
   contents: write
 
 # One run per branch at a time, so a newer default-branch build never ends up behind an older Latest.
+# On other branches and pull requests a new push cancels the run it replaces instead of waiting behind it.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.ref != format('refs/heads/{0}', github.event.repository.default_branch) }}
 
 jobs:
   # The screen previews (tools/ui-preview): every scene in dark and light, for the reviewer to look at.
-  screens:
+  # One after the other they take over half an hour, so four runners take a quarter of the scenes each.
+  render:
+    name: render (${{ matrix.shard }}/4)
     runs-on: ubuntu-latest
+    # A shard renders in about 10 minutes; a scene that hangs fails the run itself after 2 minutes.
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v5
 
@@ -28,17 +37,37 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
 
       - name: Render screens
-        run: ./gradlew -p tools/ui-preview render
+        run: ./gradlew -p tools/ui-preview render -Pshard=${{ matrix.shard }}/4
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: herdr-screens-${{ github.run_number }}
+          name: herdr-screens-${{ github.run_number }}-${{ matrix.shard }}
           path: tools/ui-preview/build/shots/
           if-no-files-found: ignore
 
+  # The four shards' shots as one herdr-screens-<run> artifact, and one check that passes when they all did.
+  screens:
+    needs: render
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/upload-artifact/merge@v4
+        with:
+          name: herdr-screens-${{ github.run_number }}
+          pattern: herdr-screens-${{ github.run_number }}-*
+          delete-merged: true
+
+      - name: Every shard rendered
+        if: always() && needs.render.result != 'success'
+        run: |
+          echo "::error::Rendering the screens ${{ needs.render.result }}; see the render jobs' logs (a stuck scene prints HANG and every thread's stack)."
+          exit 1
+
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     env:
       # Only the default branch publishes a release; everything else is a run artifact.
       PUBLISH: ${{ github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
