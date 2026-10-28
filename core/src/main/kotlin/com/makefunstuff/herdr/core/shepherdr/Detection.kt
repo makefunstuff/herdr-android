@@ -35,7 +35,13 @@ object BoardDetection {
         // Any free port on the phone: the forward is only ever reached by the app itself.
         val forward = runCatching { ForwardTransport.over(PortForward("127.0.0.1", PORT, preferred = 0) { h, p -> conn.openTcp(h, p) }) }.getOrNull()
         if (forward != null) {
-            probe(forward)?.let { return forward to it }
+            val version = try {
+                probe(forward)
+            } catch (e: CancellationException) {
+                forward.close()
+                throw e
+            }
+            version?.let { return forward to it }
             forward.close()
         }
         val curl = CurlTransport { command, stdin, seconds -> conn.runWithInput(command, CurlTransport.stdin(stdin), seconds) }
