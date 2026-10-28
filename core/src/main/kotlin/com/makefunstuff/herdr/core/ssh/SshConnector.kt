@@ -1,5 +1,9 @@
 package com.makefunstuff.herdr.core.ssh
 
+import com.hierynomus.sshj.transport.cipher.BlockCiphers
+import com.hierynomus.sshj.transport.cipher.ChachaPolyCiphers
+import com.hierynomus.sshj.transport.cipher.GcmCiphers
+import com.hierynomus.sshj.transport.mac.Macs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import net.schmizz.sshj.DefaultConfig
@@ -10,16 +14,22 @@ import net.schmizz.sshj.connection.Connection
 import net.schmizz.sshj.connection.channel.direct.AbstractDirectChannel
 import net.schmizz.sshj.connection.channel.direct.Session
 import net.schmizz.sshj.transport.TransportException
+import net.schmizz.sshj.transport.compression.DelayedZlibCompression
+import net.schmizz.sshj.transport.compression.NoneCompression
+import net.schmizz.sshj.transport.compression.ZlibCompression
 import net.schmizz.sshj.transport.verification.HostKeyVerifier
 import net.schmizz.sshj.userauth.UserAuthException
 import java.io.Closeable
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
+import java.net.InetAddress
+import java.net.Socket
 import java.security.MessageDigest
 import java.security.PublicKey
 import java.util.Base64
 import java.util.concurrent.TimeUnit
+import javax.net.SocketFactory
 
 /** Private key in OpenSSH PEM form plus its `authorized_keys` line. */
 class SshIdentity(val privateKeyPem: String, val publicKeyLine: String)
@@ -154,7 +164,54 @@ private class DirectStreamLocal(connection: Connection, private val path: String
         .putUInt32(0) // reserved
 }
 
+private object SshSocketFactory : SocketFactory() {
+    private val delegate = SocketFactory.getDefault()
+    override fun createSocket(): Socket = delegate.createSocket().also { configure(it) }
+    override fun createSocket(host: String, port: Int): Socket = delegate.createSocket(host, port).also { configure(it) }
+    override fun createSocket(host: String, port: Int, localHost: InetAddress, localPort: Int): Socket =
+        delegate.createSocket(host, port, localHost, localPort).also { configure(it) }
+    override fun createSocket(host: InetAddress, port: Int): Socket = delegate.createSocket(host, port).also { configure(it) }
+    override fun createSocket(address: InetAddress, port: Int, localAddress: InetAddress, localPort: Int): Socket =
+        delegate.createSocket(address, port, localAddress, localPort).also { configure(it) }
+
+    fun configure(socket: Socket) {
+        runCatching {
+            socket.tcpNoDelay = true
+            socket.keepAlive = true
+            socket.receiveBufferSize = 512 * 1024
+            socket.sendBufferSize = 512 * 1024
+        }
+    }
+}
+
 object SshConnector {
+
+    /**
+     * SSH configuration tuned for interactive responsiveness, hardware crypto and compression:
+     * - AEAD ciphers first (ChaCha20-Poly1305 and hardware-accelerated AES-GCM), avoiding 2-pass MAC overhead
+     * - Encrypt-Then-MAC (ETM) for CTR fallback
+     * - zlib@openssh.com (delayed-zlib) compression for ~70-85% payload reduction on high latency links
+     */
+    fun defaultConfig(): DefaultConfig = DefaultConfig().apply {
+        cipherFactories = listOf(
+            ChachaPolyCiphers.CHACHA_POLY_OPENSSH(),
+            GcmCiphers.AES128GCM(),
+            GcmCiphers.AES256GCM(),
+            BlockCiphers.AES128CTR(),
+            BlockCiphers.AES256CTR(),
+        )
+        macFactories = listOf(
+            Macs.HMACSHA2256Etm(),
+            Macs.HMACSHA2512Etm(),
+            Macs.HMACSHA2256(),
+            Macs.HMACSHA2512(),
+        )
+        compressionFactories = listOf(
+            DelayedZlibCompression.Factory(),
+            ZlibCompression.Factory(),
+            NoneCompression.Factory(),
+        )
+    }
 
     /**
      * Connects and authenticates to [machine]. A pinned host key that doesn't match fails with
@@ -172,7 +229,8 @@ object SshConnector {
             val via = lookup(viaId) ?: throw ConnectError.Unreachable(machine.target, IOException("jump machine is missing"))
             connect(via, identity, lookup, depth + 1)
         }
-        val client = SSHClient(DefaultConfig())
+        val client = SSHClient(defaultConfig())
+        client.socketFactory = SshSocketFactory
         var seen: String? = null
         client.addHostKeyVerifier(object : HostKeyVerifier {
             override fun verify(hostname: String?, port: Int, key: PublicKey): Boolean {
@@ -205,6 +263,8 @@ object SshConnector {
             jump?.close()
             throw ConnectError.Unreachable(machine.target, e)
         }
+        client.socket?.let { SshSocketFactory.configure(it) }
+        client.connection.windowSize = 4 * 1024 * 1024L
         client.connection.keepAlive.keepAliveInterval = 15
         try {
             val keys = client.loadKeys(identity.privateKeyPem, identity.publicKeyLine, null)
@@ -222,7 +282,8 @@ object SshConnector {
      * pairing code's machine answers ([Pairing.reach]).
      */
     suspend fun hostKey(host: String, port: Int, timeoutMs: Int = 6_000): String = withContext(Dispatchers.IO) {
-        val client = SSHClient(DefaultConfig())
+        val client = SSHClient(defaultConfig())
+        client.socketFactory = SshSocketFactory
         var seen: String? = null
         client.addHostKeyVerifier(object : HostKeyVerifier {
             override fun verify(hostname: String?, port: Int, key: PublicKey): Boolean {

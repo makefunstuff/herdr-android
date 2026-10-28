@@ -3,6 +3,7 @@ package com.makefunstuff.herdr.core.host
 import com.makefunstuff.herdr.core.api.ApiClient
 import com.makefunstuff.herdr.core.api.ApiConnection
 import com.makefunstuff.herdr.core.api.HerdrJson
+import com.makefunstuff.herdr.core.api.PongInfo
 import com.makefunstuff.herdr.core.api.SessionEntry
 import com.makefunstuff.herdr.core.api.HerdrApi
 import com.makefunstuff.herdr.core.api.SessionSnapshot
@@ -26,6 +27,8 @@ import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -35,6 +38,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.supervisorScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.IOException
 
@@ -273,9 +279,10 @@ class HostSession(
         val found = probeHerdr(conn, m)
         var choice = HerdrBinaries.choose(found, null)?.let { HerdrChoice(it, null, found) }
         herdrMachine = choice?.let { m.copy(herdrPath = it.binary.path) } ?: m
-        val opener = apiOpener(conn, m, found)
+        val openerResult = apiOpener(conn, m, found)
+        val opener = openerResult.opener
         val herdr = HerdrApi(ApiClient(opener))
-        val pong = herdr.ping()
+        val pong = openerResult.pong ?: herdr.ping()
         api = herdr
         choice = HerdrBinaries.choose(found, pong.version)?.let { HerdrChoice(it, pong.version, found) }
         herdrMachine = choice?.let { m.copy(herdrPath = it.binary.path) } ?: m
@@ -328,23 +335,29 @@ class HostSession(
         return HerdrBinaries.parse(out.stdout)
     }
 
+    private data class OpenerResult(val opener: suspend () -> Duplex, val pong: PongInfo? = null)
+
     /**
      * Finds how to reach the session's API socket. Prefers a direct Unix-socket channel (no process
      * per request); falls back to `herdr remote-api-bridge` when the SSH server forbids socket
-     * forwarding.
+     * forwarding. Tests Unix socket with `ping()` and returns the PongInfo to save a redundant round trip.
      */
-    private suspend fun apiOpener(conn: MachineConnection, m: Machine, found: List<HerdrBinary>): suspend () -> Duplex {
+    private suspend fun apiOpener(conn: MachineConnection, m: Machine, found: List<HerdrBinary>): OpenerResult {
         val list = conn.run(HerdrCommands.sessionList(herdrMachine))
         if (list.exitStatus == HerdrCommands.NOT_FOUND_EXIT) {
             throw ConnectError.HerdrMissing(
                 "herdr isn't installed on ${m.label}, or it's outside the usual paths. Install it, or set its path in this machine's settings.",
             )
         }
+        if (list.exitStatus != 0 && list.exitStatus != null) {
+            val detail = list.stderr.trim().lines().lastOrNull { it.isNotBlank() } ?: "session list failed (exit ${list.exitStatus})"
+            throw IOException("Couldn't list herdr sessions on ${m.label}: $detail")
+        }
         val sessions = runCatching {
             HerdrJson.decodeFromJsonElement(SessionListSerializer, HerdrJson.parseToJsonElement(list.stdout).jsonObject["sessions"]!!)
         }.getOrElse {
             val detail = list.stderr.trim().lines().lastOrNull { it.isNotBlank() } ?: "unexpected output"
-            throw ConnectError.HerdrMissing("Couldn't list herdr sessions on ${m.label}: $detail")
+            throw IOException("Couldn't parse herdr sessions on ${m.label}: $detail")
         }
         val entry = sessions.firstOrNull { it.name == m.session }
             ?: throw ConnectError.HerdrMissing(
@@ -358,12 +371,12 @@ class HostSession(
         val socketPath = entry.socketPath
         if (socketPath.isNotEmpty()) {
             val viaSocket: suspend () -> Duplex = { conn.openUnixSocket(socketPath) }
-            val works = runCatching { HerdrApi(ApiClient(viaSocket)).ping() }.isSuccess
-            if (works) return viaSocket
+            val pong = runCatching { HerdrApi(ApiClient(viaSocket)).ping() }.getOrNull()
+            if (pong != null) return OpenerResult(viaSocket, pong)
         }
         herdrMachine = findApiBridge(m, found, { conn.run(it) }, { conn.start(it) })
         // Read at each request, so the bridge follows the binary chosen once the server's version is known.
-        return { conn.start(HerdrCommands.apiBridge(herdrMachine)) }
+        return OpenerResult({ conn.start(HerdrCommands.apiBridge(herdrMachine)) }, null)
     }
 
     private suspend fun subscribe(opener: suspend () -> Duplex, params: kotlinx.serialization.json.JsonObject): ApiConnection {
@@ -405,8 +418,16 @@ class HostSession(
 
     /** Reads each workspace's integration metadata (workspace.get); the snapshot doesn't carry it. */
     private suspend fun loadWorkspaceMeta(herdr: HerdrApi, snapshot: SessionSnapshot) {
-        val meta = snapshot.workspaces.associate { ws ->
-            ws.workspaceId to runCatching { herdr.workspace(ws.workspaceId).tokens }.getOrDefault(emptyMap())
+        // Concurrency limited to 4 to avoid exceeding OpenSSH default MaxSessions (10) on multiplexed links.
+        val semaphore = Semaphore(4)
+        val meta = supervisorScope {
+            snapshot.workspaces.map { ws ->
+                async {
+                    semaphore.withPermit {
+                        ws.workspaceId to runCatching { herdr.workspace(ws.workspaceId).tokens }.getOrDefault(emptyMap())
+                    }
+                }
+            }.awaitAll().toMap()
         }
         _state.update { it.copy(workspaceMeta = meta) }
     }

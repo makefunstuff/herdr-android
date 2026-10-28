@@ -105,6 +105,7 @@ import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -162,33 +163,53 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
     // Selected text on its way to an agent's chat, while the sheet asks which one.
     var quoting by remember(paneId) { mutableStateOf<String?>(null) }
     var resizeOpen by remember { mutableStateOf(false) }
+    var autoReconnecting by remember { mutableStateOf(false) }
     val searchFocus = remember { FocusRequester() }
 
     val keep = keepHost
     val ready = (keep && hostRect != null) || grid != null
     LaunchedEffect(generation, ready) {
         if (!ready) return@LaunchedEffect
-        val opened = runCatching {
-            val conn = session.awaitConnection(timeoutMs = 30_000)
-            val (cols, rows) = if (keep && hostRect != null && hostRect.width > 0 && hostRect.height > 0) {
-                hostRect.width to hostRect.height
-            } else {
-                grid ?: (80 to 24)
+        var retryAttempt = 0
+        while (true) {
+            val opened = runCatching {
+                val conn = session.awaitConnection(timeoutMs = 30_000)
+                val (cols, rows) = if (keep && hostRect != null && hostRect.width > 0 && hostRect.height > 0) {
+                    hostRect.width to hostRect.height
+                } else {
+                    grid ?: (80 to 24)
+                }
+                TerminalStream(conn, session.state.value.herdrMachine, paneId, cols, rows, container.scope).also { it.open() }
             }
-            TerminalStream(conn, session.state.value.herdrMachine, paneId, cols, rows, container.scope).also { it.open() }
-        }
-        val s = opened.getOrNull()
-        if (s == null) {
-            stream = null
-            failure = opened.exceptionOrNull()?.message ?: "Couldn't reach the machine"
-            return@LaunchedEffect
-        }
-        failure = null
-        stream = s
-        try {
-            awaitCancellation()
-        } finally {
-            s.close()
+            val s = opened.getOrNull()
+            if (s == null) {
+                if (stream == null) {
+                    failure = opened.exceptionOrNull()?.message ?: "Couldn't reach the machine"
+                    autoReconnecting = false
+                    return@LaunchedEffect
+                } else {
+                    autoReconnecting = true
+                    val wait = minOf(10_000L, 1_000L shl minOf(retryAttempt, 3))
+                    retryAttempt++
+                    delay(wait)
+                    continue
+                }
+            }
+            failure = null
+            autoReconnecting = false
+            retryAttempt = 0
+            stream = s
+            try {
+                val closed = s.status.first { it is TerminalStream.Status.Closed } as TerminalStream.Status.Closed
+                if (closed.isRemoteExit) {
+                    awaitCancellation()
+                } else {
+                    autoReconnecting = true
+                    delay(1_000L)
+                }
+            } finally {
+                s.close()
+            }
         }
     }
 
@@ -241,6 +262,7 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
 
     /** A key of the bar: sent with the sticky modifiers, or the bar's own (a modifier, the F-keys, the keyboard). */
     fun press(key: BarKey) {
+        if (autoReconnecting) return
         when (key) {
             is BarKey.Send -> {
                 stream?.send(key.bytes(sticky.mods))
@@ -478,8 +500,8 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
                     },
                     update = { v ->
                         v.setColors(termPalette, hc.termSelection.toArgb())
-                        v.onInput = { text -> stream?.send(text) }
-                        v.onScroll = { lines -> if (lines != 0) stream?.scroll(lines > 0, kotlin.math.abs(lines)) }
+                        v.onInput = { text -> if (!autoReconnecting) stream?.send(text) }
+                        v.onScroll = { lines -> if (!autoReconnecting && lines != 0) stream?.scroll(lines > 0, kotlin.math.abs(lines)) }
                         if (v.fitToView != !keepHost) v.fitToView = !keepHost
                         v.keepScreenOn = bar.keepScreenOn
                         if (kotlin.math.abs(v.fontSizeSp - sizes.terminal) > 0.01f) v.setFontSizeSp(sizes.terminal)
@@ -487,14 +509,32 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
                     modifier = Modifier.fillMaxSize(),
                 )
                 val herdr = state.herdr
-                val message = failure ?: when (val st = status) {
-                    is TerminalStream.Status.Closed -> st.reason + (herdr?.let { "\n\n" + it.explain(session.machine.label) } ?: "")
+                val message = if (autoReconnecting) null else failure ?: when (val st = status) {
+                    is TerminalStream.Status.Closed -> if (st.isRemoteExit) st.reason + (herdr?.let { "\n\n" + it.explain(session.machine.label) } ?: "") else st.reason
                     TerminalStream.Status.Opening -> when {
                         !state.online -> "Waiting for ${session.machine.label}…"
                         silent -> "herdr hasn't sent this pane yet." + (herdr?.let { "\n\n" + it.explain(session.machine.label) } ?: "")
                         else -> null
                     }
                     TerminalStream.Status.Live -> null
+                }
+                if (autoReconnecting) {
+                    Surface(
+                        color = Herdr.colors.panel,
+                        shape = HerdrShapes.Pill,
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .padding(top = Space.s),
+                    ) {
+                        Row(
+                            Modifier.padding(horizontal = Space.m, vertical = Space.xs),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(Space.xs),
+                        ) {
+                            Icon(HerdrIcons.RefreshCcw, null, Modifier.size(14.dp), tint = Herdr.colors.working)
+                            Text("Reconnecting to ${session.machine.label}…", style = MaterialTheme.typography.labelSmall, color = Herdr.colors.muted)
+                        }
+                    }
                 }
                 if (message == null && herdr?.mismatch == true) {
                     Text(

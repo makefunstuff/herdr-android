@@ -8,6 +8,7 @@ import com.makefunstuff.herdr.core.ssh.RemoteProcess
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -87,7 +88,7 @@ class TerminalStream(
     sealed interface Status {
         data object Opening : Status
         data object Live : Status
-        data class Closed(val reason: String) : Status
+        data class Closed(val reason: String, val isRemoteExit: Boolean = false) : Status
     }
 
     val emulator = TerminalEmulator(cols, rows)
@@ -98,7 +99,8 @@ class TerminalStream(
 
     private var process: RemoteProcess? = null
     private var job: Job? = null
-    private val writeLock = Any()
+    private val outbound = Channel<String>(Channel.UNLIMITED)
+    private var writerJob: Job? = null
     private var requestedCols = cols
     private var requestedRows = rows
 
@@ -108,6 +110,19 @@ class TerminalStream(
             try {
                 val p = connection.start(HerdrCommands.terminalControl(machine, target, requestedCols, requestedRows))
                 process = p
+                writerJob = scope.launch(Dispatchers.IO) {
+                    try {
+                        for (msg in outbound) {
+                            p.stdin.write((msg + "\n").toByteArray(Charsets.UTF_8))
+                            while (true) {
+                                val next = outbound.tryReceive().getOrNull() ?: break
+                                p.stdin.write((next + "\n").toByteArray(Charsets.UTF_8))
+                            }
+                            p.stdin.flush()
+                        }
+                    } catch (_: Throwable) {
+                    }
+                }
                 p.stdout.bufferedReader(Charsets.UTF_8).useLines { lines ->
                     for (line in lines) {
                         val frame = FrameCodec.parse(line)
@@ -121,17 +136,20 @@ class TerminalStream(
                             continue
                         }
                         FrameCodec.isClosed(line)?.let { reason ->
-                            _status.value = Status.Closed(reason)
+                            _status.value = Status.Closed(reason, isRemoteExit = true)
                             return@useLines
                         }
                     }
                 }
                 if (_status.value !is Status.Closed) {
                     val err = runCatching { p.stderr.readBytes().toString(Charsets.UTF_8).trim() }.getOrDefault("")
-                    _status.value = Status.Closed(err.lines().lastOrNull { it.isNotBlank() } ?: "The terminal stream ended")
+                    _status.value = Status.Closed(err.lines().lastOrNull { it.isNotBlank() } ?: "The terminal stream ended", isRemoteExit = false)
                 }
             } catch (t: Throwable) {
-                _status.value = Status.Closed(t.message ?: "The terminal stream failed")
+                _status.value = Status.Closed(t.message ?: "The terminal stream failed", isRemoteExit = false)
+            } finally {
+                writerJob?.cancel()
+                writerJob = null
             }
         }
     }
@@ -150,18 +168,13 @@ class TerminalStream(
     fun scroll(up: Boolean, lines: Int) = write(FrameCodec.scroll(up, lines))
 
     private fun write(line: String) {
-        val p = process ?: return
-        scope.launch(Dispatchers.IO) {
-            runCatching {
-                synchronized(writeLock) {
-                    p.stdin.write((line + "\n").toByteArray(Charsets.UTF_8))
-                    p.stdin.flush()
-                }
-            }
-        }
+        outbound.trySend(line)
     }
 
     override fun close() {
+        writerJob?.cancel()
+        writerJob = null
+        outbound.close()
         val p = process
         process = null
         job?.cancel()

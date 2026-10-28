@@ -7,6 +7,8 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.net.ConnectivityManager
+import android.net.Network
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
@@ -37,7 +39,9 @@ import com.makefunstuff.herdr.push.Wakes
 import com.makefunstuff.herdr.share.Widgets
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
@@ -182,5 +186,19 @@ class AppContainer(app: Application) {
         scope.launch { hosts.hosts.collect { triage.keep(it, machines.machines.value.map { m -> m.id }.toSet()) } }
         // The push app's address may have lapsed while the app was closed: ask again, it answers with the same or a new one.
         if (push.state.value.on) phone.register()
+        // When network returns (e.g. WiFi connects, cellular signal restored), retry any sessions waiting in backoff.
+        val cm = app.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+        runCatching {
+            cm?.registerDefaultNetworkCallback(object : ConnectivityManager.NetworkCallback() {
+                private var retryJob: Job? = null
+                override fun onAvailable(network: Network) {
+                    retryJob?.cancel()
+                    retryJob = scope.launch {
+                        delay(300)
+                        hosts.retryAll()
+                    }
+                }
+            })
+        }
     }
 }

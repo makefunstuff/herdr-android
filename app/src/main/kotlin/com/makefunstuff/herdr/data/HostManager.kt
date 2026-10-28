@@ -3,6 +3,7 @@ package com.makefunstuff.herdr.data
 import com.makefunstuff.herdr.core.api.AgentInfo
 import com.makefunstuff.herdr.core.host.HostSession
 import com.makefunstuff.herdr.core.host.HostState
+import com.makefunstuff.herdr.core.host.HostStatus
 import com.makefunstuff.herdr.core.ssh.Machine
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -62,7 +63,10 @@ class HostManager(
     fun setForeground(value: Boolean) {
         foreground = value
         sessions.value.values.forEach { s ->
-            if (value && s.machine.enabled) s.start() else if (!value && !isBorrowed(s.machine.id)) s.stop()
+            if (value && s.machine.enabled) {
+                s.start()
+                if (s.state.value.status is HostStatus.Reconnecting) s.retry()
+            } else if (!value && !isBorrowed(s.machine.id)) s.stop()
         }
     }
 
