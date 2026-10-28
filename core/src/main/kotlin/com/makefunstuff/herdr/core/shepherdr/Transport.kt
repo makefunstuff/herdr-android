@@ -4,7 +4,10 @@ import com.makefunstuff.herdr.core.ssh.CommandResult
 import com.makefunstuff.herdr.core.ssh.Duplex
 import com.makefunstuff.herdr.core.ssh.HerdrCommands.quote
 import com.makefunstuff.herdr.core.ssh.PortForward
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayInputStream
 import java.io.Closeable
@@ -35,8 +38,17 @@ class ForwardTransport(
 ) : ShepherdrTransport {
     override val canStream: Boolean get() = true
 
-    override suspend fun http(method: String, path: String, body: String?, timeoutMs: Int): HttpReply = withContext(Dispatchers.IO) {
-        Wire.exchange(connect(timeoutMs), method, path, body)
+    override suspend fun http(method: String, path: String, body: String?, timeoutMs: Int): HttpReply = coroutineScope {
+        val stream = withContext(Dispatchers.IO) { connect(timeoutMs) }
+        // Its failure comes back as a result: once cancelled, the closed socket's error is no news.
+        val answer = async(Dispatchers.IO) { runCatching { Wire.exchange(stream, method, path, body) } }
+        try {
+            answer.await().getOrThrow()
+        } catch (e: CancellationException) {
+            // A socket's read can't be interrupted: closing it ends the wait (a merge waiting on checks).
+            runCatching { stream.close() }
+            throw e
+        }
     }
 
     override suspend fun webSocket(path: String): WebSocketLink = withContext(Dispatchers.IO) {
@@ -87,7 +99,7 @@ class CurlTransport(
     }
 
     override suspend fun webSocket(path: String): WebSocketLink =
-        throw IOException("The machine's SSH server doesn't forward ports: no live link, only reads")
+        throw IOException("The machine's SSH server doesn't forward ports, and Shepherdr sends chats only over a live link: allow TCP forwarding there (AllowTcpForwarding in sshd_config)")
 
     override fun close() {}
 

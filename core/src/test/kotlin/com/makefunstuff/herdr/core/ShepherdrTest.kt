@@ -27,7 +27,9 @@ import com.makefunstuff.herdr.core.shepherdr.Wire
 import com.makefunstuff.herdr.core.ssh.CommandResult
 import com.makefunstuff.herdr.core.ssh.Duplex
 import com.makefunstuff.herdr.core.ssh.PortForward
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
@@ -164,12 +166,20 @@ class ShepherdrTest {
               {"id":"c1","who":"agent","text":"HA-9 needs you","card":{"id":"c1","task":"HA-9","status":"need","text":"needs you",
                 "ask":{"chat":"HA-9/Agent","open":true,"questions":[{"id":"q9","title":"Merge HA-9?","kind":"Form","choices":[{"label":"Merge"},{"label":"Not yet"}],"to":"HA-9 agent"}]}}},
               {"id":"m2","who":"agent","question":{"id":"q2","title":"Done?","kind":"Form","choices":[{"label":"Yes"}],"to":"x","sent":0}},
-              {"id":"m3","who":"you","text":"hi","waiting":true}
+              {"id":"m3","who":"you","text":"hi","waiting":true},
+              {"id":"c4","who":"agent","text":"HA-8 needs you","card":{"id":"c4","task":"HA-8","status":"need","text":"needs you",
+                "ask":{"chat":"HA-8/Agent","open":true,"reply":{"id":"m77","text":"Which port should it use?"}}}}
             ]}}""",
         ) as V2Event.Chat
         val thread = V2Board.thread("p:m:x", chat.chat)
-        assertEquals(listOf(WorkCard("HA-9/Agent", chat.chat.messages[0].card!!.ask!!.questions!![0], "HA-9")), thread.cards)
-        assertTrue(thread.lines.last().pending)
+        assertEquals(WorkCard("HA-9/Agent", chat.chat.messages[0].card!!.ask!!.questions!![0], "HA-9", space = "p:m:x"), thread.cards[0])
+        // A plain question copied here is answered with a reply to its message.
+        val plain = thread.cards[1]
+        assertEquals("HA-8/Agent", plain.chat)
+        assertEquals("m77", plain.replyTo)
+        assertEquals("Which port should it use?", plain.question.title)
+        assertEquals(2, thread.cards.size)
+        assertEquals(listOf(false, false, true, false), thread.lines.map { it.pending })
         assertTrue(thread.working)
         assertTrue(chat.chat.openQuestions.isEmpty())
     }
@@ -290,9 +300,37 @@ class ShepherdrTest {
             assertEquals("""{"args":["merge","HA-1"]}""", fake.bodies("POST /api/cli").last())
             board.answer(CardAnswer(WorkCard("GTM-16/Agent", V1Cards.plan(t, emptyList())), 0))
             assertEquals("""{"type":"answer","chat":"GTM-16/Agent","question":"v1:plan","choice":0}""", fake.bodies("POST /api/action").last())
+            // A task's card answered from a space's chat names that space, so its copy there is settled too.
+            board.answer(CardAnswer(WorkCard("HA-9/Agent", V1Cards.plan(t, emptyList()), "HA-9", space = "p:m:x"), 1, note = "Smaller"))
+            assertEquals(
+                """{"type":"answer","chat":"HA-9/Agent","question":"v1:plan","choice":1,"note":"Smaller","space":"p:m:x"}""",
+                fake.bodies("POST /api/action").last(),
+            )
+            val plain = com.makefunstuff.herdr.core.shepherdr.V2Question(id = "m77", title = "Which port?", kind = "Reply", other = true)
+            board.answer(CardAnswer(WorkCard("HA-8/Agent", plain, "HA-8", space = "p:m:x", replyTo = "m77"), -1, other = "8080"))
+            assertEquals(
+                """{"type":"send","chat":"HA-8/Agent","text":"8080","reply":"m77","space":"p:m:x"}""",
+                fake.bodies("POST /api/action").last(),
+            )
+            assertFailsWith<IOException> { board.answer(CardAnswer(WorkCard("HA-8/Agent", plain, replyTo = "m77"), -1)) }
             board.say("p:beefy-machine:~", "hi")
             assertEquals("""{"type":"send","chat":"p:beefy-machine:~","text":"hi"}""", fake.bodies("POST /api/action").last())
             forward.close()
+        }
+    }
+
+    @Test
+    fun cancellingALongCallLetsGoAtOnce() = runBlocking {
+        FakeShepherdr().use { fake ->
+            val asked = java.util.concurrent.CountDownLatch(1)
+            val release = java.util.concurrent.CountDownLatch(1)
+            fake.on("POST /api/cli") { asked.countDown(); release.await(); 200 to """{"out":"","code":0}""" }
+            val client = ShepherdrClient(ForwardTransport({ ForwardTransport.socket(fake.port, it) }))
+            val call = launch(kotlinx.coroutines.Dispatchers.IO) { client.cli(listOf("checks", "HA-1")) }
+            assertTrue(asked.await(10, java.util.concurrent.TimeUnit.SECONDS))
+            // Shepherdr still waits on GitHub: cancelling doesn't wait with it.
+            withTimeout(5_000) { call.cancelAndJoin() }
+            release.countDown()
         }
     }
 

@@ -8,7 +8,7 @@
     "id": "51c62212-1967-48ed-8b96-7a9719a51724",
     "who": "you",
     "at": 1793229880869,
-    "text": "Make herdr-android work with Shepherdr 2.0 (this machine upgraded herdr-projects 1.2.26 -> Shepherdr 2.0.0 today). Plan it, split it into tasks, and ask me before merging anything."
+    "text": "Make herdr-android work with Shepherdr 2.0 (this machine upgraded herdr-projects 1.2.26 -> Shepherdr 2.0.0 today)."
    },
    {
     "id": "msg_011CgVVsTERTNq8pc5ucUdQH",
@@ -60,7 +60,7 @@
     "id": "msg_011CgVVw7665zS7MsBfuyt9N",
     "who": "agent",
     "at": 1793229961474,
-    "text": "I split it into three tasks. Each one opens a PR and then waits for you, so nothing gets merged without your OK.\n\n- **HA-1 Shepherdr 2 client in core** (started): this is the shared foundation. It detects whether a machine runs v2 or v1 and reaches the v2 API on 127.0.0.1:7787 through the app's existing SSH session, using a port forward, with `curl` over SSH as a fallback. It also adds a typed client for snapshot, actions, `/api/cli` and the live WebSocket, and one board interface that both v1 and v2 use. The core tests will use real JSON captured from this machine.\n- **HA-2 Board and task screens on v2** (queued): shows spaces and their tasks, with what needs you first. A task's details get approve/merge and answering its cards. Adding a task goes through the space's coordinator.\n- **HA-3 Coordinator chat on v2** (queued): live chat with a space's coordinator. You can send messages and answer its cards, and v1 machines keep using `sw-coordinator`.\n\nHA-2 and HA-3 start in parallel once HA-1 is merged. That means HA-1's merge is the first thing I'll ask you about.\n\n**For the app build:** this machine needs an Android SDK, with `ANDROID_HOME` set and compileSdk 36, and a JDK 17, for example `mise use java@17`. Without them the agents can only run the core tests and the screen previews; CI builds the APK."
+    "text": "I split it into three tasks."
    }
   ],
   "controls": {

@@ -77,8 +77,18 @@ data class WorkOverview(val spaces: List<WorkSpace>, val tasks: List<WorkTask>) 
     fun tasksIn(space: String): List<WorkTask> = tasks.filter { it.space == space }
 }
 
-/** A question card waiting for you: [question] in chat [chat] (a task's agent, or the coordinator). */
-data class WorkCard(val chat: String, val question: V2Question, val task: String = "")
+/**
+ * A question card waiting for you: [question] in chat [chat] (a task's agent, or the coordinator).
+ * A copy of a task's card shown in a space's chat names that [space], so answering it settles the copy too.
+ * A plain question with no choices is answered in words ([CardAnswer.other]) as a reply to message [replyTo].
+ */
+data class WorkCard(
+    val chat: String,
+    val question: V2Question,
+    val task: String = "",
+    val space: String = "",
+    val replyTo: String = "",
+)
 
 /** Your answer to [card]: [choice] (-1 none), or [choices] on a multi card, with an optional [note] or typed [other]. */
 data class CardAnswer(

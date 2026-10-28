@@ -107,8 +107,15 @@ class ShepherdrClient(private val transport: ShepherdrTransport) {
 
     suspend fun send(chat: String, text: String, reply: String? = null): JsonObject = act(V2Actions.send(chat, text, reply))
 
-    suspend fun answer(chat: String, question: String, choice: Int, choices: List<Int>? = null, note: String? = null, other: String? = null): JsonObject =
-        act(V2Actions.answer(chat, question, choice, choices, note, other))
+    suspend fun answer(
+        chat: String,
+        question: String,
+        choice: Int,
+        choices: List<Int>? = null,
+        note: String? = null,
+        other: String? = null,
+        space: String? = null,
+    ): JsonObject = act(V2Actions.answer(chat, question, choice, choices, note, other, space))
 
     suspend fun react(chat: String, message: String, emoji: String): JsonObject = act(V2Actions.react(chat, message, emoji))
 
@@ -159,9 +166,9 @@ class V2Live internal constructor(private val socket: WebSocketLink) : Closeable
 
     /** The next event, or null once the server closed the link. Cancelled while it waits, the link is closed. */
     suspend fun next(): V2Event? = coroutineScope {
-        val read = async(Dispatchers.IO) { socket.receive() }
+        val read = async(Dispatchers.IO) { runCatching { socket.receive() } }
         val text = try {
-            read.await()
+            read.await().getOrThrow()
         } catch (e: CancellationException) {
             // A socket's read can't be interrupted: closing it ends the wait.
             socket.close()

@@ -54,8 +54,14 @@ class V2WorkBoard(private val client: ShepherdrClient, private val version: Stri
     override suspend fun approve(task: WorkTask): String = cli(listOf("merge", task.id))
 
     override suspend fun answer(answer: CardAnswer): String {
-        val a = answer
-        client.answer(a.card.chat, a.card.question.id, a.choice, a.choices, a.note, a.other)
+        val c = answer.card
+        val space = c.space.ifEmpty { null }
+        if (c.replyTo.isNotEmpty()) {
+            val text = answer.other?.takeIf { it.isNotBlank() } ?: answer.note?.takeIf { it.isNotBlank() } ?: throw IOException("Write an answer first")
+            client.act(V2Actions.send(c.chat, text, reply = c.replyTo, space = space))
+        } else {
+            client.act(V2Actions.answer(c.chat, c.question.id, answer.choice, answer.choices, answer.note, answer.other, space))
+        }
         return ""
     }
 
@@ -137,8 +143,14 @@ object V2Board {
         val cards = chat.messages.flatMap { m ->
             buildList {
                 m.question?.takeIf { it.open }?.let { add(WorkCard(chat.key, it)) }
-                val ask = m.card?.ask?.takeIf { it.open }
-                ask?.questions.orEmpty().filter { it.open }.forEach { add(WorkCard(ask!!.chat, it, m.card?.task.orEmpty())) }
+                val ask = m.card?.ask?.takeIf { it.open } ?: return@buildList
+                val task = m.card.task.orEmpty()
+                // A task's ask copied here: answered from this space, so its copy here is settled too.
+                ask.questions.orEmpty().filter { it.open }.forEach { add(WorkCard(ask.chat, it, task, space = space)) }
+                ask.reply?.let { r ->
+                    val q = V2Question(id = r.id, title = r.text, kind = "Reply", other = true, to = task)
+                    add(WorkCard(ask.chat, q, task, space = space, replyTo = r.id))
+                }
             }
         }
         return CoordinatorThread(space, lines, working = chat.working && !chat.background, cards = cards, v2 = chat)
