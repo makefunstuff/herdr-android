@@ -63,14 +63,22 @@ class Dictation(
         data class Finishing(val startedAt: Long, val stoppedAt: Long, val said: String, val partial: String) : State {
             val text: String get() = join(said, partial)
         }
+        /**
+         * The recognizer failed and the phone's own speech dialog hears you instead, over the app, since
+         * [since]: what it hears comes back through [fromDialog]. Nothing shows here meanwhile.
+         */
+        data class Away(val since: Long) : State
         /** No microphone: refused, [forever] when the phone won't ask again (only its settings can allow it). */
         data class NoMic(val forever: Boolean) : State
         /** It went wrong; [message] says what to do. */
         data class Failed(val message: String) : State
     }
 
-    /** Why the recognizer stopped without words. */
-    enum class Problem { NoSpeech, Busy, Network, Audio, NoPermission, Language, Other }
+    /** A draft with words put in ([insert]), and where the cursor goes: right after them. */
+    data class Inserted(val text: String, val cursor: Int)
+
+    /** Why the recognizer stopped without words; [Unavailable]: the phone's recognizer couldn't be started at all. */
+    enum class Problem { NoSpeech, Busy, Network, Audio, NoPermission, Language, Unavailable, Other }
 
     private val _state = MutableStateFlow<State>(State.Idle)
     val state: StateFlow<State> = _state.asStateFlow()
@@ -167,6 +175,28 @@ class Dictation(
         }
     }
 
+    /** The phone's speech dialog opened in the recognizer's place ([Mic] did it, after a failure before any words). */
+    fun away() {
+        val s = _state.value
+        if (s is State.Recording || s is State.Finishing) _state.value = State.Away(clock())
+    }
+
+    /**
+     * What the phone's speech dialog gave back: [text] goes into the draft like any voice message
+     * (never sent by itself); without words, [problem] is said, or nothing when it was closed or heard
+     * nothing (it showed that itself). Also after the app was made anew while the dialog was up.
+     */
+    fun fromDialog(text: String?, problem: Problem?) {
+        val s = _state.value
+        if (s is State.Recording || s is State.Finishing || s == State.Asking) return
+        if (text.isNullOrBlank()) {
+            _state.value = if (problem != null) State.Failed(message(problem)) else State.Idle
+            return
+        }
+        _state.value = State.Idle
+        onText(text.trim(), if (s is State.Away) (clock() - s.since).coerceAtLeast(0) else 0L)
+    }
+
     /** How loud it is, as Android's recognizer gives it (about -2 to 10 dB). */
     fun level(rmsDb: Float) {
         val s = _state.value as? State.Recording ?: return
@@ -230,23 +260,44 @@ class Dictation(
         fun join(a: String, b: String): String = listOf(a.trim(), b.trim()).filter { it.isNotEmpty() }.joinToString(" ")
 
         /** The words heard, after what is already typed in [draft]. */
-        fun append(draft: String, text: String): String = when {
-            draft.isBlank() -> text
-            draft.last().isWhitespace() -> draft + text
-            else -> "$draft $text"
-        }
+        fun append(draft: String, text: String): String = insert(draft, draft.length, text).text
 
         /**
-         * [draft] without the words a voice message put after [before] (the draft as it was before
-         * them): [before] again while the draft is still exactly that and [words], else null (the words
-         * were changed, or more was typed after them: they are yours now, and nothing is taken out).
+         * The words heard put into [draft] where the cursor stands ([at]; nothing typed is replaced),
+         * a space between them and the words on either side. An empty box takes the words alone.
+         */
+        fun insert(draft: String, at: Int, text: String): Inserted {
+            if (draft.isBlank()) return Inserted(text, text.length)
+            val head = draft.substring(0, at.coerceIn(0, draft.length))
+            val tail = draft.substring(head.length)
+            // After a bracket that opens, and before a mark that closes ("," "." ")"), no space, as typed.
+            val lead = if (head.isEmpty() || head.last().isWhitespace() || head.last() in OPENING) "" else " "
+            val trail = if (tail.isEmpty() || tail.first().isWhitespace() || tail.first() in CLOSING) "" else " "
+            val cursor = head.length + lead.length + text.length
+            return Inserted(head + lead + text + trail + tail, cursor)
+        }
+
+        private const val OPENING = "([{"
+        private const val CLOSING = ".,;:!?)]}\"'…"
+
+        /**
+         * [draft] without the words a voice message put into [before] (the draft as it was before
+         * them, see [insert]): [before] again while the draft is still exactly that with [words] in
+         * one place, else null (the words were changed, or typed into: they are yours now, and nothing
+         * is taken out).
          */
         fun drop(draft: String, before: String, words: String): String? {
             if (words.isEmpty()) return null
-            // An empty box takes the words alone (see [append]).
+            // An empty box takes the words alone (see [insert]).
             if (before.isBlank()) return "".takeIf { draft.trim() == words }
-            if (!draft.startsWith(before)) return null
-            return before.takeIf { draft.substring(before.length).trim() == words }
+            if (draft.length < before.length + words.length) return null
+            // Where they went in: what stands before and after them is the old draft, split there.
+            val found = (0..before.length).any { at ->
+                val tail = before.substring(at)
+                draft.startsWith(before.substring(0, at)) && draft.endsWith(tail) &&
+                    draft.substring(at, draft.length - tail.length).trim() == words
+            }
+            return before.takeIf { found }
         }
 
         /** How long you spoke: `0:07`, `1:05`. */
@@ -262,8 +313,37 @@ class Dictation(
             Problem.Audio -> "The microphone didn't work. Another app may be using it."
             Problem.NoPermission -> "The microphone isn't allowed."
             Problem.Language -> "This phone can't turn speech in your language into text."
+            Problem.Unavailable -> "Speech recognition isn't available on this phone right now."
             Problem.Other -> "Speech recognition stopped. Try again."
         }
+
+        /** What one of Android's `SpeechRecognizer.ERROR_*` codes means here. */
+        fun problem(error: Int): Problem = when (error) {
+            Errors.NO_MATCH, Errors.SPEECH_TIMEOUT -> Problem.NoSpeech
+            Errors.RECOGNIZER_BUSY, Errors.TOO_MANY_REQUESTS -> Problem.Busy
+            Errors.NETWORK, Errors.NETWORK_TIMEOUT, Errors.SERVER, Errors.SERVER_DISCONNECTED -> Problem.Network
+            Errors.AUDIO -> Problem.Audio
+            Errors.INSUFFICIENT_PERMISSIONS -> Problem.NoPermission
+            Errors.LANGUAGE_NOT_SUPPORTED, Errors.LANGUAGE_UNAVAILABLE -> Problem.Language
+            else -> Problem.Other
+        }
+    }
+
+    /** Android's `SpeechRecognizer.ERROR_*` codes (core has no Android): the app's tests check they match. */
+    object Errors {
+        const val NETWORK_TIMEOUT = 1
+        const val NETWORK = 2
+        const val AUDIO = 3
+        const val SERVER = 4
+        const val CLIENT = 5
+        const val SPEECH_TIMEOUT = 6
+        const val NO_MATCH = 7
+        const val RECOGNIZER_BUSY = 8
+        const val INSUFFICIENT_PERMISSIONS = 9
+        const val TOO_MANY_REQUESTS = 10
+        const val SERVER_DISCONNECTED = 11
+        const val LANGUAGE_NOT_SUPPORTED = 12
+        const val LANGUAGE_UNAVAILABLE = 13
     }
 }
 

@@ -16,6 +16,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.selection.LocalTextSelectionColors
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableIntStateOf
@@ -47,6 +48,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
 import com.makefunstuff.herdr.ui.theme.Pretendard
 import com.makefunstuff.herdr.core.chat.Completions
 import com.makefunstuff.herdr.core.chat.Dictation
@@ -177,13 +179,25 @@ fun ChatComposer(
     // Opened with a draft, the cursor stands at its end.
     var field by remember { mutableStateOf(TextFieldValue(draft, TextRange(draft.length))) }
     // A draft changed from outside (an attached file's mention put in front, a sent message taken
-    // out): the cursor keeps its place in the words you typed, or goes to the end.
+    // out): the cursor keeps its place in the words you typed, or goes to the end; after words heard,
+    // right after them.
     val value = if (field.text == draft) field else {
         val grew = draft.length - field.text.length
-        val cursor = if (grew > 0 && draft.endsWith(field.text)) field.selection.end + grew else draft.length
+        val cursor = voice?.cursor?.placedIn(draft)
+            ?: if (grew > 0 && draft.endsWith(field.text)) field.selection.end + grew else draft.length
         TextFieldValue(draft, TextRange(cursor.coerceIn(0, draft.length)))
     }
-    SideEffect { if (value != field) field = value }
+    SideEffect {
+        if (value != field) field = value
+        voice?.cursor?.at = value.selection.max
+    }
+    // What went wrong while it heard is said for a while, then goes by itself.
+    LaunchedEffect(voiceState) {
+        if (voiceState is Dictation.State.Failed) {
+            delay(FAILED_SHOWN_MS)
+            voice?.dictation?.dismiss()
+        }
+    }
 
     BoxWithConstraints(modifier.fillMaxWidth(), contentAlignment = Alignment.BottomCenter) {
         val room = if (constraints.hasBoundedHeight) maxHeight else Dp.Infinity
@@ -220,7 +234,7 @@ fun ChatComposer(
             if (above != null) {
                 Box(Modifier.padding(bottom = Space.s).then(if (room != Dp.Infinity) Modifier.heightIn(max = room * 0.6f) else Modifier)) { above() }
             }
-            if (voice != null && (voiceState is Dictation.State.NoMic || voiceState is Dictation.State.Failed)) {
+            if (voice != null && (voiceState is Dictation.State.NoMic || voiceState is Dictation.State.Failed || voiceState == Dictation.State.Asking)) {
                 Box(Modifier.padding(bottom = Space.s)) { MicNotice(voice.dictation, voiceState) }
             }
             Column(
@@ -300,7 +314,8 @@ fun ChatComposer(
                                 .semantics { liveRegion = LiveRegionMode.Polite },
                         )
                     }
-                    trailing?.invoke(this)
+                    // While it hears, the row is the recording's (its time and what letting go does).
+                    if (!hearing) trailing?.invoke(this)
                     // Always in this place, so a finger holding it through every state keeps it.
                     if (voice != null) ComposerMic(voice.dictation, voiceState, enabled = enabled)
                     when {
@@ -313,6 +328,9 @@ fun ChatComposer(
         }
     }
 }
+
+/** How long the composer says what went wrong with a voice message before it goes by itself. */
+private const val FAILED_SHOWN_MS = 8_000L
 
 /** The message's type: `--fs-input` (16sp, the web UI's touch size) on `--lh-base`. */
 private val ComposerTextStyle = TextStyle(fontFamily = Pretendard, fontSize = 16.sp, lineHeight = 24.sp)

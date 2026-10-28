@@ -43,6 +43,51 @@ class DictationTest {
         assertEquals(listOf("run the tests again" to 7_000L), sent)
     }
 
+    @Test fun theDialogsWordsGoInAsAVoiceMessage() {
+        d.down()
+        d.away()
+        assertEquals(State.Away(1_000L), d.state.value)
+        // Letting go, ticking: nothing happens while the dialog is up.
+        d.up(heldFor = 2_000)
+        d.tick()
+        assertIs<State.Away>(d.state.value)
+        now += 5_000
+        d.fromDialog("  hello  ", Problem.Language)
+        assertEquals(listOf("hello" to 5_000L), sent)
+        assertEquals(State.Idle, d.state.value)
+    }
+
+    @Test fun theDialogsAnswerAfterTheAppWasMadeAnewStillGoesIn() {
+        d.fromDialog("from before", null)
+        assertEquals(listOf("from before" to 0L), sent)
+    }
+
+    @Test fun theDialogsAnswerWhileHearingAgainIsDropped() {
+        d.down()
+        d.fromDialog("late", null)
+        assertTrue(sent.isEmpty())
+        assertIs<State.Recording>(d.state.value)
+    }
+
+    @Test fun theDialogWithoutWordsSaysTheProblemOrNothing() {
+        d.down()
+        d.away()
+        d.fromDialog(null, null)
+        assertEquals(State.Idle, d.state.value)
+        d.down()
+        d.away()
+        d.fromDialog("", Problem.Network)
+        assertEquals(State.Failed(Dictation.message(Problem.Network)), d.state.value)
+        assertTrue(sent.isEmpty())
+    }
+
+    @Test fun downWhileAwayStartsAgain() {
+        d.down()
+        d.away()
+        d.down()
+        assertIs<State.Recording>(d.state.value)
+    }
+
     @Test fun aQuickTapKeepsHearingUntilTheNextTap() {
         d.down()
         d.up(heldFor = 120)
@@ -209,6 +254,81 @@ class DictationTest {
         assertEquals(null, Dictation.drop("Also: ran it", "Also:", "run it"))
         assertEquals(null, Dictation.drop("Al: run it", "Also:", "run it"))
         assertEquals(null, Dictation.drop("Also:", "Also:", ""))
+    }
+
+    @Test fun wordsGoInWhereTheCursorStands() {
+        fun at(draft: String, cursor: Int, text: String) = Dictation.insert(draft, cursor, text)
+        assertEquals(Dictation.Inserted("run it", 6), at("", 0, "run it"))
+        assertEquals(Dictation.Inserted("run it", 6), at("   ", 2, "run it"))
+        // In the middle: a space on each side, the cursor right after the words.
+        assertEquals(Dictation.Inserted("Please run the tests now", 20), at("Please now", 6, "run the tests"))
+        assertEquals(Dictation.Inserted("Please run the tests now", 20), at("Please  now", 7, "run the tests"))
+        // At the start, and before a mark that closes the sentence.
+        assertEquals(Dictation.Inserted("Also check the logs", 4), at("check the logs", 0, "Also"))
+        assertEquals(Dictation.Inserted("Fix the build, then push", 13), at("Fix, then push", 3, "the build"))
+        assertEquals(Dictation.Inserted("(run it)", 7), at("()", 1, "run it"))
+        // A cursor past the end (the draft changed under it) puts them at the end.
+        assertEquals(Dictation.Inserted("Also: run it", 12), at("Also:", 40, "run it"))
+        assertEquals(Dictation.Inserted("run it now", 6), at("now", -3, "run it"))
+    }
+
+    @Test fun discardingTakesTheWordsOutWhereTheyWentIn() {
+        fun spoken(before: String, cursor: Int, words: String) = Dictation.drop(Dictation.insert(before, cursor, words).text, before, words)
+        assertEquals("Please now", spoken("Please now", 6, "run the tests"))
+        assertEquals("check the logs", spoken("check the logs", 0, "Also"))
+        assertEquals("Fix, then push", spoken("Fix, then push", 3, "the build"))
+        // Two takes at the same cursor go together.
+        val first = Dictation.insert("Please now", 6, "run")
+        val two = Dictation.insert(first.text, first.cursor, "the tests")
+        assertEquals("Please run the tests now", two.text)
+        assertEquals("Please now", Dictation.drop(two.text, "Please now", Dictation.join("run", "the tests")))
+        // Typed into, or the old words changed: they are yours now.
+        assertEquals(null, Dictation.drop("Please run all the tests now", "Please now", "run the tests"))
+        assertEquals(null, Dictation.drop("Pleas run the tests now", "Please now", "run the tests"))
+    }
+
+    @Test fun recognizerErrorsSayWhatWentWrong() {
+        val e = Dictation.Errors
+        assertEquals(Problem.NoSpeech, Dictation.problem(e.NO_MATCH))
+        assertEquals(Problem.NoSpeech, Dictation.problem(e.SPEECH_TIMEOUT))
+        assertEquals(Problem.Network, Dictation.problem(e.NETWORK))
+        assertEquals(Problem.Network, Dictation.problem(e.NETWORK_TIMEOUT))
+        assertEquals(Problem.Network, Dictation.problem(e.SERVER))
+        assertEquals(Problem.Network, Dictation.problem(e.SERVER_DISCONNECTED))
+        assertEquals(Problem.Busy, Dictation.problem(e.RECOGNIZER_BUSY))
+        assertEquals(Problem.Busy, Dictation.problem(e.TOO_MANY_REQUESTS))
+        assertEquals(Problem.Audio, Dictation.problem(e.AUDIO))
+        assertEquals(Problem.NoPermission, Dictation.problem(e.INSUFFICIENT_PERMISSIONS))
+        assertEquals(Problem.Language, Dictation.problem(e.LANGUAGE_NOT_SUPPORTED))
+        assertEquals(Problem.Language, Dictation.problem(e.LANGUAGE_UNAVAILABLE))
+        assertEquals(Problem.Other, Dictation.problem(e.CLIENT))
+        assertEquals(Problem.Other, Dictation.problem(99))
+        // Each says something of its own.
+        assertEquals(Problem.entries.size, Problem.entries.map(Dictation::message).toSet().size)
+    }
+
+    @Test fun aTimeoutWithNothingSaidSaysSoAndTheMicCanBeTriedAgain() {
+        d.down()
+        d.up(heldFor = 100)
+        // A pause before the first word: it keeps hearing.
+        d.failed(Dictation.problem(Dictation.Errors.SPEECH_TIMEOUT))
+        assertIs<State.Recording>(d.state.value)
+        d.stop()
+        d.failed(Dictation.problem(Dictation.Errors.NO_MATCH))
+        assertEquals(State.Failed(Dictation.message(Problem.NoSpeech)), d.state.value)
+        assertTrue(sent.isEmpty())
+        d.dismiss()
+        assertEquals(State.Idle, d.state.value)
+    }
+
+    @Test fun noNetworkWithNothingSaidSaysSo() {
+        d.down()
+        d.failed(Dictation.problem(Dictation.Errors.NETWORK))
+        assertEquals(State.Failed(Dictation.message(Problem.Network)), d.state.value)
+        d.down()
+        assertIs<State.Recording>(d.state.value)
+        d.failed(Problem.Unavailable)
+        assertEquals(State.Failed(Dictation.message(Problem.Unavailable)), d.state.value)
     }
 
     @Test fun elapsed() {
