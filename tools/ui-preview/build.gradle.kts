@@ -77,13 +77,14 @@ sourceSets.main {
 
 tasks.register<JavaExec>("render") {
     group = "verification"
-    description = "Renders every preview scene to build/shots/<scene>.png (-Ponly=a,b for some, -Pout=dir elsewhere)."
+    description = "Renders every preview scene to build/shots/<scene>.png (-Ponly=a,b for some, -Pout=dir elsewhere, -Pshard=k/n for every n-th scene from the k-th)."
     dependsOn("classes")
     classpath = sourceSets.main.get().runtimeClasspath
     mainClass.set("preview.MainKt")
     args = listOf(
         project.findProperty("out")?.toString() ?: layout.buildDirectory.dir("shots").get().asFile.path,
         project.findProperty("only")?.toString().orEmpty(),
+        project.findProperty("shard")?.toString().orEmpty(),
     )
     systemProperty("java.awt.headless", "true")
     systemProperty("skiko.renderApi", "SOFTWARE")

@@ -150,19 +150,48 @@ fun main(args: Array<String>) {
         System.err.println("No scene called ${unknown.joinToString()}. Scenes: ${names.joinToString()}")
         kotlin.system.exitProcess(2)
     }
+    // Shard k of n (`k/n`, from 1): every n-th scene, both its themes, so CI renders them on n runners at once.
+    val (shard, shards) = args.getOrElse(2) { "" }.ifEmpty { "1/1" }.split('/').map { it.trim().toInt() }
+    require(shards >= 1 && shard in 1..shards) { "shard is k/n with 1 ≤ k ≤ n, not ${args[2]}" }
     var failed = 0
-    for (scene in all) for (dark in listOf(true, false)) {
+    for ((index, scene) in all.withIndex()) for (dark in listOf(true, false)) {
+        if (index % shards != shard - 1) continue
         val name = if (dark) scene.name else scene.name + "-light"
         if (only.isNotEmpty() && name !in only && scene.name !in only) continue
         val file = File(out, "$name.png")
         val started = System.currentTimeMillis()
+        val watch = Watchdog.start(name)
         runCatching { render(scene, dark, file) }
             .onSuccess { println("ok   $name  (${System.currentTimeMillis() - started} ms)") }
             .onFailure { failed++; println("FAIL $name: $it"); it.printStackTrace() }
+        watch.interrupt()
     }
     println("Shots in ${out.absolutePath}")
     // Leftover coroutines and the fake machines' threads would keep the JVM alive.
     kotlin.system.exitProcess(if (failed > 0) 1 else 0)
+}
+
+/**
+ * A shot that takes longer than [LIMIT_MS] is stuck (the slowest take about 25 s): what every thread
+ * was doing goes to the log and the run fails at once, instead of waiting for the CI job's timeout.
+ */
+object Watchdog {
+    const val LIMIT_MS = 120_000L
+
+    fun start(name: String): Thread = Thread {
+        try {
+            Thread.sleep(LIMIT_MS)
+        } catch (_: InterruptedException) {
+            return@Thread
+        }
+        println("HANG $name: no shot after ${LIMIT_MS / 1000} s; every thread's stack follows")
+        for ((thread, stack) in Thread.getAllStackTraces()) {
+            println("\n\"${thread.name}\" ${thread.state}")
+            stack.forEach { println("    at $it") }
+        }
+        System.out.flush()
+        Runtime.getRuntime().halt(1)
+    }.apply { isDaemon = true; this.name = "watchdog $name"; start() }
 }
 
 fun render(scene: Scene, dark: Boolean, file: File) {
