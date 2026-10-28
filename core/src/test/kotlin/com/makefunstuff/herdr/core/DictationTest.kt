@@ -43,6 +43,51 @@ class DictationTest {
         assertEquals(listOf("run the tests again" to 7_000L), sent)
     }
 
+    @Test fun theDialogsWordsGoInAsAVoiceMessage() {
+        d.down()
+        d.away()
+        assertEquals(State.Away(1_000L), d.state.value)
+        // Letting go, ticking: nothing happens while the dialog is up.
+        d.up(heldFor = 2_000)
+        d.tick()
+        assertIs<State.Away>(d.state.value)
+        now += 5_000
+        d.fromDialog("  hello  ", Problem.Language)
+        assertEquals(listOf("hello" to 5_000L), sent)
+        assertEquals(State.Idle, d.state.value)
+    }
+
+    @Test fun theDialogsAnswerAfterTheAppWasMadeAnewStillGoesIn() {
+        d.fromDialog("from before", null)
+        assertEquals(listOf("from before" to 0L), sent)
+    }
+
+    @Test fun theDialogsAnswerWhileHearingAgainIsDropped() {
+        d.down()
+        d.fromDialog("late", null)
+        assertTrue(sent.isEmpty())
+        assertIs<State.Recording>(d.state.value)
+    }
+
+    @Test fun theDialogWithoutWordsSaysTheProblemOrNothing() {
+        d.down()
+        d.away()
+        d.fromDialog(null, null)
+        assertEquals(State.Idle, d.state.value)
+        d.down()
+        d.away()
+        d.fromDialog("", Problem.Network)
+        assertEquals(State.Failed(Dictation.message(Problem.Network)), d.state.value)
+        assertTrue(sent.isEmpty())
+    }
+
+    @Test fun downWhileAwayStartsAgain() {
+        d.down()
+        d.away()
+        d.down()
+        assertIs<State.Recording>(d.state.value)
+    }
+
     @Test fun aQuickTapKeepsHearingUntilTheNextTap() {
         d.down()
         d.up(heldFor = 120)
