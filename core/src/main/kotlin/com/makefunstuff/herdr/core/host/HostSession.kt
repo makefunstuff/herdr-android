@@ -7,7 +7,15 @@ import com.makefunstuff.herdr.core.api.PongInfo
 import com.makefunstuff.herdr.core.api.SessionEntry
 import com.makefunstuff.herdr.core.api.HerdrApi
 import com.makefunstuff.herdr.core.api.SessionSnapshot
+import com.makefunstuff.herdr.core.board.BoardApi
 import com.makefunstuff.herdr.core.board.BoardClient
+import com.makefunstuff.herdr.core.board.V1WorkBoard
+import com.makefunstuff.herdr.core.board.WorkBoard
+import com.makefunstuff.herdr.core.shepherdr.BoardDetection
+import com.makefunstuff.herdr.core.shepherdr.ShepherdrClient
+import com.makefunstuff.herdr.core.shepherdr.ShepherdrTransport
+import com.makefunstuff.herdr.core.shepherdr.V2Version
+import com.makefunstuff.herdr.core.shepherdr.V2WorkBoard
 import com.makefunstuff.herdr.core.ssh.ConnectError
 import com.makefunstuff.herdr.core.ssh.HerdrBinaries
 import com.makefunstuff.herdr.core.ssh.HerdrBinary
@@ -39,7 +47,9 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.IOException
@@ -65,6 +75,8 @@ data class HostState(
     val boardPath: String? = null,
     /** Whether the look for herdr-projects answered since the machine connected, so a null [boardPath] means it isn't there. */
     val boardChecked: Boolean = false,
+    /** Shepherdr 2's version where its API answers on the machine; null where it doesn't (or not checked yet). */
+    val shepherdrVersion: String? = null,
     /** The herdr executable the app runs on the machine; null until it connects, or when it couldn't be probed. */
     val herdr: HerdrChoice? = null,
     /**
@@ -79,6 +91,9 @@ data class HostState(
     val unreadNotices: Int = 0,
 ) {
     val hasBoard: Boolean get() = boardPath != null
+
+    /** Which board the machine runs: Shepherdr 2 wins over a herdr-projects launcher, which may be an old one left on disk. */
+    val boardApi: BoardApi get() = BoardDetection.decide(shepherdrVersion?.let { V2Version(version = it) }, boardPath)
 
     /** [machine] with its herdr path set to the chosen binary: what every herdr command should run. */
     val herdrMachine: Machine get() = herdr?.let { machine.copy(herdrPath = it.binary.path) } ?: machine
@@ -116,6 +131,9 @@ class HostSession(
     private val refreshRequests = Channel<Unit>(Channel.CONFLATED)
 
     @Volatile private var connection: MachineConnection? = null
+    /** How Shepherdr 2's API is reached on this connection (its port forward), once found; closed with the connection. */
+    @Volatile private var shepherdr: ShepherdrTransport? = null
+    private val shepherdrLock = Mutex()
     @Volatile private var api: HerdrApi? = null
     @Volatile private var herdrMachine: Machine = machine
     @Volatile private var metaDirty = true
@@ -222,11 +240,48 @@ class HostSession(
         return BoardClient(conn, state.value.herdrMachine, path)
     }
 
-    /** Looks for the board again, for one installed or removed since the machine connected. */
+    /** Looks for the board again, for one installed or removed since the machine connected: Shepherdr 2's API, then v1's launcher. */
     suspend fun checkBoard() {
         val conn = connection ?: return
+        val v2 = findShepherdr(conn)
         val path = runCatching { BoardClient.locate(conn) }.getOrElse { return }
-        _state.update { it.copy(boardPath = path, boardChecked = true) }
+        _state.update { it.copy(boardPath = path, shepherdrVersion = v2?.version, boardChecked = true) }
+    }
+
+    /** Shepherdr 2 on this machine, over the connection's one port forward to it. */
+    suspend fun awaitShepherdr(timeoutMs: Long = 20_000): ShepherdrClient {
+        val conn = awaitConnection(timeoutMs)
+        shepherdr?.let { return ShepherdrClient(it) }
+        findShepherdr(conn) ?: throw IOException("Shepherdr 2 isn't running on ${machine.label}")
+        return ShepherdrClient(shepherdr ?: throw IOException(statusMessage()))
+    }
+
+    /** The machine's work board, whichever it runs ([HostState.boardApi]). */
+    suspend fun awaitWorkBoard(timeoutMs: Long = 20_000): WorkBoard {
+        awaitConnection(timeoutMs)
+        if (!state.value.boardChecked) checkBoard()
+        val s = state.value
+        return when (val api = s.boardApi) {
+            is BoardApi.V2 -> V2WorkBoard(awaitShepherdr(timeoutMs), api.version)
+            is BoardApi.V1 -> V1WorkBoard(awaitBoard(timeoutMs), api.path)
+            BoardApi.None -> throw IOException("Neither Shepherdr nor herdr-projects is installed on ${machine.label}")
+        }
+    }
+
+    /** Keeps the transport that still answers, else finds one; null where Shepherdr 2 doesn't answer. */
+    private suspend fun findShepherdr(conn: MachineConnection): V2Version? = shepherdrLock.withLock {
+        shepherdr?.let { t ->
+            BoardDetection.probe(t)?.let { return@withLock it }
+            shepherdr = null
+            runCatching { t.close() }
+        }
+        val (t, v) = BoardDetection.open(conn) ?: return@withLock null
+        if (connection !== conn) {
+            runCatching { t.close() }
+            return@withLock null
+        }
+        shepherdr = t
+        v
     }
 
     private fun statusMessage(): String = when (val s = state.value.status) {
@@ -434,6 +489,8 @@ class HostSession(
 
     private fun teardown() {
         api = null
+        shepherdr?.let { runCatching { it.close() } }
+        shepherdr = null
         val c = connection
         connection = null
         runCatching { c?.close() }
