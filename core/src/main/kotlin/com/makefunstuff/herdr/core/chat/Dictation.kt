@@ -63,6 +63,11 @@ class Dictation(
         data class Finishing(val startedAt: Long, val stoppedAt: Long, val said: String, val partial: String) : State {
             val text: String get() = join(said, partial)
         }
+        /**
+         * The recognizer failed and the phone's own speech dialog hears you instead, over the app, since
+         * [since]: what it hears comes back through [fromDialog]. Nothing shows here meanwhile.
+         */
+        data class Away(val since: Long) : State
         /** No microphone: refused, [forever] when the phone won't ask again (only its settings can allow it). */
         data class NoMic(val forever: Boolean) : State
         /** It went wrong; [message] says what to do. */
@@ -168,6 +173,28 @@ class Dictation(
             is State.Finishing -> finish(s, join(s.said, text.ifBlank { s.partial }))
             else -> {}
         }
+    }
+
+    /** The phone's speech dialog opened in the recognizer's place ([Mic] did it, after a failure before any words). */
+    fun away() {
+        val s = _state.value
+        if (s is State.Recording || s is State.Finishing) _state.value = State.Away(clock())
+    }
+
+    /**
+     * What the phone's speech dialog gave back: [text] goes into the draft like any voice message
+     * (never sent by itself); without words, [problem] is said, or nothing when it was closed or heard
+     * nothing (it showed that itself). Also after the app was made anew while the dialog was up.
+     */
+    fun fromDialog(text: String?, problem: Problem?) {
+        val s = _state.value
+        if (s is State.Recording || s is State.Finishing || s == State.Asking) return
+        if (text.isNullOrBlank()) {
+            _state.value = if (problem != null) State.Failed(message(problem)) else State.Idle
+            return
+        }
+        _state.value = State.Idle
+        onText(text.trim(), if (s is State.Away) (clock() - s.since).coerceAtLeast(0) else 0L)
     }
 
     /** How loud it is, as Android's recognizer gives it (about -2 to 10 dB). */
