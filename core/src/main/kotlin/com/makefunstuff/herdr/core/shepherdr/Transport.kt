@@ -26,6 +26,9 @@ interface ShepherdrTransport : Closeable {
 
     /** Opens the live link at [path]; fails where [canStream] is false. */
     suspend fun webSocket(path: String): WebSocketLink
+
+    /** Where there is no live link ([canStream] false): chat [key] as a `chat` event's JSON, read some other way. */
+    suspend fun readChat(key: String, timeoutMs: Long): String = throw IOException("No way to read a chat here")
 }
 
 /**
@@ -99,12 +102,41 @@ class CurlTransport(
     }
 
     override suspend fun webSocket(path: String): WebSocketLink =
-        throw IOException("The machine's SSH server doesn't forward ports, and Shepherdr sends chats only over a live link: allow TCP forwarding there (AllowTcpForwarding in sshd_config)")
+        throw IOException("The machine's SSH server doesn't forward ports: no live link, so the app reads again every few seconds")
+
+    /**
+     * Shepherdr sends chats only over its live link, which curl can't hold: the machine's `bun` (which
+     * the `shepherdr` command itself runs on) opens one there, prints the chat once and quits.
+     */
+    override suspend fun readChat(key: String, timeoutMs: Long): String {
+        val seconds = ((timeoutMs + 999) / 1000).toInt().coerceAtLeast(1)
+        val r = run(chatCommand(key, seconds), "", seconds + 10L)
+        val line = r.stdout.lines().lastOrNull { it.startsWith(CHAT_MARK) }
+            ?: throw IOException(r.stderr.trim().lines().lastOrNull { it.isNotBlank() } ?: "Shepherdr sent no chat $key")
+        return line.removePrefix(CHAT_MARK)
+    }
 
     override fun close() {}
 
     companion object {
         private const val MARK = "@@shepherdr-status@@"
+        private const val CHAT_MARK = "@@shepherdr-chat@@"
+
+        /**
+         * A few lines of JavaScript for `bun` (or `node`, which has WebSocket too) through a login shell,
+         * where PATH finds them: watch [key], print its first chat event after [CHAT_MARK], quit.
+         */
+        fun chatCommand(key: String, seconds: Int): String {
+            val k = kotlinx.serialization.json.JsonPrimitive(key).toString()
+            val js = "const k=$k;const ws=new WebSocket('ws://${Wire.HOST}/api/ws');" +
+                "setTimeout(()=>{console.error('Shepherdr sent no chat '+k);process.exit(3)},${seconds * 1000});" +
+                "ws.onopen=()=>ws.send(JSON.stringify({type:'watch',chats:[k],term:null,visible:false,push:null}));" +
+                "ws.onmessage=(e)=>{const m=JSON.parse(String(e.data));" +
+                "if(m.type==='chat'&&m.chat&&m.chat.key===k)process.stdout.write('$CHAT_MARK'+JSON.stringify(m)+'\\n',()=>process.exit(0))};" +
+                "ws.onerror=()=>{console.error('Shepherdr refused the live link');process.exit(4)}"
+            val run = "if command -v bun >/dev/null 2>&1; then exec bun -e ${quote(js)}; else exec node -e ${quote(js)}; fi"
+            return "sh -c ${quote("exec \"\${SHELL:-/bin/sh}\" -lc \"\$1\" </dev/null")} sh ${quote(run)}"
+        }
 
         /** `curl` with the body on its stdin and the status after a mark at the end of its output. */
         fun command(method: String, path: String, hasBody: Boolean, seconds: Int): String = buildList {

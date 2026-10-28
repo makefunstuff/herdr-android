@@ -262,7 +262,8 @@ class HostSession(
         if (!state.value.boardChecked) checkBoard()
         val s = state.value
         return when (val api = s.boardApi) {
-            is BoardApi.V2 -> V2WorkBoard(awaitShepherdr(timeoutMs), api.version)
+            // The client each time: after a reconnect it is the new connection's forward.
+            is BoardApi.V2 -> V2WorkBoard({ awaitShepherdr(timeoutMs) }, api.version)
             is BoardApi.V1 -> V1WorkBoard(awaitBoard(timeoutMs), api.path)
             BoardApi.None -> throw IOException("Neither Shepherdr nor herdr-projects is installed on ${machine.label}")
         }
@@ -281,6 +282,12 @@ class HostSession(
             return@withLock null
         }
         shepherdr = t
+        // Torn down meanwhile: teardown let go of the connection before it closed what it found here.
+        if (connection !== conn) {
+            shepherdr = null
+            runCatching { t.close() }
+            return@withLock null
+        }
         v
     }
 
@@ -489,10 +496,10 @@ class HostSession(
 
     private fun teardown() {
         api = null
-        shepherdr?.let { runCatching { it.close() } }
-        shepherdr = null
         val c = connection
         connection = null
+        shepherdr?.let { runCatching { it.close() } }
+        shepherdr = null
         runCatching { c?.close() }
     }
 }

@@ -254,7 +254,7 @@ class ShepherdrTest {
     }
 
     @Test
-    fun curlIsTheFallbackWithItsStatusAtTheEnd() = runBlocking {
+    fun curlIsTheFallbackWithItsStatusAtTheEnd() = runBlocking<Unit> {
         val cmd = CurlTransport.command("POST", "/api/cli", true, 30)
         assertEquals(
             "'curl' '-sS' '--max-time' '30' '-X' 'POST' '-H' 'Content-Type: application/json' '--data-binary' '@-' '-w' '\n@@shepherdr-status@@%{http_code}' 'http://127.0.0.1:7787/api/cli'",
@@ -398,6 +398,50 @@ class ShepherdrTest {
             val two = withTimeout(10_000) { board.coordinatorThreads("p:beefy-machine:herdr-android").take(2).toList() }
             assertTrue(two[1].lines[1].text.endsWith("and one more."))
         }
+    }
+
+    @Test
+    fun aDroppedLiveLinkIsLinkedAgain() = runBlocking {
+        FakeShepherdr().use { fake ->
+            val links = java.util.concurrent.atomic.AtomicInteger()
+            fake.onSocket { ws ->
+                val n = links.incrementAndGet()
+                ws.sendText("""{"type":"snapshot","snapshot":{"places":[{"id":"p:m:$n"}]}}""")
+                // The first link drops (Shepherdr restarts); the second stays until the app goes.
+                if (n == 1) ws.close() else ws.readText()
+            }
+            val board = V2WorkBoard(ShepherdrClient(ForwardTransport({ ForwardTransport.socket(fake.port, it) })))
+            val two = withTimeout(10_000) { board.overviews().take(2).toList() }
+            assertEquals(listOf("p:m:1", "p:m:2"), two.map { it.spaces.single().id })
+        }
+    }
+
+    @Test
+    fun theFirstFailureOfALiveFlowIsThrown() = runBlocking<Unit> {
+        val dead = ServerSocket(0).use { it.localPort }
+        val board = V2WorkBoard(ShepherdrClient(ForwardTransport({ ForwardTransport.socket(dead, it) })))
+        assertFailsWith<IOException> { withTimeout(10_000) { board.overviews().first() } }
+    }
+
+    @Test
+    fun withoutAForwardAChatIsReadByTheMachinesBun() = runBlocking {
+        val cmd = CurlTransport.chatCommand("p:m:it's", 15)
+        assertTrue(cmd.startsWith("sh -c "))
+        assertTrue(cmd.contains("bun -e") && cmd.contains("node -e"))
+        // The key goes in as a JSON string, its quote escaped for the shell.
+        assertTrue(cmd.contains("const k=\"p:m:it"))
+        val event = fixture("chat-event.json").replace("\n", " ")
+        val curl = CurlTransport { c, _, _ ->
+            if (c.contains("bun -e")) CommandResult(0, "login banner\n@@shepherdr-chat@@" + ShepherdrJson.parseToJsonElement(event) + "\n", "")
+            else CommandResult(0, fixture("snapshot.json") + "\n@@shepherdr-status@@200", "")
+        }
+        val board = V2WorkBoard(ShepherdrClient(curl))
+        val thread = board.coordinator("p:beefy-machine:herdr-android")
+        assertEquals(3, thread.lines.size)
+        // No live link: the flows read again.
+        assertEquals(3, withTimeout(10_000) { board.overviews(everyMs = 10).take(2).toList() }.last().tasks.size)
+        val none = CurlTransport { _, _, _ -> CommandResult(3, "", "Shepherdr sent no chat x") }
+        assertEquals("Shepherdr sent no chat x", assertFailsWith<IOException> { ShepherdrClient(none).chat("x") }.message)
     }
 
     @Test

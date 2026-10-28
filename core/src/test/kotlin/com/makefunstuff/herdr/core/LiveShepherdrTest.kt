@@ -3,6 +3,8 @@ package com.makefunstuff.herdr.core
 import com.makefunstuff.herdr.core.board.BoardApi
 import com.makefunstuff.herdr.core.host.HostSession
 import com.makefunstuff.herdr.core.keys.KeyImport
+import com.makefunstuff.herdr.core.shepherdr.CurlTransport
+import com.makefunstuff.herdr.core.shepherdr.ShepherdrClient
 import com.makefunstuff.herdr.core.shepherdr.V2WorkBoard
 import com.makefunstuff.herdr.core.ssh.Machine
 import kotlinx.coroutines.CoroutineScope
@@ -66,6 +68,14 @@ class LiveShepherdrTest {
                     assertEquals(t.id, d.task.id)
                 }
                 println("waiting: ${client.waiting()}")
+
+                // Where the SSH server won't forward: curl for the API, the machine's bun for a chat.
+                val conn = session.awaitConnection()
+                val curl = V2WorkBoard(ShepherdrClient(CurlTransport { c, stdin, t -> conn.runWithInput(c, CurlTransport.stdin(stdin), t) }))
+                assertEquals(o.tasks.map { it.id }, curl.overview().tasks.map { it.id })
+                val viaBun = curl.coordinator(home.id)
+                println("home chat without a forward: ${viaBun.lines.size} lines")
+                assertEquals(home.chat, viaBun.v2!!.key)
             } finally {
                 session.stop()
                 scope.cancel()

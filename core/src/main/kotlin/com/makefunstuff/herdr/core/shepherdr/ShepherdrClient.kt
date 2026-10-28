@@ -131,8 +131,16 @@ class ShepherdrClient(private val transport: ShepherdrTransport) {
     /** Opens the live link: a snapshot comes at once, then each change. */
     suspend fun live(): V2Live = V2Live(transport.webSocket("/api/ws"))
 
-    /** One chat as it is now: through the live link, the only way chats come. */
-    suspend fun chat(key: String, timeoutMs: Long = 15_000): V2Chat = live().use { link ->
+    /** One chat as it is now: through the live link, the only way chats come (or the transport's own way without one). */
+    suspend fun chat(key: String, timeoutMs: Long = 15_000): V2Chat {
+        if (!transport.canStream) {
+            val e = V2Events.parse(transport.readChat(key, timeoutMs)) as? V2Event.Chat ?: throw IOException("Shepherdr sent no chat $key")
+            return e.chat
+        }
+        return liveChat(key, timeoutMs)
+    }
+
+    private suspend fun liveChat(key: String, timeoutMs: Long): V2Chat = live().use { link ->
         link.watch(listOf(key))
         withTimeoutOrNull(timeoutMs) {
             var chat: V2Chat? = null

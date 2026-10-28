@@ -40,25 +40,7 @@
      {
       "name": "Memory",
       "pct": 52,
-      "detail": "65 GB of 125 GB",
-      "level": "ok"
-     },
-     {
-      "name": "Disk",
-      "pct": 88,
-      "detail": "home 88% · /tmp 6%",
-      "level": "ok"
-     },
-     {
-      "name": "GPU 1",
-      "pct": 99,
-      "detail": "NVIDIA GeForce RTX 5060 Ti · memory 93%",
-      "level": "ok"
-     },
-     {
-      "name": "GPU 2",
-      "pct": 89,
-      "detail": "NVIDIA GeForce RTX 5060 Ti · memory 96%",
+      "detail": "16 GB of 32 GB",
       "level": "ok"
      }
     ],
