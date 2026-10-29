@@ -181,6 +181,18 @@ interface WorkBoard {
      * message then carries (so a screen knows it came in), and [reply] the id of the message it answers.
      */
     suspend fun say(space: String, text: String, cid: String? = null, reply: String? = null): String
+
+    /** Copies a file for [space]'s coordinator to its machine: its path there, for [sayFiles]. */
+    suspend fun upload(space: String, name: String, data: ByteArray, type: String): String =
+        throw IOException("This board takes no files")
+
+    /** Hands [paths] ([upload]ed) to [space]'s coordinator, as files sent in its chat. */
+    suspend fun sayFiles(space: String, paths: List<String>, cid: String? = null): String =
+        throw IOException("This board takes no files")
+
+    /** A file sent in [space]'s coordinator chat, read back by its [path]. */
+    suspend fun file(space: String, path: String): ByteArray =
+        throw IOException("This board takes no files")
 }
 
 object WorkTasks {

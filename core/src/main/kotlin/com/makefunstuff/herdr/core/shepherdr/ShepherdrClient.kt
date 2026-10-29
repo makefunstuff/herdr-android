@@ -35,11 +35,22 @@ data class V2ActResult(val ok: Boolean, val json: JsonObject)
 
 /** The bodies `POST /api/action` takes (`Action` in `shared/types.ts`), for what the app does. */
 object V2Actions {
-    /** Words into a chat; [reply]: the id of the message they answer; [space]: sent from a needs-you card in that space. */
-    fun send(chat: String, text: String, reply: String? = null, cid: String? = null, space: String? = null): JsonObject = buildJsonObject {
+    /**
+     * Words into a chat; [reply]: the id of the message they answer; [space]: sent from a needs-you card in that space;
+     * [attachments]: files uploaded for it ([ShepherdrClient.upload]), each named to the agent as an `<attachment>` line.
+     */
+    fun send(
+        chat: String,
+        text: String,
+        reply: String? = null,
+        cid: String? = null,
+        space: String? = null,
+        attachments: List<String> = emptyList(),
+    ): JsonObject = buildJsonObject {
         put("type", "send")
         put("chat", chat)
         put("text", text)
+        if (attachments.isNotEmpty()) putJsonArray("attachments") { attachments.forEach { add(JsonPrimitive(it)) } }
         cid?.let { put("cid", it) }
         reply?.let { put("reply", it) }
         space?.let { put("space", it) }
@@ -134,6 +145,26 @@ class ShepherdrClient(private val transport: ShepherdrTransport) {
     ): JsonObject = act(V2Actions.answer(chat, question, choice, choices, note, other, space))
 
     suspend fun react(chat: String, message: String, emoji: String): JsonObject = act(V2Actions.react(chat, message, emoji))
+
+    /**
+     * Copies a file for [chat] to the machine of its agent (`POST /api/upload`, into Shepherdr's inbox
+     * there): its path, to send with a message ([V2Actions.send]'s attachments).
+     */
+    suspend fun upload(chat: String, name: String, data: ByteArray, type: String = "application/octet-stream"): String {
+        val (body, contentType) = Wire.form(mapOf("chat" to chat), "file", name, type, data)
+        val r = transport.bytes("POST", "/api/upload", body, contentType)
+        val o = ok(HttpReply(r.status, r.body.toString(Charsets.UTF_8)))
+        return (o["path"] as? JsonPrimitive)?.content?.takeIf { it.isNotEmpty() } ?: throw IOException("Shepherdr didn't say where it put the file")
+    }
+
+    /** A file attached in [chat], by its [path] (`GET /api/file`): its bytes. */
+    suspend fun file(chat: String, path: String): ByteArray {
+        val q = "chat=" + java.net.URLEncoder.encode(chat, "UTF-8") + "&path=" + java.net.URLEncoder.encode(path, "UTF-8")
+        val r = transport.bytes("GET", "/api/file?$q")
+        if (r.status == 404) throw IOException("${path.substringAfterLast('/')} isn't there any more")
+        if (r.status !in 200..299) throw IOException("Shepherdr answered ${r.status}")
+        return r.body
+    }
 
     /**
      * The `shepherdr` command with [args] (`["merge", "HA-1"]`), as the human would run it. Some wait

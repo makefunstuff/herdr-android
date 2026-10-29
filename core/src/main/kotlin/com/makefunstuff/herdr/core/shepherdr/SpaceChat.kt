@@ -2,6 +2,8 @@ package com.makefunstuff.herdr.core.shepherdr
 
 import com.makefunstuff.herdr.core.board.WorkCard
 import com.makefunstuff.herdr.core.board.WorkStatus
+import com.makefunstuff.herdr.core.chat.VoiceNote
+import com.makefunstuff.herdr.core.chat.VoiceNotes
 
 /**
  * A space's coordinator chat on Shepherdr 2 as the Coordinator screen draws it, oldest first: your
@@ -53,6 +55,12 @@ sealed interface SpaceChatItem {
     /** A file sent along: yours, or one the coordinator shared. */
     data class File(override val id: String, val you: Boolean, val name: String, val path: String) : SpaceChatItem
 
+    /**
+     * A voice message: a file sent as one ([VoiceNotes.isVoice]), [path] on the machine; or one of
+     * yours still on the phone ([note], not sent yet, or sent and not in the chat yet).
+     */
+    data class Voice(override val id: String, val you: Boolean, val path: String?, val millis: Long, val note: VoiceNote? = null) : SpaceChatItem
+
     /** An artifact the coordinator posted: shown in Shepherdr itself, the app names it. */
     data class Artifact(override val id: String, val artifact: String, val version: Int, val intro: String = "") : SpaceChatItem
 
@@ -67,8 +75,17 @@ sealed interface SpaceChatItem {
 data class OutgoingLine(val cid: String, val text: String, val reply: V2ReplyQuote? = null)
 
 object SpaceChat {
-    /** [chat] (a space's coordinator chat, [space] its id) as the screen's items; [outgoing] not yet in it go last. */
-    fun items(space: String, chat: V2Chat, outgoing: List<OutgoingLine> = emptyList()): List<SpaceChatItem> {
+    /**
+     * [chat] (a space's coordinator chat, [space] its id) as the screen's items; [outgoing] not yet in it go last,
+     * then the voice messages of yours ([voice]) it doesn't show yet, while they wait ([VoiceNotes.waiting] at [now]).
+     */
+    fun items(
+        space: String,
+        chat: V2Chat,
+        outgoing: List<OutgoingLine> = emptyList(),
+        voice: List<VoiceNote> = emptyList(),
+        now: Long = 0,
+    ): List<SpaceChatItem> {
         val failed = chat.failed.orEmpty().associate { it.cid to it.error }
         val out = ArrayList<SpaceChatItem>()
         for (m in chat.messages) {
@@ -88,7 +105,11 @@ object SpaceChat {
                             waiting = m.waiting, failed = m.cid?.let { failed[it] },
                         )
                     }
-                    m.file?.takeIf { it.name.isNotBlank() }?.let { f -> out += SpaceChatItem.File("${m.id}#file", m.you, f.name, f.path) }
+                    m.file?.takeIf { it.name.isNotBlank() }?.let { f ->
+                        val millis = VoiceNotes.millis(f.name)
+                        out += if (millis != null) SpaceChatItem.Voice("${m.id}#file", m.you, f.path, millis, VoiceNotes.byRemote(voice, f.path))
+                        else SpaceChatItem.File("${m.id}#file", m.you, f.name, f.path)
+                    }
                     m.answered?.takeIf { it.isNotBlank() }?.let { a -> out += SpaceChatItem.Note("${m.id}#answered", a) }
                 }
             }
@@ -96,6 +117,10 @@ object SpaceChat {
         val seen = chat.messages.mapNotNullTo(HashSet()) { it.cid }
         outgoing.filter { it.cid !in seen }.forEach { o ->
             out += SpaceChatItem.Words("cid:${o.cid}", true, o.text, o.reply, waiting = failed[o.cid] == null, failed = failed[o.cid])
+        }
+        val files = chat.messages.mapNotNullTo(HashSet()) { it.file?.path }
+        voice.filter { (it.remote == null || it.remote !in files) && VoiceNotes.waiting(it, now) }.forEach { n ->
+            out += SpaceChatItem.Voice("voice:${n.id}", true, n.remote, n.millis, n)
         }
         return out
     }

@@ -24,6 +24,10 @@ interface ShepherdrTransport : Closeable {
 
     suspend fun http(method: String, path: String, body: String? = null, timeoutMs: Int = 30_000): HttpReply
 
+    /** A request whose body ([bytes] of [type]; null: none) or answer is a file, not JSON: an upload, a download. */
+    suspend fun bytes(method: String, path: String, bytes: ByteArray? = null, type: String? = null, timeoutMs: Int = 120_000): BytesReply =
+        throw IOException("No way to send files here")
+
     /** Opens the live link at [path]; fails where [canStream] is false. */
     suspend fun webSocket(path: String): WebSocketLink
 
@@ -49,6 +53,17 @@ class ForwardTransport(
             answer.await().getOrThrow()
         } catch (e: CancellationException) {
             // A socket's read can't be interrupted: closing it ends the wait (a merge waiting on checks).
+            runCatching { stream.close() }
+            throw e
+        }
+    }
+
+    override suspend fun bytes(method: String, path: String, bytes: ByteArray?, type: String?, timeoutMs: Int): BytesReply = coroutineScope {
+        val stream = withContext(Dispatchers.IO) { connect(timeoutMs) }
+        val answer = async(Dispatchers.IO) { runCatching { Wire.exchange(stream, method, path, bytes, type) } }
+        try {
+            answer.await().getOrThrow()
+        } catch (e: CancellationException) {
             runCatching { stream.close() }
             throw e
         }
@@ -101,6 +116,16 @@ class CurlTransport(
         return parse(r)
     }
 
+    /** Both ways as base64 through the command's text: [bytes] decoded on the machine into curl, its answer encoded back. */
+    override suspend fun bytes(method: String, path: String, bytes: ByteArray?, type: String?, timeoutMs: Int): BytesReply {
+        val seconds = if (timeoutMs <= 0) 600 else (timeoutMs + 999) / 1000
+        val stdin = bytes?.let { java.util.Base64.getEncoder().encodeToString(it) }.orEmpty()
+        val r = run(bytesCommand(method, path, bytes != null, type, seconds), stdin, seconds + 5L)
+        if (r.exitStatus == 127) throw IOException("curl isn't installed on the machine, and its SSH server doesn't forward ports")
+        val reply = parse(r)
+        return BytesReply(reply.status, java.util.Base64.getMimeDecoder().decode(reply.body.trim()))
+    }
+
     override suspend fun webSocket(path: String): WebSocketLink =
         throw IOException("The machine's SSH server doesn't forward ports: no live link, so the app reads again every few seconds")
 
@@ -146,6 +171,24 @@ class CurlTransport(
             add("-w"); add("\n$MARK%{http_code}")
             add("http://${Wire.HOST}$path")
         }.joinToString(" ") { quote(it) }
+
+        /**
+         * [command] for a binary body (base64 on stdin, decoded on the machine) and answer (saved by
+         * curl, then printed as base64 before the status mark), in `sh` whatever the login shell is.
+         */
+        fun bytesCommand(method: String, path: String, hasBody: Boolean, type: String?, seconds: Int): String {
+            val curl = buildList {
+                add("curl"); add("-sS"); add("--max-time"); add(seconds.toString())
+                add("-X"); add(method)
+                if (hasBody) { add("-H"); add("Content-Type: ${type ?: "application/octet-stream"}"); add("--data-binary"); add("@-") }
+                add("-o"); add("\$t"); add("-w"); add("%{http_code}")
+                add("http://${Wire.HOST}$path")
+            }.joinToString(" ") { if (it == "\$t") "\"\$t\"" else quote(it) }
+            val script = "t=\$(mktemp) || exit 1; trap 'rm -f \"\$t\"' EXIT; " +
+                "code=\$(" + (if (hasBody) "base64 -d | " else "") + curl + "); s=\$?; " +
+                "base64 < \"\$t\"; printf '\\n$MARK%s' \"\$code\"; exit \$s"
+            return "sh -c ${quote(script)}"
+        }
 
         fun parse(r: CommandResult): HttpReply {
             val at = r.stdout.lastIndexOf("\n$MARK")

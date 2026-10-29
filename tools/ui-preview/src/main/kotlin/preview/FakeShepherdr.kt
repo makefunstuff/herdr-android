@@ -28,6 +28,9 @@ class FakeShepherdr(
     fun run(command: String, stdin: String): CommandResult? {
         val w = Shell.words(command)
         if (w.firstOrNull() == "curl") return curl(w, stdin)
+        // A file up or down (CurlTransport.bytes): base64 both ways.
+        if (w.firstOrNull() == "sh" && "/api/upload" in command) return bytes(201, upload(String(java.util.Base64.getMimeDecoder().decode(stdin.trim()), Charsets.ISO_8859_1)).toByteArray())
+        if (w.firstOrNull() == "sh" && "/api/file" in command) return bytes(200, ByteArray(64))
         if ("@@shepherdr-chat@@" in command) {
             val key = Regex("""const k=("(?:[^"\\]|\\.)*")""").find(command)?.groupValues?.get(1)
                 ?.let { Json.parseToJsonElement(it).jsonPrimitive.content } ?: return CommandResult(3, "", "no chat")
@@ -36,6 +39,21 @@ class FakeShepherdr(
         }
         return null
     }
+
+    /** The uploads, as their paths in the inbox. */
+    val uploads = ArrayList<String>()
+
+    /** A file sent as a form (`chat`, then the file): where it lands in the chat's inbox. */
+    private fun upload(form: String): String {
+        val chat = Regex("""name="chat"\r\n\r\n([^\r]*)""").find(form)?.groupValues?.get(1).orEmpty()
+        val name = Regex("""filename="([^"]*)"""").find(form)?.groupValues?.get(1) ?: "file"
+        val path = "/home/demo/.shepherdr/inbox/${chat.replace(Regex("[^\\w.-]"), "_")}/mh2k1a${uploads.size}-$name"
+        uploads += path
+        return """{"path":"$path"}"""
+    }
+
+    private fun bytes(status: Int, body: ByteArray) =
+        CommandResult(0, java.util.Base64.getMimeEncoder().encodeToString(body) + "\n@@shepherdr-status@@$status", "")
 
     private fun curl(w: List<String>, stdin: String): CommandResult {
         val method = w.getOrNull(w.indexOf("-X") + 1) ?: "GET"
@@ -57,9 +75,16 @@ class FakeShepherdr(
         when (a["type"]?.jsonPrimitive?.content) {
             // In at once, the coordinator at work on it.
             "send" -> change(chat) { c ->
+                val words = a.getValue("text").jsonPrimitive.content
                 val m = obj("id" to "sent-${actions.size}", "who" to "you", "text" to a.getValue("text"), "at" to Demo.NOW) +
                     listOfNotNull(a["cid"]?.let { "cid" to it }, a["reply"]?.let { r -> "reply" to quote(c, r.jsonPrimitive.content) })
-                JsonObject(c + mapOf("messages" to JsonArray(messages(c) + JsonObject(m)), "working" to JsonPrimitive(true)))
+                // Each file sent with it is a message of its own, by the name it was sent as.
+                val files = a["attachments"]?.jsonArray.orEmpty().mapIndexed { i, p ->
+                    val path = p.jsonPrimitive.content
+                    obj("id" to "sent-${actions.size}-f$i", "who" to "you", "at" to Demo.NOW, "file" to obj("name" to path.substringAfterLast('/').replace(Regex("^[a-z0-9]+-"), ""), "path" to path))
+                }
+                val sent = (if (words.isNotEmpty() || files.isEmpty()) listOf(JsonObject(m)) else emptyList()) + files
+                JsonObject(c + mapOf("messages" to JsonArray(messages(c) + sent), "working" to JsonPrimitive(true)))
             }
             // The card shows the choice sent, here and on its copy in a space's chat.
             "answer" -> {

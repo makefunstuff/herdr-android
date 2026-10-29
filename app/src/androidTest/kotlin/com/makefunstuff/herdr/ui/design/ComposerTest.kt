@@ -144,116 +144,57 @@ class ComposerTest {
     }
 
     /** A phone that hears "run the tests again" once it is told to stop. */
-    private class HeardMic(val allowed: Boolean = true) : com.makefunstuff.herdr.core.chat.Dictation.Mic {
-        lateinit var dictation: com.makefunstuff.herdr.core.chat.Dictation
+    private class FakeMic(val allowed: Boolean = true) : com.makefunstuff.herdr.core.chat.VoiceRecorder.Mic {
         var asked = 0
         override fun allowed() = allowed
         override fun ask() { asked++ }
         override fun settings() {}
-        override fun listen() {}
-        override fun stop() = dictation.segment("run the tests again")
+        override fun start() = true
+        override fun stop(): String? = "/files/voice/a.m4a"
         override fun cancel() {}
+        override fun level() = 0.5f
     }
 
-    @Test fun voiceMessageGoesIntoTheDraftToCheckBeforeSending() {
-        var draft by mutableStateOf("")
-        var take by mutableStateOf<Long?>(null)
+    @Test fun aTappedVoiceMessageIsSentAndTheDraftStays() {
+        var draft by mutableStateOf("half a thought")
         var sent = 0
-        val mic = HeardMic()
         var now = 0L
-        val dictation = com.makefunstuff.herdr.core.chat.Dictation(mic, { now }) { text, millis ->
-            draft = com.makefunstuff.herdr.core.chat.Dictation.append(draft, text)
-            take = millis
-        }.also { mic.dictation = it }
-        rule.setContent {
-            HerdrTheme {
-                ChatComposer(
-                    draft, { draft = it }, "Message claude…", onSend = { sent++ },
-                    // As the agent's chat does: the words out again only while they stand as heard.
-                    voice = ComposerVoice(dictation, take) {
-                        com.makefunstuff.herdr.core.chat.Dictation.drop(draft, "", "run the tests again")?.let { draft = it }
-                        take = null
-                    },
-                )
-            }
-        }
-        // A tap starts it: the box gives way to what it hears, Send waits, and an X cancels.
+        val recorded = mutableListOf<Long>()
+        val recorder = com.makefunstuff.herdr.core.chat.VoiceRecorder(FakeMic(), { now }) { _, millis -> recorded += millis }
+        rule.setContent { HerdrTheme { ChatComposer(draft, { draft = it }, "Message claude…", onSend = { sent++ }, voice = recorder) } }
+        // A tap starts it: the box gives way to the recording, and an X cancels.
         rule.onNodeWithContentDescription("Record a voice message").atLeast48()
         rule.onNodeWithContentDescription("Record a voice message").performClick()
-        rule.onNodeWithText("Listening…").assertIsDisplayed()
-        rule.onNodeWithText("Tap the mic to finish").assertIsDisplayed()
+        rule.onNodeWithText("Recording a voice message").assertIsDisplayed()
+        rule.onNodeWithText("Tap to send").assertIsDisplayed()
         rule.onNodeWithContentDescription("Cancel voice message").assertIsDisplayed()
-        rule.onNodeWithContentDescription("Send").assertIsNotEnabled()
-        // The next tap finishes: the words wait in the box, marked as a voice message.
+        // Send sends the recording, not the draft.
         now = 4_000
-        rule.onNodeWithContentDescription("Finish voice message").performClick()
+        rule.onNodeWithContentDescription("Send voice message").performClick()
         rule.waitForIdle()
-        assertEquals("run the tests again", draft)
-        rule.onNodeWithText("Voice message · 0:04").assertIsDisplayed()
-        // Its X takes the words out again.
-        rule.onNodeWithContentDescription("Discard voice message").performClick()
-        rule.waitForIdle()
-        assertEquals("", draft)
-        rule.onNodeWithText("Voice message · 0:04").assertDoesNotExist()
-        // Again, and edited: Send takes it, and the X leaves your words alone.
+        assertEquals(listOf(4_000L), recorded)
+        assertEquals(0, sent)
+        assertEquals("half a thought", draft)
+        rule.onNodeWithText("Recording a voice message").assertDoesNotExist()
+        // The mic's second tap sends too; the X drops it.
         rule.onNodeWithContentDescription("Record a voice message").performClick()
-        rule.onNodeWithContentDescription("Finish voice message").performClick()
-        rule.waitForIdle()
-        field.performTextInput(", then push")
-        rule.onNodeWithContentDescription("Send").assertIsEnabled().performClick()
-        assertEquals(1, sent)
-        rule.onNodeWithContentDescription("Discard voice message").performClick()
-        assertEquals("run the tests again, then push", draft)
-    }
-
-    @Test fun spokenWordsGoInWhereTheCursorStands() {
-        var draft by mutableStateOf("Please now")
-        val cursor = ComposerCursor()
-        val mic = HeardMic()
-        val dictation = com.makefunstuff.herdr.core.chat.Dictation(mic, { 0L }) { text, _ ->
-            // As rememberVoiceDraft does.
-            val inserted = com.makefunstuff.herdr.core.chat.Dictation.insert(draft, cursor.at, text)
-            cursor.place(inserted)
-            draft = inserted.text
-        }.also { mic.dictation = it }
-        rule.setContent {
-            HerdrTheme { ChatComposer(draft, { draft = it }, "Message claude…", onSend = {}, voice = ComposerVoice(dictation, null, cursor) {}) }
-        }
-        field.performTextInputSelection(TextRange(6))
+        now = 9_000
+        rule.onNodeWithContentDescription("Send voice message").performClick()
         rule.onNodeWithContentDescription("Record a voice message").performClick()
-        rule.onNodeWithContentDescription("Finish voice message").performClick()
+        rule.onNodeWithContentDescription("Cancel voice message").performClick()
         rule.waitForIdle()
-        assertEquals("Please run the tests again now", draft)
-        // The cursor stands right after them: typing goes on from there.
-        field.performTextInput(" and")
-        assertEquals("Please run the tests again and now", draft)
-    }
-
-    @Test fun coordinatorTakesVoiceMessages() {
-        var draft by mutableStateOf("")
-        val mic = HeardMic()
-        val dictation = com.makefunstuff.herdr.core.chat.Dictation(mic, { 0L }) { text, _ -> draft = text }.also { mic.dictation = it }
-        rule.setContent {
-            HerdrTheme { CoordinatorComposer(draft, { draft = it }, true, "Tell the Coordinator…", false, {}, {}, voice = ComposerVoice(dictation, null) {}) }
-        }
-        rule.onNodeWithContentDescription("Record a voice message").performClick()
-        // While it hears, the row is the recording's.
-        rule.onNodeWithText("Start agents").assertDoesNotExist()
-        rule.onNodeWithContentDescription("Finish voice message").performClick()
-        rule.waitForIdle()
-        assertEquals("run the tests again", draft)
-        rule.onNodeWithText("Start agents").assertIsDisplayed()
+        assertEquals(listOf(4_000L, 5_000L), recorded)
     }
 
     @Test fun aRefusedMicrophoneIsExplained() {
-        val mic = HeardMic(allowed = false)
-        val dictation = com.makefunstuff.herdr.core.chat.Dictation(mic, { 0L }) { _, _ -> }.also { mic.dictation = it }
-        rule.setContent { HerdrTheme { ChatComposer("", {}, "Message claude…", onSend = {}, voice = ComposerVoice(dictation, null) {}) } }
+        val mic = FakeMic(allowed = false)
+        val recorder = com.makefunstuff.herdr.core.chat.VoiceRecorder(mic, { 0L }) { _, _ -> }
+        rule.setContent { HerdrTheme { ChatComposer("", {}, "Message claude…", onSend = {}, voice = recorder) } }
         rule.onNodeWithContentDescription("Record a voice message").performClick()
         assertEquals(1, mic.asked)
         // While Android asks, the composer says why.
         rule.onNodeWithText("Allow the microphone").assertIsDisplayed()
-        dictation.answered(granted = false, forever = true)
+        recorder.answered(granted = false, forever = true)
         rule.onNodeWithText("The microphone is off").assertIsDisplayed()
         rule.onNodeWithText("Open settings").assertIsDisplayed()
         rule.onNodeWithText("Not now").performClick()

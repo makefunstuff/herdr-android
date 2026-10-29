@@ -21,12 +21,6 @@ import preview.Demo.GPU
 import preview.Demo.SITE_AGENT
 
 /** Task AND-9's worktree on devbox, opened from the task (its agent works in devbox's herdr-android workspace). */
-/** What the Coordinator's voice scenes hear. */
-private val coordinatorSpeech = PreviewMic.Setup(
-    heard = "Add a task to make the jobs page",
-    said = "Add a task to make the jobs page fast on large tables, and start an agent on it.",
-    spokeFor = 5_000,
-)
 private val TASK_CODE = CodeSpot(DEVBOX, FakeCode.TASK, task = "herdr-android/9", taskName = "AND-9", pane = APP_AGENT)
 private const val CARD = "app/src/main/kotlin/demo/herdr/ui/machines/MachineCard.kt"
 
@@ -47,6 +41,12 @@ private fun SceneData.held() {
     composer = (composer ?: com.makefunstuff.herdr.data.ComposerStore.State()).let {
         it.copy(held = it.held + (key to listOf(com.makefunstuff.herdr.core.chat.HeldMessage("held-1", "Also add it to the widget", Demo.NOW - 40_000))))
     }
+}
+
+/** devbox's app agent done with its second ask: what you send goes in at once, not held. */
+private fun SceneData.appDone() {
+    host(DEVBOX).snapshot = Demo.devbox(appStatus = "done")
+    host(DEVBOX).transcripts = host(DEVBOX).transcripts + (Demo.APP_SESSION to Demo.appTranscriptDone())
 }
 
 /** devbox on Shepherdr 2 (DemoV2): its spaces and their coordinators. */
@@ -283,16 +283,36 @@ fun scenes(): List<Scene> = listOf(
     Scene("chat-files", route = Routes.agent(DEVBOX, APP_AGENT), actions = { type("Look at @mach") }),
     Scene("chat-model", route = Routes.agent(DEVBOX, APP_AGENT), actions = { tapLabel("Model Opus 5.5, context 62% full") }),
     Scene("quick-replies", route = Routes.COMPOSER, setup = { replies() }),
-    // Voice messages: the mic held while you speak (the words as they come, the time, slide to cancel), slid away
-    // far enough that letting go cancels, tapped to go on hands-free; then the words in the box to check before
-    // Send; why the microphone is needed while Android asks for it, and again once refused; nothing heard; and a
-    // message sent by voice, with its mic in the chat.
+    // Voice messages: the mic held while you speak (the time, how loud, slide to cancel), slid away far enough
+    // that letting go cancels, tapped to go on hands-free; sent (copied to the machine, then to the agent as its
+    // file) and played back; one whose copy failed, to retry; one held while the agent works; too short to send;
+    // why the microphone is needed while Android asks for it, and again once refused.
     Scene("chat-voice-recording", route = Routes.agent(DEVBOX, APP_AGENT), actions = { hold("Record a voice message", 0.5f to 0.5f) }),
     Scene("chat-voice-cancel", route = Routes.agent(DEVBOX, APP_AGENT), actions = { hold("Record a voice message", 0.5f to 0.5f, -2.5f to 0.6f) }),
     Scene("chat-voice-tap", route = Routes.agent(DEVBOX, APP_AGENT), actions = { tapLabel("Record a voice message") }),
-    Scene("chat-voice-review", route = Routes.agent(DEVBOX, APP_AGENT), actions = {
+    Scene("chat-voice-sent", route = Routes.agent(DEVBOX, APP_AGENT), setup = { appDone() }, actions = {
         tapLabel("Record a voice message")
-        tapLabel("Finish voice message")
+        tapLabel("Send voice message")
+    }),
+    Scene("chat-voice-playing", route = Routes.agent(DEVBOX, APP_AGENT), setup = { appDone() }, actions = {
+        tapLabel("Record a voice message")
+        tapLabel("Send voice message")
+        tapLabel("Play voice message")
+    }),
+    Scene("chat-voice-failed", route = Routes.agent(DEVBOX, APP_AGENT), setup = {
+        appDone()
+        host(DEVBOX).uploadFails = "No space left on device"
+    }, actions = {
+        tapLabel("Record a voice message")
+        tapLabel("Send voice message")
+    }),
+    Scene("chat-voice-held", route = Routes.agent(DEVBOX, APP_AGENT), actions = {
+        tapLabel("Record a voice message")
+        tapLabel("Send voice message")
+    }),
+    Scene("chat-voice-short", route = Routes.agent(DEVBOX, APP_AGENT), setup = { mic = PreviewMic.Setup(spokeFor = 400) }, actions = {
+        tapLabel("Record a voice message")
+        tapLabel("Send voice message")
     }),
     Scene("chat-voice-denied", route = Routes.agent(DEVBOX, APP_AGENT), setup = {
         mic = PreviewMic.Setup(allowed = false, answer = false)
@@ -300,15 +320,6 @@ fun scenes(): List<Scene> = listOf(
     Scene("chat-voice-asking", route = Routes.agent(DEVBOX, APP_AGENT), setup = {
         mic = PreviewMic.Setup(allowed = false, answer = null)
     }, actions = { tapLabel("Record a voice message") }),
-    Scene("chat-voice-nothing", route = Routes.agent(DEVBOX, APP_AGENT), setup = {
-        mic = PreviewMic.Setup(heard = "", said = "")
-    }, actions = {
-        tapLabel("Record a voice message")
-        tapLabel("Finish voice message")
-    }),
-    Scene("chat-voice-sent", route = Routes.agent(DEVBOX, APP_AGENT), setup = {
-        voiceSent = mapOf(com.makefunstuff.herdr.data.DraftStore.agent(DEVBOX, APP_AGENT) to listOf(Demo.voiceSent()))
-    }),
     // The chats' own text size (Settings → Text size), larger than the phone's.
     Scene("chat-large-text", route = Routes.agent(DEVBOX, APP_AGENT), setup = { textSizes = com.makefunstuff.herdr.data.TextSizeStore.Sizes(chat = 1.3f) }),
 
@@ -368,12 +379,6 @@ fun scenes(): List<Scene> = listOf(
     Scene("coordinator-needs", route = Routes.coordinator(DEVBOX), setup = { host(DEVBOX).board?.remote = Demo.whatNeedsMe() }),
     // A suggested ask tapped: its words wait in the message box, to send or change.
     Scene("coordinator-ask", route = Routes.coordinator(DEVBOX), actions = { tapText("What needs me?") }),
-    // A voice message to the Coordinator: tapped to go on hands-free, then its words in the box to check before Send.
-    Scene("coordinator-voice", route = Routes.coordinator(DEVBOX), setup = { mic = coordinatorSpeech }, actions = { tapLabel("Record a voice message") }),
-    Scene("coordinator-voice-review", route = Routes.coordinator(DEVBOX), setup = { mic = coordinatorSpeech }, actions = {
-        tapLabel("Record a voice message")
-        tapLabel("Finish voice message")
-    }),
     // On Shepherdr 2 each space has its own coordinator: herdr-android's chat with its update cards, a
     // task's plan copied in to approve and its own merge question; the home space's quiet one; one at work
     // with your message on its way; and a choice answered from here.
@@ -384,6 +389,12 @@ fun scenes(): List<Scene> = listOf(
         drafts[com.makefunstuff.herdr.data.DraftStore.coordinator(DEVBOX, DemoV2.API)] = "Also check the /jobs/export endpoint"
     }, actions = { tapLabel("Send") }),
     Scene("coordinator-v2-answered", route = Routes.coordinator(DEVBOX, DemoV2.APP), setup = { shepherdr() }, actions = { tapText("Let me look first") }),
+    // A voice message to a space's coordinator: recording, then sent into Shepherdr's inbox and the chat as its file.
+    Scene("coordinator-v2-voice", route = Routes.coordinator(DEVBOX), setup = { shepherdr() }, actions = { tapLabel("Record a voice message") }),
+    Scene("coordinator-v2-voice-sent", route = Routes.coordinator(DEVBOX), setup = { shepherdr() }, actions = {
+        tapLabel("Record a voice message")
+        tapLabel("Send voice message")
+    }),
     // A task in an answer opens on the board.
     Scene("coordinator-task", route = Routes.coordinator(DEVBOX), actions = { tapText("Speed up /jobs on large tables") }),
     // Reaching the Coordinator from outside the app: a share (a log line and a screenshot) choosing its machine,

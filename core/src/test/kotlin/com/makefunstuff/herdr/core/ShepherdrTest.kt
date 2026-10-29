@@ -276,6 +276,61 @@ class ShepherdrTest {
         assertFailsWith<IOException> { missing.http("GET", "/api/version") }
     }
 
+    @Test
+    fun aFileGoesUpAsAFormAndComesBackAsBytes() = runBlocking {
+        FakeShepherdr().use { fake ->
+            fake.on("POST /api/upload") { 200 to """{"path":"/home/u/.shepherdr/inbox/home/lq3x9aab12-voice-message-0m07s.m4a"}""" }
+            fake.on("GET /api/file?chat=home&path=%2Fhome%2Fu%2Fx.m4a") { 200 to "AUDIO" }
+            val client = ShepherdrClient(ForwardTransport({ ForwardTransport.socket(fake.port, it) }))
+            val path = client.upload("home", "voice-message-0m07s.m4a", "AUDIO".toByteArray(), "audio/mp4")
+            assertEquals("/home/u/.shepherdr/inbox/home/lq3x9aab12-voice-message-0m07s.m4a", path)
+            val form = fake.bodies("POST /api/upload").single()
+            assertTrue("name=\"chat\"\r\n\r\nhome\r\n" in form, form)
+            assertTrue("name=\"file\"; filename=\"voice-message-0m07s.m4a\"\r\nContent-Type: audio/mp4\r\n\r\nAUDIO\r\n--" in form, form)
+            assertEquals("AUDIO", String(client.file("home", "/home/u/x.m4a")))
+            assertEquals("x.m4a.gone isn't there any more", assertFailsWith<IOException> { client.file("home", "/home/u/x.m4a.gone") }.message)
+        }
+    }
+
+    @Test
+    fun aSendWithFilesNamesThem() {
+        val a = V2Actions.send("home", "", cid = "c1", attachments = listOf("/inbox/a.m4a"))
+        assertEquals("""{"type":"send","chat":"home","text":"","attachments":["/inbox/a.m4a"],"cid":"c1"}""", a.toString())
+        assertFalse("attachments" in V2Actions.send("home", "hi").toString())
+    }
+
+    @Test
+    fun aFormKeepsTheBytesAsTheyAre() {
+        val data = byteArrayOf(0, -1, 13, 10, 45, 45)
+        val (body, type) = Wire.form(mapOf("chat" to "a/b"), "file", "x\"y.m4a", "audio/mp4", data, boundary = "B")
+        assertEquals("multipart/form-data; boundary=B", type)
+        val head = "--B\r\nContent-Disposition: form-data; name=\"chat\"\r\n\r\na/b\r\n" +
+            "--B\r\nContent-Disposition: form-data; name=\"file\"; filename=\"x_y.m4a\"\r\nContent-Type: audio/mp4\r\n\r\n"
+        assertContentEquals(head.toByteArray() + data + "\r\n--B--\r\n".toByteArray(), body)
+    }
+
+    /** The curl fallback's file command, run for real by `sh` with a stand-in `curl` that echoes what it got. */
+    @Test
+    fun curlCarriesFilesBothWaysAsBase64() = runBlocking<Unit> {
+        val dir = kotlin.io.path.createTempDirectory("curl").toFile()
+        val fakeCurl = java.io.File(dir, "curl")
+        // Writes what came on stdin (the decoded body) to the -o file with a mark, and its status to stdout.
+        fakeCurl.writeText("#!/bin/sh\nout=\nwhile [ \$# -gt 0 ]; do [ \"\$1\" = -o ] && out=\$2; shift; done\n{ printf 'got:'; cat; } > \"\$out\"\nprintf 201\n")
+        fakeCurl.setExecutable(true)
+        val curl = CurlTransport { command, stdin, _ ->
+            val p = ProcessBuilder("sh", "-c", command).apply { environment()["PATH"] = dir.path + ":" + System.getenv("PATH") }.start()
+            p.outputStream.use { it.write(stdin.toByteArray()) }
+            val out = p.inputStream.readBytes().toString(Charsets.UTF_8)
+            val err = p.errorStream.readBytes().toString(Charsets.UTF_8)
+            CommandResult(p.waitFor(), out, err)
+        }
+        val data = ByteArray(300) { it.toByte() }
+        val r = curl.bytes("POST", "/api/upload", data, "multipart/form-data; boundary=B")
+        assertEquals(201, r.status)
+        assertContentEquals("got:".toByteArray() + data, r.body)
+        dir.deleteRecursively()
+    }
+
     // ---- the client over the wire ----------------------------------------------------------------
 
     @Test

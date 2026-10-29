@@ -98,6 +98,16 @@ class V2WorkBoard(private val connect: suspend () -> ShepherdrClient, private va
         return ""
     }
 
+    override suspend fun upload(space: String, name: String, data: ByteArray, type: String): String =
+        connect().upload(chatOf(space), name, data, type)
+
+    override suspend fun sayFiles(space: String, paths: List<String>, cid: String?): String {
+        connect().act(V2Actions.send(chatOf(space), "", cid = cid, attachments = paths))
+        return ""
+    }
+
+    override suspend fun file(space: String, path: String): ByteArray = connect().file(chatOf(space), path)
+
     /** Runs the `shepherdr` command; its last line, or its own reason in the exception. */
     suspend fun cli(args: List<String>): String {
         val r = connect().cli(args)

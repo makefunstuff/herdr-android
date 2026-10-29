@@ -15,6 +15,9 @@ import java.util.Base64
 /** An HTTP answer: its status and its body as text. */
 data class HttpReply(val status: Int, val body: String)
 
+/** An HTTP answer with its body as bytes (a file). */
+class BytesReply(val status: Int, val body: ByteArray)
+
 /**
  * Just enough HTTP/1.1 and WebSocket (RFC 6455) for Shepherdr's loopback API, over any byte stream
  * (a socket to the SSH port forward). Android has no `java.net.http`, and core has no HTTP library:
@@ -25,15 +28,18 @@ object Wire {
     /** The `Host` the server sees: the address it listens on, as the forward reaches it. */
     const val HOST = "127.0.0.1:7787"
 
-    fun request(method: String, path: String, body: String?): ByteArray {
-        val bytes = body?.toByteArray(Charsets.UTF_8)
+    fun request(method: String, path: String, body: String?): ByteArray =
+        request(method, path, body?.toByteArray(Charsets.UTF_8), "application/json")
+
+    /** A request with [bytes] of [type] as its body (none: no body). */
+    fun request(method: String, path: String, bytes: ByteArray?, type: String?): ByteArray {
         val head = buildString {
             append("$method $path HTTP/1.1\r\n")
             append("Host: $HOST\r\n")
             append("Accept: application/json\r\n")
             append("Connection: close\r\n")
             if (bytes != null) {
-                append("Content-Type: application/json\r\n")
+                append("Content-Type: ${type ?: "application/octet-stream"}\r\n")
                 append("Content-Length: ${bytes.size}\r\n")
             }
             append("\r\n")
@@ -42,13 +48,35 @@ object Wire {
     }
 
     /** One request on a fresh stream, closed after the answer. */
-    fun exchange(stream: Duplex, method: String, path: String, body: String?): HttpReply = stream.use { s ->
-        s.output.write(request(method, path, body))
+    fun exchange(stream: Duplex, method: String, path: String, body: String?): HttpReply {
+        val r = exchange(stream, method, path, body?.toByteArray(Charsets.UTF_8), "application/json")
+        return HttpReply(r.status, r.body.toString(Charsets.UTF_8))
+    }
+
+    /** One request with a binary body (or none), its answer as bytes; the stream is closed after it. */
+    fun exchange(stream: Duplex, method: String, path: String, bytes: ByteArray?, type: String?): BytesReply = stream.use { s ->
+        s.output.write(request(method, path, bytes, type))
         s.output.flush()
         val input = BufferedInputStream(s.input)
         val (status, headers) = readHead(input)
-        HttpReply(status, readBody(input, headers).toString(Charsets.UTF_8))
+        BytesReply(status, readBody(input, headers))
     }
+
+    /**
+     * A `multipart/form-data` body: [fields] as text, then one file, [name] its file name. The
+     * second is its `Content-Type`, with the boundary.
+     */
+    fun form(fields: Map<String, String>, fileField: String, name: String, type: String, data: ByteArray, boundary: String = "herdr" + java.util.UUID.randomUUID().toString().replace("-", "")): Pair<ByteArray, String> {
+        val out = ByteArrayOutputStream()
+        fun text(s: String) = out.write(s.toByteArray(Charsets.UTF_8))
+        fields.forEach { (k, v) -> text("--$boundary\r\nContent-Disposition: form-data; name=\"${quoted(k)}\"\r\n\r\n$v\r\n") }
+        text("--$boundary\r\nContent-Disposition: form-data; name=\"${quoted(fileField)}\"; filename=\"${quoted(name)}\"\r\nContent-Type: $type\r\n\r\n")
+        out.write(data)
+        text("\r\n--$boundary--\r\n")
+        return out.toByteArray() to "multipart/form-data; boundary=$boundary"
+    }
+
+    private fun quoted(s: String) = s.replace("\\", "_").replace("\"", "_").replace("\r", "_").replace("\n", "_")
 
     /** The status line and the headers (names lowercased). */
     fun readHead(input: InputStream): Pair<Int, Map<String, String>> {

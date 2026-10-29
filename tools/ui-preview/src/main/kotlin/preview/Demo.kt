@@ -281,12 +281,6 @@ object Demo {
      */
     fun appMore(lines: Int = Int.MAX_VALUE): String = resource("claude-app-more.jsonl").trimEnd().lines().take(lines).joinToString("\n") + "\n"
 
-    /** The app agent's second message, as the phone kept it: sent by voice at 07:39 (`chat-voice-sent`). */
-    fun voiceSent() = com.makefunstuff.herdr.core.chat.Spoken.Sent(
-        "Nice. Also show when each machine last answered, like \"2 min ago\".",
-        LocalDateTime.of(2026, 10, 17, 7, 39).toInstant(ZoneOffset.UTC).toEpochMilli(),
-    )
-
     /** devbox's app agent once its second ask is done, a failed test run on the way. */
     fun appTranscriptDone(): String = resource("claude-app.jsonl").trimEnd() + "\n" + appMore()
 

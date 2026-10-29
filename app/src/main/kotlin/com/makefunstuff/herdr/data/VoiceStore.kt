@@ -1,33 +1,53 @@
 package com.makefunstuff.herdr.data
 
-import com.makefunstuff.herdr.core.chat.Spoken
+import com.makefunstuff.herdr.core.chat.VoiceNote
+import com.makefunstuff.herdr.core.chat.VoiceNotes
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.serialization.builtins.ListSerializer
-import kotlinx.serialization.builtins.MapSerializer
-import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 import java.io.File
 
 /**
- * The messages sent as voice messages, by chat (its [DraftStore] key): the chat shows them with a
- * mic ([Spoken.marks]). The agent's transcript has only the words, so the phone keeps which they were.
+ * The voice messages recorded on the phone ([VoiceNote]), by chat (its [DraftStore] key), with their
+ * audio files in [dir]: those not sent yet wait here for a retry, also across restarts; sent ones
+ * are kept a while ([VoiceNotes.KEEP] per chat), so they play without fetching them back.
  */
-class VoiceStore(private val file: File) {
+class VoiceStore(private val file: File, val dir: File = File(file.parentFile, "voice")) {
     private val json = Json { ignoreUnknownKeys = true }
-    private val serializer = MapSerializer(String.serializer(), ListSerializer(Spoken.Sent.serializer()))
-    private val _sent = MutableStateFlow(load())
-    val sent: StateFlow<Map<String, List<Spoken.Sent>>> = _sent.asStateFlow()
+    private val serializer = ListSerializer(VoiceNote.serializer())
+    private val _notes = MutableStateFlow(load())
+    val notes: StateFlow<List<VoiceNote>> = _notes.asStateFlow()
 
-    /** [text] went to [chat] as a voice message at [at]. */
-    @Synchronized
-    fun add(chat: String, text: String, at: Long) {
-        save(_sent.value + (chat to Spoken.add(_sent.value[chat].orEmpty(), text, at)))
+    /** A new file to record into. */
+    fun newFile(): File {
+        dir.mkdirs()
+        return File(dir, "${System.currentTimeMillis()}-${(Math.random() * 1e6).toInt()}.m4a")
     }
 
-    private fun save(next: Map<String, List<Spoken.Sent>>) {
-        _sent.value = next
+    @Synchronized
+    fun add(note: VoiceNote) {
+        val (next, gone) = VoiceNotes.add(_notes.value, note)
+        gone.forEach { File(it.file).delete() }
+        save(next)
+    }
+
+    @Synchronized
+    fun update(id: String, f: (VoiceNote) -> VoiceNote) = save(VoiceNotes.update(_notes.value, id, f))
+
+    /** Thrown away: the note and its file. */
+    @Synchronized
+    fun drop(id: String) {
+        val note = _notes.value.firstOrNull { it.id == id } ?: return
+        File(note.file).delete()
+        save(_notes.value - note)
+    }
+
+    fun note(id: String): VoiceNote? = _notes.value.firstOrNull { it.id == id }
+
+    private fun save(next: List<VoiceNote>) {
+        _notes.value = next
         runCatching {
             file.parentFile?.mkdirs()
             val tmp = File(file.parentFile, "${file.name}.tmp")
@@ -36,15 +56,9 @@ class VoiceStore(private val file: File) {
         }
     }
 
-    /** [text] sent at [at] didn't go after all. */
-    @Synchronized
-    fun drop(chat: String, text: String, at: Long) {
-        val list = _sent.value[chat] ?: return
-        val i = list.indexOfLast { it.text == text && it.at == at }
-        if (i < 0) return
-        save(_sent.value + (chat to list.toMutableList().also { it.removeAt(i) }))
-    }
-
-    private fun load(): Map<String, List<Spoken.Sent>> =
-        runCatching { if (file.exists()) json.decodeFromString(serializer, file.readText()) else null }.getOrNull() ?: emptyMap()
+    // A file from before (AND-53 kept only the words of what was sent) doesn't read as notes: none.
+    private fun load(): List<VoiceNote> =
+        runCatching { if (file.exists()) json.decodeFromString(serializer, file.readText()) else null }.getOrNull()
+            ?.filter { File(it.file).exists() }
+            ?: emptyList()
 }
