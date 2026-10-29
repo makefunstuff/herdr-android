@@ -1,6 +1,7 @@
 package com.makefunstuff.herdr.core
 
 import com.makefunstuff.herdr.core.board.WorkStatus
+import com.makefunstuff.herdr.core.chat.VoiceNote
 import com.makefunstuff.herdr.core.shepherdr.OutgoingLine
 import com.makefunstuff.herdr.core.shepherdr.ShepherdrText
 import com.makefunstuff.herdr.core.shepherdr.SpaceChat
@@ -106,5 +107,29 @@ class SpaceChatTest {
         val f = SpaceChat.items("k", failed, out).single() as SpaceChatItem.Words
         assertEquals("The coordinator isn't running", f.failed)
         assertTrue(!f.waiting)
+    }
+
+    @Test
+    fun voiceFilesAreVoiceMessagesAndYoursOnThePhoneComeLast() {
+        val c = chat(
+            """{"key":"home","messages":[
+              {"id":"m1","who":"you","file":{"name":"voice-message-0m07s.m4a","path":"/inbox/a-voice-message-0m07s.m4a"}},
+              {"id":"m2","who":"you","file":{"name":"shot.png","path":"/inbox/b-shot.png"}}
+            ]}""",
+        )
+        val sent = VoiceNote("n1", "k", "/phone/1.m4a", 7_000, 1, remote = "/inbox/a-voice-message-0m07s.m4a", sent = true)
+        val going = VoiceNote("n2", "k", "/phone/2.m4a", 3_000, 2)
+        val failed = VoiceNote("n3", "k", "/phone/3.m4a", 4_000, 3, remote = "/inbox/c-voice-message-0m04s.m4a", error = "offline")
+        // Sent a while ago and never shown (the chat moved on): no longer waits at the end.
+        val old = VoiceNote("n4", "k", "/phone/4.m4a", 4_000, 4, remote = "/inbox/d-voice-message-0m04s.m4a", sent = true, sentAt = 10)
+        val arriving = VoiceNote("n5", "k", "/phone/5.m4a", 4_000, 5, remote = "/inbox/e-voice-message-0m04s.m4a", sent = true, sentAt = 100_000)
+        val items = SpaceChat.items("home", c, voice = listOf(sent, going, failed, old, arriving), now = 120_000)
+        assertEquals(listOf("m1#file", "m2#file", "voice:n2", "voice:n3", "voice:n5"), items.map { it.id })
+        val v = items[0] as SpaceChatItem.Voice
+        assertEquals(7_000L, v.millis)
+        // Played from the phone: the one it was copied as.
+        assertEquals(sent, v.note)
+        assertTrue(items[1] is SpaceChatItem.File)
+        assertEquals(going, (items[2] as SpaceChatItem.Voice).note)
     }
 }

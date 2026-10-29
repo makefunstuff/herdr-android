@@ -73,7 +73,10 @@ import com.makefunstuff.herdr.ui.common.detail
 import com.makefunstuff.herdr.ui.common.label
 import com.makefunstuff.herdr.ui.common.rememberAttacher
 import com.makefunstuff.herdr.ui.common.rememberDraft
-import com.makefunstuff.herdr.ui.common.rememberVoiceDraft
+import com.makefunstuff.herdr.ui.common.LocalVoiceMessages
+import com.makefunstuff.herdr.ui.common.VoiceMessage
+import com.makefunstuff.herdr.ui.common.rememberVoiceMessages
+import com.makefunstuff.herdr.core.chat.VoiceNotes
 import com.makefunstuff.herdr.ui.common.toast
 import com.makefunstuff.herdr.ui.design.BubbleShape
 import com.makefunstuff.herdr.ui.design.ChatComposer
@@ -154,7 +157,24 @@ internal fun SpaceCoordinator(nav: NavController, machineId: String, session: Ho
     // The home space's draft is the machine's, where a share puts its words.
     val draftKey = if (space == null || space.home) DraftStore.coordinator(machineId) else DraftStore.coordinator(machineId, space.id)
     var draft by rememberDraft(draftKey)
-    val voice = rememberVoiceDraft(draftKey, draft) { draft = it }
+    // A voice message: its file goes into Shepherdr's inbox, then to the coordinator as a file sent in its chat.
+    val voice = rememberVoiceMessages(
+        draftKey,
+        online = state.online && board != null && space != null,
+        upload = { file, name ->
+            val b = board ?: throw java.io.IOException("Shepherdr isn't reachable")
+            val id = space?.id ?: throw java.io.IOException("No space to send it to")
+            b.upload(id, name, file.readBytes(), VoiceNotes.MIME)
+        },
+        deliver = { remote ->
+            val b = board ?: throw java.io.IOException("Shepherdr isn't reachable")
+            b.sayFiles(space?.id ?: throw java.io.IOException("No space to send it to"), listOf(remote))
+        },
+        fetch = { remote ->
+            val b = board ?: throw java.io.IOException("Shepherdr isn't reachable")
+            b.file(space?.id ?: throw java.io.IOException("No space"), remote)
+        },
+    )
     val tray = rememberImageTray(draftKey, machineId, session, state.online)
     val attach = rememberAttacher(session, onAttached = { path -> draft = Attachments.withMention(draft, path) }, onImage = tray::add)
     var attachMenu by remember { mutableStateOf(false) }
@@ -186,7 +206,7 @@ internal fun SpaceCoordinator(nav: NavController, machineId: String, session: Ho
         }
     }
     val t = thread
-    val items = remember(t, outgoing) { t?.v2?.let { SpaceChat.items(t.space, it, outgoing) }.orEmpty() }
+    val items = remember(t, outgoing, voice.notes) { t?.v2?.let { SpaceChat.items(t.space, it, outgoing, voice.notes, container.clock()) }.orEmpty() }
     val list = rememberLazyListState()
     LaunchedEffect(items.size) { if (items.isNotEmpty() && list.firstVisibleItemIndex <= 1) list.animateScrollToItem(0) }
 
@@ -213,7 +233,6 @@ internal fun SpaceCoordinator(nav: NavController, machineId: String, session: Ho
         send(text, replyTo)
         draft = DraftStore.afterSend(draft, typed)
         tray.sent(pictures)
-        voice.sent()
         replyTo = null
     }
 
@@ -272,7 +291,7 @@ internal fun SpaceCoordinator(nav: NavController, machineId: String, session: Ho
                             attached = !tray.isEmpty,
                             floating = true,
                             leading = { ComposerIconButton(HerdrIcons.Plus, "Attach files", enabled = state.online && !uploading) { attachMenu = true } },
-                            voice = voice.composer,
+                            voice = voice.recorder,
                         )
                     }
                 },
@@ -285,7 +304,7 @@ internal fun SpaceCoordinator(nav: NavController, machineId: String, session: Ho
                         val why = chatProblem ?: problem
                         if (why != null) ChatEmpty(HerdrIcons.CircleAlert, "Can't reach Shepherdr", why) else LoadingState("Reading the chat")
                     }
-                    else -> CompositionLocalProvider(LocalChatImages provides ChatImages(machineId, session, container.images, state.online)) {
+                    else -> CompositionLocalProvider(LocalChatImages provides ChatImages(machineId, session, container.images, state.online), LocalVoiceMessages provides voice) {
                         LazyColumn(
                             state = list,
                             // Newest at the bottom: it stays at its end when the keyboard opens or the message box grows.
@@ -424,6 +443,7 @@ private fun ChatItem(
             if (item.intro.isNotEmpty()) MarkdownText(item.intro, Modifier.padding(horizontal = Space.xs), style = MaterialTheme.typography.bodyLarge)
             QuestionCard(item.card, item.answer, item.card.question.id in answering, onAnswer)
         }
+        is SpaceChatItem.Voice -> VoiceMessage(item.path, item.millis, item.you, item.note)
         is SpaceChatItem.File -> Row(
             Modifier.fillMaxWidth(), horizontalArrangement = if (item.you) Arrangement.End else Arrangement.Start,
             verticalAlignment = Alignment.CenterVertically,

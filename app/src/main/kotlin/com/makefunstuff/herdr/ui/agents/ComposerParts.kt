@@ -1,6 +1,8 @@
 package com.makefunstuff.herdr.ui.agents
 
 import androidx.compose.foundation.Canvas
+import com.makefunstuff.herdr.core.chat.VoiceNotes
+import com.makefunstuff.herdr.core.chat.VoiceRecorder
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -112,8 +114,10 @@ fun HeldList(
                             Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(start = Space.l),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
+                            // A voice message held: its length, not its file's path.
+                            val voiceMillis = VoiceNotes.mentioned(m.text)?.let(VoiceNotes::millis)
                             Text(
-                                "“${m.text}”",
+                                if (voiceMillis != null) "Voice message · ${VoiceRecorder.elapsed(voiceMillis)}" else "“${m.text}”",
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = c.strong,
                                 maxLines = 2,

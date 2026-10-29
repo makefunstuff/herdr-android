@@ -77,7 +77,6 @@ import com.makefunstuff.herdr.ui.design.ChatComposer
 import com.makefunstuff.herdr.ui.design.ChatSurface
 import com.makefunstuff.herdr.ui.design.typingInShortWindow
 import com.makefunstuff.herdr.ui.design.ComposerToggle
-import com.makefunstuff.herdr.ui.design.ComposerVoice
 import com.makefunstuff.herdr.ui.design.ComposerIconButton
 import com.makefunstuff.herdr.ui.common.rememberAttacher
 import com.makefunstuff.herdr.core.host.Images
@@ -92,7 +91,6 @@ import com.makefunstuff.herdr.ui.images.rememberImageTray
 import androidx.compose.runtime.CompositionLocalProvider
 import com.makefunstuff.herdr.core.host.Attachments
 import com.makefunstuff.herdr.ui.common.rememberDraft
-import com.makefunstuff.herdr.ui.common.rememberVoiceDraft
 import com.makefunstuff.herdr.data.DraftStore
 import androidx.compose.foundation.layout.navigationBarsPadding
 import com.makefunstuff.herdr.ui.design.HerdrIcons
@@ -153,8 +151,6 @@ private fun BoardCoordinator(nav: NavController, machineId: String, session: Hos
     var sending by remember { mutableStateOf(false) }
     // Kept per machine across navigation, rotation and restarts; cleared only once the message is sent.
     var draft by rememberDraft(DraftStore.coordinator(machineId))
-    // Spoken words go into the draft where the cursor stands, to check before Send.
-    val voice = rememberVoiceDraft(DraftStore.coordinator(machineId), draft) { draft = it }
     /** The board's Tab for the next message: what the Coordinator adds from it gets an agent at once. */
     var startAgents by rememberSaveable { mutableStateOf(false) }
     // Pictures for the Coordinator wait in the composer (and are copied to its machine) until the message goes.
@@ -251,7 +247,6 @@ private fun BoardCoordinator(nav: NavController, machineId: String, session: Hos
                 .onSuccess { msg ->
                     draft = DraftStore.afterSend(draft, typed)
                     tray.sent(pictures)
-                    voice.sent()
                     startAgents = false
                     // With no Coordinator set up there, the board files the words as a task instead.
                     if (!tracked) context.toast(msg.ifEmpty { "Sent" })
@@ -316,7 +311,6 @@ private fun BoardCoordinator(nav: NavController, machineId: String, session: Hos
                         onAttach = { attachMenu = true },
                         uploading = uploading,
                         tray = tray,
-                        voice = voice.composer,
                     )
                     }
                 },
@@ -558,7 +552,7 @@ internal fun Notice(text: String, tint: Color?, action: Pair<String, () -> Unit>
 
 /**
  * The Coordinator's composer: the shared [ChatComposer], with the attach button ([onAttach]) on
- * the left, the mic for a voice message ([voice]) and the board's Tab as a "Start agents" switch beside Send. Off, Send hands the message to the Coordinator; on (amber), Send also gives
+ * the left and the board's Tab as a "Start agents" switch beside Send. Off, Send hands the message to the Coordinator; on (amber), Send also gives
  * an agent to every task the Coordinator adds from it, and Send says so to a screen reader. It
  * turns itself off again once that message is sent.
  */
@@ -576,7 +570,6 @@ internal fun CoordinatorComposer(
     onAttach: (() -> Unit)? = null,
     uploading: Boolean = false,
     tray: ImageTray? = null,
-    voice: ComposerVoice? = null,
 ) {
     ChatComposer(
         draft = draft,
@@ -597,6 +590,5 @@ internal fun CoordinatorComposer(
         trailing = {
             ComposerToggle("Start agents", HerdrIcons.Zap, startAgents, onStartAgents, enabled = enabled && !sending)
         },
-        voice = voice,
     )
 }

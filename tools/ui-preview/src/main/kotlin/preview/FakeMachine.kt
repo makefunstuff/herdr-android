@@ -66,6 +66,8 @@ class FakeMachine(
     /** Integration metadata per workspace (`workspace.get`'s tokens). */
     var workspaceTokens: Map<String, Map<String, String>> = emptyMap(),
     var version: String = "0.9.0",
+    /** Set to make copying a file there fail (HostSession.upload), with this as the shell's error. */
+    var uploadFails: String? = null,
     /** Set to make connecting fail, e.g. [ConnectError.Auth]. */
     var refuse: ConnectError? = null,
     /** What the health probe reads there (RAM, disks, processes, worktrees). */
@@ -156,6 +158,7 @@ class FakeMachine(
             // The composer's completions: an agent's own commands, and the files in its folder.
             "herdr-agent-commands" in w -> ok(agentCommands)
             "herdr-agent-files" in w -> ok(code?.filesIn(w.last()).orEmpty())
+            "herdr-android/uploads/" in command && uploadFails != null -> CommandResult(1, "", uploadFails.orEmpty())
             "herdr-android/uploads/" in command -> ok("/home/demo/.cache/herdr-android/uploads/20261017-091204-3f2a/" + Shell.words(command.substringAfterLast("\"/")).first())
             else -> ok("")
         }

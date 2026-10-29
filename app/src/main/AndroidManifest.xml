@@ -21,8 +21,8 @@
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
-    <!-- Voice messages in the chats: the phone's speech recognition hears you and only the words are
-         sent. Asked for the first time the mic is used. -->
+    <!-- Voice messages in the chats: the phone records you and the recording goes to the agent.
+         Asked for the first time the mic is used. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
     <!-- Push apps (UnifiedPush distributors such as ntfy) that give the app an address for its machines. -->
@@ -30,8 +30,6 @@
         <intent><action android:name="org.unifiedpush.android.distributor.REGISTER" /></intent>
         <!-- The phone's text to speech, which reads the brief aloud. -->
         <intent><action android:name="android.intent.action.TTS_SERVICE" /></intent>
-        <!-- The phone's speech recognition, for voice messages. -->
-        <intent><action android:name="android.speech.RecognitionService" /></intent>
     </queries>
 
     <!-- enableOnBackInvokedCallback: predictive back (Android 13 and up shows where back goes while
