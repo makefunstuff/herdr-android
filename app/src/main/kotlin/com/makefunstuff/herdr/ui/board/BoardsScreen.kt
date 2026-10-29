@@ -49,13 +49,13 @@ import com.makefunstuff.herdr.ui.share.Ask
 import com.makefunstuff.herdr.ui.theme.Herdr
 import com.makefunstuff.herdr.ui.theme.Space
 import androidx.compose.foundation.lazy.LazyListScope
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import com.makefunstuff.herdr.core.board.WorkOverview
 import com.makefunstuff.herdr.core.board.WorkStatus
 import com.makefunstuff.herdr.core.board.WorkTask
 import com.makefunstuff.herdr.ui.common.toast
+import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 
@@ -187,19 +187,14 @@ fun BoardsScreen(nav: NavController) {
     adding?.let { id ->
         container.hosts.session(id)?.let { session ->
             val repos = boards.firstOrNull { it.machineId == id }?.tasks.orEmpty().map { it.repo }.distinct().sorted()
-            val work = works[id]
-            if (work != null) AddWorkTaskPanel(
-                work.spaces, onDismiss = { adding = null },
-                onSend = { space, title, brief ->
-                    adding = null
-                    scope.launch {
-                        runCatching { session.awaitWorkBoard().addTask(space.id, title, brief) }
-                            .onSuccess { context.toast(it) }
-                            .onFailure { context.toast(it.message ?: "Shepherdr refused") }
-                        readNow.trySend(Unit)
-                    }
-                },
-            ) else BoardDialogs(
+            if (session.state.value.onShepherdr2) AddWorkTask(session, works[id], onDismiss = { adding = null }) { space, title, brief ->
+                adding = null
+                scope.launch {
+                    runCatching { session.awaitWorkBoard().addTask(space.id, title, brief) }
+                        .onSuccess { context.toast(it) }.onFailure { context.toast(it.message ?: "Shepherdr refused") }
+                    readNow.trySend(Unit)
+                }
+            } else BoardDialogs(
                 pending = Pending.Add, session = session, repos = repos, onDismiss = { adding = null },
                 onWords = { _, _ -> }, onConfirm = {}, onAnyway = {},
                 onSaved = { adding = null; readNow.trySend(Unit) },

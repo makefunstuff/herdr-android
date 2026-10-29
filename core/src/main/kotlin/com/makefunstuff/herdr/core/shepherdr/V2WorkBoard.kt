@@ -164,6 +164,7 @@ object V2Board {
                 chat = p.chat.ifEmpty { p.id },
                 needsYou = p.status == V2Status.Need || s.asks.containsKey(p.id) || tasks.any { it.space == p.id && it.status.needsYou },
                 unreachable = p.unreachableSince != null,
+                asks = s.asks.containsKey(p.id),
             )
         }
         return WorkOverview(spaces, tasks)

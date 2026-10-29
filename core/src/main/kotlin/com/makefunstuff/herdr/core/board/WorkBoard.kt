@@ -47,6 +47,8 @@ data class WorkSpace(
     val needsYou: Boolean = false,
     /** Its machine can't be reached now (v2). */
     val unreachable: Boolean = false,
+    /** Its coordinator has a question open for you (v2's `asks`). */
+    val asks: Boolean = false,
 )
 
 /** One task, in the same shape from both boards. */

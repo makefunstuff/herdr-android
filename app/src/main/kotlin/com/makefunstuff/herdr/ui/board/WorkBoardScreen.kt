@@ -33,6 +33,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -204,8 +205,8 @@ internal fun WorkBoardScreen(
 
     val o = board
     val needsYou = o?.needsYou.orEmpty()
-    // A space whose coordinator waits for you, with no task of its own that does.
-    val asking = o?.spaces.orEmpty().filter { s -> s.needsYou && o?.tasksIn(s.id).orEmpty().none { it.status.needsYou } }
+    // A space whose coordinator has a question open for you.
+    val asking = o?.spaces.orEmpty().filter { it.asks }
     val done = o?.tasks.orEmpty().filter { it.status == WorkStatus.Done }
     val many = (o?.spaces?.size ?: 0) > 1
     fun spaceName(id: String) = o?.spaces?.firstOrNull { it.id == id }?.name.orEmpty()
@@ -403,6 +404,21 @@ internal fun prNumberOf(pr: String): String? = pr.substringAfterLast('/').takeIf
 /** What the Add panel and Start work say about adding a task on Shepherdr 2. */
 internal const val ADD_THROUGH_COORDINATOR =
     "Shepherdr 2 makes tasks only through a space's coordinator: this sends it what you wrote, and it adds the task."
+
+/**
+ * [AddWorkTaskPanel] for [session]'s board from elsewhere (the Board tab): its spaces as last read, or read
+ * now when they weren't yet, so a task never goes to a herdr-projects 1.x left on disk.
+ */
+@Composable
+internal fun AddWorkTask(session: HostSession, read: WorkOverview?, onDismiss: () -> Unit, onSend: (WorkSpace, String, String) -> Unit) {
+    val spaces by produceState(read?.spaces, session.machine.id) {
+        if (value == null) value = runCatching { session.awaitWorkBoard().overview().spaces }.getOrDefault(emptyList())
+    }
+    val l = spaces
+    if (l == null || l.isEmpty()) BoardPanel("Add a task", onDismiss, buttons = { PanelCancel(onDismiss) }) {
+        if (l == null) LoadingState("Reading ${session.machine.label}'s spaces") else ErrorMessage("Shepherdr didn't say which spaces it has")
+    } else AddWorkTaskPanel(l, onDismiss, onSend)
+}
 
 /**
  * Adding a task on a Shepherdr 2 board: which space, a title and a brief. Sent to that space's

@@ -89,4 +89,17 @@ class WorkBoardScreensTest {
         assertEquals("60", r.prNumber)
         assertEquals("", r.machine)
     }
+
+    @Test
+    fun aSpaceWhoseCoordinatorAsksSaysSo() {
+        val s = com.makefunstuff.herdr.core.shepherdr.V2Snapshot(
+            places = listOf(com.makefunstuff.herdr.core.shepherdr.V2Place("p:m:a", "a"), com.makefunstuff.herdr.core.shepherdr.V2Place("p:m:b", "b")),
+            tasks = listOf(com.makefunstuff.herdr.core.shepherdr.V2Task("A-1", status = com.makefunstuff.herdr.core.shepherdr.V2TaskStatus.Ready, place = "p:m:a")),
+            asks = mapOf("p:m:a" to "ask:1"),
+        )
+        val o = V2Board.overview(s)
+        // Its coordinator's question shows even though a task of it waits for you too.
+        assertEquals(listOf(true, false), o.spaces.map { it.asks })
+        assertEquals(listOf(true, false), o.spaces.map { it.needsYou })
+    }
 }
