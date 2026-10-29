@@ -248,7 +248,8 @@ internal fun QuestionCard(card: WorkCard, enabled: Boolean, onSend: (CardAnswer)
                 }
             }
             if (words || q.other) HerdrField(
-                other, { other = it; if (it.isNotBlank() && !q.multi) picked = -1 },
+                // Your own words answer in place of a pick: the picks are let go, so none looks sent that isn't.
+                other, { other = it; if (it.isNotBlank()) { picked = -1; picks = emptyList() } },
                 label = if (words) "Your answer" else "Other", modifier = Modifier.fillMaxWidth(), enabled = enabled,
             )
             if (!words && !q.noNote && (picked >= 0 || picks.isNotEmpty())) HerdrField(

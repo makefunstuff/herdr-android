@@ -268,7 +268,7 @@ private fun AppNav(nav: NavHostController) {
         },
     ) {
         val wide = maxWidth >= WIDE
-        val boards = hosts.filter { it.hasBoard }.map { it.machine.id }
+        val boards = hosts.filter { it.hasWorkBoard }.map { it.machine.id }
         // A board already open in the middle (it was open when the window grew) isn't shown twice.
         val board = if (wide && route != Routes.BOARD) chosenBoard.machine?.takeIf { it in boards } ?: boards.firstOrNull() else null
         val panes = remember(wide, board, chosenBoard) { Panes(wide, board, chosenBoard) }
