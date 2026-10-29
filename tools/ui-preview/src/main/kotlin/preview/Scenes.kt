@@ -436,6 +436,8 @@ fun scenes(): List<Scene> = listOf(
     Scene("task-v2-close", route = Routes.board(DEVBOX, "AND-20"), setup = { v2() }, actions = { tapText("Close, nothing merged") }),
     Scene("board-v2-add", route = Routes.board(DEVBOX), setup = { v2() }, actions = { tapLabel("Add a task") }),
     Scene("boards-v2", route = Routes.BOARDS, setup = { home(); v2() }),
+    // A space's heading opens that space's coordinator chat.
+    Scene("board-v2-coordinator", route = Routes.board(DEVBOX), setup = { v2() }, actions = { tapText("herdr-android · 2") }),
     Scene("routines", route = Routes.routines(DEVBOX), heightDp = 1100, setup = { home() }),
     Scene("routines-all", route = Routes.routines(), setup = { home(); host(GPU).board = Demo.gpuBoard() }),
     Scene("routine", route = Routes.routines(DEVBOX), heightDp = 1400, setup = { home() }, actions = { tapText("Check CI on open PRs") }),

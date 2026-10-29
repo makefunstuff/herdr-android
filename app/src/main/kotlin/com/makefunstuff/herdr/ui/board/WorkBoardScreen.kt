@@ -199,8 +199,10 @@ internal fun WorkBoardScreen(
     // A merge can't be taken back: the fingerprint first, when that is on, as for v1's Approve and merge.
     fun merge(t: WorkTask) = guard.run(Guarded.Merge, "Merge ${t.name}?", t.title) { act("Merging", t, approves = true) { it.approve(t) } }
     fun answer(a: CardAnswer, t: WorkTask) = act("Answering", t) { it.answer(a).ifEmpty { "Answered" } }
-    fun openCoordinator() {
-        if (pane != null) panes.open(nav, Routes.coordinator(machineId)) else nav.navigate(Routes.coordinator(machineId))
+    /** [space]'s coordinator chat; the home space's without one. */
+    fun openCoordinator(space: String? = null) {
+        val route = Routes.coordinator(machineId, space)
+        if (pane != null) panes.open(nav, route) else nav.navigate(route)
     }
 
     val o = board
@@ -220,7 +222,7 @@ internal fun WorkBoardScreen(
                     subtitle = "${state.machine.label} · ${if (o == null) "Shepherdr 2" else "${needsYou.size + asking.size} need you"}",
                     onBack = if (pane == null) ({ nav.popBackStack() }) else null,
                 ) {
-                    BarIcon(HerdrIcons.MessagesSquare, "Coordinator chat", ::openCoordinator)
+                    BarIcon(HerdrIcons.MessagesSquare, "Coordinator chat", { openCoordinator() })
                     BarIcon(HerdrIcons.RefreshCw, "Read the board again", { readNow.trySend(Unit) })
                 }
             },
@@ -250,15 +252,18 @@ internal fun WorkBoardScreen(
                                 items(needsYou, key = { "n-${it.id}" }) { t ->
                                     WorkTaskRow(t, space = if (many) spaceName(t.space) else "", onOpen = { openId = t.id })
                                 }
-                                items(asking, key = { "a-${it.id}" }) { s -> CoordinatorAsksRow(s, onOpen = ::openCoordinator) }
+                                items(asking, key = { "a-${it.id}" }) { s -> CoordinatorAsksRow(s, onOpen = { openCoordinator(s.id) }) }
                             }
                             o.spaces.forEach { s ->
                                 val open = o.tasksIn(s.id).filter { !it.status.needsYou && it.status != WorkStatus.Done }
                                 if (open.isEmpty() && !s.unreachable) return@forEach
                                 item(key = "h-${s.id}") {
+                                    // The space's heading opens its coordinator's chat.
                                     SectionHeading(
                                         listOfNotNull(s.name, open.size.takeIf { it > 0 }?.toString(), "can't be reached".takeIf { s.unreachable }).joinToString(" · "),
+                                        Modifier.clickable(onClickLabel = "Open ${s.name}'s coordinator chat") { openCoordinator(s.id) }.heightIn(min = 48.dp),
                                         top = Space.m,
+                                        trailing = { Icon(HerdrIcons.MessagesSquare, null, tint = Herdr.colors.muted, modifier = Modifier.size(18.dp)) },
                                     )
                                 }
                                 items(open, key = { it.id }) { t -> WorkTaskRow(t, onOpen = { openId = t.id }) }

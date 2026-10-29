@@ -138,7 +138,7 @@ fun BoardsScreen(nav: NavController) {
                         works[b.machineId]?.let { w ->
                             workGroup(b.machineId, b.machineLabel, w, top = if (i == 0) Space.xs else Space.m,
                                 onBoard = { panes.openBoard(nav, b.machineId) },
-                                onCoordinator = { panes.open(nav, Routes.coordinator(b.machineId)) },
+                                onCoordinator = { space -> panes.open(nav, Routes.coordinator(b.machineId, space)) },
                                 onTask = { t -> panes.openBoard(nav, b.machineId, t.id, alone = true) })
                             return@forEachIndexed
                         }
@@ -209,7 +209,7 @@ fun BoardsScreen(nav: NavController) {
  * to do, and how many are done. Its heading opens the whole board.
  */
 private fun LazyListScope.workGroup(
-    machineId: String, label: String, w: WorkOverview, top: Dp, onBoard: () -> Unit, onCoordinator: () -> Unit, onTask: (WorkTask) -> Unit,
+    machineId: String, label: String, w: WorkOverview, top: Dp, onBoard: () -> Unit, onCoordinator: (String) -> Unit, onTask: (WorkTask) -> Unit,
 ) {
     val open = w.tasks.filter { it.status != WorkStatus.Done }
     val needs = open.count { it.status.needsYou }
@@ -237,7 +237,7 @@ private fun LazyListScope.workGroup(
         WorkTaskRow(t, onOpen = { onTask(t) }, space = if (many) w.spaces.firstOrNull { it.id == t.space }?.name.orEmpty() else "")
     }
     rows(open.filter { it.status.needsYou })
-    items(asking, key = { "asks/$machineId/${it.id}" }) { s -> CoordinatorAsksRow(s, onOpen = onCoordinator) }
+    items(asking, key = { "asks/$machineId/${it.id}" }) { s -> CoordinatorAsksRow(s, onOpen = { onCoordinator(s.id) }) }
     rows(open.filter { !it.status.needsYou })
     if (done > 0) item(key = "done/$machineId") {
         Text(
