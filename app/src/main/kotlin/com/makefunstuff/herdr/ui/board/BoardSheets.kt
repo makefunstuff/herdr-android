@@ -599,7 +599,7 @@ private fun NavCard(icon: ImageVector, title: String, detail: String, onClick: (
 
 /** The first lines of a long Markdown text, about [lines] of them, and "Show all" to read the rest. Short text shows whole. */
 @Composable
-private fun Preview(source: String, key: String, lines: Int, color: Color = Color.Unspecified) {
+internal fun Preview(source: String, key: String, lines: Int, color: Color = Color.Unspecified) {
     val short = remember(source, lines) { previewOf(source, lines) }
     var all by rememberSaveable(key) { mutableStateOf(false) }
     Column(Modifier.animateContentSize()) {
@@ -656,7 +656,7 @@ private fun Card(title: String, color: Color, content: @Composable () -> Unit) {
 
 /** A titled part of the task that folds away: a 48dp heading row with a chevron, its content under it. */
 @Composable
-private fun Section(title: String, startOpen: Boolean = true, key: String = title, content: @Composable () -> Unit) {
+internal fun Section(title: String, startOpen: Boolean = true, key: String = title, content: @Composable () -> Unit) {
     var open by rememberSaveable(key) { mutableStateOf(startOpen) }
     Column(verticalArrangement = Arrangement.spacedBy(Space.s), modifier = Modifier.animateContentSize()) {
         Row(

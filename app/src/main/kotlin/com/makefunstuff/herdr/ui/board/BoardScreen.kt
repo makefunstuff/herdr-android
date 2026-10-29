@@ -150,6 +150,11 @@ fun BoardScreen(nav: NavController, machineId: String, openTask: String? = null,
         return
     }
     val state by session.state.collectAsStateWithLifecycle()
+    // Shepherdr 2: its own board, through its API; herdr-projects 1.x keeps the screen below.
+    if (state.onShepherdr2) {
+        WorkBoardScreen(nav, session, machineId, openTask, pane, alone)
+        return
+    }
     var tasks by remember { mutableStateOf<List<BoardTask>>(emptyList()) }
     var problem by remember { mutableStateOf<String?>(null) }
     var loaded by remember { mutableStateOf(false) }

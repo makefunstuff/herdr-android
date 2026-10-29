@@ -1,0 +1,29 @@
+{
+ "AND-21/Agent": {
+  "key": "AND-21/Agent",
+  "cli": "Claude Code",
+  "messages": [
+   {"id": "m1", "who": "agent", "text": "The line is in and its test passes. One question before I finish."},
+   {"id": "m2", "who": "agent", "question": {
+     "id": "q-and21-1", "title": "Which wording for the line under each machine?", "kind": "Form", "other": true, "to": "AND-21",
+     "choices": [
+      {"label": "Last answered 2 min ago", "description": "As the brief said"},
+      {"label": "Answered 2 min ago"},
+      {"label": "Seen 2 min ago", "description": "Shorter; matches the agents' cards"}
+     ]
+   }}
+  ]
+ },
+ "AND-24/Agent": {
+  "key": "AND-24/Agent",
+  "cli": "Codex",
+  "messages": [
+   {"id": "m1", "who": "agent", "question": {
+     "id": "q-and24-1", "title": "Which sections should fold away under **More settings**?", "kind": "Form", "multi": true, "noNote": true, "to": "AND-24",
+     "choices": [
+      {"label": "Key bar"}, {"label": "Quiet hours"}, {"label": "Alert rules"}, {"label": "Usage limits"}
+     ]
+   }}
+  ]
+ }
+}

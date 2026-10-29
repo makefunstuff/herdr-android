@@ -16,6 +16,10 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 import java.io.IOException
 
 /**
@@ -52,6 +56,19 @@ class V2WorkBoard(private val connect: suspend () -> ShepherdrClient, private va
 
     /** `shepherdr merge <id>`: merging is what a yes to a ready task means on Shepherdr 2. */
     override suspend fun approve(task: WorkTask): String = cli(listOf("merge", task.id))
+
+    /** `close` (`shepherdr task close`): what it held back is named when it refuses for unmerged work. */
+    override suspend fun close(task: WorkTask): String {
+        val o = connect().actRaw(V2Actions.close(task.id))
+        if (o.ok) return "${task.name} is done, nothing merged"
+        throw IOException(V2Board.closeRefusal(task, o.json))
+    }
+
+    /** A message to [space]'s coordinator, which makes the task: Shepherdr 2 makes tasks no other way. */
+    override suspend fun addTask(space: String, title: String, brief: String): String {
+        connect().send(chatOf(space), V2Board.addRequest(title, brief))
+        return "Sent to the coordinator: it adds the task"
+    }
 
     override suspend fun answer(answer: CardAnswer): String {
         val c = answer.card
@@ -164,6 +181,19 @@ object V2Board {
         chat = t.agent?.chat.orEmpty(),
         pinned = t.pinned != null,
     )
+
+    /** What a space's coordinator is asked, to add a task: its title, then the brief. */
+    fun addRequest(title: String, brief: String): String = buildString {
+        append("Please add a task: ").append(title.trim())
+        brief.trim().takeIf { it.isNotEmpty() }?.let { append("\n\n").append(it) }
+    }
+
+    /** Why `close` refused, from its answer: the work it holds (`held`), or its own error. */
+    fun closeRefusal(task: WorkTask, o: JsonObject): String {
+        val held = (o["held"] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.takeIf(String::isNotBlank) }.orEmpty()
+        if (held.isNotEmpty()) return "${task.name} holds work main lacks: ${held.joinToString("; ")}. Merge or drop it first."
+        return (o["error"] as? JsonPrimitive)?.contentOrNull ?: "Shepherdr refused to close ${task.name}"
+    }
 
     fun status(s: V2TaskStatus): WorkStatus = when (s) {
         V2TaskStatus.Need -> WorkStatus.Need
