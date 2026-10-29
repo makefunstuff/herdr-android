@@ -48,7 +48,10 @@ import com.makefunstuff.herdr.Routes
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
+import com.makefunstuff.herdr.core.board.BoardApi
 import com.makefunstuff.herdr.core.board.BoardGlance
+import com.makefunstuff.herdr.core.host.HostSession
+import com.makefunstuff.herdr.core.host.HostState
 import com.makefunstuff.herdr.core.board.BoardTask
 import com.makefunstuff.herdr.core.board.CoordinatorAsk
 import com.makefunstuff.herdr.core.board.TaskMentions
@@ -113,18 +116,26 @@ import kotlinx.coroutines.withTimeoutOrNull
  * way another machine's board reaches it (`herdr-projects remote list|dispatch`), so the phone and
  * the board's own box share one conversation.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CoordinatorScreen(nav: NavController, machineId: String) {
-    val container = LocalContainer.current
-    val panes = LocalPanes.current
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val session = container.hosts.session(machineId)
+fun CoordinatorScreen(nav: NavController, machineId: String, space: String? = null) {
+    val session = LocalContainer.current.hosts.session(machineId)
     if (session == null) {
         EmptyState("Machine not found", "It may have been removed.")
         return
     }
+    val state by session.state.collectAsStateWithLifecycle()
+    // Shepherdr 2 has a coordinator in each space; herdr-projects 1.x one for the machine.
+    if (state.boardApi is BoardApi.V2) SpaceCoordinator(nav, machineId, session, space) else BoardCoordinator(nav, machineId, session)
+}
+
+/** herdr-projects 1.x's one Coordinator on the machine. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun BoardCoordinator(nav: NavController, machineId: String, session: HostSession) {
+    val container = LocalContainer.current
+    val panes = LocalPanes.current
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val state by session.state.collectAsStateWithLifecycle()
     // The board's tasks as the app last read them: the strip under the bar, the tasks the answers name, the asks.
     val boardLists by container.boards.lists.collectAsStateWithLifecycle()
@@ -151,45 +162,9 @@ fun CoordinatorScreen(nav: NavController, machineId: String) {
     // A file for the Coordinator: copied to the board's machine, then named at the start of the draft.
     val attach = rememberAttacher(session, onAttached = { path -> draft = Attachments.withMention(draft, path) }, onImage = tray::add)
     var attachMenu by remember { mutableStateOf(false) }
-    // Files shared to the app for this Coordinator (a screenshot, a log): a picture goes to the composer's
-    // pictures at once, any other file is copied over as an attached one once connected.
-    var copyingShared by remember { mutableStateOf(false) }
-    val sharedWaiting by remember(machineId) { container.shares.files(machineId) }.collectAsStateWithLifecycle(emptyList())
-    LaunchedEffect(machineId) { container.shares.used(machineId) }
-    LaunchedEffect(machineId, state.online) {
-        val online = state.online
-        container.shares.files(machineId).collect { files ->
-            for (f in files) {
-                if (!online && !Images.isImage(f.name)) continue
-                copyingShared = true
-                try {
-                    // Android may have cleared the app's cache while the share waited.
-                    if (!java.io.File(f.path).exists()) throw java.io.IOException("${f.name} was no longer on the phone, so it wasn't attached. Share it again.")
-                    if (!sharePicture(f, tray, container.images)) {
-                        // Not a picture the phone can read after all: it goes as a file.
-                        if (!online) continue
-                        val path = withContext(Dispatchers.IO) { java.io.File(f.path).inputStream().use { session.upload(f.name, it) } }
-                        draft = Attachments.withMention(draft, path)
-                    }
-                } catch (e: CancellationException) {
-                    copyingShared = false
-                    throw e
-                } catch (t: Throwable) {
-                    context.toast(t.message ?: "Couldn't attach ${f.name}")
-                }
-                container.shares.done(machineId, f)
-            }
-            copyingShared = false
-        }
-    }
-    val uploading = attach.uploading || copyingShared
-    /** Shared files (not pictures, which wait in the composer) that wait for this machine to connect, said where the chat shows what is going on. */
-    val filesWaiting = sharedWaiting.filterNot { Images.isImage(it.name) }
-    val waitNote = if (state.online || filesWaiting.isEmpty()) null else {
-        val one = filesWaiting.singleOrNull()
-        if (one != null) "${one.name} waits to be copied to ${state.machine.label}, and is attached to your message once it connects."
-        else "${filesWaiting.size} shared files wait to be copied to ${state.machine.label}, and are attached to your message once it connects."
-    }
+    val shared = rememberSharedFiles(machineId, session, state, tray) { path -> draft = Attachments.withMention(draft, path) }
+    val uploading = attach.uploading || shared.copying
+    val waitNote = shared.waitNote
     val readNow = remember { Channel<Unit>(Channel.CONFLATED) }
     val readTasksNow = remember { Channel<Unit>(Channel.CONFLATED) }
     val list = rememberLazyListState()
@@ -407,6 +382,56 @@ fun CoordinatorScreen(nav: NavController, machineId: String) {
     if (attachMenu) AttachMenu(attach, tray, online = state.online, onDismiss = { attachMenu = false })
 }
 
+/** Files shared to the app for a machine's Coordinator: one is being copied ([copying]); [waitNote] says what waits for it to connect. */
+internal class SharedFiles(val copying: Boolean, val waitNote: String?)
+
+/**
+ * Files shared to the app for this Coordinator (a screenshot, a log): a picture goes to the composer's
+ * pictures ([tray]) at once, any other file is copied over as an attached one once connected ([onFile] its path there).
+ */
+@Composable
+internal fun rememberSharedFiles(machineId: String, session: HostSession, state: HostState, tray: ImageTray, onFile: (String) -> Unit): SharedFiles {
+    val container = LocalContainer.current
+    val context = LocalContext.current
+    val file by androidx.compose.runtime.rememberUpdatedState(onFile)
+    var copyingShared by remember { mutableStateOf(false) }
+    val sharedWaiting by remember(machineId) { container.shares.files(machineId) }.collectAsStateWithLifecycle(emptyList())
+    LaunchedEffect(machineId) { container.shares.used(machineId) }
+    LaunchedEffect(machineId, state.online) {
+        val online = state.online
+        container.shares.files(machineId).collect { files ->
+            for (f in files) {
+                if (!online && !Images.isImage(f.name)) continue
+                copyingShared = true
+                try {
+                    // Android may have cleared the app's cache while the share waited.
+                    if (!java.io.File(f.path).exists()) throw java.io.IOException("${f.name} was no longer on the phone, so it wasn't attached. Share it again.")
+                    if (!sharePicture(f, tray, container.images)) {
+                        // Not a picture the phone can read after all: it goes as a file.
+                        if (!online) continue
+                        file(withContext(Dispatchers.IO) { java.io.File(f.path).inputStream().use { session.upload(f.name, it) } })
+                    }
+                } catch (e: CancellationException) {
+                    copyingShared = false
+                    throw e
+                } catch (t: Throwable) {
+                    context.toast(t.message ?: "Couldn't attach ${f.name}")
+                }
+                container.shares.done(machineId, f)
+            }
+            copyingShared = false
+        }
+    }
+    // Shared files (not pictures, which wait in the composer) that wait for this machine to connect, said where the chat shows what is going on.
+    val filesWaiting = sharedWaiting.filterNot { Images.isImage(it.name) }
+    val waitNote = if (state.online || filesWaiting.isEmpty()) null else {
+        val one = filesWaiting.singleOrNull()
+        if (one != null) "${one.name} waits to be copied to ${state.machine.label}, and is attached to your message once it connects."
+        else "${filesWaiting.size} shared files wait to be copied to ${state.machine.label}, and are attached to your message once it connects."
+    }
+    return SharedFiles(copyingShared, waitNote)
+}
+
 /**
  * A shared file that is a picture, made smaller into [tray]: true when it is there now (or the
  * message was full, which says so), false when the phone can't read it as a picture.
@@ -433,7 +458,7 @@ private fun stateWords(v: CoordinatorView): String = when {
 
 /** The screen's own empty state: an icon, a heading and a sentence, centred in the space. */
 @Composable
-private fun ChatEmpty(icon: ImageVector, title: String, body: String) {
+internal fun ChatEmpty(icon: ImageVector, title: String, body: String) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { StateBlock(icon, title, body) }
 }
 
@@ -512,7 +537,7 @@ private fun Foot(v: CoordinatorView?, tooOld: Boolean, problem: String?, waitNot
 }
 
 @Composable
-private fun Working() {
+internal fun Working() {
     val t = rememberInfiniteTransition(label = "working")
     val a by t.animateFloat(0.3f, 1f, infiniteRepeatable(tween(700), RepeatMode.Reverse), label = "dots")
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = Space.xs)) {
@@ -524,7 +549,7 @@ private fun Working() {
 
 /** A plain sentence on a tinted tile, in place of a raw error dump; [tint] null is neutral. */
 @Composable
-private fun Notice(text: String, tint: Color?, action: Pair<String, () -> Unit>? = null) {
+internal fun Notice(text: String, tint: Color?, action: Pair<String, () -> Unit>? = null) {
     Column {
         com.makefunstuff.herdr.ui.design.Notice(text, color = tint, icon = if (tint == Herdr.colors.red) HerdrIcons.CircleAlert else HerdrIcons.Info)
         if (action != null) QuietButton(onClick = action.second, color = Herdr.colors.accent) { Text(action.first) }

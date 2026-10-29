@@ -144,7 +144,8 @@ object Routes {
     const val AGENT = "agent/{mid}/{pane}"
     const val TERMINAL = "terminal/{mid}/{pane}"
     const val LAYOUT = "layout/{mid}/{pane}"
-    const val COORDINATOR = "coordinator/{mid}"
+    /** A machine's Coordinator; on Shepherdr 2, [space]'s (its id), else its home space's. */
+    const val COORDINATOR = "coordinator/{mid}?space={space}"
     /** One machine's board; with [task] open, and with `alone` closing the task goes back instead of to the board. */
     const val BOARD = "board/{mid}?task={task}&alone={alone}"
     /** Finished work across every board, one card a task; opened at a machine's (and a task's) card when given. */
@@ -183,7 +184,7 @@ object Routes {
     fun agent(mid: String, pane: String) = "agent/$mid/${Uri.encode(pane)}"
     fun terminal(mid: String, pane: String) = "terminal/$mid/${Uri.encode(pane)}"
     fun layout(mid: String, pane: String) = "layout/$mid/${Uri.encode(pane)}"
-    fun coordinator(mid: String) = "coordinator/$mid"
+    fun coordinator(mid: String, space: String? = null) = "coordinator/$mid" + (space?.let { "?space=" + Uri.encode(it) } ?: "")
     fun ask(to: String) = "ask/$to"
     fun board(mid: String, task: String? = null, alone: Boolean = false) =
         if (task == null) "board/$mid" else "board/$mid?task=${Uri.encode(task)}" + if (alone) "&alone=1" else ""
@@ -392,7 +393,9 @@ internal fun NavGraphBuilder.screens(nav: NavHostController, agents: @Composable
             paneId = it.arguments?.getString("pane")?.let(Uri::decode)?.ifEmpty { null },
         )
     }
-    composable(Routes.COORDINATOR) { CoordinatorScreen(nav, it.arguments?.getString("mid").orEmpty()) }
+    composable(Routes.COORDINATOR) {
+        CoordinatorScreen(nav, it.arguments?.getString("mid").orEmpty(), it.arguments?.getString("space")?.let(Uri::decode)?.ifEmpty { null })
+    }
     composable(Routes.PREVIEW) {
         com.makefunstuff.herdr.ui.preview.DevServerScreen(
             nav, it.arguments?.getString("mid").orEmpty(), it.arguments?.getString("ws")?.let(Uri::decode).orEmpty(),
