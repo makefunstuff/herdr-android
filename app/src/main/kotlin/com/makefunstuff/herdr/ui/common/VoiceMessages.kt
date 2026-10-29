@@ -83,7 +83,7 @@ fun rememberVoiceMessages(
     val player = rememberVoicePlayer()
     var loading by remember { mutableStateOf(emptySet<String>()) }
 
-    /** Sends what of this chat's waits, one at a time in the order recorded; one that fails says why and waits. */
+    /** Sends what of this chat's waits, one at a time in the order recorded; one that fails says why, and the rest wait behind it. */
     fun pump() {
         if (!isOnline) return
         val mine = chat
@@ -102,6 +102,7 @@ fun rememberVoiceMessages(
                         throw e
                     } catch (t: Throwable) {
                         store.update(n.id) { it.copy(error = t.message ?: "Couldn't send it") }
+                        return@withLock
                     }
                 }
             }
@@ -112,6 +113,8 @@ fun rememberVoiceMessages(
         store.add(VoiceNote(UUID.randomUUID().toString(), chat, file.path, millis, container.clock()))
         pump()
     }
+    // A recording belongs to the chat it began in: another one picked meanwhile (a space) drops it.
+    LaunchedEffect(chat) { recorder?.cancel() }
     // The chat opened, or the machine is back: what waits goes, also the ones that failed before.
     LaunchedEffect(chat, online) {
         if (!online) return@LaunchedEffect

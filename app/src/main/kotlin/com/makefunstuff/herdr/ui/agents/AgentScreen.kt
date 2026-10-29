@@ -67,6 +67,7 @@ import com.makefunstuff.herdr.core.chat.AgentCommand
 import com.makefunstuff.herdr.core.chat.AgentCommands
 import com.makefunstuff.herdr.core.chat.Completions
 import com.makefunstuff.herdr.core.chat.Held
+import com.makefunstuff.herdr.core.chat.VoiceNotes
 import com.makefunstuff.herdr.ui.common.LocalVoiceMessages
 import com.makefunstuff.herdr.ui.common.rememberVoiceMessages
 import com.makefunstuff.herdr.core.chat.HeldMessage
@@ -394,7 +395,8 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
         else -> null
     }
     // Voice messages still on the phone (on their way, or not sent) come after what the agent has.
-    val waitingVoice = voice.notes.filter { !it.sent }
+    // One whose `@path` is on its way already shows as that.
+    val waitingVoice = voice.notes.filter { n -> !n.sent && state.pending.none { p -> n.remote != null && VoiceNotes.mentioned(p.text) == n.remote } }
     val rows = remember(turns, steps, live, opened.toMap(), machineNow, state.pending, state.source, state.screen, state.truncated, state.thinking, waitingVoice) {
         buildList {
             if (state.truncated) add(ChatRow.Info("truncated", "Earlier messages aren't loaded"))
