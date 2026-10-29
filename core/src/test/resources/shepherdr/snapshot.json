@@ -1,0 +1,252 @@
+{
+ "name": "Shepherdr",
+ "host": "beefy-machine",
+ "places": [
+  {
+   "id": "p:beefy-machine:~",
+   "name": "home",
+   "machine": "beefy-machine",
+   "home": true,
+   "level": 1,
+   "status": "work",
+   "mode": "regular",
+   "chat": "p:beefy-machine:~"
+  },
+  {
+   "id": "p:beefy-machine:herdr-android",
+   "name": "herdr-android",
+   "machine": "beefy-machine",
+   "level": 2,
+   "status": "work",
+   "mode": "regular",
+   "chat": "p:beefy-machine:herdr-android",
+   "githubRemote": true
+  }
+ ],
+ "machines": [
+  {
+   "id": "m:beefy-machine",
+   "machine": "beefy-machine",
+   "name": "beefy-machine",
+   "status": "idle",
+   "health": {
+    "meters": [
+     {
+      "name": "CPU",
+      "pct": 46,
+      "detail": "load 5.6 on 12 cores",
+      "level": "ok"
+     },
+     {
+      "name": "Memory",
+      "pct": 52,
+      "detail": "16 GB of 32 GB",
+      "level": "ok"
+     }
+    ],
+    "herdr": true,
+    "working": 1,
+    "max": 10,
+    "held": 0,
+    "at": "01:25"
+   }
+  }
+ ],
+ "tasks": [
+  {
+   "id": "HA-1",
+   "name": "Shepherdr 2 client in core",
+   "status": "work",
+   "place": "p:beefy-machine:herdr-android",
+   "sub": "Working",
+   "age": "now",
+   "branch": "work/1-shepherdr-2-client-in-core",
+   "agent": {
+    "chat": "HA-1/Agent",
+    "role": "Agent",
+    "cli": "Claude Code",
+    "status": "work",
+    "age": "now",
+    "note": "Working"
+   },
+   "desc": "Build the core layer the app needs to work with Shepherdr 2, in core/ (no Android SDK needed).",
+   "state": "Working · just now",
+   "on": "Claude Code",
+   "created": "today 01:25 by herdr-android (you asked in chat)",
+   "browser": {
+    "ready": true
+   }
+  },
+  {
+   "id": "HA-2",
+   "name": "Board and task screens on v2",
+   "status": "queued",
+   "place": "p:beefy-machine:herdr-android",
+   "sub": "After HA-1",
+   "age": "now",
+   "branch": "work/2-board-and-task-screens-on-v2",
+   "agent": {
+    "chat": "HA-2/Agent",
+    "role": "Agent",
+    "cli": "Claude Code",
+    "status": "queued",
+    "age": "now",
+    "note": "After HA-1"
+   },
+   "desc": "Make the app's Board and a task's details work on Shepherdr 2.",
+   "state": "Queued · just now",
+   "on": "Claude Code",
+   "created": "today 01:25 by herdr-android (you asked in chat)",
+   "after": [
+    "HA-1"
+   ],
+   "browser": {
+    "ready": true
+   }
+  },
+  {
+   "id": "HA-3",
+   "name": "Coordinator chat on v2",
+   "status": "queued",
+   "place": "p:beefy-machine:herdr-android",
+   "sub": "After HA-1",
+   "age": "now",
+   "branch": "work/3-coordinator-chat-on-v2",
+   "agent": {
+    "chat": "HA-3/Agent",
+    "role": "Agent",
+    "cli": "Claude Code",
+    "status": "queued",
+    "age": "now",
+    "note": "After HA-1"
+   },
+   "desc": "Make the app's Coordinator screen (ui/coordinator) chat with a space's coordinator on Shepherdr 2.",
+   "state": "Queued · just now",
+   "on": "Claude Code",
+   "created": "today 01:25 by herdr-android (you asked in chat)",
+   "after": [
+    "HA-1"
+   ],
+   "browser": {
+    "ready": true
+   }
+  }
+ ],
+ "automations": {
+  "p:beefy-machine:~": [],
+  "p:beefy-machine:herdr-android": []
+ },
+ "artifacts": [],
+ "asks": {},
+ "last": {
+  "p:beefy-machine:~": 1793229804577,
+  "p:beefy-machine:herdr-android": 1793229961474
+ },
+ "read": {
+  "*": 1793229804570
+ },
+ "sections": [
+  {
+   "id": "pinned",
+   "name": "Pinned",
+   "spaces": []
+  }
+ ],
+ "settings": [
+  {
+   "name": "How tasks work",
+   "about": "Each new task's brief ends with these in its Settings block, each as the line shown. To change one for a single task, tell its coordinator.",
+   "rows": [
+    {
+     "label": "Review",
+     "key": "brief.review",
+     "value": "on",
+     "options": [
+      "on",
+      "off"
+     ],
+     "line": "Review: on. Have your change reviewed by fresh eyes before it merges."
+    },
+    {
+     "label": "Must fix",
+     "key": "review.mustFix",
+     "value": "major",
+     "options": [
+      "critical",
+      "major",
+      "minor",
+      "trivial"
+     ],
+     "line": "Must fix: major. Findings are tagged critical/major/minor/trivial; fix critical and major, then review again."
+    },
+    {
+     "label": "Review rounds",
+     "key": "review.rounds",
+     "value": "3 rounds",
+     "num": {
+      "min": 1,
+      "max": 10,
+      "unit": "rounds",
+      "one": "round"
+     },
+     "line": "Review rounds: 3. Stop when a round finds none to fix, at most 3 rounds."
+    },
+    {
+     "label": "Merge",
+     "key": "brief.merge",
+     "value": "on its own",
+     "options": [
+      "on its own",
+      "after GitHub checks",
+      "ask me first"
+     ],
+     "line": "Merge: on its own. Merge it yourself once it works (shepherdr merge <id>). Don't wait for GitHub's checks."
+    },
+    {
+     "group": "Reviewer",
+     "label": "Agent",
+     "key": "reviewer.agent",
+     "value": "Codex",
+     "options": [
+      "Codex",
+      "Claude Code",
+      "pi"
+     ],
+     "line": "Reviewer: a headless Codex or a Codex subagent (its default model and effort)."
+    },
+    {
+     "group": "Reviewer",
+     "label": "Model",
+     "key": "reviewer.model",
+     "value": "default",
+     "text": false,
+     "options": [
+      "default",
+      "GPT-6-Luna",
+      "GPT-5.6-Terra",
+      "GPT-5.6-Luna"
+     ]
+    },
+    {
+     "group": "Reviewer",
+     "label": "Effort",
+     "key": "reviewer.effort",
+     "value": "default",
+     "options": [
+      "default",
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max",
+      "ultra"
+     ]
+    }
+   ],
+   "note": "Settings: (from shepherdr show; where the brief above says otherwise, it wins)\n- Review: on. Have your change reviewed by fresh eyes before it merges.\n- Reviewer: a headless Codex or a Codex subagent (its default model and effort).\n- Must fix: major. Findings are tagged critical/major/minor/trivial; fix critical and major, then review again.\n- Review rounds: 3. Stop when a round finds none to fix, at most 3 rounds.\n- Merge: on its own. Merge it yourself once it works (shepherdr merge <id>). Don't wait for GitHub's checks.",
+   "level": "all",
+   "told": true
+  }
+ ],
+ "user": "Sam"
+}
