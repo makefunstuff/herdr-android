@@ -73,7 +73,7 @@ fun BoardsScreen(nav: NavController) {
     val hosts by container.hosts.hosts.collectAsStateWithLifecycle()
     // Each task's agent on its machine: its chat opens from the card.
     val agents = remember(hosts) { HomeAgent.of(hosts) }
-    val boards = rememberBoards()
+    val boards = rememberBoards(withShepherdr2 = true)
     // Shepherdr 2 machines: their spaces and tasks as the board sent them.
     val works = rememberWorkBoards()
     val problems = rememberBoardProblems()
@@ -138,6 +138,7 @@ fun BoardsScreen(nav: NavController) {
                         works[b.machineId]?.let { w ->
                             workGroup(b.machineId, b.machineLabel, w, top = if (i == 0) Space.xs else Space.m,
                                 onBoard = { panes.openBoard(nav, b.machineId) },
+                                onCoordinator = { panes.open(nav, Routes.coordinator(b.machineId)) },
                                 onTask = { t -> panes.openBoard(nav, b.machineId, t.id, alone = true) })
                             return@forEachIndexed
                         }
@@ -207,7 +208,9 @@ fun BoardsScreen(nav: NavController) {
  * A Shepherdr 2 machine's part of the Board tab: what needs you, then each space's tasks at work and
  * to do, and how many are done. Its heading opens the whole board.
  */
-private fun LazyListScope.workGroup(machineId: String, label: String, w: WorkOverview, top: Dp, onBoard: () -> Unit, onTask: (WorkTask) -> Unit) {
+private fun LazyListScope.workGroup(
+    machineId: String, label: String, w: WorkOverview, top: Dp, onBoard: () -> Unit, onCoordinator: () -> Unit, onTask: (WorkTask) -> Unit,
+) {
     val open = w.tasks.filter { it.status != WorkStatus.Done }
     val needs = open.count { it.status.needsYou }
     val working = open.count { it.status == WorkStatus.Work || it.status == WorkStatus.Merging }
@@ -217,7 +220,7 @@ private fun LazyListScope.workGroup(machineId: String, label: String, w: WorkOve
         SectionHeading(
             listOfNotNull(
                 label,
-                needs.takeIf { it > 0 }?.let { "$it need${if (it == 1) "s" else ""} you" },
+                (needs + w.spaces.count { it.asks }).takeIf { it > 0 }?.let { "$it need${if (it == 1) "s" else ""} you" },
                 working.takeIf { it > 0 }?.let { "$it working" },
             ).joinToString(" · "),
             Modifier.clickable(onClickLabel = "Open $label's board", onClick = onBoard).heightIn(min = 48.dp),
@@ -225,12 +228,17 @@ private fun LazyListScope.workGroup(machineId: String, label: String, w: WorkOve
             trailing = { Icon(HerdrIcons.ChevronRight, null, tint = Herdr.colors.muted, modifier = Modifier.size(20.dp)) },
         )
     }
-    if (open.isEmpty()) item(key = "empty/$machineId") {
+    // What needs you first (tasks that ask, then ready ones, then coordinators that ask), then the rest.
+    val asking = w.spaces.filter { it.asks }
+    if (open.isEmpty() && asking.isEmpty()) item(key = "empty/$machineId") {
         Text("No open tasks", style = MaterialTheme.typography.bodyMedium, color = Herdr.colors.muted, modifier = Modifier.padding(start = Space.xs))
     }
-    items(open, key = { "$machineId/${it.id}" }) { t ->
+    fun rows(list: List<WorkTask>) = items(list, key = { "$machineId/${it.id}" }) { t ->
         WorkTaskRow(t, onOpen = { onTask(t) }, space = if (many) w.spaces.firstOrNull { it.id == t.space }?.name.orEmpty() else "")
     }
+    rows(open.filter { it.status.needsYou })
+    items(asking, key = { "asks/$machineId/${it.id}" }) { s -> CoordinatorAsksRow(s, onOpen = onCoordinator) }
+    rows(open.filter { !it.status.needsYou })
     if (done > 0) item(key = "done/$machineId") {
         Text(
             "$done done · on $label's board",

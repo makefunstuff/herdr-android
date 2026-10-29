@@ -85,7 +85,7 @@ fun StartWorkScreen(nav: NavController, machineId: String? = null, text: String 
     val scope = rememberCoroutineScope()
     val hosts by container.hosts.hosts.collectAsStateWithLifecycle()
     val starts by container.starts.state.collectAsStateWithLifecycle()
-    val boards = rememberBoards()
+    val boards = rememberBoards(withShepherdr2 = true)
     var words by rememberSaveable { mutableStateOf(text) }
     var board by rememberSaveable { mutableStateOf(starts.board) }
     var startNow by rememberSaveable { mutableStateOf(starts.startNow) }

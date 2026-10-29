@@ -237,7 +237,9 @@ private fun AppNav(nav: NavHostController) {
     // The tabs' badges: everything on the Needs you list, and the tasks waiting for you across the boards.
     val waiting = remember(hosts, homeBoards, seen) { Home.of(HomeAgent.of(hosts), homeBoards, seen).needsYou }
     val needsYou = waiting.size
-    val tasksWaiting = remember(homeBoards) { BoardGroup.waiting(homeBoards) }
+    // The Board tab's own count: Shepherdr 2's tasks too.
+    val allBoards = rememberBoards(withShepherdr2 = true)
+    val tasksWaiting = remember(allBoards) { BoardGroup.waiting(allBoards) }
     val keyState by container.identity.state.collectAsStateWithLifecycle()
     var keySetupDismissed by rememberSaveable { mutableStateOf(false) }
     // The agents list's machine filter and scroll, kept here: the list moves between the phone layout and the left pane.

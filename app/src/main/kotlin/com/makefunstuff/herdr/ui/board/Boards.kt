@@ -14,14 +14,18 @@ import com.makefunstuff.herdr.ui.common.LocalContainer
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.withTimeoutOrNull
 
-/** The boards of the connected machines that have one, as last read, in the machines' order. */
+/**
+ * The boards of the connected machines that have one, as last read, in the machines' order. Shepherdr 2's
+ * only with [withShepherdr2] (the Board tab, Start work): the screens that act on a task through
+ * herdr-projects (Agents, search) leave them out.
+ */
 @Composable
-fun rememberBoards(): List<HomeBoard> {
+fun rememberBoards(withShepherdr2: Boolean = false): List<HomeBoard> {
     val container = LocalContainer.current
     val hosts by container.hosts.hosts.collectAsStateWithLifecycle()
     val lists by container.boards.lists.collectAsStateWithLifecycle()
-    return remember(hosts, lists) {
-        hosts.filter { it.online && it.hasWorkBoard }.mapNotNull { h -> lists[h.machine.id]?.let { HomeBoard(h.machine.id, h.machine.label, it.tasks) } }
+    return remember(hosts, lists, withShepherdr2) {
+        hosts.filter { it.online && (if (withShepherdr2) it.hasWorkBoard else it.hasBoard && !it.onShepherdr2) }.mapNotNull { h -> lists[h.machine.id]?.let { HomeBoard(h.machine.id, h.machine.label, it.tasks) } }
     }
 }
 

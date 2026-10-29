@@ -384,7 +384,7 @@ internal fun WorkTaskRow(t: WorkTask, onOpen: () -> Unit, space: String = "") {
 
 /** A space whose coordinator waits for you: opens its chat, where the question is. */
 @Composable
-private fun CoordinatorAsksRow(s: WorkSpace, onOpen: () -> Unit) {
+internal fun CoordinatorAsksRow(s: WorkSpace, onOpen: () -> Unit) {
     val c = Herdr.colors
     QuietCard(onClick = onOpen, onClickLabel = "Open the coordinator chat", padded = true) {
         Row(verticalAlignment = Alignment.CenterVertically) {
