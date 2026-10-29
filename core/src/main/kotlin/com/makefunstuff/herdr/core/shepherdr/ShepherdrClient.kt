@@ -30,6 +30,9 @@ data class V2CliResult(val out: String = "", val code: Int = 0) {
     val said: String get() = out.lines().map { it.trim() }.lastOrNull { it.isNotEmpty() }.orEmpty()
 }
 
+/** What `/api/action` answered: [ok], and the whole answer. */
+data class V2ActResult(val ok: Boolean, val json: JsonObject)
+
 /** The bodies `POST /api/action` takes (`Action` in `shared/types.ts`), for what the app does. */
 object V2Actions {
     /** Words into a chat; [reply]: the id of the message they answer; [space]: sent from a needs-you card in that space. */
@@ -73,6 +76,13 @@ object V2Actions {
         put("emoji", emoji)
     }
 
+    /** Marks task [task] done with nothing merged (`shepherdr task close`); [force] even with work main lacks. */
+    fun close(task: String, force: Boolean = false): JsonObject = buildJsonObject {
+        put("type", "close")
+        put("chat", task)
+        if (force) put("force", true)
+    }
+
     /** The body of `POST /api/cli`: the `shepherdr` command's words. */
     fun cli(args: List<String>): JsonObject = buildJsonObject {
         putJsonArray("args") { args.forEach { add(JsonPrimitive(it)) } }
@@ -103,6 +113,12 @@ class ShepherdrClient(private val transport: ShepherdrTransport) {
             throw IOException((o["error"] as? JsonPrimitive)?.content ?: "Shepherdr refused it")
         }
         return o
+    }
+
+    /** Sends [action] and gives its answer as it is, refused or not (a refusal can carry more than its words). */
+    suspend fun actRaw(action: JsonObject): V2ActResult {
+        val o = ok(transport.http("POST", "/api/action", action.toString()))
+        return V2ActResult((o["ok"] as? JsonPrimitive)?.booleanOrNull != false && o["error"] !is JsonPrimitive, o)
     }
 
     suspend fun send(chat: String, text: String, reply: String? = null): JsonObject = act(V2Actions.send(chat, text, reply))

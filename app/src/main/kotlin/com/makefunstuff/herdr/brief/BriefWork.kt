@@ -3,6 +3,7 @@ package com.makefunstuff.herdr.brief
 import com.makefunstuff.herdr.core.api.AgentStatus
 import com.makefunstuff.herdr.core.api.SessionSnapshot
 import com.makefunstuff.herdr.core.board.BoardTask
+import com.makefunstuff.herdr.core.board.WorkTasks
 import com.makefunstuff.herdr.core.brief.Baseline
 import com.makefunstuff.herdr.core.brief.Brief
 import com.makefunstuff.herdr.core.brief.BriefLine
@@ -206,8 +207,13 @@ class BriefWork(
         val conn = s.awaitConnection(5_000)
         val snapshot = runCatching { api.snapshot() }.getOrElse { if (it is CancellationException) throw it; null }
         if (!s.state.value.boardChecked) s.checkBoard()
-        val hasBoard = s.state.value.hasBoard
-        val tasks = if (hasBoard) runCatching { PushLook.tasks(s.awaitBoard()) }.getOrNull() else null
+        val hasBoard = s.state.value.hasWorkBoard
+        val tasks = when {
+            // Shepherdr 2: its tasks in the rows the brief reads.
+            s.state.value.onShepherdr2 -> runCatching { s.awaitWorkBoard().overview().tasks.map(WorkTasks::row) }.getOrNull()
+            hasBoard -> runCatching { PushLook.tasks(s.awaitBoard()) }.getOrNull()
+            else -> null
+        }
         // What each agent that asks wants, from its screen.
         val questions = snapshot?.agents.orEmpty().filter { it.agentStatus == AgentStatus.Blocked }.mapNotNull { a ->
             val text = runCatching { api.readPane(a.paneId, source = "visible", lines = 60).text }.getOrNull() ?: return@mapNotNull null

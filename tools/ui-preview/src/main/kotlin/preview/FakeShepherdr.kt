@@ -149,6 +149,16 @@ object DemoV2 {
         ]}
     """.trimIndent()
 
+    /**
+     * devbox's board on Shepherdr 2 for the Board and task scenes (`demo/shepherdr/`): home, herdr-android and
+     * website, a task in every status, two tasks whose cards ask (one choice or your own words; several), and
+     * website's coordinator with a question open; the coordinators' chats above too.
+     */
+    fun board() = FakeShepherdr(
+        snapshot = Json.parseToJsonElement(Demo.resource("shepherdr/snapshot.json")).jsonObject,
+        chats = chats() + Json.parseToJsonElement(Demo.resource("shepherdr/chats.json")).jsonObject.mapValues { it.value.jsonObject },
+    )
+
     fun chats(): Map<String, JsonObject> =
         listOf(APP_CHAT, HOME_CHAT, API_CHAT).associate { Json.parseToJsonElement(it).jsonObject.let { c -> c.getValue("key").jsonPrimitive.content to c } }
 }

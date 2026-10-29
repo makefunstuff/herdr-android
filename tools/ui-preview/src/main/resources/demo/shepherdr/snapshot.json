@@ -1,0 +1,64 @@
+{
+ "name": "Shepherdr",
+ "host": "devbox",
+ "places": [
+  {"id": "p:devbox:~", "name": "home", "machine": "devbox", "home": true, "level": 1, "status": "idle", "chat": "p:devbox:~"},
+  {"id": "p:devbox:herdr-android", "name": "herdr-android", "machine": "devbox", "status": "need", "chat": "p:devbox:herdr-android", "githubRemote": true},
+  {"id": "p:devbox:website", "name": "website", "machine": "devbox", "status": "need", "chat": "p:devbox:website", "githubRemote": true}
+ ],
+ "machines": [{"id": "m:devbox", "machine": "devbox", "name": "devbox", "status": "idle"}],
+ "asks": {"p:devbox:website": "q-website-1"},
+ "tasks": [
+  {
+   "id": "AND-21", "name": "Show when each machine last answered", "status": "need", "place": "p:devbox:herdr-android",
+   "sub": "Asks which wording to use", "age": "4m", "branch": "work/21-last-answered",
+   "agent": {"chat": "AND-21/Agent", "role": "Agent", "cli": "Claude Code", "status": "need", "age": "4m"},
+   "desc": "Add a “last answered 2 min ago” line to each machine card on the Machines screen, with a test for it.\n\nKeep to DESIGN.md: `bodySmall` in `muted`, under the machine's name.",
+   "report": {"msg": "Asks which wording to use", "progress": 70}
+  },
+  {
+   "id": "AND-24", "name": "Tidy the settings screen", "status": "need", "place": "p:devbox:herdr-android",
+   "sub": "Asks which sections to fold", "age": "12m", "branch": "work/24-tidy-settings",
+   "agent": {"chat": "AND-24/Agent", "role": "Agent", "cli": "Codex", "status": "need", "age": "12m"},
+   "desc": "Fold the rarely used settings away so the screen fits on one phone screen."
+  },
+  {
+   "id": "AND-20", "name": "Rate-limit the export endpoint per tenant", "status": "ready", "place": "p:devbox:herdr-android",
+   "sub": "Ready to merge: PR #142", "age": "25m", "branch": "work/20-rate-limit-export",
+   "agent": {"chat": "AND-20/Agent", "role": "Agent", "cli": "Claude Code", "status": "ready", "age": "25m"},
+   "desc": "Limit /export to 10 requests a minute per tenant, with a clear 429 and a Retry-After header.",
+   "said": "Exports are now limited to **10 a minute per tenant**. A request over the limit gets a 429 with `Retry-After`, and the limit is a setting.",
+   "facts": "PR #142 · commit 9f2c1ab · checks passed (go test ./..., GitHub) · review: 2 rounds, 1 major fixed",
+   "report": {"msg": "Ready to merge", "progress": 100},
+   "pr": {"number": 142, "url": "https://github.com/demo/api-server/pull/142"}
+  },
+  {
+   "id": "AND-19", "name": "Speed up /jobs on large tables", "status": "work", "place": "p:devbox:herdr-android",
+   "sub": "Adding an index on jobs.created_at", "age": "now", "branch": "work/19-jobs-speed",
+   "agent": {"chat": "AND-19/Agent", "role": "Agent", "cli": "Claude Code", "status": "work", "age": "now"},
+   "desc": "Make GET /jobs answer under 200 ms on a table of a million rows.",
+   "report": {"msg": "Adding an index on jobs.created_at", "progress": 60, "eta": 15}
+  },
+  {
+   "id": "AND-18", "name": "Rewrite the install page", "status": "merging", "place": "p:devbox:website",
+   "sub": "Merging: waits for GitHub's checks", "age": "2m",
+   "agent": {"chat": "AND-18/Agent", "role": "Agent", "cli": "Claude Code", "status": "merging", "age": "2m"},
+   "pr": {"number": 57, "url": "https://github.com/demo/website/pull/57"}
+  },
+  {
+   "id": "AND-22", "name": "Dark mode for the brief", "status": "queued", "place": "p:devbox:herdr-android",
+   "sub": "After AND-19", "after": ["AND-19"], "age": "1h"
+  },
+  {
+   "id": "AND-23", "name": "Add app screenshots to the README", "status": "todo", "place": "p:devbox:website",
+   "sub": "Waits for a go", "age": "2h"
+  },
+  {
+   "id": "AND-15", "name": "Retry flaky uploads", "status": "done", "place": "p:devbox:herdr-android",
+   "sub": "Merged", "age": "yesterday", "pr": {"number": 138, "url": "https://github.com/demo/api-server/pull/138"}
+  },
+  {
+   "id": "AND-14", "name": "Fix the footer links", "status": "done", "place": "p:devbox:website", "sub": "Closed, nothing merged", "age": "yesterday", "outcome": "stopped"
+  }
+ ]
+}

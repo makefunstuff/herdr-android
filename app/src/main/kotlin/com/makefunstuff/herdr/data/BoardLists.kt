@@ -1,6 +1,8 @@
 package com.makefunstuff.herdr.data
 
 import com.makefunstuff.herdr.core.board.BoardTask
+import com.makefunstuff.herdr.core.board.WorkOverview
+import com.makefunstuff.herdr.core.board.WorkTasks
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -25,8 +27,11 @@ class BoardLists(
     private val onRead: (String, List<BoardTask>) -> Unit = { _, _ -> },
     private val now: () -> Long = System::currentTimeMillis,
 ) {
-    /** One board's list; [problem] when the last read failed (the tasks are then the read before). */
-    data class Read(val tasks: List<BoardTask>, val problem: String? = null)
+    /**
+     * One board's list; [problem] when the last read failed (the tasks are then the read before).
+     * On Shepherdr 2, [work] is the board as it sent it (its spaces) and [tasks] its tasks in v1's row shape.
+     */
+    data class Read(val tasks: List<BoardTask>, val problem: String? = null, val work: WorkOverview? = null)
 
     private val _lists = MutableStateFlow<Map<String, Read>>(emptyMap())
     /** When each board was last read, so two screens reading at once (a wide window's) don't read it twice. */
@@ -40,10 +45,16 @@ class BoardLists(
         _lists.update { it + (machineId to Read(tasks)) }
     }
 
+    /** [machineId]'s Shepherdr 2 board, read somewhere in the app. */
+    fun put(machineId: String, work: WorkOverview) {
+        readAt[machineId] = now()
+        _lists.update { it + (machineId to Read(work.tasks.map(WorkTasks::row), work = work)) }
+    }
+
     /** Reads every connected machine's board now, side by side; one read within [freshMs] is left as it is. */
     suspend fun readAll(freshMs: Long = 3_000) = coroutineScope {
         val t = now()
-        hosts.hosts.value.filter { it.online && it.hasBoard && t - (readAt[it.machine.id] ?: 0L) >= freshMs }
+        hosts.hosts.value.filter { it.online && it.hasWorkBoard && t - (readAt[it.machine.id] ?: 0L) >= freshMs }
             .map { h -> async { read(h.machine.id) } }.awaitAll()
         Unit
     }
@@ -56,8 +67,13 @@ class BoardLists(
     private suspend fun read(machineId: String) {
         try {
             val session = hosts.session(machineId) ?: return
-            val tasks = withTimeout(30_000) { session.awaitBoard().tasks() }
-            put(machineId, tasks)
+            val tasks = if (session.state.value.onShepherdr2) {
+                val work = withTimeout(30_000) { session.awaitWorkBoard().overview() }
+                put(machineId, work)
+                work.tasks.map(WorkTasks::row)
+            } else {
+                withTimeout(30_000) { session.awaitBoard().tasks() }.also { put(machineId, it) }
+            }
             onRead(machineId, tasks)
         } catch (e: CancellationException) {
             if (e !is kotlinx.coroutines.TimeoutCancellationException) throw e
@@ -68,7 +84,7 @@ class BoardLists(
     }
 
     private fun failed(machineId: String, problem: String) {
-        _lists.update { it + (machineId to Read(it[machineId]?.tasks.orEmpty(), problem)) }
+        _lists.update { it + (machineId to Read(it[machineId]?.tasks.orEmpty(), problem, it[machineId]?.work)) }
     }
 }
 

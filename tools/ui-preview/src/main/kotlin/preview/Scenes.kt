@@ -51,7 +51,7 @@ private fun SceneData.held() {
 
 /** devbox on Shepherdr 2 (DemoV2): its spaces and their coordinators. */
 private fun SceneData.shepherdr() {
-    host(DEVBOX).shepherdr = FakeShepherdr()
+    host(DEVBOX).shepherdr = DemoV2.board()
 }
 
 /** The shell's test run selected, and what herdr reads for it. */
@@ -84,6 +84,11 @@ private fun SceneData.home() {
     host(DEVBOX).snapshot = Demo.devbox(home = true)
     host(GPU).snapshot = Demo.gpu(home = true)
     host(GPU).board = Demo.gpuBoard()
+}
+
+/** Shepherdr 2 on devbox, beside the herdr-projects 1.x left on disk, as on a machine that upgraded: its board wins. */
+private fun SceneData.v2() {
+    host(DEVBOX).shepherdr = DemoV2.board()
 }
 
 /** Where a 540×1200 screenshot is drawn in the editor's [w]×[h] canvas: as large as fits, in the middle. */
@@ -347,6 +352,7 @@ fun scenes(): List<Scene> = listOf(
     // Start work from a sentence: as a board task on devbox; as an agent now (its folders and the agents
     // installed there); and the folder browser, one level down.
     Scene("start", route = Routes.start(text = "Add a “last answered 2 min ago” line to each machine card, and a test for it"), setup = { home() }),
+    Scene("start-v2", route = Routes.start(text = "Add a “last answered 2 min ago” line to each machine card, and a test for it"), setup = { home(); v2() }),
     Scene(
         "start-agent", route = Routes.start(text = "Add a “last answered 2 min ago” line to each machine card, and a test for it"), setup = { home() },
         actions = { tapExact("Agent now") },
@@ -420,6 +426,18 @@ fun scenes(): List<Scene> = listOf(
     // Run now; reached from a board's menu, the Board tab's bar and a machine's Routines row. One open with its
     // firings; a new one on a schedule and on a board event; one edited; one removed; every board's; none yet.
     Scene("board-menu", route = Routes.board(DEVBOX), actions = { tapLabel("Filter and more") }),
+    // Shepherdr 2: the board through its API (what needs you first, then each space), a task's details with its
+    // cards answered on the screen, Merge and Close, and adding a task, which goes to a space's coordinator.
+    Scene("board-v2", route = Routes.board(DEVBOX), setup = { v2() }),
+    Scene("board-v2-tall", route = Routes.board(DEVBOX), heightDp = 1700, setup = { v2() }, actions = { tapText("Done · 2") }),
+    Scene("task-v2-asks", route = Routes.board(DEVBOX, "AND-21"), heightDp = 1300, setup = { v2() }, actions = { tapText("Seen 2 min ago") }),
+    Scene("task-v2-multi", route = Routes.board(DEVBOX, "AND-24"), setup = { v2() }, actions = { tapText("Key bar"); tapText("Alert rules") }),
+    Scene("task-v2-ready", route = Routes.board(DEVBOX, "AND-20"), heightDp = 1300, setup = { v2() }),
+    Scene("task-v2-close", route = Routes.board(DEVBOX, "AND-20"), setup = { v2() }, actions = { tapText("Close, nothing merged") }),
+    Scene("board-v2-add", route = Routes.board(DEVBOX), setup = { v2() }, actions = { tapLabel("Add a task") }),
+    Scene("boards-v2", route = Routes.BOARDS, setup = { home(); v2() }),
+    // A space's heading opens that space's coordinator chat.
+    Scene("board-v2-coordinator", route = Routes.board(DEVBOX), setup = { v2() }, actions = { tapText("herdr-android · 2") }),
     Scene("routines", route = Routes.routines(DEVBOX), heightDp = 1100, setup = { home() }),
     Scene("routines-all", route = Routes.routines(), setup = { home(); host(GPU).board = Demo.gpuBoard() }),
     Scene("routine", route = Routes.routines(DEVBOX), heightDp = 1400, setup = { home() }, actions = { tapText("Check CI on open PRs") }),
@@ -479,6 +497,7 @@ fun scenes(): List<Scene> = listOf(
     // aloud, on its fourth sentence (the review that failed, marked in the list), and what devbox shows without a
     // journal. When it comes: two times on weekdays, read aloud in the car; adding a time.
     Scene("brief", route = Routes.BRIEF, heightDp = 2100, setup = { brief = Demo.brief() }, actions = { settle() }),
+    Scene("brief-v2", route = Routes.BRIEF, heightDp = 2100, setup = { brief = Demo.brief(); v2() }, actions = { settle() }),
     Scene(
         "brief-reading", route = Routes.BRIEF, setup = { brief = Demo.brief() },
         actions = { ctx ->

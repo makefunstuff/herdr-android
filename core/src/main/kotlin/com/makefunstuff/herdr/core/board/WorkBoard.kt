@@ -21,17 +21,17 @@ sealed interface BoardApi {
  * Where a task stands, in one set of words for both boards: Shepherdr 2's own, herdr-projects 1.x's
  * folded into them ([WorkTasks.status]). In the order a list shows them: what needs you first.
  */
-enum class WorkStatus(val label: String, val needsYou: Boolean = false) {
+enum class WorkStatus(val label: String, val tone: BoardTone, val needsYou: Boolean = false) {
     /** Its agent asks or waits for you. */
-    Need("needs you", true),
+    Need("needs you", BoardTone.Red, true),
     /** Finished: waits for your yes to merge. */
-    Ready("ready to merge", true),
-    Work("working"),
+    Ready("ready to merge", BoardTone.Green, true),
+    Work("working", BoardTone.Amber),
     /** On its way into main: nothing for you to do. */
-    Merging("merging"),
-    Queued("queued"),
-    Todo("to do"),
-    Done("done"),
+    Merging("merging", BoardTone.Blue),
+    Queued("queued", BoardTone.Pink),
+    Todo("to do", BoardTone.Grey),
+    Done("done", BoardTone.Teal),
 }
 
 /** A space: a folder with its own coordinator (v2), or the machine's one board (v1, [id] ""). */
@@ -47,6 +47,8 @@ data class WorkSpace(
     val needsYou: Boolean = false,
     /** Its machine can't be reached now (v2). */
     val unreachable: Boolean = false,
+    /** Its coordinator has a question open for you (v2's `asks`). */
+    val asks: Boolean = false,
 )
 
 /** One task, in the same shape from both boards. */
@@ -152,6 +154,15 @@ interface WorkBoard {
     /** Approves a ready task, which merges it; the board's own sentence. */
     suspend fun approve(task: WorkTask): String
 
+    /** Marks [task] done with nothing merged; refused while it holds work main lacks. */
+    suspend fun close(task: WorkTask): String
+
+    /**
+     * A new task in [space]: [title], and [brief] for its agent. On Shepherdr 2 only a space's
+     * coordinator makes tasks, so this is a message to it ([V2Board.addRequest]); what was done, in a sentence.
+     */
+    suspend fun addTask(space: String, title: String, brief: String): String
+
     suspend fun answer(answer: CardAnswer): String
 
     /** [space]'s coordinator chat as it is now. */
@@ -184,6 +195,44 @@ object WorkTasks {
         BoardStatus.Done, BoardStatus.Archived -> WorkStatus.Done
     }
 
+    /**
+     * [t] in v1's row shape, for what still reads a board as rows (the brief, the Needs you list, the
+     * widget's count): v1's own row where it is one; a v2 task as near as v1's words say it (merging reads as working).
+     */
+    fun row(t: WorkTask): BoardTask = t.v1 ?: BoardTask(
+        id = t.id,
+        key = t.name,
+        title = t.title,
+        state = when (t.status) {
+            WorkStatus.Need, WorkStatus.Ready -> "blocked"
+            WorkStatus.Work, WorkStatus.Merging -> "working"
+            WorkStatus.Done -> "done"
+            WorkStatus.Queued, WorkStatus.Todo -> "idle"
+        },
+        stage = when (t.status) {
+            WorkStatus.Ready -> "approval"
+            WorkStatus.Queued -> "queued"
+            WorkStatus.Merging -> "merging"
+            else -> ""
+        },
+        kind = when (t.status) {
+            WorkStatus.Need -> "question"
+            WorkStatus.Ready -> "permission"
+            else -> ""
+        },
+        agent = "",
+        msg = t.line,
+        progress = t.progress,
+        eta = null,
+        research = false,
+        pr = t.pr,
+        archived = false,
+        pinned = t.pinned,
+        reviewRound = 0,
+        reviewPassed = null,
+        approvalBlocked = false,
+    )
+
     /** What needs you first, then the rest in [WorkStatus] order; pinned ones first within each; otherwise as given. */
     fun ordered(tasks: List<WorkTask>): List<WorkTask> =
         tasks.sortedWith(compareBy<WorkTask> { it.status.ordinal }.thenBy { if (it.pinned) 0 else 1 })
@@ -210,6 +259,10 @@ class V1WorkBoard(private val board: BoardClient, private val path: String = "")
     }
 
     override suspend fun approve(task: WorkTask): String = board.act(BoardAction.Approve, task.id)
+
+    override suspend fun close(task: WorkTask): String = throw IOException("herdr-projects has no close: archive the task instead")
+
+    override suspend fun addTask(space: String, title: String, brief: String): String = board.add(title, description = brief)
 
     override suspend fun answer(answer: CardAnswer): String {
         val id = answer.card.task.ifEmpty { answer.card.chat }

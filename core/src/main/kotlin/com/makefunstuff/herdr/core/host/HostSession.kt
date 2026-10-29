@@ -95,6 +95,12 @@ data class HostState(
     /** Which board the machine runs: Shepherdr 2 wins over a herdr-projects launcher, which may be an old one left on disk. */
     val boardApi: BoardApi get() = BoardDetection.decide(shepherdrVersion?.let { V2Version(version = it) }, boardPath)
 
+    /** A work board of either kind there: Shepherdr 2's, or herdr-projects 1.x's. */
+    val hasWorkBoard: Boolean get() = boardApi != BoardApi.None
+
+    /** It runs Shepherdr 2: its board screens talk to its API ([HostSession.awaitWorkBoard]), never herdr-projects. */
+    val onShepherdr2: Boolean get() = boardApi is BoardApi.V2
+
     /** [machine] with its herdr path set to the chosen binary: what every herdr command should run. */
     val herdrMachine: Machine get() = herdr?.let { machine.copy(herdrPath = it.binary.path) } ?: machine
 

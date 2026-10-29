@@ -48,7 +48,16 @@ import com.makefunstuff.herdr.ui.design.SectionHeading
 import com.makefunstuff.herdr.ui.share.Ask
 import com.makefunstuff.herdr.ui.theme.Herdr
 import com.makefunstuff.herdr.ui.theme.Space
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.Dp
+import com.makefunstuff.herdr.core.board.WorkOverview
+import com.makefunstuff.herdr.core.board.WorkStatus
+import com.makefunstuff.herdr.core.board.WorkTask
+import com.makefunstuff.herdr.ui.common.toast
+import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.launch
 
 /**
  * The Board tab: every machine's work board in one list, a group per machine (what waits for you
@@ -59,18 +68,24 @@ import kotlinx.coroutines.channels.Channel
 fun BoardsScreen(nav: NavController) {
     val container = LocalContainer.current
     val panes = LocalPanes.current
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val hosts by container.hosts.hosts.collectAsStateWithLifecycle()
     // Each task's agent on its machine: its chat opens from the card.
     val agents = remember(hosts) { HomeAgent.of(hosts) }
-    val boards = rememberBoards()
+    val boards = rememberBoards(withShepherdr2 = true)
+    // Shepherdr 2 machines: their spaces and tasks as the board sent them.
+    val works = rememberWorkBoards()
     val problems = rememberBoardProblems()
     val readNow = remember { Channel<Unit>(Channel.CONFLATED) }
     ReadBoards(readNow, everyMs = 10_000)
-    val withBoard = hosts.filter { it.hasBoard }
+    val withBoard = hosts.filter { it.hasWorkBoard }
     var chosen by rememberSaveable { mutableStateOf<String?>(null) }
     // A machine without a board (or not checked yet since it connected) shows all.
     val machine = chosen?.takeIf { id -> withBoard.any { it.machine.id == id } }
-    val groups = remember(boards, machine) { BoardGroup.of(boards, machine) }
+    val groups = remember(boards, works, machine) { BoardGroup.of(boards.filter { it.machineId !in works }, machine).associateBy { it.machineId } }
+    // In the machines' order, each with its v1 group or its Shepherdr 2 board.
+    val shown = boards.filter { machine == null || it.machineId == machine }
     val waiting = remember(boards) { BoardGroup.waiting(boards) }
     // Adding a task: on the machine shown, or the one chosen first.
     var adding by remember { mutableStateOf<String?>(null) }
@@ -107,7 +122,7 @@ fun BoardsScreen(nav: NavController) {
             when {
                 withBoard.isEmpty() -> EmptyState(
                     if (hosts.none { it.online }) "Not connected yet" else "No work board",
-                    if (hosts.none { it.online }) "The boards show once a machine with herdr-projects answers." else "None of your machines has herdr-projects. Its tasks show here once one does.",
+                    if (hosts.none { it.online }) "The boards show once a machine with Shepherdr or herdr-projects answers." else "None of your machines has Shepherdr or herdr-projects. Its tasks show here once one does.",
                     icon = HerdrIcons.SquareKanban,
                 )
                 boards.isEmpty() && problems.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { LoadingState("Reading the boards") }
@@ -119,7 +134,15 @@ fun BoardsScreen(nav: NavController) {
                     problems.forEach { (label, p) ->
                         item(key = "problem/$label") { ErrorMessage("$label's board: $p", onRetry = { readNow.trySend(Unit) }) }
                     }
-                    groups.forEachIndexed { i, g ->
+                    shown.forEachIndexed { i, b ->
+                        works[b.machineId]?.let { w ->
+                            workGroup(b.machineId, b.machineLabel, w, top = if (i == 0) Space.xs else Space.m,
+                                onBoard = { panes.openBoard(nav, b.machineId) },
+                                onCoordinator = { space -> panes.open(nav, Routes.coordinator(b.machineId, space)) },
+                                onTask = { t -> panes.openBoard(nav, b.machineId, t.id, alone = true) })
+                            return@forEachIndexed
+                        }
+                        val g = groups[b.machineId] ?: return@forEachIndexed
                         item(key = "h/${g.machineId}") {
                             SectionHeading(
                                 listOfNotNull(
@@ -165,11 +188,62 @@ fun BoardsScreen(nav: NavController) {
     adding?.let { id ->
         container.hosts.session(id)?.let { session ->
             val repos = boards.firstOrNull { it.machineId == id }?.tasks.orEmpty().map { it.repo }.distinct().sorted()
-            BoardDialogs(
+            if (session.state.value.onShepherdr2) AddWorkTask(session, works[id], onDismiss = { adding = null }) { space, title, brief ->
+                adding = null
+                scope.launch {
+                    runCatching { session.awaitWorkBoard().addTask(space.id, title, brief) }
+                        .onSuccess { context.toast(it) }.onFailure { context.toast(it.message ?: "Shepherdr refused") }
+                    readNow.trySend(Unit)
+                }
+            } else BoardDialogs(
                 pending = Pending.Add, session = session, repos = repos, onDismiss = { adding = null },
                 onWords = { _, _ -> }, onConfirm = {}, onAnyway = {},
                 onSaved = { adding = null; readNow.trySend(Unit) },
             )
         }
+    }
+}
+
+/**
+ * A Shepherdr 2 machine's part of the Board tab: what needs you, then each space's tasks at work and
+ * to do, and how many are done. Its heading opens the whole board.
+ */
+private fun LazyListScope.workGroup(
+    machineId: String, label: String, w: WorkOverview, top: Dp, onBoard: () -> Unit, onCoordinator: (String) -> Unit, onTask: (WorkTask) -> Unit,
+) {
+    val open = w.tasks.filter { it.status != WorkStatus.Done }
+    val needs = open.count { it.status.needsYou }
+    val working = open.count { it.status == WorkStatus.Work || it.status == WorkStatus.Merging }
+    val done = w.tasks.size - open.size
+    val many = w.spaces.size > 1
+    item(key = "h/$machineId") {
+        SectionHeading(
+            listOfNotNull(
+                label,
+                (needs + w.spaces.count { it.asks }).takeIf { it > 0 }?.let { "$it need${if (it == 1) "s" else ""} you" },
+                working.takeIf { it > 0 }?.let { "$it working" },
+            ).joinToString(" · "),
+            Modifier.clickable(onClickLabel = "Open $label's board", onClick = onBoard).heightIn(min = 48.dp),
+            top = top,
+            trailing = { Icon(HerdrIcons.ChevronRight, null, tint = Herdr.colors.muted, modifier = Modifier.size(20.dp)) },
+        )
+    }
+    // What needs you first (tasks that ask, then ready ones, then coordinators that ask), then the rest.
+    val asking = w.spaces.filter { it.asks }
+    if (open.isEmpty() && asking.isEmpty()) item(key = "empty/$machineId") {
+        Text("No open tasks", style = MaterialTheme.typography.bodyMedium, color = Herdr.colors.muted, modifier = Modifier.padding(start = Space.xs))
+    }
+    fun rows(list: List<WorkTask>) = items(list, key = { "$machineId/${it.id}" }) { t ->
+        WorkTaskRow(t, onOpen = { onTask(t) }, space = if (many) w.spaces.firstOrNull { it.id == t.space }?.name.orEmpty() else "")
+    }
+    rows(open.filter { it.status.needsYou })
+    items(asking, key = { "asks/$machineId/${it.id}" }) { s -> CoordinatorAsksRow(s, onOpen = { onCoordinator(s.id) }) }
+    rows(open.filter { !it.status.needsYou })
+    if (done > 0) item(key = "done/$machineId") {
+        Text(
+            "$done done · on $label's board",
+            style = MaterialTheme.typography.labelLarge, color = Herdr.colors.accent,
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(onClick = onBoard).padding(horizontal = Space.xs, vertical = Space.m),
+        )
     }
 }
