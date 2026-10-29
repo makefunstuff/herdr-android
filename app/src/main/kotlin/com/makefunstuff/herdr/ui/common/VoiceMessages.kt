@@ -53,7 +53,9 @@ val LocalVoiceMessages = staticCompositionLocalOf<VoiceMessages?> { null }
 
 /**
  * Voice messages for the chat under [chat] (its DraftStore key): each recording is copied to the
- * machine with [upload] (its path there back), then handed to the agent with [deliver]; a sent one
+ * machine with [upload] (its path there back), then handed to the agent with [deliver] (with the
+ * note's id, which Shepherdr takes as the message's `cid`). Both are given the chat it is for, which
+ * is still the screen's only while they run: one that changed (another space picked) refuses. A sent one
  * not on the phone any more is read back with [fetch] to play. Waiting ones go on their own when the
  * chat opens or the machine comes back ([online]), in the order recorded.
  */
@@ -62,7 +64,7 @@ fun rememberVoiceMessages(
     chat: String,
     online: Boolean,
     upload: suspend (file: File, name: String) -> String,
-    deliver: suspend (remote: String) -> Unit,
+    deliver: suspend (remote: String, id: String) -> Unit,
     fetch: suspend (remote: String) -> ByteArray,
 ): VoiceMessages {
     val container = LocalContainer.current
@@ -73,22 +75,28 @@ fun rememberVoiceMessages(
     val give by rememberUpdatedState(deliver)
     val get by rememberUpdatedState(fetch)
     val isOnline by rememberUpdatedState(online)
+    val current by rememberUpdatedState(chat)
     val all by store.notes.collectAsState()
     val notes = remember(all, chat) { all.filter { it.chat == chat } }
-    val lock = remember(chat) { Mutex() }
+    // One at a time across chats too: a space switched mid-send never runs two.
+    val lock = remember { Mutex() }
     val player = rememberVoicePlayer()
     var loading by remember { mutableStateOf(emptySet<String>()) }
 
     /** Sends what of this chat's waits, one at a time in the order recorded; one that fails says why and waits. */
     fun pump() {
         if (!isOnline) return
+        val mine = chat
         scope.launch {
             lock.withLock {
-                for (n in store.notes.value.filter { it.chat == chat && !it.sent && it.error == null }) {
+                for (n in store.notes.value.filter { it.chat == mine && !it.sent && it.error == null }) {
+                    // The screen moved to another chat meanwhile: these wait until it is back on theirs.
+                    if (current != mine) return@withLock
                     try {
                         val remote = n.remote ?: withContext(Dispatchers.IO) { up(File(n.file), VoiceNotes.fileName(n.millis)) }
                             .also { r -> store.update(n.id) { it.copy(remote = r) } }
-                        give(remote)
+                        if (current != mine) return@withLock
+                        give(remote, n.id)
                         store.update(n.id) { it.copy(sent = true, sentAt = container.clock(), error = null) }
                     } catch (e: CancellationException) {
                         throw e

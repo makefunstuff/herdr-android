@@ -331,18 +331,19 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
     /**
      * A voice message copied to the machine ([remote]), to the agent: its path as an `@` mention, the
      * way a file goes to a herdr agent, which its program (Claude Code, Codex, pi) reads itself. While
-     * the agent works it is held like typed words; refused, it throws, and the message waits to retry.
+     * the agent works it is held like typed words, and also while it asks something: typed into its
+     * question, the path would answer it. Refused, it throws, and the message waits to retry.
      */
     suspend fun deliverVoice(remote: String) {
         val text = Attachments.mention(remote)
-        if (Held.holds(status, named = agent != null)) {
+        if (Held.holds(status, named = agent != null) || status == AgentStatus.Blocked) {
             container.composer.hold(chatKey, text, container.clock())
             return
         }
         chat.addPending(text)
         scope.launch { listState.animateScrollToItem(0) }
         try {
-            AgentInput.send(session.awaitApi(), paneId, text, named = agent != null, blocked = status == AgentStatus.Blocked)
+            AgentInput.send(session.awaitApi(), paneId, text, named = agent != null, blocked = false)
         } catch (t: Throwable) {
             chat.dropPending(text)
             throw t
@@ -353,7 +354,7 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
         chatKey,
         online = host.online,
         upload = { file, name -> file.inputStream().use { session.upload(name, it) } },
-        deliver = ::deliverVoice,
+        deliver = { remote, _ -> deliverVoice(remote) },
         fetch = { remote -> session.fetchImage(remote) },
     )
 

@@ -45,8 +45,8 @@ private fun SceneData.held() {
 
 /** devbox's app agent done with its second ask: what you send goes in at once, not held. */
 private fun SceneData.appDone() {
-        host(DEVBOX).snapshot = Demo.devbox(appStatus = "done")
-        host(DEVBOX).transcripts = host(DEVBOX).transcripts + (Demo.APP_SESSION to Demo.appTranscriptDone())
+    host(DEVBOX).snapshot = Demo.devbox(appStatus = "done")
+    host(DEVBOX).transcripts = host(DEVBOX).transcripts + (Demo.APP_SESSION to Demo.appTranscriptDone())
 }
 
 /** devbox on Shepherdr 2 (DemoV2): its spaces and their coordinators. */

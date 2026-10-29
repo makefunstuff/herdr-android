@@ -166,9 +166,9 @@ internal fun SpaceCoordinator(nav: NavController, machineId: String, session: Ho
             val id = space?.id ?: throw java.io.IOException("No space to send it to")
             b.upload(id, name, file.readBytes(), VoiceNotes.MIME)
         },
-        deliver = { remote ->
+        deliver = { remote, id ->
             val b = board ?: throw java.io.IOException("Shepherdr isn't reachable")
-            b.sayFiles(space?.id ?: throw java.io.IOException("No space to send it to"), listOf(remote))
+            b.sayFiles(space?.id ?: throw java.io.IOException("No space to send it to"), listOf(remote), cid = id)
         },
         fetch = { remote ->
             val b = board ?: throw java.io.IOException("Shepherdr isn't reachable")
