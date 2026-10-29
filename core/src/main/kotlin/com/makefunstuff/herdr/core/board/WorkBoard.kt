@@ -165,8 +165,11 @@ interface WorkBoard {
         }
     }
 
-    /** Sends [text] to [space]'s coordinator. */
-    suspend fun say(space: String, text: String): String
+    /**
+     * Sends [text] to [space]'s coordinator. On v2, [cid] is the screen's id for it, which the chat's
+     * message then carries (so a screen knows it came in), and [reply] the id of the message it answers.
+     */
+    suspend fun say(space: String, text: String, cid: String? = null, reply: String? = null): String
 }
 
 object WorkTasks {
@@ -238,7 +241,7 @@ class V1WorkBoard(private val board: BoardClient, private val path: String = "")
         }
     }
 
-    override suspend fun say(space: String, text: String): String = board.send(text)
+    override suspend fun say(space: String, text: String, cid: String?, reply: String?): String = board.send(text)
 
     private fun task(t: BoardTask) = WorkTask(
         id = t.id,

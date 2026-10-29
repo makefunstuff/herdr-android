@@ -76,8 +76,8 @@ class V2WorkBoard(private val connect: suspend () -> ShepherdrClient, private va
         }
     }
 
-    override suspend fun say(space: String, text: String): String {
-        connect().send(chatOf(space), text)
+    override suspend fun say(space: String, text: String, cid: String?, reply: String?): String {
+        connect().act(V2Actions.send(chatOf(space), text, reply = reply, cid = cid))
         return ""
     }
 
@@ -198,7 +198,7 @@ object V2Board {
     }
 
     /** A message's words as one bubble shows them; null for one with none (a turn's tool steps). */
-    fun words(m: V2Message): String? = m.text?.takeIf { it.isNotBlank() }
+    fun words(m: V2Message): String? = m.text?.let(ShepherdrText::clean)?.takeIf { it.isNotBlank() }
         ?: m.question?.title?.takeIf { it.isNotBlank() }
         ?: m.file?.name?.takeIf { it.isNotBlank() }
         ?: m.answered?.takeIf { it.isNotBlank() }

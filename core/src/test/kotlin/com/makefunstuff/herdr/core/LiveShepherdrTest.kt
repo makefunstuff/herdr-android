@@ -1,10 +1,13 @@
 package com.makefunstuff.herdr.core
 
 import com.makefunstuff.herdr.core.board.BoardApi
+import com.makefunstuff.herdr.core.board.CardAnswer
 import com.makefunstuff.herdr.core.host.HostSession
 import com.makefunstuff.herdr.core.keys.KeyImport
 import com.makefunstuff.herdr.core.shepherdr.CurlTransport
 import com.makefunstuff.herdr.core.shepherdr.ShepherdrClient
+import com.makefunstuff.herdr.core.shepherdr.SpaceChat
+import com.makefunstuff.herdr.core.shepherdr.SpaceChatItem
 import com.makefunstuff.herdr.core.shepherdr.V2WorkBoard
 import com.makefunstuff.herdr.core.ssh.Machine
 import kotlinx.coroutines.CoroutineScope
@@ -28,6 +31,65 @@ import kotlin.test.assertTrue
 class LiveShepherdrTest {
     private val keyPath = System.getenv("HERDR_LIVE_KEY")
     private val target = System.getenv("HERDR_LIVE_SHEPHERDR")
+
+    /**
+     * Chatting with the home space's coordinator as the Coordinator screen does: a message sent goes in
+     * and comes back with its id, the coordinator works and replies, and a choice card it was asked to
+     * put up is answered from here. Writes into the home space's chat, so it runs only with
+     * HERDR_LIVE_SEND=1 as well.
+     */
+    @Test
+    fun chatsWithTheHomeCoordinatorOverSsh() {
+        assumeTrue(keyPath != null && target != null && System.getenv("HERDR_LIVE_SEND") == "1", "set HERDR_LIVE_KEY, HERDR_LIVE_SHEPHERDR and HERDR_LIVE_SEND=1 to run")
+        val identity = KeyImport.fromPrivateKey(File(keyPath!!).readText(), "test")
+        val (user, host, port) = Machine.parseTarget(target!!)!!
+        val machine = Machine("live", "live", host, port, user ?: "root", session = System.getenv("HERDR_LIVE_SESSION") ?: "default")
+        runBlocking {
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+            val session = HostSession(machine, { identity }, { null }, scope)
+            try {
+                session.start()
+                withTimeout(60_000) { session.state.first { it.online && it.boardChecked } }
+                val board = session.awaitWorkBoard()
+                val home = board.overview().spaces.first { it.home }
+                val cid = "ha3-live-${System.currentTimeMillis()}"
+                val title = "HA-3 live check $cid?"
+                board.say(
+                    home.id,
+                    "This is an automated check from the herdr-android app's tests (task HA-3), not the human. " +
+                        "Please put up one choice card, exactly: shepherdr ask \"$title\" --choice \"Yes\" --choice \"No\" " +
+                        "and end your turn. When it is answered, reply in one short line with the answer you got.",
+                    cid = cid,
+                )
+                val seen = mutableSetOf<String>()
+                val card = withTimeout(240_000) {
+                    board.coordinatorThreads(home.id).first { t ->
+                        val items = SpaceChat.items(home.id, t.v2!!)
+                        if (items.any { it.id.startsWith("cid:") }) seen += "outgoing"
+                        if (t.v2!!.messages.any { it.cid == cid }) seen += "in"
+                        if (t.working) seen += "working"
+                        t.cards.any { it.question.title == title }
+                    }.cards.first { it.question.title == title }
+                }
+                println("seen before the card: $seen")
+                assertTrue("in" in seen, "the message came back with its id")
+                board.answer(CardAnswer(card, choice = 0))
+                val after = withTimeout(240_000) {
+                    board.coordinatorThreads(home.id).first { t ->
+                        val q = t.v2!!.messages.firstNotNullOfOrNull { m -> m.question?.takeIf { it.title == title } }
+                        q != null && !q.open && !t.working && t.v2!!.messages.last().question == null && !t.v2!!.messages.last().you
+                    }
+                }
+                val items = SpaceChat.items(home.id, after.v2!!)
+                val answered = items.filterIsInstance<SpaceChatItem.Question>().first { it.card.question.title == title }
+                assertEquals("Yes", answered.answer)
+                println("its reply: " + (items.last() as? SpaceChatItem.Words)?.text)
+            } finally {
+                session.stop()
+                scope.cancel()
+            }
+        }
+    }
 
     @Test
     fun readsARealShepherdrOverSsh() {
