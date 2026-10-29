@@ -35,8 +35,8 @@ class DraftStore(context: Context) {
         /** An agent's chat: one draft per pane on each machine. */
         fun agent(machineId: String, paneId: String) = "agent/$machineId/$paneId"
 
-        /** The work board's Coordinator chat on a machine. */
-        fun coordinator(machineId: String) = "coordinator/$machineId"
+        /** The work board's Coordinator chat on a machine; on Shepherdr 2, one per space. */
+        fun coordinator(machineId: String, space: String? = null) = "coordinator/$machineId" + (space?.let { "/$it" } ?: "")
 
         /**
          * The draft once [sent] has gone: empty, or what was typed on after it while it was on its

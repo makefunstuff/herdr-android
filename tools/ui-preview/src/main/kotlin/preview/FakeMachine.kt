@@ -61,6 +61,8 @@ class FakeMachine(
     var said: Map<String, String> = emptyMap(),
     /** The work board's data, or null when herdr-projects isn't installed there. */
     var board: FakeBoard? = null,
+    /** Shepherdr 2 there (its API, reached with curl), or null where it doesn't run. */
+    var shepherdr: FakeShepherdr? = null,
     /** Integration metadata per workspace (`workspace.get`'s tokens). */
     var workspaceTokens: Map<String, Map<String, String>> = emptyMap(),
     var version: String = "0.9.0",
@@ -99,7 +101,8 @@ class FakeMachine(
 
     // ---- shell commands -------------------------------------------------------------------------
 
-    fun run(command: String): CommandResult {
+    fun run(command: String, stdin: String = ""): CommandResult {
+        shepherdr?.run(command, stdin)?.let { return it }
         Shell.words(command).let { w ->
             // Words in the chats (ChatSearch.command): the transcripts' lines that hold them, under each chat's mark.
             val chat = w.indexOf("herdr-chat-search")

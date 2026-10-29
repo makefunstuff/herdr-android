@@ -52,7 +52,8 @@ class MachineConnection(private val host: preview.FakeMachine, val hostKeyFinger
 
     suspend fun run(command: String, timeoutSeconds: Long = 30): CommandResult = host.run(command)
 
-    suspend fun runWithInput(command: String, input: InputStream, timeoutSeconds: Long = 120): CommandResult = host.run(command)
+    suspend fun runWithInput(command: String, input: InputStream, timeoutSeconds: Long = 120): CommandResult =
+        host.run(command, input.readBytes().decodeToString())
 
     suspend fun openUnixSocket(path: String): Duplex = host.socket()
 

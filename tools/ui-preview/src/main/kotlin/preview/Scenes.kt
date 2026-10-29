@@ -49,6 +49,11 @@ private fun SceneData.held() {
     }
 }
 
+/** devbox on Shepherdr 2 (DemoV2): its spaces and their coordinators. */
+private fun SceneData.shepherdr() {
+    host(DEVBOX).shepherdr = FakeShepherdr()
+}
+
 /** The shell's test run selected, and what herdr reads for it. */
 private fun SceneData.selectTests() {
     selection = com.makefunstuff.herdr.ui.terminal.CellPoint(16, 0) to com.makefunstuff.herdr.ui.terminal.CellPoint(19, 39)
@@ -363,6 +368,16 @@ fun scenes(): List<Scene> = listOf(
         tapLabel("Record a voice message")
         tapLabel("Finish voice message")
     }),
+    // On Shepherdr 2 each space has its own coordinator: herdr-android's chat with its update cards, a
+    // task's plan copied in to approve and its own merge question; the home space's quiet one; one at work
+    // with your message on its way; and a choice answered from here.
+    Scene("coordinator-v2", route = Routes.coordinator(DEVBOX, DemoV2.APP), setup = { shepherdr() }),
+    Scene("coordinator-v2-home", route = Routes.coordinator(DEVBOX), setup = { shepherdr() }),
+    Scene("coordinator-v2-working", route = Routes.coordinator(DEVBOX, DemoV2.API), setup = {
+        shepherdr()
+        drafts[com.makefunstuff.herdr.data.DraftStore.coordinator(DEVBOX, DemoV2.API)] = "Also check the /jobs/export endpoint"
+    }, actions = { tapLabel("Send") }),
+    Scene("coordinator-v2-answered", route = Routes.coordinator(DEVBOX, DemoV2.APP), setup = { shepherdr() }, actions = { tapText("Let me look first") }),
     // A task in an answer opens on the board.
     Scene("coordinator-task", route = Routes.coordinator(DEVBOX), actions = { tapText("Speed up /jobs on large tables") }),
     // Reaching the Coordinator from outside the app: a share (a log line and a screenshot) choosing its machine,
