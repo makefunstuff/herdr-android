@@ -195,7 +195,11 @@ internal fun SpaceCoordinator(nav: NavController, machineId: String, session: Ho
                 b.coordinatorThreads(id).collect { t ->
                     thread = t
                     chatProblem = null
-                    t.v2?.let { chat -> outgoing = SpaceChat.stillOutgoing(chat, outgoing) }
+                    t.v2?.let { chat ->
+                        outgoing = SpaceChat.stillOutgoing(chat, outgoing)
+                        // A voice message Shepherdr held, then couldn't hand over: on the phone again, with Retry.
+                        chat.failed?.takeIf { it.isNotEmpty() }?.let { f -> voice.refused(f.associate { it.cid to it.error }) }
+                    }
                 }
             } catch (e: CancellationException) {
                 throw e

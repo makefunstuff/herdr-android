@@ -208,6 +208,8 @@ sealed interface VoiceStatus {
     data object Sent : VoiceStatus
     data object Sending : VoiceStatus
     data object Offline : VoiceStatus
+    /** Waits for one before it that failed. */
+    data object Behind : VoiceStatus
     data class Failed(val why: String) : VoiceStatus
 }
 
@@ -283,6 +285,7 @@ fun VoiceBubble(
                     VoiceStatus.Sent -> null
                     VoiceStatus.Sending -> "Sending…"
                     VoiceStatus.Offline -> "Sends when the machine is back"
+                    VoiceStatus.Behind -> "Waits for the one before it"
                     is VoiceStatus.Failed -> "Not sent: ${status.why}"
                 }
                 if (line != null) Text(

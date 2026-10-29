@@ -41,6 +41,8 @@ class VoiceMessages internal constructor(
     /** The voice messages being read back from the machine to play, by key. */
     val loading: Set<String>,
     val retry: (VoiceNote) -> Unit,
+    /** Shepherdr's refusals, why by `cid`: the voice messages they were wait for a retry again. */
+    val refused: (Map<String, String>) -> Unit,
     val discard: (VoiceNote) -> Unit,
     /** Plays (or pauses) the voice message at [remote] on the machine, or [note] still on the phone. */
     val play: (key: String, remote: String?, note: VoiceNote?) -> Unit,
@@ -89,14 +91,19 @@ fun rememberVoiceMessages(
         val mine = chat
         scope.launch {
             lock.withLock {
-                for (n in store.notes.value.filter { it.chat == mine && !it.sent && it.error == null }) {
+                for (n in store.notes.value.filter { it.chat == mine && !it.sent }) {
                     // The screen moved to another chat meanwhile: these wait until it is back on theirs.
                     if (current != mine) return@withLock
+                    // One that failed holds the rest behind it, so they never go before it.
+                    if (n.failed) return@withLock
                     try {
                         val remote = n.remote ?: withContext(Dispatchers.IO) { up(File(n.file), VoiceNotes.fileName(n.millis)) }
                             .also { r -> store.update(n.id) { it.copy(remote = r) } }
                         if (current != mine) return@withLock
-                        give(remote, n.id)
+                        // A new id each try: a refusal of an earlier one never marks this one.
+                        val cid = UUID.randomUUID().toString()
+                        store.update(n.id) { it.copy(cid = cid) }
+                        give(remote, cid)
                         store.update(n.id) { it.copy(sent = true, sentAt = container.clock(), error = null) }
                     } catch (e: CancellationException) {
                         throw e
@@ -132,6 +139,11 @@ fun rememberVoiceMessages(
         retry = { n ->
             store.update(n.id) { it.copy(error = null) }
             pump()
+        },
+        refused = { failed ->
+            VoiceNotes.refused(store.notes.value.filter { it.chat == chat }, failed).forEach { (n, why) ->
+                store.update(n.id) { it.copy(sent = false, error = why) }
+            }
         },
         discard = { n ->
             if (player.state.value?.key == n.id) player.release()
@@ -183,6 +195,7 @@ fun VoiceMessage(remote: String?, millis: Long, you: Boolean, note: VoiceNote?) 
         note == null || note.sent -> VoiceStatus.Sent
         error != null -> VoiceStatus.Failed(error)
         voice?.online == false -> VoiceStatus.Offline
+        voice != null && VoiceNotes.behindFailed(voice.notes, note) -> VoiceStatus.Behind
         else -> VoiceStatus.Sending
     }
     VoiceBubble(

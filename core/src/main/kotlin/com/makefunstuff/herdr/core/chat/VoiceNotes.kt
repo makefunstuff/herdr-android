@@ -25,6 +25,8 @@ data class VoiceNote(
     val sentAt: Long = 0,
     /** Why the last try failed; null while it goes. */
     val error: String? = null,
+    /** The id its last hand-over went with (Shepherdr's `cid`), so a refusal that comes later finds it. */
+    val cid: String? = null,
 ) {
     val failed: Boolean get() = error != null
 }
@@ -74,6 +76,20 @@ object VoiceNotes {
     /** [notes] with note [id] changed by [f]. */
     fun update(notes: List<VoiceNote>, id: String, f: (VoiceNote) -> VoiceNote): List<VoiceNote> =
         notes.map { if (it.id == id) f(it) else it }
+
+    /**
+     * The sent ones of [notes] whose hand-over came back refused later ([failed]: why, by `cid`; a
+     * message Shepherdr held, then couldn't deliver): each with why, to wait for a retry again.
+     */
+    fun refused(notes: List<VoiceNote>, failed: Map<String, String>): List<Pair<VoiceNote, String>> =
+        notes.mapNotNull { n -> n.cid?.takeIf { n.sent }?.let(failed::get)?.let { n to it.ifBlank { "The agent didn't take it" } } }
+
+    /** The ones waiting behind [note]'s chat's first failed one: they go after it, never before. */
+    fun behindFailed(notes: List<VoiceNote>, note: VoiceNote): Boolean {
+        val queue = notes.filter { it.chat == note.chat && !it.sent }
+        val first = queue.indexOfFirst { it.failed }
+        return first >= 0 && queue.indexOf(note) > first
+    }
 
     /** The one copied to [remote] on the machine, to play from the phone. */
     fun byRemote(notes: List<VoiceNote>, remote: String): VoiceNote? = notes.lastOrNull { it.remote == remote }

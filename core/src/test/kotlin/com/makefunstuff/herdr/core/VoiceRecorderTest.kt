@@ -191,4 +191,24 @@ class VoiceNotesTest {
         assertEquals("5", VoiceNotes.byRemote(notes, "/r/5")?.id)
         assertEquals("boom", VoiceNotes.update(notes, "u") { it.copy(error = "boom") }.first { it.id == "u" }.error)
     }
+
+    @Test fun aHandOverRefusedLaterIsFoundByItsLastId() {
+        val sent = VoiceNote("1", "a", "/1", 1_000, 1, remote = "/r/1", sent = true, cid = "c2")
+        val earlier = VoiceNote("2", "a", "/2", 1_000, 2, remote = "/r/2", sent = true, cid = "c1")
+        val waiting = VoiceNote("3", "a", "/3", 1_000, 3, cid = "c3")
+        val r = VoiceNotes.refused(listOf(sent, earlier, waiting), mapOf("c2" to "", "c3" to "gone", "old" to "x"))
+        // Only a sent one, by the id it last went with; no reason given reads as one.
+        assertEquals(listOf(sent to "The agent didn't take it"), r)
+    }
+
+    @Test fun theOnesAfterAFailedOneWaitBehindIt() {
+        val a = VoiceNote("a", "k", "/a", 1_000, 1, error = "offline")
+        val b = VoiceNote("b", "k", "/b", 1_000, 2)
+        val other = VoiceNote("o", "x", "/o", 1_000, 3)
+        val notes = listOf(a, b, other)
+        assertTrue(VoiceNotes.behindFailed(notes, b))
+        assertEquals(false, VoiceNotes.behindFailed(notes, a))
+        assertEquals(false, VoiceNotes.behindFailed(notes, other))
+        assertEquals(false, VoiceNotes.behindFailed(listOf(a.copy(error = null), b), b))
+    }
 }
