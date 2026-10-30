@@ -1,18 +1,21 @@
 package com.makefunstuff.herdr.core.hc
 
+import com.makefunstuff.herdr.core.terminal.LiveTerminal
 import com.makefunstuff.herdr.core.terminal.TerminalEmulator
 import com.makefunstuff.herdr.core.terminal.TerminalStream
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import java.io.Closeable
+import kotlinx.coroutines.withContext
 
 /**
  * A live, writable view of one herdr-core terminal, the counterpart of [TerminalStream] for a
@@ -20,8 +23,9 @@ import java.io.Closeable
  * [revision] ticking after each read. The core sends raw output (it never re-encodes it), so the
  * app's own emulator draws it as it draws any terminal.
  *
- * Unlike herdr's pane stream there is no scroll request: the first paint carries [history] lines,
- * and the emulator scrolls back through those.
+ * Attaching takes the terminal's size at once (hc: the last active viewer sets it), as classic
+ * herdr's takeover does; with [observe] it only watches, never typing or resizing. hc has no
+ * scroll request and the emulator keeps no scrollback, so [scroll] does nothing yet.
  */
 class HcTerminalStream(
     private val client: HcClient,
@@ -29,30 +33,32 @@ class HcTerminalStream(
     cols: Int,
     rows: Int,
     private val scope: CoroutineScope,
-    private val history: Int = 1000,
-    /** Watch only: never types or resizes the terminal (the person's own window keeps its size). */
     private val observe: Boolean = false,
-) : Closeable {
-    val emulator = TerminalEmulator(cols, rows)
+) : LiveTerminal {
+    override val emulator = TerminalEmulator(cols, rows)
     private val _revision = MutableStateFlow(0L)
-    val revision: StateFlow<Long> = _revision.asStateFlow()
+    override val revision: StateFlow<Long> = _revision.asStateFlow()
     private val _status = MutableStateFlow<TerminalStream.Status>(TerminalStream.Status.Opening)
-    val status: StateFlow<TerminalStream.Status> = _status.asStateFlow()
+    override val status: StateFlow<TerminalStream.Status> = _status.asStateFlow()
 
-    private var attach: HcAttach? = null
     private var job: Job? = null
     private val outbound = Channel<suspend (HcAttach) -> Unit>(Channel.UNLIMITED)
-    private var cols = cols
-    private var rows = rows
+    @Volatile private var cols = cols
+    @Volatile private var rows = rows
 
-    fun open() {
+    override fun open() {
         if (job != null) return
         job = scope.launch(Dispatchers.IO) {
             var a: HcAttach? = null
             try {
-                a = client.attach(address, cols, rows, history, observe)
-                attach = a
+                // Not cut short: the core keeps a viewer whose reply was dropped, so it is detached below instead.
+                a = withContext(NonCancellable) { client.attach(address, cols, rows, observe = observe) }
+                ensureActive()
                 val stream = a
+                if (observe) {
+                    // Drawn at the size the person's window keeps.
+                    if (stream.terminal.cols > 0 && stream.terminal.rows > 0) synchronized(emulator.lock) { emulator.resize(stream.terminal.cols, stream.terminal.rows) }
+                }
                 val writer = launch { for (op in outbound) runCatching { op(stream) } }
                 while (true) {
                     val bytes = stream.output() ?: break
@@ -73,24 +79,24 @@ class HcTerminalStream(
         }
     }
 
-    fun send(bytes: ByteArray) {
-        outbound.trySend { it.write(bytes) }
+    override fun send(bytes: ByteArray) {
+        if (!observe) outbound.trySend { it.write(bytes) }
     }
 
-    fun send(text: String) = send(text.toByteArray(Charsets.UTF_8))
+    override fun send(text: String) = send(text.toByteArray(Charsets.UTF_8))
 
-    fun resize(cols: Int, rows: Int) {
+    override fun resize(cols: Int, rows: Int) {
         if (cols == this.cols && rows == this.rows) return
         this.cols = cols
         this.rows = rows
         synchronized(emulator.lock) { emulator.resize(cols, rows) }
-        outbound.trySend { it.resize(cols, rows) }
+        if (!observe) outbound.trySend { it.resize(cols, rows) }
     }
+
+    override fun scroll(up: Boolean, lines: Int) {}
 
     override fun close() {
         outbound.close()
-        attach?.close()
-        attach = null
         job?.cancel()
         job = null
     }

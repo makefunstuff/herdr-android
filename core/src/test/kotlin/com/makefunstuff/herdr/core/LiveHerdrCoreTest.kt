@@ -60,13 +60,43 @@ class LiveHerdrCoreTest {
                 val read = client.read(first.address, lines = 20)
                 println("read ${first.address}: ${read.how}, ${read.text.trim().lines().take(3)}")
 
-                val stream = HcTerminalStream(client, first.address, 80, 24, scope, history = 50, observe = true)
+                val stream = HcTerminalStream(client, first.address, 80, 24, scope, observe = true)
                 stream.open()
                 withTimeout(20_000) { stream.revision.first { it > 0 } }
                 assertEquals(TerminalStream.Status.Live, stream.status.value)
                 val screen = synchronized(stream.emulator.lock) { stream.emulator.screenText() }
                 println("attached ${first.address}:\n" + screen.lines().filter { it.isNotBlank() }.take(6).joinToString("\n"))
                 stream.close()
+            } finally {
+                session.stop()
+                scope.cancel()
+            }
+        }
+    }
+
+    /**
+     * A machine without classic herdr: here a herdr session that doesn't exist, so classic herdr is
+     * "missing" as on a machine with only the desktop app. herdr-core is still found and followed,
+     * and the status still says what classic herdr lacks.
+     */
+    @Test
+    fun findsHerdrCoreWhereClassicHerdrIsMissing() {
+        assumeTrue(keyPath != null && target != null, "set HERDR_LIVE_KEY and HERDR_LIVE_CORE to run")
+        val identity = KeyImport.fromPrivateKey(File(keyPath!!).readText(), "test")
+        val (user, host, port) = Machine.parseTarget(target!!)!!
+        val machine = Machine("live", "live", host, port, user ?: "root", session = "ha5-no-such-session")
+        runBlocking {
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+            val session = HostSession(machine, { identity }, { null }, scope)
+            try {
+                session.start()
+                val s = withTimeout(60_000) { session.state.first { it.herdrCore != null } }
+                println("status: ${s.status}")
+                assertTrue(s.status is com.makefunstuff.herdr.core.host.HostStatus.Attention, "${s.status}")
+                assertEquals(null, s.snapshot)
+                val live = session.awaitHerdrCore().list().terminals.filter { it.live }
+                assertEquals(live.map { it.address }.toSet(), s.herdrCore!!.snapshot.panes.map { it.terminalId }.toSet())
+                println("herdr-core alone: ${s.herdrCore!!.snapshot.agents.size} agents, ${live.size} terminals")
             } finally {
                 session.stop()
                 scope.cancel()

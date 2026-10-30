@@ -6,10 +6,13 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -25,6 +28,7 @@ import java.io.OutputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 
 /** An error herdr-core answered with: [kind] is its stable `data.kind` (`not_found`, `blocked`, …). */
@@ -101,12 +105,15 @@ class HcConnection private constructor(
     private val pending = ConcurrentHashMap<Long, CompletableDeferred<JsonObject>>()
     private val streams = ConcurrentHashMap<Int, HcStream>()
     private val writeLock = Any()
+    private val ended = AtomicBoolean(false)
     private var reader: Job? = null
+    private var scope: CoroutineScope? = null
 
     /** Completes when the connection ends: null when closed here, else why. */
     val closed = CompletableDeferred<Throwable?>()
 
     private fun start(scope: CoroutineScope) {
+        this.scope = scope
         reader = scope.launch(Dispatchers.IO) {
             var failure: Throwable? = null
             try {
@@ -118,6 +125,8 @@ class HcConnection private constructor(
                 failure = t
             } finally {
                 val error = failure ?: IOException("herdr-core closed the connection")
+                // Before failing the waiters: a call registering from now on fails itself.
+                ended.set(true)
                 pending.values.forEach { it.completeExceptionally(error) }
                 pending.clear()
                 streams.values.forEach { it.ended(null) }
@@ -154,7 +163,7 @@ class HcConnection private constructor(
         val id = nextId.getAndIncrement()
         val waiter = CompletableDeferred<JsonObject>()
         pending[id] = waiter
-        if (closed.isCompleted) {
+        if (ended.get() || closed.isCompleted) {
             pending.remove(id)
             throw IOException("herdr-core closed the connection")
         }
@@ -174,21 +183,18 @@ class HcConnection private constructor(
         }
     }
 
-    /** Off the coroutines, for a viewer closing on its way out. */
-    internal fun writeNow(bytes: ByteArray) {
-        runCatching {
-            synchronized(writeLock) {
-                output.write(bytes)
-                output.flush()
-            }
-        }
+    /** In the background, for a viewer closing on its way out (a screen's dispose runs on the UI thread). */
+    internal fun writeLater(bytes: ByteArray) {
+        val s = scope ?: return
+        s.launch(Dispatchers.IO) { runCatching { write(bytes) } }
     }
 
     override fun close() {
+        // First: the reader then fails on the closed pipe, which is no news.
+        if (!closed.isCompleted) closed.complete(null)
         runCatching { output.close() }
         reader?.cancel()
         onClose()
-        if (!closed.isCompleted) closed.complete(null)
     }
 
     companion object {
@@ -201,21 +207,25 @@ class HcConnection private constructor(
          */
         suspend fun open(duplex: Duplex, scope: CoroutineScope, timeoutMs: Long = 20_000): HcConnection = withContext(Dispatchers.IO) {
             try {
-                val hello = withTimeout(timeoutMs) {
-                    val line = request(0, "hello", buildJsonObject {
-                        put("generation", JsonPrimitive(GENERATION))
-                        put("framed", JsonPrimitive(true))
-                    })
-                    duplex.output.write(line.toByteArray(Charsets.UTF_8))
-                    duplex.output.write('\n'.code)
-                    duplex.output.flush()
-                    // Byte by byte: what follows the line is already framed.
-                    val reply = readLine(duplex.input)
-                        ?: throw IOException("herdr-core didn't answer")
-                    val obj = runCatching { HcJson.parseToJsonElement(reply).jsonObject }
-                        .getOrElse { throw IOException("Not herdr-core: ${reply.take(120)}") }
-                    unwrap(obj).decode<HcHello>()
-                }
+                val line = request(0, "hello", buildJsonObject {
+                    put("generation", JsonPrimitive(GENERATION))
+                    put("framed", JsonPrimitive(true))
+                })
+                duplex.output.write(line.toByteArray(Charsets.UTF_8))
+                duplex.output.write('\n'.code)
+                duplex.output.flush()
+                // Byte by byte: what follows the line is already framed. A blocking read ignores a
+                // timeout, so a core that never answers is closed, which ends the read.
+                val reply = coroutineScope {
+                    val read = async(Dispatchers.IO) { runCatching { readLine(duplex.input) } }
+                    withTimeoutOrNull(timeoutMs) { read.await() } ?: run {
+                        runCatching { duplex.close() }
+                        throw IOException("herdr-core didn't answer")
+                    }
+                }.getOrThrow() ?: throw IOException("herdr-core didn't answer")
+                val obj = runCatching { HcJson.parseToJsonElement(reply).jsonObject }
+                    .getOrElse { throw IOException("Not herdr-core: ${reply.take(120)}") }
+                val hello = unwrap(obj).decode<HcHello>()
                 if (!hello.framed) throw IOException("herdr-core ${hello.version} refused framed mode")
                 HcConnection(duplex.input, duplex.output, hello) { duplex.close() }.also { it.start(scope) }
             } catch (t: Throwable) {
@@ -292,6 +302,6 @@ class HcStream internal constructor(val channel: Int, private val connection: Hc
     /** Detaches; the core answers with an empty CLOSE. */
     fun close() {
         if (closeReason.isCompleted) return
-        connection.writeNow(HcFrames.encode(channel, HcFrames.CLOSE))
+        connection.writeLater(HcFrames.encode(channel, HcFrames.CLOSE))
     }
 }

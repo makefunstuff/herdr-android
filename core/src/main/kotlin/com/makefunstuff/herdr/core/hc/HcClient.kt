@@ -23,8 +23,6 @@ class HcClient(private val caller: ApiCaller) {
     private val connection: HcConnection
         get() = caller as? HcConnection ?: throw IOException("herdr-core streams need a framed connection")
 
-    suspend fun status(): HcServerStatus = caller.call("server.status").decode()
-
     /** Live terminals here and on machines this core added; with [all], finished ones too. */
     suspend fun list(all: Boolean = false): HcList = caller.call("terminal.list", Requests.list(all)).decode()
 
@@ -47,10 +45,6 @@ class HcClient(private val caller: ApiCaller) {
     /** The stop key (esc for a program that reports status, else ctrl+c), and what came of it. */
     suspend fun interrupt(terminal: String): HcInterrupted =
         caller.call("terminal.interrupt", Requests.terminal(terminal), timeoutMs = 30_000).decode()
-
-    /** Sets labels; an empty value removes one. */
-    suspend fun label(terminal: String, labels: Map<String, String>): HcTerminal =
-        caller.call("terminal.label", Requests.label(terminal, labels)).decode()
 
     /**
      * Subscribes to every change: [HcSubscription.snapshot] first, then [HcSubscription.events] in
@@ -82,8 +76,6 @@ class HcClient(private val caller: ApiCaller) {
             obj("terminal" to terminal, "text" to text, "force" to force.takeIf { it })
         fun keys(terminal: String, keys: List<String>): JsonObject =
             obj("terminal" to terminal, "keys" to JsonArray(keys.map { JsonPrimitive(it) }))
-        fun label(terminal: String, labels: Map<String, String>): JsonObject =
-            obj("terminal" to terminal, "labels" to JsonObject(labels.mapValues { JsonPrimitive(it.value) }))
         fun attach(terminal: String, cols: Int, rows: Int, history: Int, observe: Boolean): JsonObject = obj(
             "terminal" to terminal,
             "cols" to cols,

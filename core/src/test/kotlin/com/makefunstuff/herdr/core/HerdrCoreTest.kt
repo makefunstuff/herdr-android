@@ -51,6 +51,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import org.junit.jupiter.api.Assumptions.assumeTrue
 
 /**
  * herdr-core (`hc` 0.1.14) as the app reads it, from what a real `hc connect` said on a dev
@@ -85,7 +86,6 @@ class HerdrCoreTest {
             "terminal.read" to HcClient.Requests.read("t4", 200),
             "terminal.send" to HcClient.Requests.send("t4", "hi", force = true),
             "terminal.keys" to HcClient.Requests.keys("t4", listOf("y", "enter")),
-            "terminal.label" to HcClient.Requests.label("t4", mapOf("where" to "a / b")),
             "terminal.attach" to HcClient.Requests.attach("t4", 80, 24, history = 1000, observe = true),
         )
         for ((method, body) in bodies) {
@@ -106,7 +106,6 @@ class HerdrCoreTest {
         assertEquals("""{"terminal":"t3","cols":60,"rows":10,"history":20,"observe":true}""", HcClient.Requests.attach("t3", 60, 10, 20, true).toString())
         assertEquals("""{"terminal":"t3","cols":60,"rows":10}""", HcClient.Requests.attach("t3", 60, 10, 0, false).toString())
         assertEquals("""{}""", HcClient.Requests.list(false).toString())
-        assertEquals("""{"terminal":"rohan/t7","labels":{"where":""}}""", HcClient.Requests.label("rohan/t7", mapOf("where" to "")).toString())
         assertEquals(
             """{"jsonrpc":"2.0","id":3,"method":"terminal.read","params":{"terminal":"t4","lines":80}}""",
             HcConnection.request(3, "terminal.read", HcClient.Requests.read("t4", 80)),
@@ -195,6 +194,17 @@ class HerdrCoreTest {
         assertEquals("Other terminals on rohan", snap.workspace(r.workspaceId)!!.label)
     }
 
+    @Test
+    fun aShellWhereAnAgentQuitIsNoAgentAndABlankSpaceNameIsNoCrash() {
+        // hc keeps `reported` once a program ever reported; the status goes when it quits.
+        val quit = HcTerminal("t5", reported = true, foreground = com.makefunstuff.herdr.core.hc.HcForeground(name = "zsh"), createdMs = 1)
+        val blank = HcTerminal("t6", labels = mapOf("where" to " / build"), createdMs = 2)
+        val snap = HcMapping.snapshot(listOf(quit, blank))
+        assertTrue(snap.agents.isEmpty())
+        assertEquals("zsh", snap.pane("hc:t5")!!.displayName)
+        assertEquals("build", snap.tab(snap.pane("hc:t6")!!.tabId)!!.label)
+    }
+
     // --- events, as hc sent them ---
 
     private fun events(name: String): List<HcEvent> = res(name).lines().mapNotNull { HcEvents.parse(it) }
@@ -212,7 +222,8 @@ class HerdrCoreTest {
         val notices = mutableListOf<Notice>()
         var now = 1_000L
         for (e in evs) {
-            view = view.apply(e, now = now++)
+            view = view.apply(e, statusAt = if (view.statusChange(e) != null) now else null)
+            now++
             val next = HcMapping.snapshot(view.terminals.values)
             notices += Notices.between(snap, next, now)
             snap = next
@@ -227,6 +238,8 @@ class HerdrCoreTest {
         assertEquals(listOf(Notice.Kind.Done), notices.map { it.kind })
         assertEquals("hc:t4", notices.single().paneId)
         assertEquals("ha5-claude finished", notices.single().title)
+        // Its last change (to idle, the 7th event) took the time it was given, the core's clock.
+        assertEquals(1_006L, snap.agents.first { it.terminalId == "t4" }.stateChangeSeq)
 
         // Replayed events at or below the seq are already in: nothing changes.
         assertEquals(view, view.apply(evs[1]))
@@ -370,13 +383,13 @@ class HerdrCoreTest {
             // Every piece read was credited back on its channel.
             assertEquals(res("events-status.jsonl").toByteArray().size, core.credits.filter { it.first == 1 }.sumOf { it.second })
 
-            val stream = HcTerminalStream(client, "t3", 60, 10, scope, history = 20)
+            val stream = HcTerminalStream(client, "t3", 60, 10, scope)
             stream.open()
             withTimeout(10_000) { stream.revision.first { it > 0 } }
             assertEquals(TerminalStream.Status.Live, stream.status.value)
             assertTrue(synchronized(stream.emulator.lock) { stream.emulator.screenText() }.startsWith("plain shell"))
             assertEquals(
-                """{"terminal":"t3","cols":60,"rows":10,"history":20}""",
+                """{"terminal":"t3","cols":60,"rows":10}""",
                 core.requests.first { it["method"]!!.jsonPrimitive.content == "terminal.attach" }["params"].toString(),
             )
             stream.send("ls\r")
@@ -386,6 +399,7 @@ class HerdrCoreTest {
             assertEquals("ls\r", keys.payload.toString(Charsets.UTF_8))
             val resize = core.frames.first { it.channel == 2 && it.kind == HcFrames.RESIZE }
             assertEquals(listOf<Byte>(80, 0, 24, 0), resize.payload.toList())
+            assertEquals(bytes("attach.bin").size, core.credits.filter { it.first == 2 }.sumOf { it.second })
             stream.close()
             withTimeout(10_000) { while (core.frames.none { it.channel == 2 && it.kind == HcFrames.CLOSE }) kotlinx.coroutines.delay(10) }
 
@@ -409,37 +423,70 @@ class HerdrCoreTest {
     // --- detection ---
 
     @Test
-    fun detectsARunningCoreAndPrefersItsOwnBuild() {
+    fun detectsARunningCoreAndPrefersItsInstalledBuild() {
         val out = """
+            socket	/run/user/1000/herdr-core/default.sock
+            core	/home/dev/src/herdr-core/target/debug/herdr-core	51234
             core	/home/dev/.local/bin/herdr-core	1924723
+            bin	/home/dev/src/herdr-core/target/debug/herdr-core	hc 0.2.0-dev	core
             bin	/home/dev/.local/bin/herdr-core	hc 0.1.14	core
+            bin	/home/dev/.local/bin/herdr-core	hc 0.1.14	path
             bin	/usr/local/bin/herdr-core	hc 0.1.9	path
             motd noise
         """.trimIndent()
         val p = HcDetection.parse(out)
         assertTrue(p.running)
+        assertEquals("/run/user/1000/herdr-core/default.sock", p.socket)
+        // A dev build a core runs from is passed over for the installed one that also runs.
         assertEquals("/home/dev/.local/bin/herdr-core", p.binary!!.path)
         assertEquals("0.1.14", p.binary!!.version)
-        assertEquals(2, p.binaries.size)
-        assertEquals("'/home/dev/.local/bin/herdr-core' connect", HcDetection.connectCommand(p.binary!!))
+        assertEquals(
+            """sh -c '[ -S "${'$'}1" ] || { echo '\''herdr-core stopped'\'' >&2; exit 3; }; HC_SOCKET="${'$'}1" exec "${'$'}2" connect' hc '/run/user/1000/herdr-core/default.sock' '/home/dev/.local/bin/herdr-core'""",
+            HcDetection.connectCommand(p.binary!!, p.socket!!),
+        )
     }
 
     @Test
-    fun anInstalledCoreThatDoesntRunIsNotUsed() {
-        val p = HcDetection.parse("bin\t/home/dev/.local/bin/herdr-core\thc 0.1.14\tpath\n")
-        assertFalse(p.running)
-        assertNotNull(p.binary)
-        assertTrue(HcDetection.parse("").binaries.isEmpty())
-        // Without pgrep, a socket where a core keeps one counts.
-        assertTrue(HcDetection.parse("socket\t/run/user/1000/herdr-core/default.sock\nbin\t/usr/bin/herdr-core\thc 0.1.14\tpath\n").running)
+    fun onlyACoreThatRunsOnItsSocketCounts() {
+        // A core process, but not on the default socket (another HC_SESSION): connect would start one.
+        assertFalse(HcDetection.parse("core\t/home/dev/.local/bin/herdr-core\t42\nbin\t/home/dev/.local/bin/herdr-core\thc 0.1.14\tcore\n").running)
+        // Its socket, but no core runs on the machine (a crash left it).
+        assertFalse(HcDetection.parse("socket\t/run/user/1000/herdr-core/default.sock\nbin\t/usr/bin/herdr-core\thc 0.1.14\tpath\n").running)
+        // Without pgrep, the socket alone.
+        assertTrue(HcDetection.parse("socket\t/run/user/1000/herdr-core/default.sock\nnopgrep\nbin\t/usr/bin/herdr-core\thc 0.1.14\tpath\n").running)
+        assertFalse(HcDetection.parse("").running)
+        assertNull(HcDetection.parse("").binary)
+    }
+
+    /** [HcDetection.probe] in `sh` here, as SSH runs it there, with [home] as HOME and its own runtime and state folders. */
+    private fun probe(home: File): String {
+        val p = ProcessBuilder("sh", "-c", HcDetection.probe)
+            .apply {
+                environment().apply {
+                    keys.removeAll { it.startsWith("HC_") }
+                    put("HOME", home.path)
+                    put("SHELL", "/bin/sh")
+                    put("PATH", "/usr/bin:/bin")
+                    put("XDG_RUNTIME_DIR", File(home, "run").path)
+                    put("XDG_STATE_HOME", File(home, "state").path)
+                }
+            }
+            .redirectErrorStream(true)
+            .start()
+        val out = p.inputStream.readBytes().toString(Charsets.UTF_8)
+        assertEquals(0, p.waitFor(), out)
+        return out
     }
 
     @Test
-    fun theProbeScriptFindsHerdrCoreInAHome() {
+    fun theProbeScriptFindsARunningCoreOnItsSocket() {
+        assumeTrue(File("/proc/self/exe").exists() && File("/bin/bash").exists(), "needs Linux /proc and bash")
         val home = Files.createTempDirectory("hc-home").toFile()
+        var fake: Process? = null
+        var server: java.nio.channels.ServerSocketChannel? = null
         try {
             val bin = File(home, ".local/bin").apply { mkdirs() }
-            File(bin, "herdr-core").apply {
+            val exe = File(bin, "herdr-core").apply {
                 writeText("#!/bin/sh\necho 'hc 0.1.14'\n")
                 setExecutable(true)
             }
@@ -448,19 +495,28 @@ class HerdrCoreTest {
                 writeText("#!/bin/sh\necho 'herbstclient 0.9.5'\n")
                 setExecutable(true)
             }
-            val p = ProcessBuilder("sh", "-c", HcDetection.probe)
-                .apply { environment().apply { put("HOME", home.path); put("SHELL", "/bin/sh"); put("PATH", "/usr/bin:/bin") } }
-                .redirectErrorStream(true)
-                .start()
-            val out = p.inputStream.readBytes().toString(Charsets.UTF_8)
-            assertEquals(0, p.waitFor())
-            val probe = HcDetection.parse(out)
-            val mine = probe.binaries.firstOrNull { it.path == "${home.path}/.local/bin/herdr-core" }
+            // No socket: nothing more is looked for, whatever is installed.
+            assertEquals("", probe(home).trim())
+
+            val socket = File(home, "run/herdr-core/default.sock").apply { parentFile.mkdirs() }
+            server = java.nio.channels.ServerSocketChannel.open(java.net.StandardProtocolFamily.UNIX)
+                .bind(java.net.UnixDomainSocketAddress.of(socket.toPath()))
+            // A process that looks like `herdr-core serve` to pgrep.
+            fake = ProcessBuilder("/bin/bash", "-c", "exec -a \"\$0\" sleep 60", "${exe.path} serve").start()
+            Thread.sleep(300)
+            val out = probe(home)
+            val found = HcDetection.parse(out)
+            assertTrue(found.running, out)
+            assertEquals(socket.path, found.socket)
+            assertTrue(found.coreExes.any { it.endsWith("/sleep") }, out)
+            val mine = found.binaries.firstOrNull { it.path == exe.path }
             assertNotNull(mine, out)
             assertEquals("0.1.14", mine.version)
             assertEquals("path", mine.source)
-            assertFalse(probe.binaries.any { it.path.endsWith("/hc") }, out)
+            assertFalse(found.binaries.any { it.path.endsWith("/hc") }, out)
         } finally {
+            fake?.destroy()
+            server?.close()
             home.deleteRecursively()
         }
     }

@@ -12,11 +12,23 @@ import kotlinx.serialization.json.decodeFromJsonElement
 
 /**
  * A core's terminals as its event stream describes them: a subscription's snapshot, then each
- * event applied the way the schema's README says. [now] stamps a status change, which the event
- * doesn't carry (`status_ms` in a record is the core's own clock).
+ * event applied the way the schema's README says.
  */
 data class HcView(val seq: Long = 0, val terminals: Map<String, HcTerminal> = emptyMap()) {
-    fun apply(event: HcEvent, now: Long = System.currentTimeMillis()): HcView {
+    /**
+     * The new status word when [event] changes a terminal's, else null. Its `status_ms` (the core's clock, which the
+     * event doesn't carry) is then read from the core and given to [apply], so it reads the same
+     * after a resubscribe and never mixes in the phone's clock.
+     */
+    fun statusChange(event: HcEvent): String? {
+        if (event.method != "event" || event.type != "status" || event.seq <= seq) return null
+        val old = terminals[event.terminal ?: return null] ?: return null
+        val next = (event.data as? JsonObject)?.decode<HcStatusChange>()?.status ?: return null
+        return next.state.takeIf { it != old.status?.state }
+    }
+
+    /** [event] applied; [statusAt] is when a status word changed, by the core's clock (else the phone's). */
+    fun apply(event: HcEvent, statusAt: Long? = null): HcView {
         if (event.method == "missed") return HcView(event.seq, event.terminals.orEmpty().associateBy { it.address })
         if (event.method != "event") return this
         // After a `missed` snapshot, events at or below its seq are already in it.
@@ -38,7 +50,7 @@ data class HcView(val seq: Long = 0, val terminals: Map<String, HcTerminal> = em
             "status" -> old?.let { t ->
                 val s = data?.decode<HcStatusChange>() ?: return@let t
                 val changed = s.status?.state != t.status?.state
-                t.copy(status = s.status, records = s.records, reported = s.reported, statusMs = if (changed && s.status != null) now else t.statusMs)
+                t.copy(status = s.status, records = s.records, reported = s.reported, statusMs = if (changed && s.status != null) statusAt ?: System.currentTimeMillis() else t.statusMs)
             }
             "turn" -> old?.copy(turn = data?.long("turn") ?: old.turn)
             "title" -> old?.copy(title = data?.string("title") ?: old.title)
@@ -75,7 +87,7 @@ data class HcView(val seq: Long = 0, val terminals: Map<String, HcTerminal> = em
  *   labels each terminal it shows with `herdr.space` and `herdr.tab` (ids) and `where`
  *   (`<space> / <tab>`, the names). A helper an agent started sits with its parent, as in the app.
  * - Terminals the app doesn't show (started with `hc run`) go in one "Other terminals" workspace.
- * - A terminal is an agent once its program reports status (OSC 7501), or when a known agent
+ * - A terminal is an agent while its program reports a status (OSC 7501), or while a known agent
  *   runs in it and hasn't reported yet.
  */
 object HcMapping {
@@ -109,7 +121,8 @@ object HcMapping {
         return program.takeIf { it in KNOWN }
     }
 
-    fun isAgent(t: HcTerminal): Boolean = t.reported || t.status != null || agentName(t) != null
+    /** It reports a status now, or a known agent runs in it ([HcTerminal.reported] stays true after the agent quit). */
+    fun isAgent(t: HcTerminal): Boolean = t.status != null || agentName(t) != null
 
     /** The status word as the app's: `error` needs the human as `blocked` does (labelled `error`). */
     fun statusWord(t: HcTerminal): String = when (val s = t.status?.state) {
@@ -144,7 +157,7 @@ object HcMapping {
         val tabKey = tab ?: names?.getOrNull(1)?.let { "where:$it" } ?: t.address
         return Place(
             spaceId = spaceId,
-            spaceName = names?.get(0)?.takeIf { it.isNotBlank() } ?: space!!,
+            spaceName = names?.get(0)?.takeIf { it.isNotBlank() } ?: space ?: "Space",
             tabId = "$spaceId/$tabKey",
             tabName = names?.getOrNull(1)?.takeIf { it.isNotBlank() } ?: tab ?: t.name ?: t.address,
         )

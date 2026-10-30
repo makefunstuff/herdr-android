@@ -28,17 +28,6 @@ data class HcHello(
     val version: String = "",
 )
 
-/** `server.status`. */
-@Serializable
-data class HcServerStatus(
-    val core: HcCore = HcCore(),
-    val version: String = "",
-    val pid: Long = 0,
-    @SerialName("uptime_ms") val uptimeMs: Long = 0,
-    val live: Int = 0,
-    val finished: Int = 0,
-)
-
 /**
  * One OSC 7501 record, the program's own words: [state] is idle, working, done, blocked or error;
  * [kind] (blocked only) permission, question or auth; [app] who reports (`claude-code`, `codex`).
