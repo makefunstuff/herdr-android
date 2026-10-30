@@ -1,0 +1,248 @@
+package com.makefunstuff.herdr.core.hc
+
+import com.makefunstuff.herdr.core.api.AgentInfo
+import com.makefunstuff.herdr.core.api.AgentStatus
+import com.makefunstuff.herdr.core.api.PaneInfo
+import com.makefunstuff.herdr.core.api.SessionSnapshot
+import com.makefunstuff.herdr.core.api.TabInfo
+import com.makefunstuff.herdr.core.api.WorkspaceInfo
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.decodeFromJsonElement
+
+/**
+ * A core's terminals as its event stream describes them: a subscription's snapshot, then each
+ * event applied the way the schema's README says. [now] stamps a status change, which the event
+ * doesn't carry (`status_ms` in a record is the core's own clock).
+ */
+data class HcView(val seq: Long = 0, val terminals: Map<String, HcTerminal> = emptyMap()) {
+    fun apply(event: HcEvent, now: Long = System.currentTimeMillis()): HcView {
+        if (event.method == "missed") return HcView(event.seq, event.terminals.orEmpty().associateBy { it.address })
+        if (event.method != "event") return this
+        // After a `missed` snapshot, events at or below its seq are already in it.
+        if (event.seq <= seq) return this
+        val address = event.terminal ?: return copy(seq = event.seq)
+        val data = event.data as? JsonObject
+        val old = terminals[address]
+        val next: HcTerminal? = when (event.type) {
+            "created", "restarted" -> data?.let { runCatching { HcJson.decodeFromJsonElement<HcTerminal>(it) }.getOrNull() } ?: old
+            "removed" -> null
+            "lost" -> old?.let { t ->
+                val e = data?.decode<HcEnded>()
+                t.copy(reason = e?.reason, exitCode = e?.exitCode, pid = null, foreground = null)
+            }
+            "finished" -> old?.let { t ->
+                val e = data?.decode<HcEnded>()
+                t.copy(state = "finished", reason = e?.reason, exitCode = e?.exitCode, finishedMs = e?.finishedMs, foreground = null)
+            }
+            "status" -> old?.let { t ->
+                val s = data?.decode<HcStatusChange>() ?: return@let t
+                val changed = s.status?.state != t.status?.state
+                t.copy(status = s.status, records = s.records, reported = s.reported, statusMs = if (changed && s.status != null) now else t.statusMs)
+            }
+            "turn" -> old?.copy(turn = data?.long("turn") ?: old.turn)
+            "title" -> old?.copy(title = data?.string("title") ?: old.title)
+            "labels" -> {
+                val record = (data?.get("record") as? JsonObject)?.let { runCatching { HcJson.decodeFromJsonElement<HcTerminal>(it) }.getOrNull() }
+                val labels = (data?.get("labels") as? JsonObject)?.let { runCatching { HcJson.decodeFromJsonElement<Map<String, String>>(it) }.getOrNull() }
+                (record ?: old)?.let { t -> labels?.let { t.copy(labels = it) } ?: t }
+            }
+            "size" -> old?.copy(cols = data?.long("cols")?.toInt() ?: old.cols, rows = data?.long("rows")?.toInt() ?: old.rows)
+            "foreground" -> old?.copy(
+                foreground = event.data?.takeIf { it !is JsonNull }?.let { runCatching { HcJson.decodeFromJsonElement<HcForeground>(it) }.getOrNull() },
+            )
+            else -> old
+        }
+        val map = if (next == null) terminals - address else terminals + (address to next)
+        return HcView(event.seq, map)
+    }
+
+    companion object {
+        fun of(snapshot: HcSubscribed): HcView = HcView(snapshot.seq, snapshot.terminals.associateBy { it.address })
+
+        private fun JsonObject.long(key: String): Long? = (get(key) as? kotlinx.serialization.json.JsonPrimitive)?.content?.toLongOrNull()
+        private fun JsonObject.string(key: String): String? = (get(key) as? kotlinx.serialization.json.JsonPrimitive)?.takeIf { it.isString }?.content
+    }
+}
+
+/**
+ * herdr-core's terminals as the app's own models ([SessionSnapshot]), so the Agents list, Needs
+ * you, notices and the machine screen read them as they read classic herdr's. Every id is
+ * prefixed with [PREFIX] so a machine running both can show both side by side; [address] gives
+ * back the terminal's hc address from a pane id.
+ *
+ * - A space of the Herdr desktop app is a workspace, its tab a tab, each terminal a pane: the app
+ *   labels each terminal it shows with `herdr.space` and `herdr.tab` (ids) and `where`
+ *   (`<space> / <tab>`, the names). A helper an agent started sits with its parent, as in the app.
+ * - Terminals the app doesn't show (started with `hc run`) go in one "Other terminals" workspace.
+ * - A terminal is an agent once its program reports status (OSC 7501), or when a known agent
+ *   runs in it and hasn't reported yet.
+ */
+object HcMapping {
+    const val PREFIX = "hc:"
+    const val OTHER = "${PREFIX}other"
+    private const val SPACE = "herdr.space"
+    private const val TAB = "herdr.tab"
+    private const val WHERE = "where"
+
+    /** Agents people start in a terminal, by program name: shown before they report a status. */
+    private val KNOWN = setOf(
+        "claude", "codex", "pi", "omp", "opencode", "gemini", "amp", "droid", "copilot", "cursor-agent", "goose", "grok", "aider", "crush", "qwen",
+    )
+
+    /** The hc address of a pane id from [snapshot], or null when it isn't one of herdr-core's. */
+    fun address(paneId: String): String? = paneId.takeIf { it.startsWith(PREFIX) }?.removePrefix(PREFIX)
+
+    fun paneId(address: String): String = PREFIX + address
+
+    /** The agent name the app knows (`claude` for Claude Code's `claude-code`), from its 7501 app or its program. */
+    fun agentName(t: HcTerminal): String? {
+        val app = t.status?.app?.trim()?.lowercase().orEmpty()
+        if (app.isNotEmpty()) {
+            return when (app) {
+                "claude-code", "claude" -> "claude"
+                "pi-coding-agent" -> "pi"
+                else -> app.removeSuffix("-cli")
+            }
+        }
+        val program = (t.foreground?.name ?: t.argv.firstOrNull()?.substringAfterLast('/')).orEmpty()
+        return program.takeIf { it in KNOWN }
+    }
+
+    fun isAgent(t: HcTerminal): Boolean = t.reported || t.status != null || agentName(t) != null
+
+    /** The status word as the app's: `error` needs the human as `blocked` does (labelled `error`). */
+    fun statusWord(t: HcTerminal): String = when (val s = t.status?.state) {
+        null -> AgentStatus.Unknown.wire
+        "error" -> AgentStatus.Blocked.wire
+        else -> s
+    }
+
+    private data class Place(val spaceId: String, val spaceName: String, val tabId: String, val tabName: String)
+
+    private fun placeOf(t: HcTerminal, all: Map<String, HcTerminal>): Place {
+        var cur: HcTerminal? = t
+        for (i in 0 until 32) {
+            val c = cur ?: break
+            own(c)?.let { return it }
+            cur = c.parent?.let { all[sibling(c.address, it)] }
+        }
+        val machine = machineOf(t.address)
+        val id = if (machine == null) OTHER else "$OTHER@$machine"
+        return Place(id, if (machine == null) "Other terminals" else "Other terminals on $machine", "$id/tab", "Terminals")
+    }
+
+    /** Where the desktop app put it, from its labels; null where it didn't. */
+    private fun own(t: HcTerminal): Place? {
+        val where = t.labels[WHERE]?.takeIf { it.isNotBlank() }
+        val names = where?.split(" / ", limit = 2)
+        val space = t.labels[SPACE]?.takeIf { it.isNotBlank() }
+        val tab = t.labels[TAB]?.takeIf { it.isNotBlank() }
+        if (space == null && where == null) return null
+        val scope = machineOf(t.address)?.let { "$it/" }.orEmpty()
+        val spaceId = PREFIX + scope + (space ?: "where:${names!![0]}")
+        val tabKey = tab ?: names?.getOrNull(1)?.let { "where:$it" } ?: t.address
+        return Place(
+            spaceId = spaceId,
+            spaceName = names?.get(0)?.takeIf { it.isNotBlank() } ?: space!!,
+            tabId = "$spaceId/$tabKey",
+            tabName = names?.getOrNull(1)?.takeIf { it.isNotBlank() } ?: tab ?: t.name ?: t.address,
+        )
+    }
+
+    /** `rohan` for `rohan/t7`; null for this core's own. */
+    private fun machineOf(address: String): String? = address.substringBeforeLast('/', "").ifEmpty { null }
+
+    /** A parent's address as the list has it: a remote terminal's parent `t3` is `rohan/t3` here. */
+    private fun sibling(child: String, parent: String): String =
+        machineOf(child)?.takeIf { '/' !in parent }?.let { "$it/$parent" } ?: parent
+
+    private fun attention(words: List<String>): String =
+        words.maxByOrNull { AgentStatus.of(it).attention }?.takeIf { AgentStatus.of(it) != AgentStatus.Unknown } ?: AgentStatus.Unknown.wire
+
+    /** Live terminals as a snapshot, spaces and tabs in the order their first terminal started, other terminals last. */
+    fun snapshot(terminals: Collection<HcTerminal>, version: String = "", generation: Int = HcConnection.GENERATION): SessionSnapshot {
+        val all = terminals.associateBy { it.address }
+        val live = terminals.filter { it.live }.sortedWith(compareBy({ it.createdMs }, { it.address }))
+        val placed = live.map { it to placeOf(it, all) }
+        val panes = placed.map { (t, p) ->
+            val agent = agentName(t)
+            PaneInfo(
+                paneId = paneId(t.address),
+                terminalId = t.address,
+                workspaceId = p.spaceId,
+                tabId = p.tabId,
+                cwd = t.cwd,
+                foregroundCwd = t.foreground?.cwd,
+                label = t.name ?: if (agent == null) t.foreground?.name else null,
+                agent = agent,
+                terminalTitle = t.title.ifBlank { null },
+                agentStatusRaw = if (isAgent(t)) statusWord(t) else AgentStatus.Unknown.wire,
+                stateLabels = labels(t),
+            )
+        }
+        val agents = placed.filter { isAgent(it.first) }.map { (t, p) ->
+            AgentInfo(
+                terminalId = t.address,
+                name = t.name,
+                agent = agentName(t),
+                title = t.status?.msg?.ifBlank { null } ?: t.status?.title?.ifBlank { null },
+                terminalTitle = t.title.ifBlank { null },
+                agentStatusRaw = statusWord(t),
+                stateLabels = labels(t),
+                tokensRaw = t.status?.progress?.let { JsonObject(mapOf("progress" to kotlinx.serialization.json.JsonPrimitive(it))) },
+                workspaceId = p.spaceId,
+                tabId = p.tabId,
+                paneId = paneId(t.address),
+                stateChangeSeq = t.statusMs ?: t.createdMs,
+                completionSeq = t.turn.takeIf { it > 0 },
+                cwd = t.foreground?.cwd ?: t.cwd,
+            )
+        }
+        // The desktop app's spaces first, the terminals it doesn't show after them.
+        val spaces = placed.map { it.second }.distinctBy { it.spaceId }.sortedBy { it.spaceId.startsWith(OTHER) }
+        val tabs = placed.map { it.second }.distinctBy { it.tabId }
+        fun words(match: (PaneInfo) -> Boolean) = panes.filter(match).map { it.agentStatusRaw }
+        return SessionSnapshot(
+            version = version,
+            protocol = generation,
+            workspaces = spaces.mapIndexed { i, s ->
+                val own = tabs.filter { it.spaceId == s.spaceId }
+                WorkspaceInfo(
+                    workspaceId = s.spaceId,
+                    number = i + 1,
+                    label = s.spaceName,
+                    paneCount = panes.count { it.workspaceId == s.spaceId },
+                    tabCount = own.size,
+                    activeTabId = own.first().tabId,
+                    agentStatusRaw = attention(words { it.workspaceId == s.spaceId }),
+                )
+            },
+            tabs = spaces.flatMap { s ->
+                tabs.filter { it.spaceId == s.spaceId }.mapIndexed { i, t ->
+                    TabInfo(
+                        tabId = t.tabId,
+                        workspaceId = s.spaceId,
+                        number = i + 1,
+                        label = t.tabName,
+                        paneCount = panes.count { it.tabId == t.tabId },
+                        agentStatusRaw = attention(words { it.tabId == t.tabId }),
+                    )
+                }
+            },
+            panes = panes,
+            agents = agents,
+        )
+    }
+
+    /** What to call a status the app's words lack: `error`, and what a blocked program waits for. */
+    private fun labels(t: HcTerminal): Map<String, String> {
+        val s = t.status ?: return emptyMap()
+        return when {
+            s.state == "error" -> mapOf(AgentStatus.Blocked.wire to "error")
+            s.state == "blocked" && s.kind == "question" -> mapOf(AgentStatus.Blocked.wire to "question")
+            s.state == "blocked" && s.kind == "auth" -> mapOf(AgentStatus.Blocked.wire to "needs sign-in")
+            else -> emptyMap()
+        }
+    }
+}
