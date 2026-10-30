@@ -125,7 +125,8 @@ fun MachineScreen(nav: NavController, machineId: String) {
     }
     val state by session.state.collectAsStateWithLifecycle()
     val answeredAt by session.answeredAt.collectAsStateWithLifecycle()
-    val snap = state.snapshot
+    // Classic herdr's workspaces; not its last ones while the machine is online for herdr-core alone.
+    val snap = state.snapshot?.takeIf { state.classicMissing == null }
     // The desktop app's spaces, tabs and terminals (herdr-core), shown after classic herdr's workspaces.
     val core = state.herdrCore
     val list = rememberLazyListState()

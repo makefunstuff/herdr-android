@@ -364,10 +364,14 @@ class HerdrCore:
         self.n += 1
         self.f.write((json.dumps({"jsonrpc": "2.0", "id": self.n, "method": method, "params": params}) + "\n").encode())
         self.f.flush()
-        line = self.f.readline()
-        if not line:
-            raise RuntimeError("herdr-core closed the connection")
-        out = json.loads(line.decode(errors="replace"))
+        while True:
+            line = self.f.readline()
+            if not line:
+                raise RuntimeError("herdr-core closed the connection")
+            out = json.loads(line.decode(errors="replace"))
+            # A late answer to a call that timed out isn't this one's.
+            if out.get("id") == self.n:
+                break
         if out.get("error"):
             raise RuntimeError(out["error"].get("message") or "herdr-core: error")
         return out.get("result") or {}
@@ -1364,7 +1368,9 @@ def tick(state, n, dry_run=False, now=None):
                         _classic_last[key] = snap
                         st.pop("classic_problem", None)
                     except Exception:  # noqa: BLE001 - herdr-core's agents are still told, classic herdr's kept as they were
-                        if core is None and not told_core:
+                        # Without classic herdr's last snapshot, one that had agents keeps them by not looking now.
+                        told_classic = any(not p.startswith(HC_PREFIX) for p in st.get("agents") or {})
+                        if key not in _classic_last and (told_classic or (core is None and not told_core)):
                             raise
                         log_once(st, "classic_problem", "herdr session %s:" % key, sys.exc_info()[1])
                         snap = _classic_last.get(key, snap)

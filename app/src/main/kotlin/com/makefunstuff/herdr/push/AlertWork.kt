@@ -152,14 +152,17 @@ class AlertWork(
         val snapshot = Sessions.merge(api?.snapshot(), core) ?: SessionSnapshot()
         val tasks = board?.let { PushLook.tasks(it) }
         val events = PushLook.events({ pane -> s.awaitAgent(pane).read(pane, lines = 60, visible = true) }, snapshot, tasks)
-        tally.agents(machineId, snapshot)
+        // Only once both were read (herdr-core looked for, classic herdr not stopped): else agents would seem gone.
+        if (st.agentsKnown) tally.agents(machineId, snapshot)
         tasks?.let { tally.tasks(machineId, it) }
         val conn = s.awaitConnection()
         // Whether someone is at the machine, from its herdr-push (a machine without one can't tell).
         if (rules.holdAtMachine) HerdrPush.Client(conn, s.machine.label).presence()?.let { quiet.presence.record(machineId, s.machine.label, it, System.currentTimeMillis()) }
         inbox.apply(Alerts.all(machineId, s.machine.label, events), quiet = quiet.silent(), hold = quiet.check(), rules = rules)
-        watches.look(machineId, s.machine.label, snapshot.agents, tasks)
-        live.looked(machineId, s.machine.label, snapshot, tasks)
+        if (st.agentsKnown) {
+            watches.look(machineId, s.machine.label, snapshot.agents, tasks)
+            live.looked(machineId, s.machine.label, snapshot, tasks)
+        }
         // Low on RAM or disk, for a machine without herdr-push (where it runs, the push said so already: shown once).
         runCatching { HealthClient { cmd, timeout -> conn.run(cmd, timeout) }.sample() }.getOrNull()?.let { sample ->
             val report = HealthReport.of(sample, ProcLabels.label(sample, null, snapshot)) ?: return@let

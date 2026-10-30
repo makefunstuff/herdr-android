@@ -175,5 +175,11 @@ class HcScreensTest {
         assertEquals(core.snapshot, alone.view)
         assertFalse(alone.classic)
         assertNull(alone.snapshot)
+        assertTrue(alone.copy(herdrCoreLooked = true).agentsKnown)
+        // Classic herdr stopped on a machine running both: its last snapshot isn't shown, and its agents' marks wait for it.
+        val stopped = alone.copy(snapshot = classic, herdrCoreLooked = true)
+        assertEquals(core.snapshot, stopped.view)
+        assertFalse(stopped.agentsKnown)
+        assertTrue(both.copy(herdrCoreLooked = true).agentsKnown)
     }
 }

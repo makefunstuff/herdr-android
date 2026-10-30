@@ -110,15 +110,19 @@ data class HostState(
      */
     val herdrCoreLooked: Boolean = false,
 ) {
-    /** Every agent of the machine is in [view]: classic herdr's and herdr-core's were both read. */
-    val agentsKnown: Boolean get() = herdrCoreLooked && view != null
+    /**
+     * Every agent of the machine is in [view]: classic herdr's and herdr-core's were both read. Not
+     * while classic herdr, which answered before, has stopped: its agents' marks and watches wait for it.
+     */
+    val agentsKnown: Boolean get() = herdrCoreLooked && view != null && !(classicMissing != null && snapshot != null)
 
     /**
      * Classic herdr's [snapshot] and herdr-core's together, classic first: what the Agents list,
      * Needs you, the chats and the machine screen show. Null until either answered. herdr-core's
-     * ids all start with [HcMapping.PREFIX]; [snapshot] alone stays classic herdr's.
+     * ids all start with [HcMapping.PREFIX]; [snapshot] alone stays classic herdr's. Online for
+     * herdr-core alone ([classicMissing]), classic herdr's last snapshot isn't live and is left out.
      */
-    val view: SessionSnapshot? by lazy { Sessions.merge(snapshot, herdrCore?.snapshot) }
+    val view: SessionSnapshot? by lazy { Sessions.merge(snapshot?.takeIf { classicMissing == null }, herdrCore?.snapshot) }
 
     /** Whether classic herdr answers here (a machine may be online for herdr-core alone). */
     val classic: Boolean get() = online && classicMissing == null
@@ -424,6 +428,7 @@ class HostSession(
         val openerResult = try {
             apiOpener(conn, m, found)
         } catch (e: ConnectError.HerdrMissing) {
+            if (!followsCore(m)) throw e
             herdrCoreOnly(conn, m, e)
         }
         val opener = openerResult.opener
@@ -597,9 +602,9 @@ class HostSession(
     }
 
     /**
-     * herdr-core belongs to the machine as a whole, not to a herdr session: beside classic herdr the app
-     * follows it for the default session only, as herdr-push does, so two machines in the app for two
-     * sessions of one host don't show its agents twice. (Where classic herdr is missing, it is followed whatever the session.)
+     * herdr-core belongs to the machine as a whole, not to a herdr session: the app follows it for the
+     * default session only, as herdr-push does, so two machines in the app for two sessions of one host
+     * don't show its agents twice.
      */
     private fun followsCore(m: Machine): Boolean = m.session.ifEmpty { "default" } == "default"
 
@@ -620,8 +625,8 @@ class HostSession(
         } ?: throw missing
         val why = missing.message ?: "herdr is missing"
         val attention = HostStatus.Attention(why, HostStatus.Attention.Kind.Herdr)
-        // Online for herdr-core: what classic herdr showed before it stopped isn't live, so it goes.
-        _state.update { it.copy(status = attention, classicMissing = why, snapshot = null, workspaceMeta = emptyMap()) }
+        // Online for herdr-core: what classic herdr showed before it stopped is kept but not shown ([HostState.view]).
+        _state.update { it.copy(status = attention, classicMissing = why) }
         followHerdrCore(conn, core)
         // Online for herdr-core while it answers; what classic herdr lacks while it doesn't.
         val status = launch {
