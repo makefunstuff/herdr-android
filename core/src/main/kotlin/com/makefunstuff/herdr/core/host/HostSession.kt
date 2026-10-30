@@ -11,6 +11,11 @@ import com.makefunstuff.herdr.core.board.BoardApi
 import com.makefunstuff.herdr.core.board.BoardClient
 import com.makefunstuff.herdr.core.board.V1WorkBoard
 import com.makefunstuff.herdr.core.board.WorkBoard
+import com.makefunstuff.herdr.core.hc.HcClient
+import com.makefunstuff.herdr.core.hc.HcDetection
+import com.makefunstuff.herdr.core.hc.HcMapping
+import com.makefunstuff.herdr.core.hc.HcView
+import com.makefunstuff.herdr.core.hc.HerdrCore
 import com.makefunstuff.herdr.core.shepherdr.BoardDetection
 import com.makefunstuff.herdr.core.shepherdr.ShepherdrClient
 import com.makefunstuff.herdr.core.shepherdr.ShepherdrTransport
@@ -87,6 +92,8 @@ data class HostState(
     val workspaceMeta: Map<String, Map<String, String>> = emptyMap(),
     /** The session's notifications, newest first. */
     val notices: List<Notice> = emptyList(),
+    /** herdr-core on this machine when one runs there (null: none, or not found yet). */
+    val herdrCore: HerdrCoreState? = null,
     /** How many of [notices] arrived since they were last looked at. */
     val unreadNotices: Int = 0,
 ) {
@@ -106,6 +113,13 @@ data class HostState(
 
     val online: Boolean get() = status == HostStatus.Online
 }
+
+/**
+ * herdr-core (the Herdr desktop app's runtime) on a machine that also runs classic herdr: its
+ * version, the core's name, and its terminals as a [SessionSnapshot] whose ids all start with
+ * [HcMapping.PREFIX], beside [HostState.snapshot]'s.
+ */
+data class HerdrCoreState(val version: String, val coreName: String, val binary: String, val snapshot: SessionSnapshot)
 
 /**
  * Keeps one machine connected and its herdr state fresh.
@@ -141,6 +155,10 @@ class HostSession(
     @Volatile private var shepherdr: ShepherdrTransport? = null
     private val shepherdrLock = Mutex()
     @Volatile private var api: HerdrApi? = null
+    /** herdr-core's one `hc connect` on this connection, once found; closed with the connection. */
+    @Volatile private var herdrCore: HerdrCore? = null
+    /** Follows herdr-core for this connection: outside the session's scope, so it never holds up a reconnect. */
+    @Volatile private var herdrCoreJob: Job? = null
     @Volatile private var herdrMachine: Machine = machine
     @Volatile private var metaDirty = true
 
@@ -316,6 +334,10 @@ class HostSession(
                 t
             }
             teardown()
+            if (failure is ClassicHerdrBack) {
+                attempt = 0
+                continue
+            }
             val (status, wait) = classify(failure, attempt)
             _state.update { it.copy(status = status) }
             attempt = if (status is HostStatus.Attention) attempt else attempt + 1
@@ -347,7 +369,11 @@ class HostSession(
         val found = probeHerdr(conn, m)
         var choice = HerdrBinaries.choose(found, null)?.let { HerdrChoice(it, null, found) }
         herdrMachine = choice?.let { m.copy(herdrPath = it.binary.path) } ?: m
-        val openerResult = apiOpener(conn, m, found)
+        val openerResult = try {
+            apiOpener(conn, m, found)
+        } catch (e: ConnectError.HerdrMissing) {
+            herdrCoreOnly(conn, m, e)
+        }
         val opener = openerResult.opener
         val herdr = HerdrApi(ApiClient(opener))
         val pong = openerResult.pong ?: herdr.ping()
@@ -361,6 +387,7 @@ class HostSession(
         val snapshot = herdr.snapshot()
         applySnapshot(snapshot) { it.copy(status = HostStatus.Online, herdrVersion = pong.version, herdr = choice) }
         launch { checkBoard() }
+        followHerdrCore(conn, null)
         launch { loadWorkspaceMeta(herdr, snapshot) }
 
         val done = CompletableDeferred<Throwable?>()
@@ -500,8 +527,135 @@ class HostSession(
         _state.update { it.copy(workspaceMeta = meta) }
     }
 
+    /** herdr-core's API on this machine, over the connection's one `hc connect`. */
+    suspend fun awaitHerdrCore(timeoutMs: Long = 20_000): HcClient =
+        withTimeoutOrNull(timeoutMs) { state.first { it.herdrCore != null } }?.let { herdrCore?.client }
+            ?: throw IOException("herdr-core isn't running on ${machine.label}")
+
+    /**
+     * A machine without classic herdr where herdr-core runs: the session stays connected for
+     * herdr-core, while the status still says what classic herdr lacks (the screens show that until
+     * they read [HostState.herdrCore]). Classic herdr is looked for again as often as the Attention
+     * retry would; once it answers, the session starts over with both.
+     */
+    private suspend fun herdrCoreOnly(conn: MachineConnection, m: Machine, missing: ConnectError.HerdrMissing): Nothing {
+        val core = try {
+            HcDetection.open(conn, scope)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Throwable) {
+            null
+        } ?: throw missing
+        _state.update { it.copy(status = HostStatus.Attention(missing.message ?: "herdr is missing", HostStatus.Attention.Kind.Herdr)) }
+        followHerdrCore(conn, core)
+        var due = System.currentTimeMillis() + CLASSIC_RECHECK_MS
+        while (true) {
+            // Retry looks again at once, as it reconnects a machine whose herdr is missing.
+            val retry = withTimeoutOrNull(LINK_CHECK_MS) { retryNow.receive() } != null
+            // Nothing else here notices a dropped link: no classic event stream.
+            if (!conn.isConnected) throw IOException("Lost the connection to ${m.label}")
+            if (!retry && System.currentTimeMillis() < due) continue
+            due = System.currentTimeMillis() + CLASSIC_RECHECK_MS
+            val back = try {
+                apiOpener(conn, m, probeHerdr(conn, m))
+                true
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Throwable) {
+                false
+            }
+            if (back) throw ClassicHerdrBack()
+        }
+    }
+
+    /** Starts following herdr-core on [conn] ([first]: already connected), beside classic herdr. */
+    private fun followHerdrCore(conn: MachineConnection, first: HerdrCore?) {
+        herdrCoreJob?.cancel()
+        herdrCoreJob = scope.launch { watchHerdrCore(conn, first) }
+    }
+
+    /**
+     * Follows herdr-core, never failing the session: finds it (again a minute after it was missing
+     * or its line dropped, as when the desktop app starts later or hc updates), subscribes, and keeps
+     * [HostState.herdrCore] up to date from its events.
+     */
+    private suspend fun watchHerdrCore(conn: MachineConnection, first: HerdrCore?): Nothing {
+        var next = first
+        while (true) {
+            val core = next ?: try {
+                HcDetection.open(conn, scope)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Throwable) {
+                null
+            }
+            next = null
+            var followed = false
+            if (core != null) {
+                herdrCore = core
+                try {
+                    // Torn down meanwhile: teardown let go of the connection before this one was kept.
+                    if (connection === conn) followEvents(core) { followed = true }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Throwable) {
+                } finally {
+                    runCatching { core.connection.close() }
+                    if (herdrCore === core) {
+                        herdrCore = null
+                        _state.update { it.copy(herdrCore = null) }
+                    }
+                }
+            }
+            // A core that was followed and went (a restart, an hc update) is usually back in seconds;
+            // one that wouldn't subscribe waits the full minute.
+            delay(if (followed) HERDR_CORE_BACK_MS else HERDR_CORE_RETRY_MS)
+        }
+    }
+
+    /** Follows [core]'s events until its line ends; [subscribed] once it answered with its snapshot. */
+    private suspend fun followEvents(core: HerdrCore, subscribed: () -> Unit) = coroutineScope {
+        val subscription = core.client.subscribe()
+        val view = MutableStateFlow(HcView.of(subscription.snapshot))
+        subscribed()
+        val dirty = Channel<Unit>(Channel.CONFLATED)
+        fun publish() {
+            val snapshot = HcMapping.snapshot(view.value.terminals.values, core.version)
+            // Checked inside the update: teardown may let go of this core at any moment.
+            // Only a change the snapshot shows: classic screens redraw on every new state.
+            val next = HerdrCoreState(core.version, core.core.name, core.binary.path, snapshot)
+            _state.update { if (herdrCore === core && it.herdrCore != next) it.copy(herdrCore = next) else it }
+        }
+        publish()
+        val publisher = launch {
+            for (ping in dirty) {
+                delay(150) // coalesce bursts of events
+                publish()
+            }
+        }
+        try {
+            subscription.events.collect { event ->
+                // When a status word changed, by the core's clock: the record says, the event doesn't.
+                val at = view.value.statusChange(event)?.let { word ->
+                    val t = event.terminal ?: return@let null
+                    runCatching { core.client.get(t) }.getOrNull()?.takeIf { it.status?.state == word }?.statusMs
+                }
+                view.value = view.value.apply(event, statusAt = at)
+                if (event.method != "heartbeat") dirty.trySend(Unit)
+            }
+        } finally {
+            subscription.close()
+            publisher.cancel()
+        }
+    }
+
     private fun teardown() {
         api = null
+        herdrCoreJob?.cancel()
+        herdrCoreJob = null
+        herdrCore?.let { runCatching { it.connection.close() } }
+        herdrCore = null
+        _state.update { it.copy(herdrCore = null) }
         val c = connection
         connection = null
         shepherdr?.let { runCatching { it.close() } }
@@ -509,6 +663,21 @@ class HostSession(
         runCatching { c?.close() }
     }
 }
+
+/** How long the app waits before looking for herdr-core again where it wasn't, or its line dropped. */
+private const val HERDR_CORE_RETRY_MS = 60_000L
+
+/** How soon herdr-core is looked for again after a followed core went. */
+private const val HERDR_CORE_BACK_MS = 3_000L
+
+/** How long a machine with only herdr-core waits before looking for classic herdr again (the Attention retry's). */
+private const val CLASSIC_RECHECK_MS = 120_000L
+
+/** How often a machine with only herdr-core checks its SSH link is still up. */
+private const val LINK_CHECK_MS = 5_000L
+
+/** Classic herdr answers on a machine that had only herdr-core: the session starts over, at once, with both. */
+private class ClassicHerdrBack : IOException("herdr started")
 
 private val SessionListSerializer = ListSerializer(SessionEntry.serializer())
 

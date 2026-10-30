@@ -84,18 +84,18 @@ class TerminalStream(
     cols: Int,
     rows: Int,
     private val scope: CoroutineScope,
-) : Closeable {
+) : LiveTerminal {
     sealed interface Status {
         data object Opening : Status
         data object Live : Status
         data class Closed(val reason: String, val isRemoteExit: Boolean = false) : Status
     }
 
-    val emulator = TerminalEmulator(cols, rows)
+    override val emulator = TerminalEmulator(cols, rows)
     private val _revision = MutableStateFlow(0L)
-    val revision: StateFlow<Long> = _revision.asStateFlow()
+    override val revision: StateFlow<Long> = _revision.asStateFlow()
     private val _status = MutableStateFlow<Status>(Status.Opening)
-    val status: StateFlow<Status> = _status.asStateFlow()
+    override val status: StateFlow<Status> = _status.asStateFlow()
 
     private var process: RemoteProcess? = null
     private var job: Job? = null
@@ -104,7 +104,7 @@ class TerminalStream(
     private var requestedCols = cols
     private var requestedRows = rows
 
-    fun open() {
+    override fun open() {
         if (job != null) return
         job = scope.launch(Dispatchers.IO) {
             try {
@@ -154,18 +154,22 @@ class TerminalStream(
         }
     }
 
-    fun send(bytes: ByteArray) = write(FrameCodec.input(bytes))
+    override fun send(bytes: ByteArray) {
+        write(FrameCodec.input(bytes))
+    }
 
-    fun send(text: String) = send(text.toByteArray(Charsets.UTF_8))
+    override fun send(text: String) = send(text.toByteArray(Charsets.UTF_8))
 
-    fun resize(cols: Int, rows: Int) {
+    override fun resize(cols: Int, rows: Int) {
         if (cols == requestedCols && rows == requestedRows) return
         requestedCols = cols
         requestedRows = rows
         write(FrameCodec.resize(cols, rows))
     }
 
-    fun scroll(up: Boolean, lines: Int) = write(FrameCodec.scroll(up, lines))
+    override fun scroll(up: Boolean, lines: Int) {
+        write(FrameCodec.scroll(up, lines))
+    }
 
     private fun write(line: String) {
         outbound.trySend(line)

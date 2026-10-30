@@ -1,0 +1,1 @@
+{"error": {"code": -32000, "data": {"hint": "see `hc ls --all`", "kind": "not_found"}, "message": "no terminal \"nope\""}, "id": 15, "jsonrpc": "2.0"}

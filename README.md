@@ -392,7 +392,7 @@ It needs JDK 17, no Android SDK, and takes about half an hour for all 200 scenes
 
 ## Layout
 
-- `core/`: pure Kotlin/JVM: SSH, herdr API, host sessions, terminal emulator and its key bar (`core/terminal`), reading code (`core/code`), quick commands (`core/quick`), dev servers and port forwarding (`core/ports`, `core/ssh/PortForward.kt`). `./gradlew -p core test`.
+- `core/`: pure Kotlin/JVM: SSH, herdr API, herdr-core's API (`core/hc`, [`docs/HERDR_CORE.md`](docs/HERDR_CORE.md)), host sessions, terminal emulator and its key bar (`core/terminal`), reading code (`core/code`), quick commands (`core/quick`), dev servers and port forwarding (`core/ports`, `core/ssh/PortForward.kt`). `./gradlew -p core test`.
 - `app/`: the Android app. `ui/theme` and `ui/design` hold its look and shared components ([`docs/DESIGN.md`](docs/DESIGN.md)).
 - `tools/ui-preview/`: the screen previews. `./gradlew -p tools/ui-preview render`.
 - `host/herdr-push/`: the watcher that runs on a machine and pushes to the phone (Python 3; core carries it as a resource, and its tests run it).
