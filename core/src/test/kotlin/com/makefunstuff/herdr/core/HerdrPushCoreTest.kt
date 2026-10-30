@@ -156,11 +156,15 @@ class HerdrPushCoreTest {
             val (_, after) = assertNotNull(PushMessages.open(received[1], mapOf("m1" to key)))
             assertEquals(listOf<AlertChange>(AlertChange.Clear("agent:m1:hc:t2")), after.events.map { Alerts.of("m1", "devbox", it) })
 
-            // A core that stops is no news: its agents aren't "gone", and nothing starts one.
+            // The core stops (and the watcher kept nothing of it, as after its own restart): its agents are gone,
+            // the done one's notification comes down, and nothing starts a core.
             core.close()
             socket.delete()
             assertEquals(0, sh(dir, env, HerdrPush.command("once")))
-            assertEquals(2, received.size)
+            assertEquals(3, received.size)
+            val (_, stopped) = assertNotNull(PushMessages.open(received[2], mapOf("m1" to key)))
+            assertEquals(listOf<AlertChange>(AlertChange.Clear("agent:m1:hc:t4")), stopped.events.map { Alerts.of("m1", "devbox", it) })
+            assertTrue(!socket.exists())
         } finally {
             core.close()
             socket.delete()

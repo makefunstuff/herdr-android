@@ -387,7 +387,7 @@ private fun WorkspaceCard(
             verticalAlignment = Alignment.CenterVertically,
             // Long-press the header for the workspace's Git actions.
             modifier = (if (onWorktrees != null) Modifier.combinedClickable(onClick = {}, onLongClickLabel = "show the workspace's actions", onLongClick = { menu = true }) else Modifier)
-                .padding(start = Space.card, top = Space.xs, end = Space.xs).heightIn(min = 48.dp),
+                .padding(start = Space.card, top = Space.xs, end = Space.xs).then(if (onWorkspaceMenu == null) Modifier.heightIn(min = 48.dp) else Modifier),
         ) {
             StatusDot(if (ws.agentStatus == AgentStatus.Unknown) c.off else ws.agentStatus.color())
             Spacer(Modifier.width(Space.m))

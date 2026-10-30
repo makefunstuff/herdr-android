@@ -349,7 +349,8 @@ class HerdrCore:
     def call(self, method, params=None):
         if self.f is None:
             s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-            s.settimeout(10)
+            # Short: a core that doesn't answer mustn't hold up classic herdr's notifications.
+            s.settimeout(3)
             try:
                 s.connect(self.path)
             except OSError:
@@ -1352,9 +1353,9 @@ def tick(state, n, dry_run=False, now=None):
         jst = st.setdefault("journal", {})
         noted = []
         core = core_look(src, st, now) if src.session == "default" else None
-        if core is None:
-            st.pop("core_known", None)
-        if src.herdr or core is not None:
+        # herdr-core's agents last told, on a machine without classic herdr: they go when the core does.
+        told_core = any(p.startswith(HC_PREFIX) for p in st.get("agents") or {})
+        if src.herdr or core is not None or told_core:
             try:
                 snap = {"workspaces": [], "tabs": [], "agents": []}
                 if src.herdr:
@@ -1363,13 +1364,13 @@ def tick(state, n, dry_run=False, now=None):
                         _classic_last[key] = snap
                         st.pop("classic_problem", None)
                     except Exception:  # noqa: BLE001 - herdr-core's agents are still told, classic herdr's kept as they were
-                        if core is None:
+                        if core is None and not told_core:
                             raise
                         log_once(st, "classic_problem", "herdr session %s:" % key, sys.exc_info()[1])
                         snap = _classic_last.get(key, snap)
                 if core is not None:
                     snap = merged(snap, core)
-                    # A core seen for the first time (herdr-push updated, the desktop app started): its agents
+                    # A core seen for the first time (herdr-push updated to read it): its agents
                     # as they stand are learnt, not told, as on a first look.
                     if not st.get("core_known"):
                         for a in core.get("agents") or []:

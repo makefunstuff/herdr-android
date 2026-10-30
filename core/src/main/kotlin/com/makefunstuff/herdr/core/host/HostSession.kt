@@ -439,7 +439,7 @@ class HostSession(
         val snapshot = herdr.snapshot()
         applySnapshot(snapshot) { it.copy(status = HostStatus.Online, herdrVersion = pong.version, herdr = choice) }
         launch { checkBoard() }
-        followHerdrCore(conn, null)
+        if (followsCore(m)) followHerdrCore(conn, null) else _state.update { it.copy(herdrCoreLooked = true) }
         launch { loadWorkspaceMeta(herdr, snapshot) }
 
         val done = CompletableDeferred<Throwable?>()
@@ -590,9 +590,18 @@ class HostSession(
     suspend fun awaitHerdrCore(timeoutMs: Long = 20_000): HcClient {
         start()
         // The core itself, not the last state kept of one that went a moment ago.
-        return withTimeoutOrNull(timeoutMs) { state.first { it.herdrCore != null && herdrCore != null } }?.let { herdrCore?.client }
-            ?: throw IOException("herdr-core isn't running on ${machine.label}")
+        return withTimeoutOrNull(timeoutMs) {
+            while (herdrCore == null) delay(100)
+            herdrCore?.client
+        } ?: throw IOException("herdr-core isn't running on ${machine.label}")
     }
+
+    /**
+     * herdr-core belongs to the machine as a whole, not to a herdr session: beside classic herdr the app
+     * follows it for the default session only, as herdr-push does, so two machines in the app for two
+     * sessions of one host don't show its agents twice. (Where classic herdr is missing, it is followed whatever the session.)
+     */
+    private fun followsCore(m: Machine): Boolean = m.session.ifEmpty { "default" } == "default"
 
     /**
      * A machine without classic herdr where herdr-core runs: the session stays connected for
@@ -611,7 +620,8 @@ class HostSession(
         } ?: throw missing
         val why = missing.message ?: "herdr is missing"
         val attention = HostStatus.Attention(why, HostStatus.Attention.Kind.Herdr)
-        _state.update { it.copy(status = attention, classicMissing = why) }
+        // Online for herdr-core: what classic herdr showed before it stopped isn't live, so it goes.
+        _state.update { it.copy(status = attention, classicMissing = why, snapshot = null, workspaceMeta = emptyMap()) }
         followHerdrCore(conn, core)
         // Online for herdr-core while it answers; what classic herdr lacks while it doesn't.
         val status = launch {
