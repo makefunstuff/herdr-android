@@ -11,7 +11,6 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -169,7 +168,8 @@ class HcConnection private constructor(
         }
         val response = try {
             write(HcFrames.encode(0, HcFrames.DATA, request(id, method, params).toByteArray(Charsets.UTF_8)))
-            withTimeout(timeoutMs) { waiter.await() }
+            // A plain failure, not withTimeout's cancellation, which callers would take for their own.
+            withTimeoutOrNull(timeoutMs) { waiter.await() } ?: throw IOException("herdr-core didn't answer $method")
         } finally {
             pending.remove(id)
         }

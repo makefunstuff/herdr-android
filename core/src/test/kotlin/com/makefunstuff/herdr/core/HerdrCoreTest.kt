@@ -149,9 +149,9 @@ class HerdrCoreTest {
     fun spacesTabsAndAgentsMapOntoTheAppsSnapshot() {
         val snap = HcMapping.snapshot(list.terminals, "0.1.14")
         assertEquals(listOf("herdr-android", "scratch", "Other terminals"), snap.workspaces.map { it.label })
-        assertEquals(listOf("hc:sp1", "hc:sp2", "hc:other"), snap.workspaces.map { it.workspaceId })
+        assertEquals(listOf("hc:sp1", "hc:sp2", "hc:!other"), snap.workspaces.map { it.workspaceId })
         assertEquals(listOf("review", "build", "claude", "Terminals"), snap.tabs.map { it.label })
-        assertEquals(listOf("hc:sp1/tb1", "hc:sp1/tb2", "hc:sp2/tb3", "hc:other/tab"), snap.tabs.map { it.tabId })
+        assertEquals(listOf("hc:sp1/tb1", "hc:sp1/tb2", "hc:sp2/tb3", "hc:!other/tab"), snap.tabs.map { it.tabId })
         assertEquals(2, snap.workspace("hc:sp1")!!.tabCount)
         // A space shows what most needs the human in it, as classic herdr's workspaces do.
         assertEquals(AgentStatus.Blocked, snap.workspace("hc:sp1")!!.agentStatus)
@@ -375,6 +375,9 @@ class HerdrCoreTest {
                 core.requests.first { it["method"]!!.jsonPrimitive.content == "terminal.send" }["params"].toString(),
             )
             assertTrue(core.requests.all { it["jsonrpc"]!!.jsonPrimitive.content == "2.0" })
+            // A call hc doesn't answer in time fails as a failure, not as the caller's own cancellation.
+            val late = runCatching { conn.call("terminal.keys", HcClient.Requests.keys("t4", listOf("esc")), timeoutMs = 200) }.exceptionOrNull()
+            assertTrue(late is java.io.IOException && late !is kotlinx.coroutines.CancellationException, "$late")
 
             val sub = client.subscribe()
             assertEquals(16, sub.snapshot.seq)
@@ -508,7 +511,10 @@ class HerdrCoreTest {
             val found = HcDetection.parse(out)
             assertTrue(found.running, out)
             assertEquals(socket.path, found.socket)
-            assertTrue(found.coreExes.any { it.endsWith("/sleep") }, out)
+            // The fake core's executable is `sleep`: counted as running, never run itself.
+            assertFalse(found.coreExes.any { it.endsWith("/sleep") }, out)
+            // Run: a real core's own build where one runs (a dev machine), else the one installed.
+            assertEquals(found.coreExes.firstOrNull() ?: exe.path, found.binary?.path, out)
             val mine = found.binaries.firstOrNull { it.path == exe.path }
             assertNotNull(mine, out)
             assertEquals("0.1.14", mine.version)

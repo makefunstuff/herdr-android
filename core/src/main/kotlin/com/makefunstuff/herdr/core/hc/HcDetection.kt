@@ -102,9 +102,11 @@ object HcDetection {
     fun parse(out: String): HcProbe {
         val rows = out.lines().map { it.split('\t') }
         val socket = rows.firstOrNull { it.size >= 2 && it[0] == "socket" && it[1].startsWith("/") }?.get(1)
-        val cores = rows.filter { it.size >= 2 && it[0] == "core" }.map { it[1] }.filter { it.startsWith("/") }
+        // A process named like a core whose executable isn't one (`exec -a`) is never run.
+        val cores = rows.filter { it.size >= 2 && it[0] == "core" }.map { it[1] }
+            .filter { it.startsWith("/") && it.substringAfterLast('/').let { n -> n.startsWith("herdr-core") || n == "hc" } }
         val noPgrep = rows.any { it.singleOrNull() == "nopgrep" }
-        val binaries = rows.filter { it.size >= 4 && it[0] == "bin" && it[1].startsWith("/") }
+        val binaries = rows.filter { it.size >= 4 && it[0] == "bin" && it[1].startsWith("/") && (it[3] != "core" || it[1] in cores) }
             .map { HcBinary(it[1], VERSION.find(it[2])?.value, it[3]) }
         val coreRows = rows.count { it.size >= 2 && it[0] == "core" }
         return HcProbe(socket, running = socket != null && (coreRows > 0 || noPgrep), binaries = binaries.distinctBy { it.path to it.source }, coreExes = cores)

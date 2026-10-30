@@ -334,6 +334,10 @@ class HostSession(
                 t
             }
             teardown()
+            if (failure is ClassicHerdrBack) {
+                attempt = 0
+                continue
+            }
             val (status, wait) = classify(failure, attempt)
             _state.update { it.copy(status = status) }
             attempt = if (status is HostStatus.Attention) attempt else attempt + 1
@@ -544,8 +548,14 @@ class HostSession(
         } ?: throw missing
         _state.update { it.copy(status = HostStatus.Attention(missing.message ?: "herdr is missing", HostStatus.Attention.Kind.Herdr)) }
         followHerdrCore(conn, core)
+        var due = System.currentTimeMillis() + CLASSIC_RECHECK_MS
         while (true) {
-            delay(CLASSIC_RECHECK_MS)
+            // Retry looks again at once, as it reconnects a machine whose herdr is missing.
+            val retry = withTimeoutOrNull(LINK_CHECK_MS) { retryNow.receive() } != null
+            // Nothing else here notices a dropped link: no classic event stream.
+            if (!conn.isConnected) throw IOException("Lost the connection to ${m.label}")
+            if (!retry && System.currentTimeMillis() < due) continue
+            due = System.currentTimeMillis() + CLASSIC_RECHECK_MS
             val back = try {
                 apiOpener(conn, m, probeHerdr(conn, m))
                 true
@@ -554,7 +564,7 @@ class HostSession(
             } catch (_: Throwable) {
                 false
             }
-            if (back) throw IOException("herdr started on ${m.label}")
+            if (back) throw ClassicHerdrBack()
         }
     }
 
@@ -580,11 +590,15 @@ class HostSession(
                 null
             }
             next = null
+            var followed = false
             if (core != null) {
                 herdrCore = core
                 try {
                     // Torn down meanwhile: teardown let go of the connection before this one was kept.
-                    if (connection === conn) followEvents(core)
+                    if (connection === conn) {
+                        followed = true
+                        followEvents(core)
+                    }
                 } catch (e: CancellationException) {
                     throw e
                 } catch (_: Throwable) {
@@ -596,7 +610,8 @@ class HostSession(
                     }
                 }
             }
-            delay(HERDR_CORE_RETRY_MS)
+            // A core that was followed and went (a restart, an hc update) is usually back in seconds.
+            delay(if (followed) HERDR_CORE_BACK_MS else HERDR_CORE_RETRY_MS)
         }
     }
 
@@ -606,7 +621,8 @@ class HostSession(
         val dirty = Channel<Unit>(Channel.CONFLATED)
         fun publish() {
             val snapshot = HcMapping.snapshot(view.value.terminals.values, core.version)
-            if (herdrCore === core) _state.update { it.copy(herdrCore = HerdrCoreState(core.version, core.core.name, core.binary.path, snapshot)) }
+            // Checked inside the update: teardown may let go of this core at any moment.
+            _state.update { if (herdrCore === core) it.copy(herdrCore = HerdrCoreState(core.version, core.core.name, core.binary.path, snapshot)) else it }
         }
         publish()
         val publisher = launch {
@@ -649,8 +665,17 @@ class HostSession(
 /** How long the app waits before looking for herdr-core again where it wasn't, or its line dropped. */
 private const val HERDR_CORE_RETRY_MS = 60_000L
 
+/** How soon herdr-core is looked for again after a followed core went. */
+private const val HERDR_CORE_BACK_MS = 3_000L
+
 /** How long a machine with only herdr-core waits before looking for classic herdr again (the Attention retry's). */
 private const val CLASSIC_RECHECK_MS = 120_000L
+
+/** How often a machine with only herdr-core checks its SSH link is still up. */
+private const val LINK_CHECK_MS = 5_000L
+
+/** Classic herdr answers on a machine that had only herdr-core: the session starts over, at once, with both. */
+private class ClassicHerdrBack : IOException("herdr started")
 
 private val SessionListSerializer = ListSerializer(SessionEntry.serializer())
 

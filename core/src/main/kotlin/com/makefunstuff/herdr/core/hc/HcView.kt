@@ -92,7 +92,8 @@ data class HcView(val seq: Long = 0, val terminals: Map<String, HcTerminal> = em
  */
 object HcMapping {
     const val PREFIX = "hc:"
-    const val OTHER = "${PREFIX}other"
+    /** Terminals the desktop app doesn't show; `!` keeps it apart from any space id the app makes. */
+    const val OTHER = "${PREFIX}!other"
     private const val SPACE = "herdr.space"
     private const val TAB = "herdr.tab"
     private const val WHERE = "where"

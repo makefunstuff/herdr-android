@@ -89,11 +89,23 @@ class HcTerminalStream(
         if (cols == this.cols && rows == this.rows) return
         this.cols = cols
         this.rows = rows
+        // Watching, the program keeps drawing at the person's size: only the viewer's changes.
+        if (observe) return
         synchronized(emulator.lock) { emulator.resize(cols, rows) }
-        if (!observe) outbound.trySend { it.resize(cols, rows) }
+        outbound.trySend { it.resize(cols, rows) }
     }
 
     override fun scroll(up: Boolean, lines: Int) {}
+
+    /**
+     * The program's size changed elsewhere (hc's `size` event: someone typed in the desktop window,
+     * which then sets the size): the emulator follows, so the phone draws what the program draws.
+     */
+    fun programResized(cols: Int, rows: Int) {
+        if (cols <= 0 || rows <= 0) return
+        synchronized(emulator.lock) { emulator.resize(cols, rows) }
+        _revision.update { it + 1 }
+    }
 
     override fun close() {
         outbound.close()
