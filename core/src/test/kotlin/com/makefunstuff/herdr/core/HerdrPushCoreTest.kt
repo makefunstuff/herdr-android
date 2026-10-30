@@ -97,9 +97,16 @@ class HerdrPushCoreTest {
     }
 
     @Test
-    fun herdrCoresAgentsArePushedOnAMachineWithoutClassicHerdr() {
+    fun herdrCoresAgentsArePushedOnAMachineWithoutClassicHerdr() = pushes(classic = null)
+
+    /** Classic herdr installed, its server not running: herdr-core's agents are told all the same. */
+    @Test
+    fun herdrCoresAgentsArePushedWhileClassicHerdrIsntRunning() = pushes(classic = "#!/bin/sh\necho 'herdr: no server running' >&2\nexit 1\n")
+
+    private fun pushes(classic: String?) {
         assumeTrue(python(), "python3 isn't installed")
         val dir = Files.createTempDirectory("herdr-push-core").toFile()
+        val herdr = classic?.let { File(dir, "herdr").apply { writeText(it); setExecutable(true) } }
         val received = CopyOnWriteArrayList<String>()
         val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
         server.createContext("/up") { ex ->
@@ -121,7 +128,7 @@ class HerdrPushCoreTest {
             )
             assertEquals(0, sh(dir, env, HerdrPush.installCommand(), HerdrPush.script))
             val key = PushSeal.newKey()
-            val sub = HerdrPush.subscription(HerdrPush.subscriberId("phone1", "m1"), "Pixel", "http://127.0.0.1:${server.address.port}/up", key, "default", null, null)
+            val sub = HerdrPush.subscription(HerdrPush.subscriberId("phone1", "m1"), "Pixel", "http://127.0.0.1:${server.address.port}/up", key, "default", herdr?.path, null)
             assertEquals(0, sh(dir, env, HerdrPush.command("subscribe"), sub))
 
             // The first look only learns how things stand.

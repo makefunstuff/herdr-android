@@ -1,5 +1,7 @@
 package com.makefunstuff.herdr.push
 
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 import com.makefunstuff.herdr.core.api.SessionSnapshot
 import com.makefunstuff.herdr.core.host.Sessions
 import com.makefunstuff.herdr.core.api.AgentStatus
@@ -136,13 +138,18 @@ class AlertWork(
     }
 
     private suspend fun check(machineId: String) = hosts.borrow(machineId) { s ->
-        // Online for classic herdr, or for herdr-core alone (the desktop app's).
+        // Online for classic herdr, or for herdr-core alone (the desktop app's); herdr-core looked for too.
         s.awaitConnection(30_000)
-        val api = if (s.state.value.classic) s.awaitApi(30_000) else null
+        withTimeoutOrNull(15_000) { s.state.first { it.herdrCoreLooked || !it.online } }
+        val st = s.state.value
+        if (!st.online) throw IOException("${s.machine.label} went offline")
+        val api = if (st.classicMissing == null) s.awaitApi(30_000) else null
+        val core = st.herdrCore?.snapshot
+        if (api == null && core == null) throw IOException("Nothing answers on ${s.machine.label}")
         s.checkBoard()
         val board = if (s.state.value.hasBoard) s.awaitBoard() else null
-        // Classic herdr's agents and herdr-core's, as far as it was found by now.
-        val snapshot = Sessions.merge(api?.snapshot(), s.state.value.herdrCore?.snapshot) ?: SessionSnapshot()
+        // Classic herdr's agents and herdr-core's.
+        val snapshot = Sessions.merge(api?.snapshot(), core) ?: SessionSnapshot()
         val tasks = board?.let { PushLook.tasks(it) }
         val events = PushLook.events({ pane -> s.awaitAgent(pane).read(pane, lines = 60, visible = true) }, snapshot, tasks)
         tally.agents(machineId, snapshot)

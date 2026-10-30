@@ -119,7 +119,7 @@ fun FileScreen(nav: NavController, spot: CodeSpot, path: String, line: Int?) {
                 BarIcon(HerdrIcons.ALargeSmall, "Text size and wrapping", { showView = true })
                 BarIcon(HerdrIcons.MessageSquare, "Comments", { nav.navigate(Routes.codeNotes(spot)) }, badge = pending)
                 // A quick command on this file, and on the lines chosen in it ({{file}}, {{selection}}).
-                if (host.online) BarIcon(HerdrIcons.Zap, "Quick commands", {
+                if (host.classic) BarIcon(HerdrIcons.Zap, "Quick commands", {
                     quick = com.makefunstuff.herdr.ui.quick.QuickPlace(
                         spot.machine, spot.dir, label = name, pane = spot.pane, task = spot.task, taskName = spot.taskName, file = path,
                         selection = chosen?.joinToString("\n") { rows[it].text }.orEmpty(),

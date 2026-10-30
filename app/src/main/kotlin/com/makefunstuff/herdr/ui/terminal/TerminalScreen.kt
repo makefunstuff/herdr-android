@@ -461,7 +461,8 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
                     }
                     MenuRow("Edit key bar…", HerdrIcons.Keyboard, { menu = false; editKeys = true })
                     MenuRow(if (bar.keepScreenOn) "Let the screen sleep" else "Keep screen on", HerdrIcons.Sun, { menu = false; container.keyBar.setKeepScreenOn(!bar.keepScreenOn) })
-                    MenuRow(if (keepHost) "Fit to phone" else "Desktop size", if (keepHost) HerdrIcons.Smartphone else HerdrIcons.Monitor, { menu = false; keepHost = !keepHost })
+                    // herdr-core's size is the last active viewer's, the phone's own once it attached: no desktop size to keep.
+                    if (core == null) MenuRow(if (keepHost) "Fit to phone" else "Desktop size", if (keepHost) HerdrIcons.Smartphone else HerdrIcons.Monitor, { menu = false; keepHost = !keepHost })
                     MenuRow("Reconnect", HerdrIcons.RefreshCcw, { menu = false; generation++ })
                 }
             }

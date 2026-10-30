@@ -108,7 +108,7 @@ fun QuickRunsScreen(nav: NavController, machineId: String, openRun: String? = nu
                 BarIcon(HerdrIcons.RefreshCw, "Look again", { again++ })
             }
         },
-        floatingActionButton = { if (host.online) HerdrFab("Commands", icon = HerdrIcons.Zap) { commands = true } },
+        floatingActionButton = { if (host.classic) HerdrFab("Commands", icon = HerdrIcons.Zap) { commands = true } },
     ) { padding ->
         Box(Modifier.padding(padding).fillMaxSize()) {
             val l = list

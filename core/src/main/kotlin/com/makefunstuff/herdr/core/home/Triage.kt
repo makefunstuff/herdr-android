@@ -1,6 +1,5 @@
 package com.makefunstuff.herdr.core.home
 
-import com.makefunstuff.herdr.core.hc.HcMapping
 import kotlinx.serialization.Serializable
 import java.time.Instant
 import java.time.LocalTime
@@ -94,15 +93,13 @@ data class Triage(
      * What is worth keeping: snoozes that still hold, and nothing of a pane that is gone. [agents]: every
      * agent on the machines' last snapshots; [read]: the machines those come from. An agent on a machine
      * not read now (offline since the app started) is kept as it is; one on a machine taken out of the app
-     * ([machines], every machine the app has) goes. herdr-core's agents on a machine in [coreUnread]
-     * (its herdr-core not found yet, or gone for a moment) are kept as they are too.
+     * ([machines], every machine the app has) goes.
      */
-    fun keep(agents: List<HomeAgent>, read: Set<String>, machines: Set<String>, now: Long, coreUnread: Set<String> = emptySet()): Triage {
+    fun keep(agents: List<HomeAgent>, read: Set<String>, machines: Set<String>, now: Long): Triage {
         val byKey = agents.associateBy { it.key }
         fun there(key: String): Boolean {
             if (key in byKey) return true
             val machine = machines.firstOrNull { key.startsWith("$it/") } ?: return false
-            if (machine in coreUnread && key.removePrefix("$machine/").startsWith(HcMapping.PREFIX)) return true
             return machine !in read
         }
         return copy(

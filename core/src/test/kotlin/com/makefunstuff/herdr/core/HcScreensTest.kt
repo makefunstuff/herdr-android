@@ -86,6 +86,7 @@ class HcScreensTest {
         assertEquals("""{"terminal":"t2","text":"y","force":true}""", core.calls[2].second.toString())
         // Classic herdr's panes aren't hc's.
         assertFailsWith<IOException> { port.keys("w1:p1", listOf("y"), named = true) }
+        Unit
     }
 
     @Test

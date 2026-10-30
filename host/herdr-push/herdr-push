@@ -1284,33 +1284,48 @@ def sources(subs):
     return out
 
 
-# herdr-core's last snapshot per herdr session while this watcher runs: a look that fails keeps it, so a
-# core restarting doesn't clear and repeat its agents' notifications.
+# herdr-core's last snapshot per herdr session while this watcher runs, and when it was read: a core that
+# doesn't answer for a while (the desktop app restarting, an hc update, a stale socket) keeps its agents for
+# CORE_GRACE seconds, so a restart neither clears nor repeats their notifications; after that they are gone.
 _core_last = {}
+CORE_GRACE = float(os.environ.get("HERDR_PUSH_CORE_GRACE", "60"))
+# Classic herdr's last snapshot, likewise: while its server doesn't answer, herdr-core's agents are still told.
+_classic_last = {}
 
 
-def core_look(src, st):
+def core_look(src, st, now):
     """herdr-core's agents where a core runs (else None), with [src] set to read their screens."""
     path = hc_socket()
-    if not os.path.exists(path):
-        _core_last.pop(src.key, None)
-        if src.core:
-            src.core.close()
-        src.core = None
-        return None
-    if src.core is None or src.core.path != path:
-        src.core = HerdrCore(path)
     try:
+        if not os.path.exists(path):
+            raise RuntimeError("no herdr-core socket")
+        src.core = HerdrCore(path)
         snap = hc_snapshot(src.core.call("terminal.list").get("terminals") or [])
-        _core_last[src.key] = snap
+        _core_last[src.key] = (snap, now)
         st.pop("core_problem", None)
         return snap
     except Exception as e:  # noqa: BLE001 - classic herdr's agents are still told
-        src.core.close()
+        if src.core:
+            src.core.close()
+        src.core = None
+        last = _core_last.get(src.key)
+        if last is None:
+            return None
         if st.get("core_problem") != str(e):
             log("herdr-core:", e)
         st["core_problem"] = str(e)
-        return _core_last.get(src.key)
+        if now - last[1] > CORE_GRACE:
+            _core_last.pop(src.key, None)
+            return None
+        return last[0]
+
+
+def log_once(st, field, *parts):
+    """Logs a problem once until it changes or is over (the field is cleared when it is)."""
+    text = " ".join(str(p) for p in parts)
+    if st.get(field) != text:
+        log(*parts)
+    st[field] = text
 
 
 def tick(state, n, dry_run=False, now=None):
@@ -1336,12 +1351,33 @@ def tick(state, n, dry_run=False, now=None):
         # What the journal saw last; its first look only learns how things stand.
         jst = st.setdefault("journal", {})
         noted = []
-        core = core_look(src, st) if src.session == "default" else None
+        core = core_look(src, st, now) if src.session == "default" else None
+        if core is None:
+            st.pop("core_known", None)
         if src.herdr or core is not None:
             try:
-                snap = src.snapshot() if src.herdr else {"workspaces": [], "tabs": [], "agents": []}
+                snap = {"workspaces": [], "tabs": [], "agents": []}
+                if src.herdr:
+                    try:
+                        snap = src.snapshot()
+                        _classic_last[key] = snap
+                        st.pop("classic_problem", None)
+                    except Exception:  # noqa: BLE001 - herdr-core's agents are still told, classic herdr's kept as they were
+                        if core is None:
+                            raise
+                        log_once(st, "classic_problem", "herdr session %s:" % key, sys.exc_info()[1])
+                        snap = _classic_last.get(key, snap)
                 if core is not None:
                     snap = merged(snap, core)
+                    # A core seen for the first time (herdr-push updated, the desktop app started): its agents
+                    # as they stand are learnt, not told, as on a first look.
+                    if not st.get("core_known"):
+                        for a in core.get("agents") or []:
+                            if "agents" in st:
+                                st["agents"].setdefault(a["pane_id"], a.get("agent_status", "unknown"))
+                            if "agents" in jst:
+                                jst["agents"].setdefault(a["pane_id"], "%s#%s" % (a.get("agent_status", "unknown"), a.get("state_change_seq", "")))
+                    st["core_known"] = True
                 first = "agents" not in st
                 told = agent_events(src, snap, st.setdefault("agents", {}), first)
                 events += told

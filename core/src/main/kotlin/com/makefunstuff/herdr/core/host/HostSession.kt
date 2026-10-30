@@ -104,7 +104,15 @@ data class HostState(
      * installed, or its session doesn't run); null where classic herdr answers.
      */
     val classicMissing: String? = null,
+    /**
+     * Whether herdr-core was looked for since the machine connected (found or not): until then a
+     * machine running both shows classic herdr's agents alone, which isn't all of them.
+     */
+    val herdrCoreLooked: Boolean = false,
 ) {
+    /** Every agent of the machine is in [view]: classic herdr's and herdr-core's were both read. */
+    val agentsKnown: Boolean get() = herdrCoreLooked && view != null
+
     /**
      * Classic herdr's [snapshot] and herdr-core's together, classic first: what the Agents list,
      * Needs you, the chats and the machine screen show. Null until either answered. herdr-core's
@@ -359,7 +367,7 @@ class HostSession(
         v
     }
 
-    private fun statusMessage(): String = state.value.classicMissing ?: when (val s = state.value.status) {
+    private fun statusMessage(): String = state.value.classicMissing?.takeIf { state.value.online } ?: when (val s = state.value.status) {
         is HostStatus.Attention -> s.message
         is HostStatus.Reconnecting -> s.message
         else -> "${machine.label} is not connected"
@@ -581,7 +589,8 @@ class HostSession(
     /** herdr-core's API on this machine, over the connection's one `hc connect`. */
     suspend fun awaitHerdrCore(timeoutMs: Long = 20_000): HcClient {
         start()
-        return withTimeoutOrNull(timeoutMs) { state.first { it.herdrCore != null } }?.let { herdrCore?.client }
+        // The core itself, not the last state kept of one that went a moment ago.
+        return withTimeoutOrNull(timeoutMs) { state.first { it.herdrCore != null && herdrCore != null } }?.let { herdrCore?.client }
             ?: throw IOException("herdr-core isn't running on ${machine.label}")
     }
 
@@ -608,7 +617,8 @@ class HostSession(
         val status = launch {
             state.collect { s ->
                 val next = if (s.herdrCore != null) HostStatus.Online else attention
-                if (s.status != next) _state.update { it.copy(status = next) }
+                // Only between these two: a stop or a new connection meanwhile keeps its own status.
+                if (s.status != next) _state.update { if (it.status == HostStatus.Online || it.status == attention) it.copy(status = next) else it }
             }
         }
         var due = System.currentTimeMillis() + CLASSIC_RECHECK_MS
@@ -656,7 +666,10 @@ class HostSession(
             }
             next = null
             var followed = false
-            if (core != null) {
+            if (core == null) {
+                // Not there (any more): what was kept of a core that went is gone too.
+                _state.update { it.copy(herdrCore = null, herdrCoreLooked = true) }
+            } else {
                 herdrCore = core
                 try {
                     // Torn down meanwhile: teardown let go of the connection before this one was kept.
@@ -668,7 +681,9 @@ class HostSession(
                     runCatching { core.connection.close() }
                     if (herdrCore === core) {
                         herdrCore = null
-                        _state.update { it.copy(herdrCore = null) }
+                        // A core that was followed keeps its last state until it is looked for again
+                        // (3 s): a restart doesn't make its agents disappear and come back.
+                        if (!followed) _state.update { it.copy(herdrCore = null, herdrCoreLooked = true) }
                     }
                 }
             }
@@ -698,6 +713,7 @@ class HostSession(
                 val added = Notices.between(s.herdrCore?.snapshot, snapshot, now)
                 s.copy(
                     herdrCore = next,
+                    herdrCoreLooked = true,
                     notices = Notices.merge(s.notices, added),
                     unreadNotices = minOf(Notices.LIMIT, s.unreadNotices + added.size),
                 )
@@ -732,7 +748,7 @@ class HostSession(
         herdrCoreJob = null
         herdrCore?.let { runCatching { it.connection.close() } }
         herdrCore = null
-        _state.update { it.copy(herdrCore = null) }
+        _state.update { it.copy(herdrCore = null, herdrCoreLooked = false) }
         val c = connection
         connection = null
         shepherdr?.let { runCatching { it.close() } }

@@ -329,7 +329,7 @@ private fun AppNav(nav: NavHostController) {
             AlertPill(
                 // A muted agent asking doesn't drop a line either; its card still waits on the list.
                 nav, panes, entry, remember(waiting, triage) { waiting.filter { !(it is Waiting.Question && it.agent.key in triage.muted) } },
-                agentsRead = remember(hosts) { hosts.filter { it.view != null }.map { it.machine.id }.toSet() },
+                agentsRead = remember(hosts) { hosts.filter { it.agentsKnown }.map { it.machine.id }.toSet() },
                 boardsRead = remember(homeBoards) { homeBoards.map { it.machineId }.toSet() },
                 fired = container.watchWork.fired,
             )

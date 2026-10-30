@@ -83,7 +83,7 @@ class LiveWork(
                 if (!hosts.isForeground || !on) return@collect
                 val now = System.currentTimeMillis()
                 for (s in states) {
-                    val snap = s.view ?: continue
+                    val snap = s.view?.takeIf { s.agentsKnown } ?: continue
                     if (!s.online || store.state.value.machine(s.machine.id).off) continue
                     val id = s.machine.id
                     val again = now - (refreshed[id] ?: 0) > REFRESH_MS

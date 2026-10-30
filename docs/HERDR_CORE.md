@@ -37,7 +37,7 @@ hc itself has terminals only. The desktop app adds its spaces and tabs as labels
 What follows on the screens:
 
 - **Agents and Needs you**: hc's agents appear with the classic ones (`HomeAgent` reads `SessionSnapshot`). A blocked one can be answered with its keys (`terminal.keys`: `y`, `enter`, `esc`). `terminal.send` refuses a blocked program (kind `blocked`) unless forced.
-- **Notifications**: the app derives them from the status changes it follows (`Notices.between` on two snapshots), so herdr-core's snapshots raise the same notices for working → done and → blocked once HA-6 feeds them in; the events stream keeps them live.
+- **Notifications**: the app derives them from the status changes it follows (`Notices.between` on two snapshots), so herdr-core's snapshots raise the same notices for working → done and → blocked; the events stream keeps them live.
 - **Terminals**: `HcTerminalStream` and classic herdr's `TerminalStream` are both a `LiveTerminal` (emulator, revision, status, send, resize, scroll, close), so the Terminal screen takes either. It is fed by `terminal.attach`; hc sends the program's raw bytes, so the app's own emulator draws them. Attaching takes the terminal's size at once (hc: the last active viewer sets it), as classic herdr's takeover does; a watch-only attach (`observe`) never types or resizes the person's window. When the desktop window takes the size back (someone typed there), hc's `size` event says so; HA-6 passes it to `programResized` so the emulator follows.
 - **Chats**: hc reports no transcript, so an hc agent's chat shows its screen (`terminal.read`), as a classic agent without a session does. Following Claude Code's transcript from the agent's `cwd` is a follow-up.
 
