@@ -486,6 +486,7 @@ class HerdrCoreTest {
         assumeTrue(File("/proc/self/exe").exists() && File("/bin/bash").exists(), "needs Linux /proc and bash")
         val home = Files.createTempDirectory("hc-home").toFile()
         var fake: Process? = null
+        var holder: Process? = null
         var server: java.nio.channels.ServerSocketChannel? = null
         try {
             val bin = File(home, ".local/bin").apply { mkdirs() }
@@ -520,7 +521,24 @@ class HerdrCoreTest {
             assertEquals("0.1.14", mine.version)
             assertEquals("path", mine.source)
             assertFalse(found.binaries.any { it.path.endsWith("/hc") }, out)
+
+            // Linux: the session's core.lock decides. Unlocked, the socket is a crashed core's, whatever
+            // else runs (the fake core still does): no core, nothing more looked for.
+            if (File("/proc/locks").canRead() && File("/usr/bin/flock").canExecute()) {
+                val lock = File(home, "state/herdr-core/default/core.lock").apply { parentFile.mkdirs(); writeText(socket.path) }
+                val stale = probe(home)
+                assertFalse(HcDetection.parse(stale).running, stale)
+                assertTrue(HcDetection.parse(stale).binaries.isEmpty(), stale)
+                // Held, as the session's core holds it.
+                holder = ProcessBuilder("/usr/bin/flock", lock.path, "sleep", "60").start()
+                Thread.sleep(300)
+                val held = probe(home)
+                assertTrue(HcDetection.parse(held).running, held)
+                assertTrue(held.lines().any { it.startsWith("lock\t") }, held)
+                assertEquals(exe.path, HcDetection.parse(held).binary?.path, held)
+            }
         } finally {
+            holder?.destroy()
             fake?.destroy()
             server?.close()
             home.deleteRecursively()

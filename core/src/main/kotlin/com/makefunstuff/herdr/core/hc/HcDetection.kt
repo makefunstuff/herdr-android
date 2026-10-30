@@ -36,9 +36,10 @@ class HerdrCore(val binary: HcBinary, val connection: HcConnection) {
  * Only a core that already runs counts: `hc connect` starts one when none listens on its socket,
  * and the app mustn't start a runtime on a machine whose owner doesn't use it. So the probe finds
  * the default session's socket the way hc does (the running core writes it to `core.lock` in its
- * state folder), checks that it exists and that a `herdr-core serve` runs, and `connect` is pinned
- * to that socket (`HC_SOCKET`). Left: a core that stops in the moment between the probe and
- * `connect`, or crashed leaving its socket while another session's core runs, gets a new one.
+ * state folder), checks that it exists and that the session's core runs (on Linux, the one holding
+ * `core.lock`'s lock; elsewhere any `herdr-core serve`), and `connect` is pinned to that socket
+ * (`HC_SOCKET`). Left: a core that stops in the moment between the probe and `connect` gets a new
+ * one, as does, off Linux, a crashed core's socket while another session's core runs.
  */
 object HcDetection {
     private val SEARCH = listOf(
@@ -69,8 +70,10 @@ object HcDetection {
 
     /**
      * Prints `socket<TAB>path` when the default core's socket exists (and nothing more when it
-     * doesn't: no core, so no search), then `core<TAB>exe<TAB>pid` for each running
-     * `herdr-core serve` (`hc serve`), or `nopgrep`, then `bin<TAB>path<TAB>--version<TAB>source`
+     * doesn't: no core, so no search); then on Linux `lock<TAB>pid` and `core<TAB>exe<TAB>pid` for
+     * the core holding the session's `core.lock` (nothing more when none does: a stale socket),
+     * elsewhere `core<TAB>exe<TAB>pid` for each running `herdr-core serve` (`hc serve`), or
+     * `nopgrep`; then `bin<TAB>path<TAB>--version<TAB>source`
      * for each herdr-core executable, the running cores' first; the login shell's PATH only when
      * nothing else had one. Only `herdr-core` by that name: an `hc` alone may be another program
      * (herbstluftwm ships one).
@@ -84,8 +87,15 @@ object HcDetection {
             "emit() { [ -n \"\$2\" ] && [ -f \"\$2\" ] && [ -x \"\$2\" ] || return 0; " +
             "k=\"\$1:\$2\"; case \"\$seen\" in *\" \$k \"*) return 0;; esac; seen=\"\$seen\$k \"; found=1; " +
             "v=\"\$(\"\$2\" --version </dev/null 2>/dev/null | head -n 1)\"; printf 'bin\\t%s\\t%s\\t%s\\n' \"\$2\" \"\$v\" \"\$1\"; }; " +
-            "exes=''; " +
-            "if command -v pgrep >/dev/null 2>&1; then " +
+            "exes=''; ino=''; " +
+            // Linux: the session's own core holds flock on core.lock; /proc/locks names it without taking it.
+            "if [ -r /proc/locks ] && [ -f \"\$st/core.lock\" ]; then ino=\"\$(stat -c %i \"\$st/core.lock\" 2>/dev/null)\"; fi; " +
+            "if [ -n \"\$ino\" ]; then " +
+            "p=\"\$(grep ' FLOCK ' /proc/locks 2>/dev/null | grep -v -e '->' | grep \":\$ino \" | awk '{print \$5}' | head -n 1)\"; " +
+            "[ -n \"\$p\" ] || exit 0; " +
+            "e=\"\$(readlink /proc/\$p/exe 2>/dev/null)\"; e=\"\${e% (deleted)}\"; " +
+            "printf 'lock\\t%s\\n' \"\$p\"; printf 'core\\t%s\\t%s\\n' \"\$e\" \"\$p\"; exes=\"\$e\"; " +
+            "elif command -v pgrep >/dev/null 2>&1; then " +
             "for p in \$(pgrep -u \"\$(id -u)\" -f '^(.*/)?([h]erdr-core|[h]c) serve( |$)' 2>/dev/null); do " +
             "if [ -d /proc/\$p ]; then e=\"\$(readlink /proc/\$p/exe 2>/dev/null)\"; e=\"\${e% (deleted)}\"; " +
             "else e=\"\$(lsof -a -p \$p -d txt -Fn 2>/dev/null | sed -n 's/^n//p' | head -n 1)\"; fi; " +
@@ -109,7 +119,9 @@ object HcDetection {
         val binaries = rows.filter { it.size >= 4 && it[0] == "bin" && it[1].startsWith("/") && (it[3] != "core" || it[1] in cores) }
             .map { HcBinary(it[1], VERSION.find(it[2])?.value, it[3]) }
         val coreRows = rows.count { it.size >= 2 && it[0] == "core" }
-        return HcProbe(socket, running = socket != null && (coreRows > 0 || noPgrep), binaries = binaries.distinctBy { it.path to it.source }, coreExes = cores)
+        // The session's lock held (Linux), else some core process (pgrep), else the socket alone.
+        val locked = rows.any { it.size >= 2 && it[0] == "lock" }
+        return HcProbe(socket, running = socket != null && (locked || coreRows > 0 || noPgrep), binaries = binaries.distinctBy { it.path to it.source }, coreExes = cores)
     }
 
     /** `<binary> connect` on [socket]: the core's API on the channel's stdin/stdout, never a new core elsewhere. */

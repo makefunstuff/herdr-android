@@ -595,10 +595,7 @@ class HostSession(
                 herdrCore = core
                 try {
                     // Torn down meanwhile: teardown let go of the connection before this one was kept.
-                    if (connection === conn) {
-                        followed = true
-                        followEvents(core)
-                    }
+                    if (connection === conn) followEvents(core) { followed = true }
                 } catch (e: CancellationException) {
                     throw e
                 } catch (_: Throwable) {
@@ -610,19 +607,24 @@ class HostSession(
                     }
                 }
             }
-            // A core that was followed and went (a restart, an hc update) is usually back in seconds.
+            // A core that was followed and went (a restart, an hc update) is usually back in seconds;
+            // one that wouldn't subscribe waits the full minute.
             delay(if (followed) HERDR_CORE_BACK_MS else HERDR_CORE_RETRY_MS)
         }
     }
 
-    private suspend fun followEvents(core: HerdrCore) = coroutineScope {
+    /** Follows [core]'s events until its line ends; [subscribed] once it answered with its snapshot. */
+    private suspend fun followEvents(core: HerdrCore, subscribed: () -> Unit) = coroutineScope {
         val subscription = core.client.subscribe()
         val view = MutableStateFlow(HcView.of(subscription.snapshot))
+        subscribed()
         val dirty = Channel<Unit>(Channel.CONFLATED)
         fun publish() {
             val snapshot = HcMapping.snapshot(view.value.terminals.values, core.version)
             // Checked inside the update: teardown may let go of this core at any moment.
-            _state.update { if (herdrCore === core) it.copy(herdrCore = HerdrCoreState(core.version, core.core.name, core.binary.path, snapshot)) else it }
+            // Only a change the snapshot shows: classic screens redraw on every new state.
+            val next = HerdrCoreState(core.version, core.core.name, core.binary.path, snapshot)
+            _state.update { if (herdrCore === core && it.herdrCore != next) it.copy(herdrCore = next) else it }
         }
         publish()
         val publisher = launch {

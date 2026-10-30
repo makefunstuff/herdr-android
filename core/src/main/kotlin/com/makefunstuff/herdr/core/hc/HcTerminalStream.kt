@@ -68,7 +68,8 @@ class HcTerminalStream(
                 }
                 writer.cancel()
                 val reason = stream.closeReason()
-                _status.value = TerminalStream.Status.Closed(reason ?: "The terminal stream ended", isRemoteExit = reason != null)
+                // `signaled`: a kept terminal lost its program and gets a new shell; reattach after `restarted`.
+                _status.value = TerminalStream.Status.Closed(reason ?: "The terminal stream ended", isRemoteExit = reason != null && reason != "signaled")
             } catch (e: CancellationException) {
                 throw e
             } catch (t: Throwable) {
