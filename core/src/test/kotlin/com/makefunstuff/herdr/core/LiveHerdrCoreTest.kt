@@ -77,7 +77,7 @@ class LiveHerdrCoreTest {
     /**
      * A machine without classic herdr: here a herdr session that doesn't exist, so classic herdr is
      * "missing" as on a machine with only the desktop app. herdr-core is still found and followed,
-     * and the status still says what classic herdr lacks.
+     * and the machine is online for it, saying what classic herdr lacks.
      */
     @Test
     fun findsHerdrCoreWhereClassicHerdrIsMissing() {
@@ -91,9 +91,11 @@ class LiveHerdrCoreTest {
             try {
                 session.start()
                 val s = withTimeout(60_000) { session.state.first { it.herdrCore != null } }
-                println("status: ${s.status}")
-                assertTrue(s.status is com.makefunstuff.herdr.core.host.HostStatus.Attention, "${s.status}")
+                val online = withTimeout(10_000) { session.state.first { it.online } }
+                println("status: ${online.status}; classic herdr: ${online.classicMissing}")
+                assertTrue(online.classicMissing != null && !online.classic)
                 assertEquals(null, s.snapshot)
+                assertEquals(online.herdrCore!!.snapshot, online.view)
                 val live = session.awaitHerdrCore().list().terminals.filter { it.live }
                 assertEquals(live.map { it.address }.toSet(), s.herdrCore!!.snapshot.panes.map { it.terminalId }.toSet())
                 println("herdr-core alone: ${s.herdrCore!!.snapshot.agents.size} agents, ${live.size} terminals")

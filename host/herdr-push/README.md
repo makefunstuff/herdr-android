@@ -2,7 +2,7 @@
 
 A small watcher that runs on a machine with herdr and tells your phone when something there needs you, also while Herdr for Android is closed:
 
-- an agent becomes **blocked** (it asks something: a permission, a question) or **finishes**;
+- an agent becomes **blocked** (it asks something: a permission, a question) or **finishes**; also the Herdr desktop app's agents, in herdr-core, read on its socket where a core runs (never starting one);
 - a work board task starts **waiting for you**: ready to approve, review failed, plan ready, pick one, asks you, needs a login, stopped at a limit, went wrong.
 
 When that is over (answered on the desktop, the agent back at work, the task moved on), it says so too, and the phone takes the notification down.

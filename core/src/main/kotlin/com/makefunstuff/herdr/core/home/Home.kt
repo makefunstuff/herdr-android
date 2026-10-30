@@ -21,9 +21,9 @@ data class HomeAgent(
     val key: String get() = "$machineId/${agent.paneId}"
 
     companion object {
-        /** Every agent on the machines' last snapshots, in the machines' order. */
+        /** Every agent on the machines' last snapshots (classic herdr's, then herdr-core's), in the machines' order. */
         fun of(hosts: List<HostState>): List<HomeAgent> = hosts.flatMap { s ->
-            val snap = s.snapshot ?: return@flatMap emptyList()
+            val snap = s.view ?: return@flatMap emptyList()
             snap.agents.map { HomeAgent(s.machine.id, s.machine.label, it, snap.location(it.workspaceId, it.tabId), snap.workspace(it.workspaceId)?.label.orEmpty()) }
         }
     }

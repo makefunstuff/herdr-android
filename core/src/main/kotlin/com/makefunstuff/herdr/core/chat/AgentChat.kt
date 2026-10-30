@@ -59,7 +59,7 @@ class AgentChat(private val host: HostSession, val paneId: String, private val s
 
     private var jobs: List<Job> = emptyList()
 
-    private fun agent(): AgentInfo? = host.state.value.snapshot?.agents?.firstOrNull { it.paneId == paneId }
+    private fun agent(): AgentInfo? = host.state.value.view?.agents?.firstOrNull { it.paneId == paneId }
 
     fun start() {
         if (jobs.isNotEmpty()) return
@@ -96,7 +96,7 @@ class AgentChat(private val host: HostSession, val paneId: String, private val s
 
     private suspend fun followTranscript() {
         host.state
-            .map { s -> s.snapshot?.agents?.firstOrNull { it.paneId == paneId }?.let { it.agent to it.agentSession } }
+            .map { s -> s.view?.agents?.firstOrNull { it.paneId == paneId }?.let { it.agent to it.agentSession } }
             .distinctUntilChanged()
             .collectLatest { pair ->
                 val kind = pair?.first
@@ -105,7 +105,7 @@ class AgentChat(private val host: HostSession, val paneId: String, private val s
                 if (ref == null || transcript == null || ref.value.isEmpty()) {
                     // No transcript for this agent: show its screen. An agent that just started
                     // reports its session a moment later, which restarts this block.
-                    if (pair != null || host.state.value.snapshot != null) _state.update { it.copy(source = Source.Screen) }
+                    if (pair != null || host.state.value.view != null) _state.update { it.copy(source = Source.Screen) }
                     return@collectLatest
                 }
                 followLoop(ref, kind)
@@ -161,14 +161,14 @@ class AgentChat(private val host: HostSession, val paneId: String, private val s
     private suspend fun watchScreen() {
         while (true) {
             val agent = agent()
-            val status = agent?.agentStatus ?: host.state.value.snapshot?.pane(paneId)?.agentStatus ?: AgentStatus.Unknown
+            val status = agent?.agentStatus ?: host.state.value.view?.pane(paneId)?.agentStatus ?: AgentStatus.Unknown
             val source = _state.value.source
             val blocked = status == AgentStatus.Blocked
             // pi and omp stream their thoughts only to the screen: read it while they work.
             val streams = status == AgentStatus.Working && source == Source.Transcript && agent?.agent in STREAMS_THINKING
             if (streams) {
                 val thinking = try {
-                    Thinking.onScreen(host.awaitApi(10_000).readPane(paneId, source = "visible", lines = 200, ansi = true).text)
+                    Thinking.onScreen(host.awaitAgent(paneId, 10_000).read(paneId, lines = 200, visible = true, ansi = true))
                 } catch (e: CancellationException) {
                     throw e
                 } catch (_: Throwable) {
@@ -180,9 +180,9 @@ class AgentChat(private val host: HostSession, val paneId: String, private val s
             }
             if (blocked || source == Source.Screen) {
                 try {
-                    val api = host.awaitApi(10_000)
-                    val visible = if (blocked) api.readPane(paneId, source = "visible", lines = 80).text else null
-                    val recent = if (source == Source.Screen) api.readPane(paneId, source = "recent_unwrapped", lines = 200).text else null
+                    val api = host.awaitAgent(paneId, 10_000)
+                    val visible = if (blocked) api.read(paneId, lines = 80, visible = true) else null
+                    val recent = if (source == Source.Screen) api.read(paneId, lines = 200, visible = false) else null
                     _state.update { s ->
                         s.copy(
                             screen = (recent ?: visible ?: s.screen).trimEnd(),

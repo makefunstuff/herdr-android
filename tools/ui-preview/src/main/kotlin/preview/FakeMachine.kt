@@ -70,6 +70,10 @@ class FakeMachine(
     var uploadFails: String? = null,
     /** Set to make connecting fail, e.g. [ConnectError.Auth]. */
     var refuse: ConnectError? = null,
+    /** Whether classic herdr is installed there; false: only herdr-core ([core]) may run. */
+    var classic: Boolean = true,
+    /** herdr-core (the desktop app's runtime) running there, or null where it doesn't. */
+    var core: FakeCore? = null,
     /** What the health probe reads there (RAM, disks, processes, worktrees). */
     var health: FakeHealth = FakeHealth(),
     /** Its AI providers, as herdr-usage reads them there; null answers no usage command. */
@@ -104,6 +108,8 @@ class FakeMachine(
     // ---- shell commands -------------------------------------------------------------------------
 
     fun run(command: String, stdin: String = ""): CommandResult {
+        // herdr-core's probe (HcDetection): its socket and core, or nothing where none runs.
+        if ("core.lock" in command) return core?.probe() ?: ok("")
         shepherdr?.run(command, stdin)?.let { return it }
         Shell.words(command).let { w ->
             // Words in the chats (ChatSearch.command): the transcripts' lines that hold them, under each chat's mark.
@@ -137,6 +143,7 @@ class FakeMachine(
         return when {
             "pgrep" in command -> ok("server\t/home/demo/.local/bin/herdr\therdr $version\n")
             "herdr-ports" in w -> ok(com.makefunstuff.herdr.core.ports.DevServers.MARK + " 1\n" + ports)
+            w.containsAll(listOf("session", "list", "--json")) && !classic -> CommandResult(127, "", "herdr: not found")
             w.containsAll(listOf("session", "list", "--json")) ->
                 ok("""{"sessions":[{"name":"default","default":true,"running":true,"socket_path":"/home/demo/.config/herdr/herdr.sock"}]}""")
             // herdr-push: only its journal is asked for in the previews; without one it isn't installed.
@@ -179,6 +186,8 @@ class FakeMachine(
 
     fun start(command: String): RemoteProcess {
         val w = Shell.words(command)
+        // `herdr-core connect` on the socket the probe found (HcDetection.connectCommand).
+        if ("HC_SOCKET" in command && command.contains(" connect")) core?.let { return it.connect() }
         return when {
             "@@missing" in command -> stream { _, out ->
                 // TranscriptFollower: kind, value, agent, bytes after "follow".
@@ -325,7 +334,7 @@ private fun stream(keepOpen: Boolean = true, body: (BufferedReader, PrintStream)
 }
 
 /** A byte pipe between two threads, without java.io's piped streams' ties to the threads that use them. */
-private class Pipe {
+internal class Pipe {
     private val lock = Object()
     private val buffer = java.io.ByteArrayOutputStream()
     private var readAt = 0
@@ -364,7 +373,7 @@ private class Pipe {
     }
 }
 
-private object Threads {
+internal object Threads {
     val pool = Executors.newCachedThreadPool { r -> Thread(r, "fake-machine").apply { isDaemon = true } }
 }
 

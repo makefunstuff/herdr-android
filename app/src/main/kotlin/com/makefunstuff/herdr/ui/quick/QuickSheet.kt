@@ -342,10 +342,10 @@ private fun NewCommandSheet(place: QuickPlace, listing: QuickListing?, onBack: (
                     runCatching {
                         when (writer) {
                             "agent" -> {
-                                val api = s.awaitApi()
-                                val agent = api.snapshot().agents.firstOrNull { it.paneId == place.pane }
-                                com.makefunstuff.herdr.core.chat.AgentInput.send(api, place.pane!!, text, named = agent != null,
-                                    blocked = agent?.agentStatus == com.makefunstuff.herdr.core.api.AgentStatus.Blocked)
+                                val api = s.awaitAgent(place.pane!!)
+                                val status = api.status(place.pane)
+                                com.makefunstuff.herdr.core.chat.AgentInput.send(api, place.pane, text, named = status != null,
+                                    blocked = status == com.makefunstuff.herdr.core.api.AgentStatus.Blocked)
                                 "Sent to ${place.agentName ?: "the agent"}"
                             }
                             "task" -> s.awaitBoard().act(com.makefunstuff.herdr.core.board.BoardAction.Tell, place.task!!, text).ifEmpty { "Sent to ${place.taskName}'s agent" }

@@ -144,7 +144,7 @@ fun SearchScreen(nav: NavController, machineId: String? = null, initial: String 
         }
     }
     val chats = hosts.flatMap { h -> chatHits[h.machine.id].orEmpty().map { h to it } }
-        .filter { (h, hit) -> filter == SearchFilter.All || h.snapshot?.agents?.firstOrNull { it.paneId == hit.paneId }?.let { SearchFilter.of(it.agentStatus) } == filter }
+        .filter { (h, hit) -> filter == SearchFilter.All || h.view?.agents?.firstOrNull { it.paneId == hit.paneId }?.let { SearchFilter.of(it.agentStatus) } == filter }
 
     fun openAgent(h: AgentHit) = panes.open(nav, Routes.agent(h.agent.machineId, h.agent.agent.paneId))
     fun openTask(t: TaskHit) {
@@ -238,8 +238,8 @@ fun SearchScreen(nav: NavController, machineId: String? = null, initial: String 
                 WorkspaceRow(w, showMachine, opening = opening == w.machineId + "/" + w.workspace.workspaceId, onOpen = { nav.navigate(Routes.machine(w.machineId)) }, onTerminal = { terminal(w) })
             }
             section("In chats", chats, key = { (h, hit) -> "c/${h.machine.id}/${hit.paneId}/${hit.snippet.hashCode()}" }) { (h, hit) ->
-                val a = h.snapshot?.agents?.firstOrNull { it.paneId == hit.paneId }
-                val ws = a?.let { h.snapshot?.workspace(it.workspaceId)?.label }
+                val a = h.view?.agents?.firstOrNull { it.paneId == hit.paneId }
+                val ws = a?.let { h.view?.workspace(it.workspaceId)?.label }
                 ListRow(
                     "“${hit.snippet}”",
                     subtitle = listOfNotNull(if (hit.you) "you" else a?.displayName, ws, h.machine.label.takeIf { showMachine }, hit.at?.let { clock(it, zone) }).joinToString(" · "),
@@ -328,10 +328,10 @@ private fun TaskRow(t: TaskHit, showMachine: Boolean, onClick: () -> Unit) {
 
 @Composable
 private fun MachineRow(m: MachineHit, onClick: () -> Unit) {
-    val agents = m.host.snapshot?.agents?.size ?: 0
+    val agents = m.host.view?.agents?.size ?: 0
     ListRow(
         m.host.machine.label,
-        subtitle = listOfNotNull(m.host.status.label(), (if (agents == 1) "1 agent" else "$agents agents").takeIf { m.host.snapshot != null }).joinToString(" · "),
+        subtitle = listOfNotNull(m.host.status.label(), (if (agents == 1) "1 agent" else "$agents agents").takeIf { m.host.view != null }).joinToString(" · "),
         leading = { IconTile(HerdrIcons.Monitor, dot = m.host.status.color(), size = 36.dp) },
         chevron = true,
         onClickLabel = "Open the machine",

@@ -1,6 +1,6 @@
 # herdr-core as a backend
 
-The Herdr desktop app (`herdr-app`) runs its terminals and agents in **herdr-core** (`hc`), not in the classic `herdr server` the app has always talked to. A machine may run either or both. This note says how the app reaches herdr-core and how hc's model maps onto the app's screens. The code is in `core/src/main/kotlin/.../core/hc/`; the screens use it from HA-6 on.
+The Herdr desktop app (`herdr-app`) runs its terminals and agents in **herdr-core** (`hc`), not in the classic `herdr server` the app has always talked to. A machine may run either or both. This note says how the app reaches herdr-core and how hc's model maps onto the app's screens. The code is in `core/src/main/kotlin/.../core/hc/`.
 
 Built against `hc` 0.1.14 (`hc schema`: OpenRPC, protocol generation 1). Its answers, as a real `hc connect` gave them, are the test fixtures in `core/src/test/resources/hc/` (paths and names scrubbed).
 
@@ -11,7 +11,7 @@ Built against `hc` 0.1.14 (`hc schema`: OpenRPC, protocol generation 1). Its ans
 - **Transport** (`HcConnection`): one `<herdr-core> connect` exec channel per machine on the existing sshj connection, kept for the connection's life and closed with it. `hello {generation: 1, framed: true}` as one JSON line, then framed mode: `[channel u32 LE][kind u8][len u32 LE][payload]`. Channel 0 carries JSON-RPC calls side by side; the event subscription and each attached terminal get a channel of their own, credited back as the app reads, so the one channel carries everything.
 - **Client** (`HcClient`): `list`, `get`, `read`, `send`, `keys`, `interrupt`, `subscribe` (snapshot, then events) and `attach` (raw terminal bytes, keys, resize). Errors come back as `HcException` with hc's stable `kind` (`not_found`, `blocked`, …).
 - **In the app** (`HostSession`): a machine running both shows both. `HostState.herdrCore` holds herdr-core's version, the core's name and its terminals as a `SessionSnapshot`, next to classic herdr's `HostState.snapshot`, which doesn't change; `awaitHerdrCore()` gives the client. herdr-core is followed outside the classic session's own scope, so a herdr-core failure or hang never fails or holds up the classic session.
-- **herdr-core alone**: where classic herdr is missing (not installed, its session not there or not running) but herdr-core runs, the session stays connected for herdr-core with `HostState.herdrCore` filled, while the status still says what classic herdr lacks, as today, until the screens read it (HA-6). Classic herdr is looked for again every two minutes, as that status's retry would, and at once on Retry; once it answers, the session starts over with both. A dropped SSH link ends the session as usual (checked every 5 s).
+- **herdr-core alone**: where classic herdr is missing (not installed, its session not there or not running) but herdr-core runs, the session stays connected for herdr-core and is **online** while herdr-core answers; `HostState.classicMissing` says what classic herdr lacks (`HostState.classic` is false), and the status says it again while herdr-core is gone too. Classic herdr is looked for again every two minutes, as that status's retry would, and at once on Retry; once it answers, the session starts over with both. A dropped SSH link ends the session as usual (checked every 5 s).
 
 ## The model
 
@@ -53,6 +53,12 @@ What follows on the screens:
 - **Agent sessions** (`agent_session`): no transcript path; see Chats.
 - **herdr's "seen"** (done becomes idle once looked at): hc can't tell; `turn` is the closest.
 
-## Left for HA-6
+## On the screens
 
-Wiring the screens: merging `HostState.herdrCore.snapshot` into the Agents list, Needs you, notices and the machine screen; routing a pane's reads, keys and terminal to `HcClient` when its id starts with `hc:`; and showing a herdr-core-only machine as online rather than "herdr isn't installed".
+- **One view**: `HostState.view` is classic herdr's snapshot and herdr-core's together (`Sessions.merge`, classic first, herdr-core's spaces numbered after). The Agents list, Needs you, notices, watches, Live Updates, search, the chats, the machine list and the Terminal screen read it; `HostState.snapshot` stays classic herdr's alone, for what only classic herdr has (layouts, worktrees, workspace metadata, quick commands, the brief).
+- **Keys and words**: `HostSession.awaitAgent(paneId)` gives an `AgentPort`: herdr-core's (`HcAgentPort`) for a pane id with `hc:`, else classic herdr's. `AgentInput` (the chat, the Needs you card's Yes and No, a notification's buttons, Stop on a Live Update) speaks only to it, so an answer is read off the screen again and pressed the same way on either.
+- **Chat**: no transcript, so the chat is the agent's screen (`terminal.read`); a question on it gets its card and buttons as a classic agent's does. Classic herdr's own actions (rename, focus, why this state, activity, quick commands) are left out for herdr-core's agents.
+- **Terminal**: `HcTerminalStream`; the desktop window taking the size back (`size` event, `HerdrCoreState.sizes`) resizes the phone's emulator. Find, selection by herdr, links, resizing panes and the layout are classic herdr's; selected text is read off the phone's own screen instead.
+- **Machine screen**: classic herdr's workspaces, then a **Desktop app** section with herdr-core's spaces, tabs and terminals (no actions on them). The machine list shows herdr-core's version and its agents in the counts.
+- **Notifications**: herdr-core's snapshots raise the session's notices as classic herdr's do (none on the first look). While the app is closed, herdr-push (version 9) reads the default core's agents on its socket (plain JSON-RPC, `terminal.list` and `terminal.read`; connecting never starts a core) and pushes them with the classic ones; the app's own look reads them as far as herdr-core was found.
+- **Order**: classic herdr's `stateChangeSeq` is a counter, herdr-core's the time in ms, so on the Agents list a herdr-core agent sorts before classic ones of the same state.

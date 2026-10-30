@@ -39,7 +39,7 @@ class WatchWork(
             hosts.hosts.collect { states ->
                 if (store.state.value.watches.isEmpty()) return@collect
                 for (s in states) {
-                    val snap = s.snapshot ?: continue
+                    val snap = s.view ?: continue
                     if (s.online) look(s.machine.id, s.machine.label, snap.agents, null)
                 }
             }

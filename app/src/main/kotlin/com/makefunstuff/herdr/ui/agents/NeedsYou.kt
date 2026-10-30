@@ -1,5 +1,6 @@
 package com.makefunstuff.herdr.ui.agents
 
+import com.makefunstuff.herdr.core.hc.HcMapping
 import com.makefunstuff.herdr.core.board.TaskLine
 import com.makefunstuff.herdr.core.chat.OptionRole
 
@@ -75,9 +76,11 @@ fun rememberAsked(agent: HomeAgent): Asked? {
     LaunchedEffect(key) {
         val session = container.hosts.session(agent.machineId) ?: return@LaunchedEffect
         runCatching {
-            val text = session.awaitApi(5_000).readPane(agent.agent.paneId, source = "visible", lines = 40).text
+            val text = session.awaitAgent(agent.agent.paneId, 5_000).read(agent.agent.paneId, lines = 40, visible = true)
             val prompt = BlockedPrompt.parse(text)
-            cache[key] = Asked(prompt?.question ?: PromptGuess.question(text) ?: return@runCatching, prompt)
+            // herdr-core's agents also say what they ask (OSC 7501's msg): the question when the screen shows none we know.
+            val said = agent.agent.title?.takeIf { HcMapping.address(agent.agent.paneId) != null }
+            cache[key] = Asked(prompt?.question ?: PromptGuess.question(text) ?: said ?: return@runCatching, prompt)
         }
     }
     return cache[key]

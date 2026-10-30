@@ -44,8 +44,10 @@ class TriageStore(
      * and those of machines no longer in the app ([machines], every machine saved).
      */
     fun keep(hosts: List<HostState>, machines: Set<String>) {
-        val read = hosts.filter { it.snapshot != null }.map { it.machine.id }.toSet()
-        change { it.keep(HomeAgent.of(hosts), read, machines, now()) }
+        val read = hosts.filter { it.view != null }.map { it.machine.id }.toSet()
+        // herdr-core is found a moment after classic herdr answers: its agents' marks wait for it.
+        val coreUnread = hosts.filter { it.herdrCore == null }.map { it.machine.id }.toSet()
+        change { it.keep(HomeAgent.of(hosts), read, machines, now(), coreUnread) }
     }
 
     private fun load(): Triage =

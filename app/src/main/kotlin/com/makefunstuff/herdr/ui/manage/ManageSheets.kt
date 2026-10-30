@@ -1,5 +1,6 @@
 package com.makefunstuff.herdr.ui.manage
 
+import com.makefunstuff.herdr.core.hc.HcMapping
 import com.makefunstuff.herdr.core.board.BoardTask
 import androidx.compose.material3.RadioButtonDefaults
 import com.makefunstuff.herdr.ui.design.SheetTitle
@@ -565,14 +566,15 @@ fun AgentActionsSheet(
 
     val (title, subtitle) = agentTitle(agent, paneLabel, task)
     ManageSheet(title, subtitle, onDismiss) {
-        if (target != null) {
+        // herdr-core's agents have none of classic herdr's names, focus or explanations: their details only.
+        if (target != null && HcMapping.address(target) == null) {
             ManageRow("Rename agent", icon = HerdrIcons.Pencil, chevron = true) { rename = true }
             ManageRow("Focus in herdr", icon = HerdrIcons.Focus) {
                 manage(context, scope, session, onDismiss) { it.focusAgent(target); null }
             }
             ManageRow("Why this state?", icon = HerdrIcons.Info, chevron = true) { explain = true }
-            ManageRow("Details", icon = HerdrIcons.FileText, chevron = true) { details = true }
         }
+        if (target != null) ManageRow("Details", icon = HerdrIcons.FileText, chevron = true) { details = true }
         if (agent != null) WatchRows(session.machine.id, agent, label)
         triage?.invoke()
         if (onTerminal != null) ManageRow("Open terminal", icon = HerdrIcons.SquareTerminal, chevron = true) { onTerminal() }

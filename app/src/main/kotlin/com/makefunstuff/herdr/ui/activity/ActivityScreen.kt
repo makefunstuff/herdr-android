@@ -127,7 +127,7 @@ fun ActivityScreen(nav: NavController, machineId: String, taskId: String?, taskN
         onDispose { feed.close() }
     }
     val state by feed.state.collectAsStateWithLifecycle()
-    val agent = paneId?.let { p -> host.snapshot?.agents?.firstOrNull { it.paneId == p } }
+    val agent = paneId?.let { p -> host.view?.agents?.firstOrNull { it.paneId == p } }
     val zone = remember { container.briefWork.zone() }
     val view by container.code.view.collectAsStateWithLifecycle()
 

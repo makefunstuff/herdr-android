@@ -126,6 +126,8 @@ fun MachineScreen(nav: NavController, machineId: String) {
     val state by session.state.collectAsStateWithLifecycle()
     val answeredAt by session.answeredAt.collectAsStateWithLifecycle()
     val snap = state.snapshot
+    // The desktop app's spaces, tabs and terminals (herdr-core), shown after classic herdr's workspaces.
+    val core = state.herdrCore
     val list = rememberLazyListState()
     // New hides while the list moves down (it would cover a pane's terminal button), and is back on the
     // way up and at the end, where the list leaves room for it under the last pane.
@@ -154,7 +156,7 @@ fun MachineScreen(nav: NavController, machineId: String) {
     var removing by remember { mutableStateOf<RemoveRequest?>(null) }
 
     fun openPane(pane: PaneInfo) {
-        val hasAgent = snap?.agents?.any { it.paneId == pane.paneId } == true
+        val hasAgent = state.view?.agents?.any { it.paneId == pane.paneId } == true
         nav.navigate(if (hasAgent) Routes.agent(machineId, pane.paneId) else Routes.terminal(machineId, pane.paneId))
     }
 
@@ -170,7 +172,7 @@ fun MachineScreen(nav: NavController, machineId: String) {
                     BarIcon(HerdrIcons.Bell, "Notifications", { showNotices = true; session.markNoticesRead() }, badge = state.unreadNotices)
                 }
                 BarIcon(HerdrIcons.Search, "Search ${state.machine.label}", { nav.navigate(Routes.search(machineId)) })
-                if (state.online) BarIcon(HerdrIcons.Zap, "Quick commands", { quick = QuickPlace(machineId, label = state.machine.label) })
+                if (state.classic) BarIcon(HerdrIcons.Zap, "Quick commands", { quick = QuickPlace(machineId, label = state.machine.label) })
                 BarIcon(HerdrIcons.RefreshCw, "Refresh", { session.retry(); session.refresh(); scope.launch { session.checkBoard() } })
                 BarIcon(HerdrIcons.Ellipsis, "More", { menu = true })
                 HerdrMenu(expanded = menu, onDismissRequest = { menu = false }, title = state.machine.label) {
@@ -200,12 +202,13 @@ fun MachineScreen(nav: NavController, machineId: String) {
             }
         },
         floatingActionButton = {
-            AnimatedVisibility(state.online && showNew, enter = fadeIn() + slideInVertically { it / 2 }, exit = fadeOut() + slideOutVertically { it / 2 }) {
+            // New workspaces, tabs and agents are classic herdr's: herdr-core's spaces are the desktop app's own.
+            AnimatedVisibility(state.classic && showNew, enter = fadeIn() + slideInVertically { it / 2 }, exit = fadeOut() + slideOutVertically { it / 2 }) {
                 HerdrFab("New") { newSheet = true }
             }
         },
     ) { padding ->
-        if (snap == null) {
+        if (snap == null && core == null) {
             EmptyState(state.status.label(), state.status.detail() ?: "Waiting for ${state.machine.label}…", icon = HerdrIcons.Monitor)
             return@Scaffold
         }
@@ -230,13 +233,13 @@ fun MachineScreen(nav: NavController, machineId: String) {
                     )
                 }
             }
-            item(key = "workspaces") {
+            if (snap != null) item(key = "workspaces") {
                 SectionHeading(if (snap.workspaces.isEmpty()) "Workspaces" else "Workspaces · ${snap.workspaces.size}", top = Space.m)
             }
-            if (snap.workspaces.isEmpty()) {
+            if (snap != null && snap.workspaces.isEmpty()) {
                 item { Text("No workspaces yet. Tap New to create one.", color = Herdr.colors.muted, style = MaterialTheme.typography.bodyMedium) }
             }
-            items(snap.workspaces, key = { it.workspaceId }) { ws ->
+            if (snap != null) items(snap.workspaces, key = { it.workspaceId }) { ws ->
                 WorkspaceCard(
                     ws,
                     snap,
@@ -256,6 +259,32 @@ fun MachineScreen(nav: NavController, machineId: String) {
                     onTabMenu = { tabMenu = it },
                     onPaneMenu = { paneMenu = it },
                 )
+            }
+            if (core != null) {
+                val spaces = core.snapshot.workspaces
+                item(key = "herdr-core") {
+                    SectionHeading("Desktop app" + if (spaces.isEmpty()) "" else " · ${spaces.size}", top = Space.m)
+                    Text(
+                        "herdr-core ${core.version}: its spaces, tabs and terminals",
+                        style = MaterialTheme.typography.bodySmall, color = Herdr.colors.muted, modifier = Modifier.padding(bottom = Space.xs),
+                    )
+                }
+                if (spaces.isEmpty()) {
+                    item(key = "herdr-core-empty") { Text("No terminals open in the desktop app.", color = Herdr.colors.muted, style = MaterialTheme.typography.bodyMedium) }
+                }
+                items(spaces, key = { it.workspaceId }) { ws ->
+                    // herdr-core has no worktrees, layouts or actions on its spaces: the panes open, nothing more.
+                    WorkspaceCard(
+                        ws,
+                        core.snapshot,
+                        meta = emptyMap(),
+                        selectedTabId = selectedTab[ws.workspaceId] ?: ws.activeTabId,
+                        onSelectTab = { selectedTab[ws.workspaceId] = it },
+                        onOpenPane = ::openPane,
+                        onTerminal = { nav.navigate(Routes.terminal(machineId, it.paneId)) },
+                        online = state.online,
+                    )
+                }
             }
         }
     }
@@ -337,12 +366,13 @@ private fun WorkspaceCard(
     onOpenPane: (PaneInfo) -> Unit,
     onTerminal: (PaneInfo) -> Unit,
     online: Boolean,
-    onWorktrees: () -> Unit,
-    onNewWorktree: () -> Unit,
-    onRemoveWorktree: () -> Unit,
-    onWorkspaceMenu: () -> Unit,
-    onTabMenu: (TabInfo) -> Unit,
-    onPaneMenu: (PaneInfo) -> Unit,
+    // Null for herdr-core's spaces, which have none of classic herdr's worktrees or actions.
+    onWorktrees: (() -> Unit)? = null,
+    onNewWorktree: () -> Unit = {},
+    onRemoveWorktree: () -> Unit = {},
+    onWorkspaceMenu: (() -> Unit)? = null,
+    onTabMenu: ((TabInfo) -> Unit)? = null,
+    onPaneMenu: ((PaneInfo) -> Unit)? = null,
 ) {
     val c = Herdr.colors
     var menu by remember { mutableStateOf(false) }
@@ -356,8 +386,8 @@ private fun WorkspaceCard(
         Row(
             verticalAlignment = Alignment.CenterVertically,
             // Long-press the header for the workspace's Git actions.
-            modifier = Modifier.combinedClickable(onClick = {}, onLongClickLabel = "show the workspace's actions", onLongClick = { menu = true })
-                .padding(start = Space.card, top = Space.xs, end = Space.xs),
+            modifier = (if (onWorktrees != null) Modifier.combinedClickable(onClick = {}, onLongClickLabel = "show the workspace's actions", onLongClick = { menu = true }) else Modifier)
+                .padding(start = Space.card, top = Space.xs, end = Space.xs).heightIn(min = 48.dp),
         ) {
             StatusDot(if (ws.agentStatus == AgentStatus.Unknown) c.off else ws.agentStatus.color())
             Spacer(Modifier.width(Space.m))
@@ -367,12 +397,12 @@ private fun WorkspaceCard(
                     Text(under, style = MaterialTheme.typography.bodySmall, color = c.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
-            RowIcon(HerdrIcons.Ellipsis, "Workspace actions", onWorkspaceMenu)
+            onWorkspaceMenu?.let { RowIcon(HerdrIcons.Ellipsis, "Workspace actions", it) }
         }
         HerdrMenu(expanded = menu, onDismissRequest = { menu = false }, title = ws.label.ifBlank { ws.workspaceId }) {
             MenuRow(
                 if (repo != null) "Worktrees of ${repo.repoName.ifBlank { "this repository" }}" else "Worktrees in this folder",
-                HerdrIcons.FolderGit2, { menu = false; onWorktrees() },
+                HerdrIcons.FolderGit2, { menu = false; onWorktrees?.invoke() },
             )
             MenuRow("New worktree…", HerdrIcons.Plus, { menu = false; onNewWorktree() }, enabled = online)
             if (repo?.isLinkedWorktree == true) {
@@ -386,8 +416,8 @@ private fun WorkspaceCard(
                         HerdrChip(t.label.ifBlank { t.tabId }, selected = t.tabId == tabId, onClick = { onSelectTab(t.tabId) })
                     }
                 }
-                tabs.firstOrNull { it.tabId == tabId }?.let { active ->
-                    RowIcon(HerdrIcons.Ellipsis, "Tab actions", { onTabMenu(active) })
+                tabs.firstOrNull { it.tabId == tabId }?.takeIf { onTabMenu != null }?.let { active ->
+                    RowIcon(HerdrIcons.Ellipsis, "Tab actions", { onTabMenu?.invoke(active) })
                 }
             }
         }
@@ -396,7 +426,7 @@ private fun WorkspaceCard(
                 LayoutMap(layout, snap, Modifier.padding(start = Space.card, top = Space.xs).size(width = 56.dp, height = 40.dp))
             }
             Column(Modifier.weight(1f)) {
-                panes.forEach { pane -> PaneLine(pane, snap, onOpen = { onOpenPane(pane) }, onTerminal = { onTerminal(pane) }, onMenu = { onPaneMenu(pane) }) }
+                panes.forEach { pane -> PaneLine(pane, snap, onOpen = { onOpenPane(pane) }, onTerminal = { onTerminal(pane) }, onMenu = onPaneMenu?.let { m -> { m(pane) } }) }
             }
         }
     }
@@ -405,7 +435,7 @@ private fun WorkspaceCard(
 /** A pane in one 48dp row: the agent's mark and state, or the shell's glyph and folder; a tap opens it, the icon its terminal. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun PaneLine(pane: PaneInfo, snap: SessionSnapshot, onOpen: () -> Unit, onTerminal: () -> Unit, onMenu: () -> Unit) {
+private fun PaneLine(pane: PaneInfo, snap: SessionSnapshot, onOpen: () -> Unit, onTerminal: () -> Unit, onMenu: (() -> Unit)?) {
     val c = Herdr.colors
     val agent = snap.agents.firstOrNull { it.paneId == pane.paneId }
     val status = agent?.agentStatus ?: pane.agentStatus
@@ -413,7 +443,7 @@ private fun PaneLine(pane: PaneInfo, snap: SessionSnapshot, onOpen: () -> Unit, 
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
-            .combinedClickable(onClickLabel = if (agent != null) "Open the chat" else "Open the terminal", onClick = onOpen, onLongClickLabel = "Pane actions", onLongClick = onMenu)
+            .combinedClickable(onClickLabel = if (agent != null) "Open the chat" else "Open the terminal", onClick = onOpen, onLongClickLabel = onMenu?.let { "Pane actions" }, onLongClick = onMenu)
             .padding(start = Space.card, end = Space.xs),
     ) {
         // The leading cell says who the pane is: the agent's brand mark, else the shell's glyph.

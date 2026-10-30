@@ -100,7 +100,8 @@ private fun MachineCard(host: HostState, via: String?, onOpen: () -> Unit, onRet
     val publicKey by LocalContainer.current.identity.publicKey.collectAsStateWithLifecycle()
     val c = Herdr.colors
     val m = host.machine
-    val snap = host.snapshot
+    // Classic herdr's workspaces and the desktop app's spaces (herdr-core) alike.
+    val snap = host.view
     val status = host.status
     QuietCard(
         Modifier.semantics(mergeDescendants = true) { stateDescription = status.label() },
@@ -117,7 +118,8 @@ private fun MachineCard(host: HostState, via: String?, onOpen: () -> Unit, onRet
             buildString {
                 append(m.target)
                 append(" · session ").append(m.session)
-                host.herdrVersion?.let { append(" · herdr ").append(it) }
+                host.herdrVersion?.takeIf { host.classicMissing == null }?.let { append(" · herdr ").append(it) }
+                host.herdrCore?.let { append(" · herdr-core ").append(it.version) }
                 via?.let { append(" · via ").append(it) }
             },
             style = MaterialTheme.typography.bodyMedium,
@@ -142,6 +144,7 @@ private fun MachineCard(host: HostState, via: String?, onOpen: () -> Unit, onRet
         }
         val note = listOfNotNull(
             if (snap != null && !host.online) "Showing the last known state" else null,
+            if (host.online && host.classicMissing != null) "Only the desktop app's herdr-core runs here" else null,
             status.detail(),
         )
         if (note.isNotEmpty()) Text(
