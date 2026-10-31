@@ -59,9 +59,9 @@ object LoginWords {
             // "OpenAI login · llama.cpp key · HF_TOKEN from the environment"
             return ps.joinToString(" · ") { p ->
                 when (p.source) {
-                    KeySource.OAuth -> "${p.id} login"
-                    KeySource.Env -> "${p.method ?: p.id} from the environment"
-                    else -> "${p.id} key"
+                    KeySource.OAuth -> "${p.name} login"
+                    KeySource.Env -> "${p.method ?: p.name} from the environment"
+                    else -> "${p.name} key"
                 }
             }
         }

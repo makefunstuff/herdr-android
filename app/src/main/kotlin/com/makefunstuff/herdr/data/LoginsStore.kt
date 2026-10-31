@@ -32,6 +32,9 @@ class LoginsStore(
     private val _reading = MutableStateFlow<Set<String>>(emptySet())
     val reading: StateFlow<Set<String>> = _reading.asStateFlow()
 
+    /** Bumped by each [put]: a reading begun before it is older than what the put says. */
+    private val puts = java.util.concurrent.atomic.AtomicLong()
+
     fun nowSeconds(): Long = clock() / 1000
 
     fun stale(machineId: String, maxAgeMs: Long): Boolean =
@@ -55,10 +58,13 @@ class LoginsStore(
         }
         if (!mine) return null
         return try {
+            val before = puts.get()
             val r = client(session).status()
-            _latest.update { it + (id to Entry(r, clock())) }
+            // A sign-in finished while this was read: its own status is newer, so read again.
+            val fresh = if (puts.get() == before) r else client(session).status()
+            _latest.update { it + (id to Entry(fresh, clock())) }
             _problems.update { it - id }
-            r
+            fresh
         } catch (e: CancellationException) {
             throw e
         } catch (t: Throwable) {
@@ -71,6 +77,7 @@ class LoginsStore(
 
     /** One CLI's status after a sign-in or sign-out, into [machineId]'s reading. */
     fun put(machineId: String, cli: CliLogin) {
+        puts.incrementAndGet()
         _latest.update { all ->
             val e = all[machineId] ?: return@update all
             all + (machineId to e.copy(report = e.report.copy(clis = e.report.clis.map { if (it.id == cli.id) cli else it })))

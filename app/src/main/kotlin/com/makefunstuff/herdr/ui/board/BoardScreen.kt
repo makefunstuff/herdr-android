@@ -407,8 +407,9 @@ fun BoardScreen(nav: NavController, machineId: String, openTask: String? = null,
             live = live, onOpenAgent = live?.let { a -> { openAgent(a.paneId) } },
             // Its agent's machine: this one, or the one of the app's machines the task runs on.
             onSignIn = {
-                val on = open.machine.takeIf { it.isNotEmpty() }?.let { m -> container.machines.machines.value.firstOrNull { it.label == m }?.id }
-                nav.navigate(Routes.logins(on ?: machineId))
+                val on = if (open.machine.isEmpty()) machineId else container.machines.machines.value.firstOrNull { it.label == open.machine }?.id
+                if (on != null) nav.navigate(Routes.logins(on))
+                else context.toast("${open.machine} isn't in the app: add it to sign its agent in")
             })
     }
     quick?.let { place -> QuickSheets(nav, place, onDismiss = { quick = null }) }

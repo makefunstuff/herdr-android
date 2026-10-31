@@ -225,7 +225,7 @@ class LoginsTest {
         b.cli("claude", """[ "$1 $2" = "auth status" ] && echo '{"loggedIn": true, "authMethod": "claude.ai", "subscriptionType": "max", "email": "x@y"}'""")
         b.cli("codex", """[ "$1 $2" = "login status" ] && echo 'Logged in using an API key - sk-proj-***ABCD'""")
         b.cli("pi", "exit 0")
-        b.cli("opencode", """printf '\033[1mOpenAI\033[0m        OAuth                       stored\nHugging Face  HF_TOKEN                    environment\n'""")
+        b.cli("opencode", """echo '[{"id": "openai", "name": "OpenAI", "connections": [{"type": "credential", "id": "c1", "label": "demo@example.com (ChatGPT Pro)", "method": "oauth"}]}, {"id": "huggingface", "name": "Hugging Face", "connections": [{"type": "env", "name": "HF_TOKEN"}]}]'""")
         b.file(".claude/.credentials.json", """{"claudeAiOauth": {"accessToken": "sekrit-access", "refreshToken": "sekrit-refresh", "expiresAt": 1793496535793, "refreshTokenExpiresAt": 1794581605793}}""")
         b.file(".pi/agent/auth.json", """{"deepseek": {"type": "api_key", "key": "!pass show deepseek"}, "groq": {"type": "api_key", "key": "gsk_typed_secret_value"}, "anthropic": {"type": "oauth", "access": "a", "refresh": "r", "expires": 1793496535793}}""")
         b.file(".bashrc", "export PATH=\$HOME/bin:\$PATH\nexport HF_TOKEN=\"hf_realLookingTokenValue123\"\nexport OPENAI_API_KEY=dummy\n# export ANTHROPIC_API_KEY=sk-commented-out-1234567\nexport GH_TOKEN=\$(pass show gh)\n")
@@ -241,12 +241,52 @@ class LoginsTest {
             listOf("anthropic" to KeySource.OAuth, "deepseek" to KeySource.Command, "groq" to KeySource.Typed),
             r.clis.first { it.id == "pi" }.providers.map { it.id to it.source },
         )
-        assertEquals(listOf("OpenAI" to KeySource.OAuth, "Hugging Face" to KeySource.Env), r.clis.first { it.id == "opencode" }.providers.map { it.id to it.source })
+        assertEquals(listOf("openai" to KeySource.OAuth, "huggingface" to KeySource.Env), r.clis.first { it.id == "opencode" }.providers.map { it.id to it.source })
+        assertEquals(listOf("OpenAI", "Hugging Face"), r.clis.first { it.id == "opencode" }.providers.map { it.name })
         assertEquals(LoginState.Missing, r.clis.first { it.id == "gemini" }.state)
         assertEquals(listOf("HF_TOKEN" to false, "OPENAI_API_KEY" to true), r.profile.map { it.name to it.placeholder })
         assertEquals(2, r.profile[0].line)
         // Only status commands ran.
-        assertEquals(setOf("claude auth status --json", "codex login status", "opencode auth list --standalone"), b.log.readLines().toSet())
+        assertEquals(setOf("claude auth status --json", "codex login status", "opencode auth list --format json --standalone"), b.log.readLines().toSet())
+    }
+
+    @Test
+    fun theScriptIsTheAppsVersion() {
+        val line = script.readLines().first { it.startsWith("VERSION = ") }
+        assertEquals("VERSION = \"${HerdrLogins.VERSION}\"", line)
+        assertTrue(script.readLines()[1] == "# version: ${HerdrLogins.VERSION}")
+    }
+
+    @Test
+    fun claudesConsoleLoginAndAnOlderOpencode() {
+        assumeTrue(python(), "python3 isn't installed")
+        val b = box()
+        b.cli("claude", """echo '{"loggedIn": true, "authMethod": "api_key", "apiKeySource": "/login managed key"}'""")
+        // opencode 1.x: no --format or --standalone, and its list as text.
+        b.cli("opencode", """case "$*" in *--format*) echo 'error: unknown option --format' >&2; exit 1;; esac; printf '● OpenAI oauth\n● Groq api\n'""")
+        val r = LoginsReader.parse(run(b, "status").last())
+        val claude = r.clis.first { it.id == "claude" }
+        assertEquals("Anthropic Console (API billing)", claude.how)
+        assertEquals(setOf(LoginAction.Login, LoginAction.Logout), claude.actions)
+        assertEquals(listOf("OpenAI" to KeySource.OAuth, "Groq" to KeySource.Typed), r.clis.first { it.id == "opencode" }.providers.map { it.id to it.source })
+    }
+
+    @Test
+    fun progressIsNoQuestionAndSuccessIsNoRefusal() {
+        assumeTrue(python(), "python3 isn't installed")
+        val b = box()
+        b.cli(
+            "claude",
+            """if [ "$1 $2" = "auth login" ]; then
+              printf 'Waiting'; sleep 1; printf '.'; sleep 1; echo
+              echo 'visit: https://claude.ai/oauth/authorize?x=1'; printf 'Paste code here > '
+              read c; echo 'Login successful.'; sleep 3; exit 0; fi
+            echo '{"loggedIn": true, "authMethod": "claude.ai"}'""",
+        )
+        val seen = events(b, "run", "claude", "login", answers = listOf("good-code-123"))
+        val asks = seen.filterIsInstance<LoginEvent.Ask>()
+        assertEquals(listOf("Paste code here >"), asks.map { it.text }, seen.toString())
+        assertTrue(assertIs<LoginEvent.Done>(seen.last()).ok)
     }
 
     @Test
@@ -336,6 +376,7 @@ class LoginsTest {
 
         val bang = assertIs<LoginEvent.Done>(LoginsReader.event(run(b, "run", "pi", "key", "mistral", input = "!rm -rf ~/x\n").last()))
         assertFalse(bang.ok)
+        assertFalse(assertIs<LoginEvent.Done>(LoginsReader.event(run(b, "run", "pi", "key", "mistral", input = "abc\${'$'}HOME123\n").last())).ok)
         assertFalse("mistral" in auth.readText())
 
         val refused = assertIs<LoginEvent.Done>(LoginsReader.event(run(b, "run", "pi", "key", "deepseek", input = "typed-over\n").last()))

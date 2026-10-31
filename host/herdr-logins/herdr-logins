@@ -52,7 +52,6 @@ HOME = os.path.expanduser("~")
 CLAUDE_DIR = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.join(HOME, ".claude")
 CODEX_DIR = os.environ.get("CODEX_HOME") or os.path.join(HOME, ".codex")
 PI_DIR = os.environ.get("PI_CODING_AGENT_DIR") or os.path.join(HOME, ".pi", "agent")
-OPENCODE_DATA = os.path.join(os.environ.get("XDG_DATA_HOME") or os.path.join(HOME, ".local", "share"), "opencode")
 GEMINI_DIR = os.path.join(HOME, ".gemini")
 
 # The shell profiles a key may be exported from.
@@ -64,6 +63,10 @@ URL = re.compile(r"https://[^\s\"'<>\x1b]+")
 # A code to type on a sign-in page: ABCD-1234, ABCD-EFGHI.
 CODE = re.compile(r"\b([A-Z0-9]{4,5}-[A-Z0-9]{4,5})\b")
 
+# A line a CLI waits on that is a question (not progress like "Waiting…"), and one that refuses what was typed.
+PROMPT = re.compile(r"[:>?]\s*$|\b(enter|paste|type|code|key|token|select|choose|press)\b", re.I)
+REFUSED = re.compile(r"\b(invalid|incorrect|wrong|refused|failed|error|try again|expired|not valid)\b", re.I)
+
 STATUS_TIMEOUT = 20
 RUN_TIMEOUT = float(os.environ.get("HERDR_LOGINS_TIMEOUT", "900"))
 
@@ -74,20 +77,34 @@ def emit(obj):
 
 
 def find_path():
-    """The login shell's PATH as well: the CLIs are often only there (mise, nvm, ~/.local/bin)."""
+    """The environment the agents get: a shell's, as a terminal opens it (login and interactive), not
+    this SSH command's. The CLIs are often only on its PATH (mise, nvm, ~/.local/bin), and a key
+    exported in a profile signs a CLI in for the agents. Kept in memory only; nothing of it goes out."""
     if os.environ.get("HERDR_LOGINS_NO_SHELL_PATH"):
         return
     shell = os.environ.get("SHELL") or "/bin/sh"
-    try:
-        out = subprocess.run([shell, "-lc", 'printf "\\n@@path %s\\n" "$PATH"'], stdin=subprocess.DEVNULL,
-                             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=10).stdout.decode("utf-8", "replace")
-    except Exception:
+    out = b""
+    for flags in ("-lic", "-lc"):
+        try:
+            out = subprocess.run([shell, flags, "printf '\\n@@env\\n'; env -0"], stdin=subprocess.DEVNULL,
+                                 stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=10).stdout
+        except Exception:
+            out = b""
+        if b"\n@@env\n" in out:
+            break
+    if b"\n@@env\n" not in out:
         return
-    for line in out.splitlines():
-        if line.startswith("@@path "):
-            extra = [p for p in line[7:].split(":") if p]
-            have = os.environ.get("PATH", "").split(":")
-            os.environ["PATH"] = ":".join(have + [p for p in extra if p not in have])
+    env = {}
+    for item in out.split(b"\n@@env\n", 1)[1].split(b"\0"):
+        k, eq, v = item.decode("utf-8", "replace").partition("=")
+        if eq and re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", k):
+            env[k] = v
+    have = os.environ.get("PATH", "").split(":")
+    extra = [p for p in env.get("PATH", "").split(":") if p]
+    os.environ["PATH"] = ":".join(have + [p for p in extra if p not in have])
+    for k, v in env.items():
+        if k not in os.environ and k not in ("PS1", "PROMPT_COMMAND", "SHLVL", "_"):
+            os.environ[k] = v
 
 
 def run(argv, stdin=None, timeout=STATUS_TIMEOUT):
@@ -157,6 +174,9 @@ def claude():
         env = "CLAUDE_CODE_OAUTH_TOKEN"
     if env:
         return dict(c, state="signed_in", how="%s from the environment" % env, source="env", actions=[])
+    if method == "api_key" and "managed" in (st.get("apiKeySource") or "").lower():
+        # claude auth login --console: a key Claude Code made and keeps itself.
+        method = "console"
     if method not in ("claude.ai", "console"):
         # A key from a helper command, a token, a cloud provider: set up on the machine, nothing to change from here.
         how = {"api_key_helper": "Key from a helper command (apiKeyHelper)", "api_key": "API key",
@@ -183,6 +203,8 @@ def codex():
         return dict(c, state="signed_out", how="Not signed in", actions=["login", "key"])
     if "chatgpt" in text:
         return dict(c, state="signed_in", how="ChatGPT login", renewed=renewed, actions=["login", "key", "logout"])
+    if "bedrock" in text or "aws" in text or "workload" in text:
+        return dict(c, state="signed_in", how="A cloud provider's login (Bedrock, workload identity)", source="env", actions=[])
     if "api key" in text:
         # Its line shows part of the key: only that it is one comes back.
         return dict(c, state="signed_in", how="OpenAI API key", actions=["login", "key", "logout"])
@@ -205,7 +227,8 @@ def pi_source(entry):
     key = entry.get("key")
     if isinstance(key, str) and key.startswith("!"):
         return "command"
-    if isinstance(key, str) and key.startswith("$"):
+    if isinstance(key, str) and "$" in key:
+        # pi reads $VAR and ${VAR} anywhere in a key.
         return "env"
     return "typed"
 
@@ -231,12 +254,46 @@ def opencode():
     c = {"id": "opencode", "name": "opencode", "installed": bool(shutil.which("opencode"))}
     if not c["installed"]:
         return dict(c, state="missing")
-    # --standalone: opencode 2's own background service isn't started (and left running) for a look.
-    code, out = run(["opencode", "auth", "list", "--standalone"])
-    if code != 0:
+    # opencode 2: as JSON, and --standalone so its background service isn't started (and left running) for a look.
+    code, out = run(["opencode", "auth", "list", "--format", "json", "--standalone"])
+    providers = None
+    if code == 0:
+        try:
+            listed = json.loads(out[out.index("["):])
+            providers = []
+            for e in listed:
+                for conn in e.get("connections") or []:
+                    p = {"id": e.get("id") or e.get("name"), "name": e.get("name") or e.get("id")}
+                    if conn.get("type") == "env":
+                        providers.append(dict(p, source="env", method=conn.get("name")))
+                    else:
+                        oauth = conn.get("method") == "oauth"
+                        providers.append(dict(p, source="oauth" if oauth else "typed", method="OAuth" if oauth else "API key"))
+        except Exception:
+            providers = None
+    if providers is None and (code is None or not re.search(r"unknown|unexpected|format|standalone", out, re.I)):
+        # It answered something else: not an opencode that doesn't know these flags.
+        return dict(c, state="unknown", actions=["login"], msg="opencode auth list gave no answer")
+    if providers is None:
+        # opencode 1.x: no service to start, and its list as text.
         code, out = run(["opencode", "auth", "list"])
+        providers = text_providers(out)
+    if code is None:
+        return dict(c, state="unknown", actions=["login"], msg="opencode auth list gave no answer")
+    stored = [p for p in providers if p["source"] != "env"]
+    return dict(c, state="signed_in" if stored else "signed_out", providers=providers,
+                how=None if stored else "No login stored", actions=["login", "logout"] if stored else ["login"])
+
+
+def text_providers(out):
+    """opencode 1.x's auth list: "● OpenAI oauth", or columns ending in stored / environment."""
     providers = []
     for line in out.splitlines():
+        m = re.match(r"^[●○•]\s+(\S.*?)\s+(oauth|api|wellknown)\s*$", line.strip(), re.I)
+        if m:
+            oauth = m.group(2).lower() == "oauth"
+            providers.append({"id": m.group(1), "source": "oauth" if oauth else "typed", "method": "OAuth" if oauth else "API key"})
+            continue
         # "OpenAI        OAuth                       stored"
         parts = re.split(r"\s{2,}", line.strip(" │┃|●○•\t"))
         if len(parts) < 3 or parts[-1].lower() not in ("stored", "environment", "env"):
@@ -245,12 +302,8 @@ def opencode():
         if where != "stored" and re.fullmatch(r"[A-Z0-9_]+", method):
             providers.append({"id": name, "source": "env", "method": method})
         else:
-            providers.append({"id": name, "source": "oauth" if method.lower() == "oauth" else "typed", "method": method})
-    if code is None:
-        return dict(c, state="unknown", actions=["login"], msg="opencode auth list gave no answer")
-    stored = [p for p in providers if p["source"] != "env"]
-    return dict(c, state="signed_in" if stored else "signed_out", providers=providers,
-                how=None if stored else "No login stored", actions=["login", "logout"] if stored else ["login"])
+            providers.append({"id": name, "source": "oauth" if "oauth" in method.lower() else "typed", "method": method})
+    return providers
 
 
 def gemini():
@@ -383,6 +436,17 @@ def drive(argv, secret_asks=False):
             os.execvpe(argv[0], argv, env)
         finally:
             os._exit(127)
+    try:
+        # A terminal as wide as COLUMNS says (a pty starts at 0x0).
+        import fcntl
+        import struct
+        import termios
+        fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", 50, 200, 0, 0))
+    except Exception:
+        pass
+    import codecs
+    decoder = codecs.getincrementaldecoder("utf-8")("replace")
+    tty_open = True
     seen = set()
     buf = ""
     partial_at = None
@@ -392,7 +456,7 @@ def drive(argv, secret_asks=False):
     typed_at = None
     inbuf = b""
     started = time.time()
-    pending = b""
+    refused_at = None
 
     def out_line(text):
         text = masked(text).rstrip()
@@ -415,13 +479,14 @@ def drive(argv, secret_asks=False):
               "secret": secret_asks or bool(re.search(r"key|token|secret|password|code", text, re.I))})
 
     def take(data):
-        nonlocal buf, partial_at, said_after_typed
+        nonlocal buf, partial_at, refused_at
         buf += ANSI.sub("", data).replace("\r\n", "\n")
         # A lone \r redraws the line: keep what is after it.
         while "\n" in buf:
             line, buf = buf.split("\n", 1)
-            if out_line(line.split("\r")[-1]) and typed_at is not None:
-                said_after_typed = time.time()
+            line = line.split("\r")[-1]
+            if out_line(line) and typed_at is not None and REFUSED.search(line):
+                refused_at = time.time()
         buf = buf.split("\r")[-1]
         partial_at = time.time() if buf.strip() else None
 
@@ -430,20 +495,17 @@ def drive(argv, secret_asks=False):
             stop(pid)
             emit({"event": "line", "text": "It took too long and was stopped"})
             return None
-        r, _, _ = select.select([fd, 0], [], [], 0.3)
+        r, _, _ = select.select(([fd] if tty_open else []) + [0], [], [], 0.3)
         if fd in r:
             try:
                 data = os.read(fd, 4096)
             except OSError:
+                # It closed its terminal (EIO) but may still run: wait for it without reading.
                 data = b""
             if data:
-                pending += data
-                try:
-                    chunk = pending.decode("utf-8")
-                    pending = b""
-                    take(chunk)
-                except UnicodeDecodeError:
-                    pass
+                take(decoder.decode(data))
+            else:
+                tty_open = False
         if 0 in r:
             got = os.read(0, 4096)
             if not got:
@@ -458,9 +520,9 @@ def drive(argv, secret_asks=False):
                 os.write(fd, typed.encode() + b"\r")
                 asked = None
                 typed_at = time.time()
-                said_after_typed = None
+                refused_at = None
         # A line it waits on (no newline after it, nothing more for a moment): a question.
-        if partial_at and time.time() - partial_at > 0.6 and buf.strip() != asked:
+        if partial_at and time.time() - partial_at > 0.6 and buf.strip() != asked and PROMPT.search(buf.strip()):
             asked = buf.strip()
             text = masked(asked)
             if URL.search(text) or CODE.search(text):
@@ -469,11 +531,11 @@ def drive(argv, secret_asks=False):
             ask(text)
             typed_at = None
             partial_at = None
-        # It answered what was typed with a line and waits on (a refused code): ask again.
-        elif said_after_typed and last_ask and time.time() - said_after_typed > 1.5:
+        # It refused what was typed and waits on (an invalid code): ask again.
+        elif refused_at and last_ask and time.time() - refused_at > 1.5:
             ask(last_ask, again=True)
             typed_at = None
-            said_after_typed = None
+            refused_at = None
         done, st = os.waitpid(pid, os.WNOHANG)
         if done:
             # What it printed last.
@@ -485,7 +547,7 @@ def drive(argv, secret_asks=False):
                     data = os.read(fd, 4096)
                     if not data:
                         break
-                    take(data.decode("utf-8", "replace"))
+                    take(decoder.decode(data))
             except OSError:
                 pass
             if buf.strip():
@@ -564,9 +626,9 @@ def pi_key(provider):
     secret = sys.stdin.readline().rstrip("\n")
     if not secret:
         return "Nothing was typed in"
-    if secret[0] in "!$":
-        # pi would run it as a command, or read it as a variable's name.
-        return "A key can't start with ! or $"
+    if secret.startswith("!") or "$" in secret:
+        # pi would run it as a command, or read a variable's name in it.
+        return "A key can't start with ! or hold a $"
 
     def put(entries):
         old = entries.get(provider)
@@ -595,19 +657,23 @@ def pi_logout(provider):
     return pi_edit(provider, take)
 
 
+def ended(what, code):
+    return "%s was stopped" % what if code is None else "%s didn't finish (exit %s)" % (what, code)
+
+
 def act(cli, action, provider):
     """One sign-in or sign-out: (ok, msg)."""
     if cli in ("opencode", "pi") and action != "login" and not (provider and PI_PROVIDER.match(provider)):
         return False, "Which provider?"
     if cli == "claude" and action == "login":
         code = drive(["claude", "auth", "login"])
-        return code == 0, None if code == 0 else "claude auth login stopped (%s)" % code
+        return code == 0, None if code == 0 else ended("claude auth login", code)
     if cli == "claude" and action == "logout":
         code, out = run(["claude", "auth", "logout"], timeout=30)
         return code == 0, None if code == 0 else (out.strip().splitlines() or ["claude auth logout failed"])[-1]
     if cli == "codex" and action == "login":
         code = drive(["codex", "login", "--device-auth"])
-        return code == 0, None if code == 0 else "codex login stopped (%s)" % code
+        return code == 0, None if code == 0 else ended("codex login", code)
     if cli == "codex" and action == "key":
         code, refused = with_stdin(["codex", "login", "--with-api-key"])
         return code == 0, refused or (None if code == 0 else "codex didn't take the key")
@@ -618,10 +684,10 @@ def act(cli, action, provider):
         if provider and not PI_PROVIDER.match(provider):
             return False, "Which provider?"
         code = drive(["opencode", "auth", "login"] + ([provider] if provider else []))
-        return code == 0, None if code == 0 else "opencode auth login stopped (%s)" % code
+        return code == 0, None if code == 0 else ended("opencode auth login", code)
     if cli == "opencode" and action == "logout":
         code = drive(["opencode", "auth", "logout", provider])
-        return code == 0, None if code == 0 else "opencode auth logout stopped (%s)" % code
+        return code == 0, None if code == 0 else ended("opencode auth logout", code)
     if cli == "pi" and action == "key":
         refused = pi_key(provider)
         if refused:

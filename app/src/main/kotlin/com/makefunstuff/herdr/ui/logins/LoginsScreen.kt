@@ -420,7 +420,7 @@ private fun ProviderRow(cli: CliLogin, p: LoginProvider, onKey: (String?) -> Uni
     val canKey = cli.id == "pi" && p.source == KeySource.Typed
     val canOut = LoginAction.Logout in cli.actions && (p.source == KeySource.Typed || p.source == KeySource.OAuth)
     ActionRow(
-        p.id, detail = where,
+        p.name, detail = where,
         icon = if (p.source == KeySource.Command) HerdrIcons.Lock else HerdrIcons.KeyRound,
         enabled = canKey || canOut,
         trailing = if (!(canKey || canOut)) null else ({
@@ -702,7 +702,7 @@ private fun KeySheet(ask: KeyAsk, machine: String, runner: LoginRunner, onDismis
                 {
                     onSave(if (pi) provider.trim() else null, key)
                 },
-                enabled = key.length >= 8 && (!pi || provider.isNotBlank()) && keyring == null,
+                enabled = key.length >= 8 && !key.startsWith("!") && '$' !in key && (!pi || provider.isNotBlank()) && keyring == null,
                 modifier = Modifier.fillMaxWidth(),
             ) { Text("Save and check") }
             if (pi) Row(verticalAlignment = Alignment.CenterVertically) {
