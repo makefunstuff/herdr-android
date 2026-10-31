@@ -51,9 +51,6 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.makefunstuff.herdr.core.home.BoardGroup
-import com.makefunstuff.herdr.core.home.Home
-import com.makefunstuff.herdr.core.home.HomeAgent
 import com.makefunstuff.herdr.core.home.Waiting
 import com.makefunstuff.herdr.data.IdentityStore
 import com.makefunstuff.herdr.ui.activity.ActivityScreen
@@ -64,6 +61,7 @@ import com.makefunstuff.herdr.ui.agents.AlertPill
 import com.makefunstuff.herdr.ui.board.BoardScreen
 import com.makefunstuff.herdr.ui.board.BoardsScreen
 import com.makefunstuff.herdr.ui.board.rememberBoards
+import com.makefunstuff.herdr.ui.board.rememberNeedsYou
 import com.makefunstuff.herdr.ui.board.ReviewScreen
 import com.makefunstuff.herdr.ui.brief.BriefScreen
 import com.makefunstuff.herdr.ui.brief.BriefSettingsScreen
@@ -233,15 +231,11 @@ private fun AppNav(nav: NavHostController) {
     val route = entry?.destination?.route
     val topLevel = route in setOf(Routes.AGENTS, Routes.BOARDS, Routes.MACHINES)
     val hosts by container.hosts.hosts.collectAsStateWithLifecycle()
-    val seen by container.seen.marks.collectAsStateWithLifecycle()
     val triage by container.triage.state.collectAsStateWithLifecycle()
     val homeBoards = rememberBoards()
-    // The tabs' badges: everything on the Needs you list, and the tasks waiting for you across the boards.
-    val waiting = remember(hosts, homeBoards, seen) { Home.of(HomeAgent.of(hosts), homeBoards, seen).needsYou }
+    // Both tabs' badge: everything on the Needs you list, Shepherdr 2's tasks too.
+    val waiting = rememberNeedsYou(homeBoards)
     val needsYou = waiting.size
-    // The Board tab's own count: Shepherdr 2's tasks too.
-    val allBoards = rememberBoards(withShepherdr2 = true)
-    val tasksWaiting = remember(allBoards) { BoardGroup.waiting(allBoards) }
     val keyState by container.identity.state.collectAsStateWithLifecycle()
     var keySetupDismissed by rememberSaveable { mutableStateOf(false) }
     // The agents list's machine filter and scroll, kept here: the list moves between the phone layout and the left pane.
@@ -282,7 +276,7 @@ private fun AppNav(nav: NavHostController) {
             Scaffold(
                 contentWindowInsets = WindowInsets(0, 0, 0, 0),
                 containerColor = Herdr.colors.ground,
-                bottomBar = { if (topLevel && !wide) AppNavBar(nav, needsYou, tasksWaiting) },
+                bottomBar = { if (topLevel && !wide) AppNavBar(nav, needsYou) },
             ) { padding ->
                 // One Row in both layouts, with the NavHost always in the same place in it, so a rotation or a
                 // resize across the line keeps every open screen as it was (the activity isn't recreated for them).
@@ -293,7 +287,7 @@ private fun AppNav(nav: NavHostController) {
                     if (wide) {
                         Column(Modifier.width(leftWidth).fillMaxHeight()) {
                             Box(Modifier.weight(1f)) { AgentsScreen(nav, agentsFilter, agentsList) }
-                            AppNavBar(nav, needsYou, tasksWaiting)
+                            AppNavBar(nav, needsYou)
                         }
                         PaneEdge()
                     }
@@ -434,10 +428,10 @@ private fun androidx.navigation.NavBackStackEntry.codeSpot(): CodeSpot =
 
 /**
  * The three top-level screens: under the whole screen on a phone, under the agents list on a wide
- * window. [needsYou] counts the Agents screen's Needs you list, [tasksWaiting] the boards' tasks waiting for you.
+ * window. [needsYou] counts the Needs you list, on Agents and Board alike.
  */
 @Composable
-private fun AppNavBar(nav: NavHostController, needsYou: Int, tasksWaiting: Int) {
+private fun AppNavBar(nav: NavHostController, needsYou: Int) {
     val entry by nav.currentBackStackEntryAsState()
     // In the middle of a wide window a chat or a machine may be open: the tab is the one it was opened from.
     val tab = remember(entry) {
@@ -445,7 +439,7 @@ private fun AppNavBar(nav: NavHostController, needsYou: Int, tasksWaiting: Int) 
     }
     HerdrNavBar {
         NavItem("Agents", HerdrIcons.House, tab == Routes.AGENTS, badge = needsYou) { nav.goTop(Routes.AGENTS) }
-        NavItem("Board", HerdrIcons.SquareKanban, tab == Routes.BOARDS, badge = tasksWaiting) { nav.goTop(Routes.BOARDS) }
+        NavItem("Board", HerdrIcons.SquareKanban, tab == Routes.BOARDS, badge = needsYou) { nav.goTop(Routes.BOARDS) }
         NavItem("Machines", HerdrIcons.List, tab == Routes.MACHINES) { nav.goTop(Routes.MACHINES) }
     }
 }

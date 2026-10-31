@@ -204,6 +204,8 @@ object V2Board {
         line = t.report?.msg?.takeIf { it.isNotBlank() } ?: t.sub.orEmpty(),
         pr = t.pr?.url.orEmpty(),
         progress = t.report?.progress,
+        eta = t.report?.eta,
+        age = t.age,
         chat = t.agent?.chat.orEmpty(),
         agent = t.agent?.cli.orEmpty(),
         pinned = t.pinned != null,

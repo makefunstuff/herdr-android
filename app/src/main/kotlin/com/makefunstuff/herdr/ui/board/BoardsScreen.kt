@@ -73,7 +73,7 @@ fun BoardsScreen(nav: NavController) {
     val hosts by container.hosts.hosts.collectAsStateWithLifecycle()
     // Each task's agent on its machine: its chat opens from the card.
     val agents = remember(hosts) { HomeAgent.of(hosts) }
-    val boards = rememberBoards(withShepherdr2 = true)
+    val boards = rememberBoards()
     // Shepherdr 2 machines: their spaces and tasks as the board sent them.
     val works = rememberWorkBoards()
     val problems = rememberBoardProblems()
@@ -86,7 +86,8 @@ fun BoardsScreen(nav: NavController) {
     val groups = remember(boards, works, machine) { BoardGroup.of(boards.filter { it.machineId !in works }, machine).associateBy { it.machineId } }
     // In the machines' order, each with its v1 group or its Shepherdr 2 board.
     val shown = boards.filter { machine == null || it.machineId == machine }
-    val waiting = remember(boards) { BoardGroup.waiting(boards) }
+    // The Needs you list's count, as both tabs' badge has it.
+    val waiting = rememberNeedsYou(boards).size
     // Adding a task: on the machine shown, or the one chosen first.
     var adding by remember { mutableStateOf<String?>(null) }
     var choosing by remember { mutableStateOf(false) }
@@ -129,10 +130,11 @@ fun BoardsScreen(nav: NavController) {
                 else -> LazyColumn(
                     Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(start = Space.screen, end = Space.screen, top = Space.xs, bottom = 96.dp),
-                    verticalArrangement = Arrangement.spacedBy(Space.s),
+                    // Compact rows, close together: about twice as many as cards fit a screen.
+                    verticalArrangement = Arrangement.spacedBy(Space.xxs),
                 ) {
                     problems.forEach { (label, p) ->
-                        item(key = "problem/$label") { ErrorMessage("$label's board: $p", onRetry = { readNow.trySend(Unit) }) }
+                        item(key = "problem/$label") { ErrorMessage("$label's board: $p", Modifier.padding(vertical = Space.xs), onRetry = { readNow.trySend(Unit) }) }
                     }
                     shown.forEachIndexed { i, b ->
                         works[b.machineId]?.let { w ->

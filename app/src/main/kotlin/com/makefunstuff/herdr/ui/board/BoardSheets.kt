@@ -397,7 +397,7 @@ fun TaskDetailContent(
             Column(verticalArrangement = Arrangement.spacedBy(Space.s)) {
                 Text(t.title, style = MaterialTheme.typography.headlineSmall)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(Space.s), verticalArrangement = Arrangement.spacedBy(Space.xs)) {
-                    StatusBadge(t.status.label, color)
+                    StatusBadge(t.status.word, color)
                     if (t.research) Pill("research")
                     if (t.pinned) Pill("pinned")
                 }

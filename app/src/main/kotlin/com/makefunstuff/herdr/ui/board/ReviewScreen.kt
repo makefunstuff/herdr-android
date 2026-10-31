@@ -453,7 +453,7 @@ private fun ReviewCard(
         Column(verticalArrangement = Arrangement.spacedBy(Space.s)) {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(Space.s), verticalArrangement = Arrangement.spacedBy(Space.xs)) {
                 Text(t.name, style = CodeStyle.copy(fontSize = 13.sp), color = c.strong, modifier = Modifier.align(Alignment.CenterVertically))
-                StatusBadge(t.status.label, t.status.color())
+                StatusBadge(t.status.word, t.status.color())
                 if (machineLabel != null) Pill(machineLabel)
                 if (t.agent.isNotEmpty()) Pill(t.agent)
             }

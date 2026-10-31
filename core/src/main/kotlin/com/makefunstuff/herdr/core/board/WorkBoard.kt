@@ -25,7 +25,7 @@ enum class WorkStatus(val label: String, val tone: BoardTone, val needsYou: Bool
     /** Its agent asks or waits for you. */
     Need("needs you", BoardTone.Red, true),
     /** Finished: waits for your yes to merge. */
-    Ready("ready to merge", BoardTone.Green, true),
+    Ready("ready", BoardTone.Green, true),
     Work("working", BoardTone.Amber),
     /** On its way into main: nothing for you to do. */
     Merging("merging", BoardTone.Blue),
@@ -66,6 +66,10 @@ data class WorkTask(
     /** Its pull request's address, when it has one. */
     val pr: String = "",
     val progress: Int? = null,
+    /** Its agent's own guess of the minutes left, when it gave one. */
+    val eta: Int? = null,
+    /** How long since it last changed, as the board says it ("4m", "yesterday"); none on v1. */
+    val age: String = "",
     /** Its agent's chat key (v2); none before its agent starts, and on v1. */
     val chat: String = "",
     /** Its agent's CLI as the board names it ("Claude Code"); none before its agent starts, and on v1. */
@@ -248,7 +252,7 @@ object WorkTasks {
         agent = t.agent,
         msg = t.line,
         progress = t.progress,
-        eta = null,
+        eta = t.eta,
         research = false,
         pr = t.pr,
         archived = false,
@@ -327,9 +331,11 @@ class V1WorkBoard(private val board: BoardClient, private val path: String = "")
         title = t.title,
         space = "",
         status = WorkTasks.status(t.status),
-        line = TaskLine.line(t.msg),
+        // What its badge's one word leaves out ("Review failed") before what it does now.
+        line = listOfNotNull(t.status.detail, TaskLine.line(t.msg).ifEmpty { null }).joinToString(" · "),
         pr = t.pr,
         progress = t.progress,
+        eta = t.eta,
         pinned = t.pinned,
         v1 = t,
     )
