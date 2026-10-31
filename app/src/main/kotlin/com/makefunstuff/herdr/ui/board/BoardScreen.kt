@@ -74,6 +74,7 @@ import com.makefunstuff.herdr.ui.common.LocalGuard
 import com.makefunstuff.herdr.core.board.BoardFilter
 import com.makefunstuff.herdr.core.board.BoardStatus
 import com.makefunstuff.herdr.core.board.BoardTask
+import com.makefunstuff.herdr.core.shepherdr.V2Board
 import com.makefunstuff.herdr.core.push.Alerts
 import com.makefunstuff.herdr.ui.common.EmptyState
 import com.makefunstuff.herdr.ui.common.LocalContainer
@@ -524,9 +525,12 @@ internal fun TaskRow(
     }
 }
 
-/** The card's way to its agent: the agent's name with a chat glyph, in amber, a tap target of its own. */
+/**
+ * The card's way to its agent: the agent's name with a chat glyph, in amber, a tap target of its own.
+ * A Shepherdr 2 task's CLI ("Claude Code") shows as its kind ("claude").
+ */
 @Composable
-private fun AgentChip(agent: String, onClick: () -> Unit) {
+internal fun AgentChip(agent: String, onClick: () -> Unit) {
     val c = Herdr.colors
     Row(
         Modifier.padding(start = Space.s).clip(HerdrShapes.Pill).background(c.accentTint)
@@ -535,7 +539,7 @@ private fun AgentChip(agent: String, onClick: () -> Unit) {
     ) {
         Icon(HerdrIcons.MessageSquare, null, tint = c.accent, modifier = Modifier.size(14.dp))
         Text(
-            agent.ifEmpty { "agent" }, style = MaterialTheme.typography.labelMedium, color = c.accent, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            V2Board.agentKind(agent).ifEmpty { "agent" }, style = MaterialTheme.typography.labelMedium, color = c.accent, maxLines = 1, overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(start = Space.xs).widthIn(max = 110.dp),
         )
     }

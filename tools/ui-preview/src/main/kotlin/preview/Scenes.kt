@@ -413,6 +413,9 @@ fun scenes(): List<Scene> = listOf(
     Scene("search", route = Routes.search(q = "jobs"), setup = { home() }, actions = { settle() }),
     Scene("search-empty", route = Routes.search(), setup = { home() }),
     Scene("search-machine", route = Routes.search(DEVBOX, "api"), setup = { home() }, actions = { settle() }),
+    // Shepherdr 2's tasks are found too, and open as their agents' chats.
+    Scene("search-v2", route = Routes.search(q = "export"), setup = { home(); v2() }, actions = { settle() }),
+    Scene("search-v2-open", route = Routes.search(q = "export"), setup = { home(); v2() }, actions = { settle(); tapText("Rate-limit the export endpoint") }),
     Scene("search-needs", route = Routes.search(q = "jobs"), setup = { home() }, actions = { settle(); tapText("Needs you") }),
 
     // Start work from a sentence: as a board task on devbox; as an agent now (its folders and the agents
@@ -438,6 +441,9 @@ fun scenes(): List<Scene> = listOf(
     // task's plan copied in to approve and its own merge question; the home space's quiet one; one at work
     // with your message on its way; and a choice answered from here.
     Scene("coordinator-v2", route = Routes.coordinator(DEVBOX, DemoV2.APP), setup = { shepherdr() }),
+    // An update card's agent chip opens that task's chat.
+    Scene("coordinator-v2-chips", route = Routes.coordinator(DEVBOX, DemoV2.APP), setup = { host(DEVBOX).shepherdr = FakeShepherdr() }),
+    Scene("coordinator-v2-agent", route = Routes.coordinator(DEVBOX, DemoV2.APP), setup = { host(DEVBOX).shepherdr = FakeShepherdr() }, actions = { tapText("claude") }),
     Scene("coordinator-v2-home", route = Routes.coordinator(DEVBOX), setup = { shepherdr() }),
     Scene("coordinator-v2-working", route = Routes.coordinator(DEVBOX, DemoV2.API), setup = {
         shepherdr()
@@ -517,7 +523,17 @@ fun scenes(): List<Scene> = listOf(
     Scene("task-v2-asks", route = Routes.board(DEVBOX, "AND-21"), heightDp = 1300, setup = { v2() }, actions = { tapText("Seen 2 min ago") }),
     Scene("task-v2-multi", route = Routes.board(DEVBOX, "AND-24"), setup = { v2() }, actions = { tapText("Key bar"); tapText("Alert rules") }),
     Scene("task-v2-ready", route = Routes.board(DEVBOX, "AND-20"), heightDp = 1300, setup = { v2() }),
-    Scene("task-v2-close", route = Routes.board(DEVBOX, "AND-20"), setup = { v2() }, actions = { tapText("Close, nothing merged") }),
+    // A task opens as its agent's chat: its turns' steps folded to a line (one opened), its question cards
+    // answered in it, the strip with its PR and Merge, and ⋯ for what it did, its brief and facts, and Close.
+    Scene("task-v2-close", route = Routes.board(DEVBOX, "AND-20"), setup = { v2() }, actions = { tapLabel("Details and more"); tapText("Close, nothing merged") }),
+    Scene("task-v2-menu", route = Routes.board(DEVBOX, "AND-20"), setup = { v2() }, actions = { tapLabel("Details and more") }),
+    Scene("task-v2-brief", route = Routes.board(DEVBOX, "AND-20"), setup = { v2() }, actions = { tapLabel("Details and more"); tapText("Brief") }),
+    Scene("task-v2-working", route = Routes.board(DEVBOX, "AND-19"), setup = { v2() }),
+    Scene("task-v2-steps", route = Routes.board(DEVBOX, "AND-21"), setup = { v2() }, actions = { tapText("Worked for") }),
+    Scene("task-v2-reply", route = Routes.board(DEVBOX, "AND-20"), setup = { v2() }, actions = { type("Make the limit 20 for the enterprise plan"); tapLabel("Send") }),
+    // One not started yet has no chat: its details, with Close in ⋯ and nothing under the thumb.
+    Scene("task-v2-todo", route = Routes.board(DEVBOX, "AND-23"), setup = { v2() }),
+    Scene("task-v2-todo-menu", route = Routes.board(DEVBOX, "AND-23"), setup = { v2() }, actions = { tapLabel("More") }),
     Scene("board-v2-add", route = Routes.board(DEVBOX), setup = { v2() }, actions = { tapLabel("Add a task") }),
     Scene("boards-v2", route = Routes.BOARDS, setup = { home(); v2() }),
     // A space's heading opens that space's coordinator chat.

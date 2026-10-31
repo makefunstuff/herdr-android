@@ -550,13 +550,13 @@ private fun Foot(v: CoordinatorView?, tooOld: Boolean, problem: String?, waitNot
 }
 
 @Composable
-internal fun Working() {
+internal fun Working(who: String = "Coordinator") {
     val t = rememberInfiniteTransition(label = "working")
     val a by t.animateFloat(0.3f, 1f, infiniteRepeatable(tween(700), RepeatMode.Reverse), label = "dots")
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = Space.xs)) {
         StatusDot(Herdr.colors.working, Modifier.alpha(a), size = 8)
         Spacer(Modifier.width(Space.s))
-        Text("Coordinator is working…", style = MaterialTheme.typography.bodySmall, color = Herdr.colors.muted)
+        Text("$who is working…", style = MaterialTheme.typography.bodySmall, color = Herdr.colors.muted)
     }
 }
 
