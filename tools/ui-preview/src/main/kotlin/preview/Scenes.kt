@@ -516,11 +516,12 @@ fun scenes(): List<Scene> = listOf(
     // Run now; reached from a board's menu, the Board tab's bar and a machine's Routines row. One open with its
     // firings; a new one on a schedule and on a board event; one edited; one removed; every board's; none yet.
     Scene("board-menu", route = Routes.board(DEVBOX), actions = { tapLabel("Filter and more") }),
-    // Shepherdr 2: the board through its API (what needs you first, then each space), a task's details with its
-    // cards answered on the screen, Merge and Close, and adding a task, which goes to a space's coordinator.
+    // Shepherdr 2: the board through its API (what needs you first, then each space, each task with its agent's chip),
+    // a task as its agent's chat with its cards answered in it, and adding a task, which goes to a space's coordinator.
     Scene("board-v2", route = Routes.board(DEVBOX), setup = { v2() }),
     Scene("board-v2-tall", route = Routes.board(DEVBOX), heightDp = 1700, setup = { v2() }, actions = { tapText("Done · 2") }),
-    Scene("task-v2-asks", route = Routes.board(DEVBOX, "AND-21"), heightDp = 1300, setup = { v2() }, actions = { tapText("Seen 2 min ago") }),
+    Scene("task-v2-asks", route = Routes.board(DEVBOX, "AND-21"), setup = { v2() }),
+    Scene("task-v2-answered", route = Routes.board(DEVBOX, "AND-21"), setup = { v2() }, actions = { tapText("Seen 2 min ago") }),
     Scene("task-v2-multi", route = Routes.board(DEVBOX, "AND-24"), setup = { v2() }, actions = { tapText("Key bar"); tapText("Alert rules") }),
     Scene("task-v2-ready", route = Routes.board(DEVBOX, "AND-20"), heightDp = 1300, setup = { v2() }),
     // A task opens as its agent's chat: its turns' steps folded to a line (one opened), its question cards

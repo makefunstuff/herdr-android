@@ -113,9 +113,20 @@ internal fun TaskChatScreen(
     var sheet by remember(t.id) { mutableStateOf<TaskSheet?>(null) }
     BackHandler(enabled = backEnabled && sheet == null, onBack = onBack)
 
-    // Its brief, plan and facts: read when it opens, and again when the board says it changed.
+    // Its brief, plan and facts: read when it opens (again until that works), and when the board says it changed.
     var details by remember(t.id) { mutableStateOf<WorkTaskDetails?>(null) }
-    LaunchedEffect(t) { runCatching { session.awaitWorkBoard().details(t) }.onSuccess { details = it } }
+    LaunchedEffect(t, state.online) {
+        while (state.online) {
+            try {
+                details = session.awaitWorkBoard().details(t)
+                break
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Throwable) {
+                delay(8_000)
+            }
+        }
+    }
 
     var thread by remember(t.chat) { mutableStateOf<CoordinatorThread?>(null) }
     var outgoing by remember(t.chat) { mutableStateOf<List<OutgoingLine>>(emptyList()) }
@@ -155,6 +166,8 @@ internal fun TaskChatScreen(
         scope.launch {
             runCatching { session.awaitWorkBoard().tell(t, text, cid = line.cid, reply = reply?.id) }.onFailure {
                 outgoing = outgoing - line
+                // Not lost: back in the message box, in front of anything typed since.
+                draft = if (draft.isBlank()) text else text + "\n" + draft
                 context.toast(it.message ?: "Couldn't send")
             }
         }
