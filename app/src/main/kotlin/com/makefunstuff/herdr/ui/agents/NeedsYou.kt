@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -165,12 +166,15 @@ private fun AnswerButton(text: String, icon: ImageVector?, primary: Boolean, ena
         if (icon != null) Icon(icon, null, Modifier.size(18.dp))
         Text(text, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
-    if (primary) PrimaryButton(onClick = onClick, enabled = enabled, content = body) else SecondaryButton(onClick = onClick, enabled = enabled, content = body)
+    // A little narrower than other buttons: Yes, No, Reply and Open fit one row on a phone.
+    val padding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
+    if (primary) PrimaryButton(onClick = onClick, enabled = enabled, contentPadding = padding, content = body)
+    else SecondaryButton(onClick = onClick, enabled = enabled, contentPadding = padding, content = body)
 }
 
 /**
  * A blocked agent as a card that answers it: the question, and Yes and No (or the menu's two
- * choices) and Reply. A menu of more than that opens in the chat. [busy] while an answer is sent.
+ * choices), Reply and Open. A menu of more than that is answered in the chat. [busy] while an answer is sent.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -245,9 +249,10 @@ fun QuestionCard(
                         if (always) HerdrIcons.FingerprintPattern else null, primary = i == 0 && !always, enabled = true,
                     ) { onChoose(prompt, i) }
                 }
-                else -> AnswerButton("Open", null, primary = false, enabled = true, onClick = onOpen)
             }
             AnswerButton("Reply", HerdrIcons.Reply, primary = false, enabled = true, onClick = onReply)
+            // Always there at the end of the row, as on a task's card: a tap on the card's blank space isn't found.
+            AnswerButton("Open", null, primary = false, enabled = true, onClick = onOpen)
         }
     }
 }
