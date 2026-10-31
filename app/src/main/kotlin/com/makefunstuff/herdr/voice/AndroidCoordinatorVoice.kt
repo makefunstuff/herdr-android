@@ -63,8 +63,8 @@ class AndroidCoordinatorVoice(
         .setOnAudioFocusChangeListener { change ->
             when (change) {
                 AudioManager.AUDIOFOCUS_LOSS -> hush()
-                // A navigation prompt: this line stops, the ones waiting are read after.
-                AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> cut()
+                // A navigation prompt or a call: this line stops, and is read again once the other is done.
+                AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> { again = current; cut() }
             }
         }
         .build()
@@ -89,6 +89,11 @@ class AndroidCoordinatorVoice(
     @Volatile private var capturing = false
     @Volatile private var pushing = false
     private var phoneEars: Job? = null
+    /** The line being read, and one cut by a call or a prompt, to read again. */
+    @Volatile private var current: Pending? = null
+    @Volatile private var again: Pending? = null
+    /** It is reading a line (from the focus asked for to the focus let go). */
+    @Volatile private var reading = false
     /** You started talking to the phone's recogniser: replies wait. */
     @Volatile private var phoneTalking = false
     /** Replies waiting to be read. */
@@ -131,6 +136,7 @@ class AndroidCoordinatorVoice(
     override fun hush() {
         // Stops the voice, not just this line: what waited to be read is dropped too.
         while (lines.tryReceive().isSuccess) waiting.decrementAndGet()
+        again = null
         cut()
     }
 
@@ -156,7 +162,11 @@ class AndroidCoordinatorVoice(
         } else {
             if (phoneEars?.isActive == true) { phone.stopHearing(); return }
             // Hands-free, mid-turn: Send ends it now.
-            if (!pushing && !capturing) return
+            if (!pushing && !capturing) {
+                // The turn already ended at its longest: the button let go still closes the microphone.
+                if (!_state.value.handsFree && phoneEars?.isActive != true) closeMic()
+                return
+            }
             pushing = false
             capturing = false
             ends.reset()
@@ -267,14 +277,26 @@ class AndroidCoordinatorVoice(
 
     /** Reads [lines] aloud, one after another; muted, they pass unsaid. */
     private suspend fun speaking() {
-        for (p in lines) {
+        while (true) {
+            val p = again?.also { again = null } ?: lines.receive().also { waiting.decrementAndGet() }
             // While you talk it waits, and reads after.
             while (capturing || phoneTalking || _state.value.phase == Phase.Hearing || _state.value.phase == Phase.Sending) delay(100)
-            waiting.decrementAndGet()
             if (_state.value.muted) continue
             // The phone's recogniser waiting for you (hands-free) gives way to the reply.
             if (phoneEars?.isActive == true) phone.stopHearing()
-            speak(p.line.text, p.at)
+            // A call (or another app) has the speaker: it waits, and reads when it is free again.
+            while (!take()) delay(1_000)
+            current = p
+            reading = true
+            try {
+                speak(p.line.text, p.at)
+            } finally {
+                reading = false
+                current = null
+                release()
+            }
+            // Cut by a prompt: a moment for it to finish before reading the line again.
+            if (again != null) delay(1_500)
         }
     }
 
@@ -285,11 +307,10 @@ class AndroidCoordinatorVoice(
         var heardAny = false
         val chunks = SpeechText.chunks(text)
         var said = 0
-        if (!take()) {
-            // A call has the speaker: this one isn't read.
-            _state.update { it.copy(phase = Phase.Ready) }
-            return
-        }
+        // With the phone's ears on (the server away, hands-free), the microphone listens while it speaks, so
+        // your voice stops it as it does with the server.
+        val bargeIn = phoneEars?.isActive == true && _state.value.handsFree
+        if (bargeIn) openMic()
         try {
             val engine = useServer()
             if (engine != null) {
@@ -301,7 +322,14 @@ class AndroidCoordinatorVoice(
                     }
                     out.start()
                     for (chunk in chunks) {
-                        val done = engine.speak(chunk, s.voice) { pcm -> heardAny = true; out.write(pcm); !hushed }
+                        var got = false
+                        val done = try {
+                            engine.speak(chunk, s.voice) { pcm -> heardAny = true; got = true; out.write(pcm); !hushed }
+                        } catch (e: IOException) {
+                            // Part of this piece came: the phone goes on from the next one, not this one again.
+                            if (got) said++
+                            throw e
+                        }
                         if (!done || hushed) break
                         said++
                     }
@@ -319,7 +347,7 @@ class AndroidCoordinatorVoice(
                 Log.i(AudioOut.TAG, "first sound %d ms after the reply came (phone)".format(SystemClock.elapsedRealtime() - at))
             }
         } finally {
-            release()
+            if (bargeIn) mic.stop()
             if (_state.value.phase == Phase.Speaking) _state.update { it.copy(phase = Phase.Ready, level = 0f) }
         }
     }
@@ -350,7 +378,7 @@ class AndroidCoordinatorVoice(
                 try {
                     (engineFor(s) ?: throw IOException("Write the server as http://address:port")).ping()
                     awaySince = 0
-                    _state.update { it.copy(engine = VoiceState.Engine.Server) }
+                    _state.update { it.copy(engine = VoiceState.Engine.Server, problem = it.problem?.takeUnless { p -> p.startsWith("The voice server refused") }) }
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -367,7 +395,12 @@ class AndroidCoordinatorVoice(
         if (mic.isOn) return true
         ends.reset()
         useHeadsetMic()
-        if (mic.start()) return true
+        if (mic.start()) {
+            // From the screen only (Android refuses it from the background): the service takes the microphone
+            // too, in case it was allowed after voice came on.
+            if (hosts.isForeground) runCatching { ContextCompat.startForegroundService(context, Intent(context, VoiceService::class.java)) }
+            return true
+        }
         settings.setHandsFree(false)
         _state.update { it.copy(problem = "No microphone: allow it in the phone's settings", handsFree = false, phase = Phase.Ready) }
         pushing = false
@@ -456,18 +489,42 @@ class AndroidCoordinatorVoice(
         phoneEars = (runScope ?: return).launch {
             // Hands-free, it keeps listening on the phone (so only the first turn may lose its first word),
             // between replies, until the server is back.
+            if (!phone.canHear) {
+                _state.update { it.copy(phase = Phase.Ready, problem = "The voice server is away and this phone has no speech recogniser") }
+                return@launch
+            }
             do {
-                while (_state.value.phase == Phase.Speaking || waiting.get() > 0) delay(100)
+                // Never while it reads aloud: the recogniser would hear the reply and send it as yours.
+                while (reading || again != null || waiting.get() > 0) delay(100)
                 phoneTalking = false
                 _state.update { it.copy(phase = Phase.Listening, engine = VoiceState.Engine.Phone) }
+                val t0 = SystemClock.elapsedRealtime()
                 val words = try {
                     phone.hear(onSpeech = { phoneTalking = true }) { l -> _state.update { it.copy(level = l) } }
                 } finally {
                     phoneTalking = false
                 }
                 send(words)
-            } while (_state.value.on && _state.value.handsFree && useServer() == null)
+                // Nothing heard at once (an error, no network for it): a pause before it listens again.
+                if (words.isBlank() && SystemClock.elapsedRealtime() - t0 < 3_000) delay(3_000)
+            } while (_state.value.on && _state.value.handsFree && !serverBack())
             if (reopen && _state.value.on && _state.value.handsFree) { delay(300); openMic() }
+        }
+    }
+
+    /** The server answers again (asked at most every [RETRY_MS]): the phone's ears give way to it. */
+    private suspend fun serverBack(): Boolean {
+        val engine = useServer() ?: return false
+        return try {
+            engine.ping()
+            awaySince = 0
+            _state.update { it.copy(engine = VoiceState.Engine.Server) }
+            true
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            away(e)
+            false
         }
     }
 
@@ -477,7 +534,8 @@ class AndroidCoordinatorVoice(
         val b = board
         if (words.length < 2 || !s.on || b == null) {
             if (words.isNotEmpty() && b == null) _state.update { it.copy(problem = "Not connected: what you said wasn't sent") }
-            _state.update { it.copy(phase = Phase.Ready, level = 0f) }
+            // Only its own phases: a reply it started reading meanwhile stays Speaking.
+            _state.update { if (it.phase == Phase.Speaking) it else it.copy(phase = Phase.Ready, level = 0f) }
             return
         }
         _state.update { it.copy(phase = Phase.Sending, line = "You: $words", problem = null) }
