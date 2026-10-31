@@ -19,7 +19,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -75,6 +75,9 @@ import com.makefunstuff.herdr.ui.design.HerdrTopBar
 import com.makefunstuff.herdr.ui.design.InfoLine
 import com.makefunstuff.herdr.ui.design.LoadingState
 import com.makefunstuff.herdr.ui.design.MenuRow
+import com.makefunstuff.herdr.ui.design.NewLine
+import com.makefunstuff.herdr.ui.design.NewestButton
+import com.makefunstuff.herdr.ui.design.rememberStickToBottom
 import com.makefunstuff.herdr.ui.design.PrimaryButton
 import com.makefunstuff.herdr.ui.design.RowDivider
 import com.makefunstuff.herdr.ui.design.StatusBadge
@@ -156,8 +159,11 @@ internal fun TaskChatScreen(
     }
     val th = thread
     val items = remember(th, outgoing) { th?.v2?.let { SpaceChat.items(th.space, it, outgoing, steps = true) }.orEmpty() }
-    val list = rememberLazyListState()
-    LaunchedEffect(items.size) { if (items.isNotEmpty() && list.firstVisibleItemIndex <= 1) list.animateScrollToItem(0) }
+    // A list of its own for each task, so another task opens at its newest too; kept to its newest message (StickToBottom).
+    val list = remember(t.id) { LazyListState() }
+    val stick = rememberStickToBottom(list)
+    val foot = th?.working == true || problem != null
+    stick.Follow(remember(items) { items.map { it.id } }, content = items to foot)
 
     var draft by rememberDraft(DraftStore.task(machineId, t.id))
     val kind = V2Board.agentKind(t.agent).ifEmpty { "its agent" }
@@ -169,7 +175,7 @@ internal fun TaskChatScreen(
     fun send(text: String, reply: V2ReplyQuote?) {
         val line = OutgoingLine(UUID.randomUUID().toString(), text, reply)
         outgoing = outgoing + line
-        scope.launch { list.animateScrollToItem(0) }
+        stick.sent()
         // On the app's scope: leaving the screen right after Send doesn't stop it.
         container.scope.launch {
             try {
@@ -235,7 +241,7 @@ internal fun TaskChatScreen(
                             if (waits.isNotEmpty() && draft.isEmpty()) {
                                 WaitsForYou(waits, Modifier.padding(horizontal = Space.screen).padding(bottom = Space.xs)) { card ->
                                     val at = items.indexOfFirst { it.holds(card) }
-                                    if (at >= 0) scope.launch { list.animateScrollToItem(items.size - at) }
+                                    if (at >= 0) scope.launch { list.animateScrollToItem(items.size - at - if (foot) 0 else 1) }
                                 }
                             }
                             replyTo?.let { r -> ReplyingTo(r, Modifier.padding(horizontal = Space.screen).padding(bottom = Space.xs)) { replyTo = null } }
@@ -259,7 +265,8 @@ internal fun TaskChatScreen(
                             val why = problem
                             if (why != null) ChatEmpty(HerdrIcons.CircleAlert, "Can't read its chat", why) else LoadingState("Reading the chat")
                         }
-                        else -> LazyColumn(
+                        else -> Box(Modifier.fillMaxSize()) {
+                        LazyColumn(
                             state = list,
                             // Newest at the bottom: it stays at its end when the keyboard opens or the message box grows.
                             reverseLayout = true,
@@ -267,7 +274,7 @@ internal fun TaskChatScreen(
                             contentPadding = PaddingValues(start = Space.screen, end = Space.screen, top = Space.m, bottom = bottom + Space.xs),
                             verticalArrangement = Arrangement.spacedBy(Space.m, Alignment.Bottom),
                         ) {
-                            item(key = "foot") {
+                            if (foot) item(key = "foot") {
                                 Column(verticalArrangement = Arrangement.spacedBy(Space.s)) {
                                     if (th.working) Working(kind.replaceFirstChar { it.uppercase() })
                                     problem?.let { Notice(it, c.red) }
@@ -279,14 +286,19 @@ internal fun TaskChatScreen(
                                 }
                             }
                             items(items.asReversed(), key = { it.id }) { item ->
-                                ChatItem(
-                                    item, answering,
-                                    onAnswer = ::answer,
-                                    onReply = { q -> replyTo = q },
-                                    onRetry = { w -> outgoing = outgoing.filterNot { "cid:${it.cid}" == w.id }; send(w.text, w.reply) },
-                                    who = kind,
-                                )
+                                Column(verticalArrangement = Arrangement.spacedBy(Space.m)) {
+                                    if (item.id == stick.unread) NewLine()
+                                    ChatItem(
+                                        item, answering,
+                                        onAnswer = ::answer,
+                                        onReply = { q -> replyTo = q },
+                                        onRetry = { w -> outgoing = outgoing.filterNot { "cid:${it.cid}" == w.id }; send(w.text, w.reply) },
+                                        who = kind,
+                                    )
+                                }
                             }
+                        }
+                        NewestButton(stick, bottom)
                         }
                     }
                 }

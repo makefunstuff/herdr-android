@@ -523,7 +523,7 @@ fun scenes(): List<Scene> = listOf(
     Scene("task-v2-asks", route = Routes.board(DEVBOX, "AND-21"), setup = { v2() }),
     Scene("task-v2-answered", route = Routes.board(DEVBOX, "AND-21"), setup = { v2() }, actions = { tapText("Seen 2 min ago") }),
     Scene("task-v2-multi", route = Routes.board(DEVBOX, "AND-24"), setup = { v2() }, actions = { tapText("Key bar"); tapText("Alert rules") }),
-    Scene("task-v2-ready", route = Routes.board(DEVBOX, "AND-20"), heightDp = 1300, setup = { v2() }),
+    Scene("task-v2-ready", route = Routes.board(DEVBOX, "AND-20"), setup = { v2() }),
     // A task opens as its agent's chat: its turns' steps folded to a line (one opened), its question cards
     // answered in it, the strip with its PR and Merge, and ⋯ for what it did, its brief and facts, and Close.
     Scene("task-v2-close", route = Routes.board(DEVBOX, "AND-20"), setup = { v2() }, actions = { tapLabel("Details and more"); tapText("Close, nothing merged") }),
