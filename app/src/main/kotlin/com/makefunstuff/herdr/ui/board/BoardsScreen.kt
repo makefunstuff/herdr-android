@@ -101,8 +101,8 @@ fun BoardsScreen(nav: NavController) {
         containerColor = Herdr.colors.ground,
         topBar = {
             HerdrTopBar("Board", subtitle = if (boards.isEmpty()) null else listOfNotNull(
-                if (waiting > 0) "$waiting need you" else if (elsewhere == 0) "Nothing waits for you" else null,
-                elsewhere.takeIf { it > 0 }?.let { "$it more on Agents" },
+                if (waiting > 0) "$waiting need${if (waiting == 1) "s" else ""} you" else if (elsewhere == 0) "Nothing waits for you" else null,
+                elsewhere.takeIf { it > 0 }?.let { if (waiting > 0) "$it more on Agents" else "$it on Agents" },
             ).joinToString(" · ")) {
                 BarIcon(HerdrIcons.Search, "Search tasks, agents and chats", { panes.open(nav, Routes.search()) })
                 BarIcon(HerdrIcons.Layers, "Review finished work", { panes.open(nav, Routes.review()) })

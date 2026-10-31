@@ -186,10 +186,10 @@ fun AgentsScreen(
     val needsYou = home.needsYou.filter { handled[it.key] != sig(it) }
     // A card answered here shows again once it changed and waits anew: a task that asked again, worded the same.
     LaunchedEffect(home.needsYou) {
-        // Only the whole list says what left it: a machine filtered out hasn't changed.
-        if (filter != null) return@LaunchedEffect
+        // Only on the machines shown: one filtered out hasn't changed.
         val now = home.needsYou.associate { it.key to sig(it) }
-        handled.keys.filter { now[it] != handled[it] }.forEach { handled.remove(it) }
+        val shown = { k: String -> filter == null || "/$filter/" in "/$k/" }
+        handled.keys.filter { shown(it) && now[it] != handled[it] }.forEach { handled.remove(it) }
     }
     val showMachine = hosts.size > 1 && filter == null
     val anyBoard = hosts.any { it.hasBoard }

@@ -151,7 +151,7 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
     }
     // What the title bar says it works on: its task, else its own name (unless that is only its CLI's or a
     // launcher's hash, `shep-1a2b…`), else its workspace, else (herdr-core's catch-all "Other terminals") its
-    // terminal's title. Never its current step: the title stays put while it works.
+    // terminal's title. Not its step message, which changes with every step.
     val workspaceLabel = agent?.let { snapshot?.workspace(it.workspaceId)?.label?.ifBlank { null } }
     val heading = task?.let { "${it.name} · ${it.title}" }
         ?: name.takeIf { agent == null || !Home.isBareName(agent, it) }
