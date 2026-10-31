@@ -72,13 +72,18 @@ class MainActivity : FragmentActivity() {
             quick.isNotEmpty() -> Links.open(Routes.quickRuns(machine, quick))
             intent.getBooleanExtra(OPEN_COORDINATOR, false) -> Links.open(Routes.coordinator(machine))
             pane.isNotEmpty() -> Links.open(Routes.agent(machine, pane))
-            // Finished work that waits for a yes: its review card, with the others after it.
-            task.isNotEmpty() && intent.getBooleanExtra(OPEN_REVIEW, false) -> Links.open(Routes.review(machine, task))
+            // Finished work that waits for a yes: its review card, with the others after it. A Shepherdr 2
+            // task has none: it opens on its board as its agent's chat, Merge on it.
+            task.isNotEmpty() && intent.getBooleanExtra(OPEN_REVIEW, false) && !onShepherdr2(machine, task) -> Links.open(Routes.review(machine, task))
             task.isNotEmpty() -> Links.open(Routes.board(machine, task))
             else -> Links.open(Routes.SETTINGS)
         }
         return true
     }
+
+    /** Whether [task] is a Shepherdr 2 task on [machine], as the app last read its board. */
+    private fun onShepherdr2(machine: String, task: String): Boolean =
+        (application as HerdrApp).container.boards.lists.value[machine]?.work?.tasks?.any { it.id == task } == true
 
     companion object {
         const val OPEN_MACHINE = "open_machine"

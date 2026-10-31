@@ -44,7 +44,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -295,7 +297,16 @@ internal fun WorkBoardScreen(
         val open = o?.tasks?.firstOrNull { it.id == openId }
         val middle by nav.currentBackStackEntryAsState()
         val middleCloses = pane != null && middle?.destination?.route != Routes.AGENTS
-        if (openId != null && open != null) {
+        // A task with an agent opens as its agent's chat; one not started yet as its details.
+        if (openId != null && open != null && open.chat.isNotEmpty()) {
+            TaskChatScreen(
+                session, machineId, open, space = spaceName(open.space), busy = busy,
+                onBack = { if (alone && pane == null && openId == openTask) nav.popBackStack() else openId = null },
+                backEnabled = !middleCloses,
+                onMerge = { merge(open) },
+                onClose = { pending = WorkPending.Close(open) },
+            )
+        } else if (openId != null && open != null) {
             WorkTaskScreen(
                 session, open, space = spaceName(open.space), busy = busy,
                 onBack = { if (alone && pane == null && openId == openTask) nav.popBackStack() else openId = null },
@@ -340,15 +351,17 @@ internal fun WorkBoardScreen(
  */
 @Composable
 internal fun WorkTaskRow(t: WorkTask, onOpen: () -> Unit, space: String = "") {
+    val onAgent = if (t.chat.isNotEmpty()) onOpen else null
     val c = Herdr.colors
     val color = t.status.color()
     val quiet = t.status == WorkStatus.Done
     QuietCard(
         Modifier.semantics(mergeDescendants = true) {
             contentDescription = listOf(t.name, t.status.label, t.title, space).filter { it.isNotEmpty() }.joinToString(", ")
+            if (onAgent != null) customActions = listOf(CustomAccessibilityAction("Open agent") { onAgent(); true })
         },
         onClick = onOpen,
-        onClickLabel = "Open details",
+        onClickLabel = if (onAgent != null) "Open its chat" else "Open details",
     ) {
         Row(Modifier.height(IntrinsicSize.Min)) {
             Box(
@@ -366,6 +379,7 @@ internal fun WorkTaskRow(t: WorkTask, onOpen: () -> Unit, space: String = "") {
                         space, style = MaterialTheme.typography.labelMedium, color = c.faint, maxLines = 1, overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.padding(start = Space.s).widthIn(max = 140.dp),
                     )
+                    if (onAgent != null) AgentChip(t.agent, onAgent)
                 }
                 Text(
                     t.title, style = MaterialTheme.typography.titleMedium, color = if (quiet) c.muted else c.text,

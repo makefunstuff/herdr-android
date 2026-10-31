@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -51,6 +52,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
+import com.makefunstuff.herdr.LocalPanes
 import com.makefunstuff.herdr.core.board.CardAnswer
 import com.makefunstuff.herdr.core.board.CoordinatorThread
 import com.makefunstuff.herdr.core.board.WorkBoard
@@ -66,6 +68,7 @@ import com.makefunstuff.herdr.core.shepherdr.SpaceChat
 import com.makefunstuff.herdr.core.shepherdr.SpaceChatItem
 import com.makefunstuff.herdr.core.shepherdr.V2ReplyQuote
 import com.makefunstuff.herdr.data.DraftStore
+import com.makefunstuff.herdr.ui.board.AgentChip
 import com.makefunstuff.herdr.ui.common.LocalContainer
 import com.makefunstuff.herdr.ui.common.MarkdownText
 import com.makefunstuff.herdr.ui.common.StatusDot
@@ -118,6 +121,7 @@ import java.util.UUID
 @Composable
 internal fun SpaceCoordinator(nav: NavController, machineId: String, session: HostSession, from: String?) {
     val container = LocalContainer.current
+    val panes = LocalPanes.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val state by session.state.collectAsStateWithLifecycle()
@@ -348,6 +352,9 @@ internal fun SpaceCoordinator(nav: NavController, machineId: String, session: Ho
                                         onAnswer = ::answer,
                                         onReply = { q -> replyTo = q },
                                         onRetry = { w -> outgoing = outgoing.filterNot { "cid:${it.cid}" == w.id }; send(w.text, w.reply) },
+                                        agentOf = { id -> overview?.tasks?.firstOrNull { it.id == id && it.chat.isNotEmpty() }?.agent?.ifEmpty { "agent" } },
+                                        // A task opens as its agent's chat, on the board.
+                                        onAgent = { id -> panes.openBoard(nav, machineId, id, alone = true) },
                                     )
                                 }
                             }
@@ -373,7 +380,7 @@ private fun stateWords(t: CoordinatorThread?, online: Boolean, offline: String):
 }
 
 /** Whether [card] is asked in this item: its own question, or one of a task's copied into an update card. */
-private fun SpaceChatItem.holds(card: WorkCard): Boolean = when (this) {
+internal fun SpaceChatItem.holds(card: WorkCard): Boolean = when (this) {
     is SpaceChatItem.Question -> this.card.chat == card.chat && this.card.question.id == card.question.id
     is SpaceChatItem.Update -> asks.any { it.chat == card.chat && it.question.id == card.question.id }
     else -> false
@@ -405,7 +412,7 @@ private fun SpacePicker(spaces: List<WorkSpace>, selected: String?, onPick: (Str
 
 /** Over the composer: how many questions wait for you, the first by name; a tap goes to it. */
 @Composable
-private fun WaitsForYou(cards: List<WorkCard>, modifier: Modifier, onGo: (WorkCard) -> Unit) {
+internal fun WaitsForYou(cards: List<WorkCard>, modifier: Modifier, onGo: (WorkCard) -> Unit) {
     val c = Herdr.colors
     val first = cards.first()
     QuietCard(modifier, onClick = { onGo(first) }, onClickLabel = "Go to the question") {
@@ -428,7 +435,7 @@ private fun WaitsForYou(cards: List<WorkCard>, modifier: Modifier, onGo: (WorkCa
 
 /** Over the composer while you reply to a message: its start, and an X that stops replying. */
 @Composable
-private fun ReplyingTo(q: V2ReplyQuote, modifier: Modifier, onCancel: () -> Unit) {
+internal fun ReplyingTo(q: V2ReplyQuote, modifier: Modifier, onCancel: () -> Unit) {
     val c = Herdr.colors
     QuietCard(modifier) {
         Row(Modifier.padding(start = Space.l), verticalAlignment = Alignment.CenterVertically) {
@@ -440,19 +447,26 @@ private fun ReplyingTo(q: V2ReplyQuote, modifier: Modifier, onCancel: () -> Unit
     }
 }
 
+/**
+ * One item of a Shepherdr 2 chat, a space's coordinator's or a task's agent's ([who], as your waiting words
+ * say it). [agentOf] names the agent of an update card's task ("Claude Code"), whose chip [onAgent] opens.
+ */
 @Composable
-private fun ChatItem(
+internal fun ChatItem(
     item: SpaceChatItem,
     answering: Set<String>,
     onAnswer: (CardAnswer) -> Unit,
     onReply: (V2ReplyQuote) -> Unit,
     onRetry: (SpaceChatItem.Words) -> Unit,
+    who: String = "the coordinator",
+    agentOf: (String) -> String? = { null },
+    onAgent: (String) -> Unit = {},
 ) {
     val c = Herdr.colors
     when (item) {
-        is SpaceChatItem.Words -> Words(item, onReply, onRetry)
+        is SpaceChatItem.Words -> Words(item, onReply, onRetry, who)
         is SpaceChatItem.Update -> Column(verticalArrangement = Arrangement.spacedBy(Space.s)) {
-            UpdateRow(item)
+            UpdateRow(item, agentOf(item.task)?.let { a -> a to { onAgent(item.task) } })
             item.asks.forEach { card -> QuestionCard(card, null, card.question.id in answering, onAnswer) }
             item.answered?.let { Text("Answered: $it", style = MaterialTheme.typography.labelMedium, color = c.muted, modifier = Modifier.padding(start = 20.dp)) }
         }
@@ -489,13 +503,40 @@ private fun ChatItem(
             item.text, style = MaterialTheme.typography.labelMedium, color = c.muted,
             modifier = Modifier.fillMaxWidth().padding(horizontal = Space.xs), textAlign = androidx.compose.ui.text.style.TextAlign.End,
         )
+        is SpaceChatItem.Steps -> StepsLine(item)
+    }
+}
+
+/** A turn's tool steps as one quiet line ("▸ Worked for 14m · 9 steps"); a tap shows the rows that say most. */
+@Composable
+private fun StepsLine(s: SpaceChatItem.Steps) {
+    val c = Herdr.colors
+    var open by rememberSaveable(s.id) { mutableStateOf(false) }
+    val head = listOfNotNull(
+        s.millis?.let { "Worked for " + SpaceChat.took(it) } ?: "Working",
+        if (s.steps == 1) "1 step" else "${s.steps} steps",
+        s.failed.takeIf { it > 0 }?.let { "$it failed" },
+    ).joinToString(" · ")
+    Column(
+        Modifier.fillMaxWidth().clickable(enabled = s.rows.isNotEmpty(), onClickLabel = if (open) "Fold the steps" else "Show the steps") { open = !open }
+            .padding(horizontal = Space.xs, vertical = Space.xs),
+    ) {
+        Row(Modifier.heightIn(min = 40.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(if (open) HerdrIcons.ChevronDown else HerdrIcons.ChevronRight, null, Modifier.size(14.dp), tint = c.faint)
+            Spacer(Modifier.width(Space.xs))
+            Text(head, style = MaterialTheme.typography.labelMedium, color = if (s.failed > 0) c.red else c.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        if (open) Column(Modifier.padding(start = 18.dp, top = Space.xs), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            s.rows.forEach { Text(it, style = MaterialTheme.typography.bodySmall, color = c.muted, maxLines = 2, overflow = TextOverflow.Ellipsis) }
+            if (s.more > 0) Text("and ${s.more} more", style = MaterialTheme.typography.bodySmall, color = c.faint)
+        }
     }
 }
 
 /** Yours on the right on a card, the coordinator's as prose on the left; a long press replies to it. */
 @OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 @Composable
-private fun Words(w: SpaceChatItem.Words, onReply: (V2ReplyQuote) -> Unit, onRetry: (SpaceChatItem.Words) -> Unit) {
+private fun Words(w: SpaceChatItem.Words, onReply: (V2ReplyQuote) -> Unit, onRetry: (SpaceChatItem.Words) -> Unit, who: String) {
     val c = Herdr.colors
     val mine = w.you
     val split = remember(w.text, mine) { if (mine) Images.split(w.text) else Images.Split(emptyList(), w.text) }
@@ -541,16 +582,19 @@ private fun Words(w: SpaceChatItem.Words, onReply: (V2ReplyQuote) -> Unit, onRet
                 w.waiting -> Row(Modifier.padding(top = Space.xs, end = Space.xs), verticalAlignment = Alignment.CenterVertically) {
                     StatusDot(c.faint, size = 6)
                     Spacer(Modifier.width(6.dp))
-                    Text("Sending · waiting for the coordinator", style = MaterialTheme.typography.labelMedium, color = c.faint)
+                    Text("Sending · waiting for $who", style = MaterialTheme.typography.labelMedium, color = c.faint)
                 }
             }
         }
     }
 }
 
-/** Shepherdr's card about a task: its state's dot, the task and what happened, and its pull request. */
+/**
+ * Shepherdr's card about a task: its state's dot, the task and what happened, its pull request, and
+ * [agent]'s chip (its CLI's name and what opens its chat) once the task has one.
+ */
 @Composable
-private fun UpdateRow(u: SpaceChatItem.Update) {
+private fun UpdateRow(u: SpaceChatItem.Update, agent: Pair<String, () -> Unit>?) {
     val c = Herdr.colors
     val uri = LocalUriHandler.current
     val tint = if (u.red != null) c.red else u.status?.let { statusColor(it) } ?: c.idle
@@ -573,6 +617,7 @@ private fun UpdateRow(u: SpaceChatItem.Update) {
                 Spacer(Modifier.width(Space.xs))
                 Text("#${pr.number}", style = MaterialTheme.typography.labelLarge, color = c.muted)
             }
+            agent?.let { (cli, open) -> AgentChip(cli, open) }
         }
     }
 }
@@ -617,7 +662,7 @@ private fun QuestionCard(card: WorkCard, answer: String?, busy: Boolean, onAnswe
                 if (open) StatusBadge("needs you", c.red)
             }
             Spacer(Modifier.size(Space.xs))
-            Text(q.title, style = MaterialTheme.typography.titleMedium, color = c.strong)
+            MarkdownText(q.title, style = MaterialTheme.typography.titleMedium, color = c.strong)
             q.steps?.takeIf { it.isNotEmpty() }?.let { steps ->
                 Column(Modifier.padding(top = Space.s), verticalArrangement = Arrangement.spacedBy(Space.xs)) {
                     steps.forEachIndexed { i, s ->

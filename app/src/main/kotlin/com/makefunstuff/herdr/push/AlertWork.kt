@@ -6,6 +6,8 @@ import com.makefunstuff.herdr.core.api.SessionSnapshot
 import com.makefunstuff.herdr.core.host.Sessions
 import com.makefunstuff.herdr.core.api.AgentStatus
 import com.makefunstuff.herdr.core.board.BoardAction
+import com.makefunstuff.herdr.core.board.WorkBoard
+import com.makefunstuff.herdr.core.board.WorkTask
 import com.makefunstuff.herdr.core.chat.AgentInput
 import com.makefunstuff.herdr.core.health.HealthClient
 import com.makefunstuff.herdr.core.health.HealthReport
@@ -85,7 +87,28 @@ class AlertWork(
         }
     }
 
-    private suspend fun act(s: HostSession, alert: Alert, action: AlertAction, text: String): String = when (action.type) {
+    private suspend fun act(s: HostSession, alert: Alert, action: AlertAction, text: String): String {
+        val onTask = action.type == AlertAction.Type.Board || action.type == AlertAction.Type.TellTask || action.type == AlertAction.Type.AskCoordinator
+        // Only a task Shepherdr 2 lists: a machine may run herdr-projects 1.x beside it, whose tasks stay its own.
+        val v2 = if (onTask && onShepherdr2(s)) s.awaitWorkBoard() else null
+        val task = v2?.overview()?.tasks?.firstOrNull { it.id == alert.taskId }
+        return if (v2 != null && task != null) actOnV2(v2, task, alert, action, text) else actHere(s, alert, action, text)
+    }
+
+    /** A Shepherdr 2 task's action: a reply goes to its agent's chat, a yes merges it, a question goes to its space's coordinator. */
+    private suspend fun actOnV2(board: WorkBoard, task: WorkTask, alert: Alert, action: AlertAction, text: String): String {
+        return when (action.type) {
+            AlertAction.Type.TellTask -> board.tell(task, text).ifEmpty { "Sent: $text" }
+            AlertAction.Type.AskCoordinator -> {
+                board.say(task.space, Alerts.aboutTask(task.name, alert.text, text))
+                "Sent to the coordinator"
+            }
+            else -> if (action.boardAction == BoardAction.Approve) board.approve(task).ifEmpty { "${action.label}: done" }
+            else throw IOException("Open ${task.name} to do that on Shepherdr 2")
+        }
+    }
+
+    private suspend fun actHere(s: HostSession, alert: Alert, action: AlertAction, text: String): String = when (action.type) {
         AlertAction.Type.Choose -> {
             // Only press the option the notification showed, on the question it showed.
             AgentInput.choose(s.awaitAgent(alert.paneId), alert.paneId, action.question, action.option, action.optionLabel, action.details)
@@ -109,6 +132,13 @@ class AlertWork(
             board(s).send(Alerts.aboutTask(alert.taskName.ifEmpty { alert.taskId }, alert.text, text))
             "Sent to the Coordinator"
         }
+    }
+
+    /** Whether [s]'s board is Shepherdr 2, checked first when it wasn't yet. */
+    private suspend fun onShepherdr2(s: HostSession): Boolean {
+        s.awaitConnection()
+        if (!s.state.value.boardChecked) s.checkBoard()
+        return s.state.value.onShepherdr2
     }
 
     private suspend fun board(s: HostSession) = run {

@@ -68,6 +68,8 @@ data class WorkTask(
     val progress: Int? = null,
     /** Its agent's chat key (v2); none before its agent starts, and on v1. */
     val chat: String = "",
+    /** Its agent's CLI as the board names it ("Claude Code"); none before its agent starts, and on v1. */
+    val agent: String = "",
     val pinned: Boolean = false,
     /** The v1 row as the board sent it, for the screens that keep v1's look and actions; null on v2. */
     val v1: BoardTask? = null,
@@ -193,6 +195,17 @@ interface WorkBoard {
     /** A file sent in [space]'s coordinator chat, read back by its [path]. */
     suspend fun file(space: String, path: String): ByteArray =
         throw IOException("This board takes no files")
+
+    /**
+     * [task]'s own chat, its agent's ([WorkTask.chat], v2), now and on every change: in a [CoordinatorThread]'s
+     * shape, its [CoordinatorThread.space] the task's space. v1 has none.
+     */
+    fun taskThreads(task: WorkTask, everyMs: Long = 3_000): Flow<CoordinatorThread> =
+        flow { throw IOException("This board keeps no chat for a task") }
+
+    /** Sends [text] into [task]'s own chat, to its agent; [cid] and [reply] as for [say]. */
+    suspend fun tell(task: WorkTask, text: String, cid: String? = null, reply: String? = null): String =
+        throw IOException("This board keeps no chat for a task")
 }
 
 object WorkTasks {
@@ -232,7 +245,7 @@ object WorkTasks {
             WorkStatus.Ready -> "permission"
             else -> ""
         },
-        agent = "",
+        agent = t.agent,
         msg = t.line,
         progress = t.progress,
         eta = null,

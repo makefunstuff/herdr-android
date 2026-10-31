@@ -38,6 +38,9 @@ class DraftStore(context: Context) {
         /** The work board's Coordinator chat on a machine; on Shepherdr 2, one per space. */
         fun coordinator(machineId: String, space: String? = null) = "coordinator/$machineId" + (space?.let { "/$it" } ?: "")
 
+        /** A Shepherdr 2 task's own chat, to its agent: one draft per task on each machine. */
+        fun task(machineId: String, task: String) = "task/$machineId/$task"
+
         /**
          * The draft once [sent] has gone: empty, or what was typed on after it while it was on its
          * way (the box stays open while a message is sent). A draft edited in what was sent is kept whole.

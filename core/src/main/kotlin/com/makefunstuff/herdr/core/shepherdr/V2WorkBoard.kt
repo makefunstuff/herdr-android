@@ -108,6 +108,21 @@ class V2WorkBoard(private val connect: suspend () -> ShepherdrClient, private va
 
     override suspend fun file(space: String, path: String): ByteArray = connect().file(chatOf(space), path)
 
+    /** Its agent's chat from the live link, as [coordinatorThreads] follows a space's. */
+    override fun taskThreads(task: WorkTask, everyMs: Long): Flow<CoordinatorThread> {
+        val key = agentChat(task)
+        return following(everyMs, listOf(key), { V2Board.thread(task.space, connect().chat(key)) }) { e ->
+            (e as? V2Event.Chat)?.takeIf { it.chat.key == key }?.let { V2Board.thread(task.space, it.chat) }
+        }
+    }
+
+    override suspend fun tell(task: WorkTask, text: String, cid: String?, reply: String?): String {
+        connect().act(V2Actions.send(agentChat(task), text, reply = reply, cid = cid))
+        return ""
+    }
+
+    private fun agentChat(task: WorkTask) = task.chat.ifEmpty { throw IOException("${task.name} has no agent yet") }
+
     /** Runs the `shepherdr` command; its last line, or its own reason in the exception. */
     suspend fun cli(args: List<String>): String {
         val r = connect().cli(args)
@@ -190,6 +205,7 @@ object V2Board {
         pr = t.pr?.url.orEmpty(),
         progress = t.report?.progress,
         chat = t.agent?.chat.orEmpty(),
+        agent = t.agent?.cli.orEmpty(),
         pinned = t.pinned != null,
     )
 
@@ -205,6 +221,9 @@ object V2Board {
         if (held.isNotEmpty()) return "${task.name} holds work main lacks: ${held.joinToString("; ")}. Merge or drop it first."
         return (o["error"] as? JsonPrimitive)?.contentOrNull ?: "Shepherdr refused to close ${task.name}"
     }
+
+    /** An agent's kind from its CLI's name, as the agents' marks are keyed: "Claude Code" is `claude`, "Codex" `codex`. */
+    fun agentKind(cli: String): String = cli.trim().substringBefore(' ').lowercase()
 
     fun status(s: V2TaskStatus): WorkStatus = when (s) {
         V2TaskStatus.Need -> WorkStatus.Need

@@ -4,6 +4,11 @@ import com.makefunstuff.herdr.core.board.WorkCard
 import com.makefunstuff.herdr.core.board.WorkStatus
 import com.makefunstuff.herdr.core.chat.VoiceNote
 import com.makefunstuff.herdr.core.chat.VoiceNotes
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.doubleOrNull
 
 /**
  * A space's coordinator chat on Shepherdr 2 as the Coordinator screen draws it, oldest first: your
@@ -69,6 +74,19 @@ sealed interface SpaceChatItem {
 
     /** "Answered “Rerun CI on main?”": your answer to a card, as the chat keeps it. */
     data class Note(override val id: String, val text: String) : SpaceChatItem
+
+    /**
+     * A turn's tool steps folded to one line ("Worked for 14m · 9 steps"), with the [rows] that say most
+     * ("Edited 2 files: app.ts, panel.tsx") and how many [more]; [millis] null while it runs.
+     */
+    data class Steps(
+        override val id: String,
+        val steps: Int,
+        val millis: Long?,
+        val rows: List<String> = emptyList(),
+        val more: Int = 0,
+        val failed: Int = 0,
+    ) : SpaceChatItem
 }
 
 /** What you sent from the screen and the chat hasn't shown yet: it shows as waiting until a message carries its [cid]. */
@@ -78,6 +96,7 @@ object SpaceChat {
     /**
      * [chat] (a space's coordinator chat, [space] its id) as the screen's items; [outgoing] not yet in it go last,
      * then the voice messages of yours ([voice]) it doesn't show yet, while they wait ([VoiceNotes.waiting] at [now]).
+     * With [steps], a turn's tool steps show as one folded line each ([SpaceChatItem.Steps]): a task's agent chat.
      */
     fun items(
         space: String,
@@ -85,6 +104,7 @@ object SpaceChat {
         outgoing: List<OutgoingLine> = emptyList(),
         voice: List<VoiceNote> = emptyList(),
         now: Long = 0,
+        steps: Boolean = false,
     ): List<SpaceChatItem> {
         val failed = chat.failed.orEmpty().associate { it.cid to it.error }
         val out = ArrayList<SpaceChatItem>()
@@ -94,6 +114,7 @@ object SpaceChat {
             val card = m.card
             val q = m.question
             val post = m.artifact
+            if (steps) m.activity?.let { a -> steps("${m.id}#steps", a)?.let { out += it } }
             when {
                 card != null -> out += update(space, m.id, card, text)
                 q != null -> out += SpaceChatItem.Question(m.id, WorkCard(chat.key, q), intro = text, answer = answered(q))
@@ -139,6 +160,28 @@ object SpaceChat {
         !q.said.isNullOrBlank() -> q.said
         q.via == "chat" -> "Answered in the chat"
         else -> "Answered"
+    }
+
+    /** A turn's activity as its folded line; null for one without steps. */
+    fun steps(id: String, a: JsonObject): SpaceChatItem.Steps? {
+        fun num(o: JsonObject, k: String) = (o[k] as? JsonPrimitive)?.doubleOrNull
+        val rows = (a["rows"] as? JsonArray).orEmpty().mapNotNull { r -> ((r as? JsonObject)?.get("text") as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() } }
+        val count = num(a, "steps")?.toInt() ?: rows.size
+        if (count <= 0 && rows.isEmpty()) return null
+        val at = num(a, "at")
+        val end = num(a, "end")
+        val millis = if (at != null && end != null) (end - at).toLong().coerceAtLeast(0) else null
+        return SpaceChatItem.Steps(id, count, millis, rows, more = num(a, "more")?.toInt() ?: 0, failed = num(a, "failed")?.toInt() ?: 0)
+    }
+
+    /** How long a turn worked, as people say it: "40s", "14m", "1h 5m". */
+    fun took(millis: Long): String {
+        val s = millis / 1000
+        return when {
+            s < 60 -> "${s.coerceAtLeast(1)}s"
+            s < 3600 -> "${s / 60}m"
+            else -> "${s / 3600}h" + (s % 3600 / 60).takeIf { it > 0 }?.let { " ${it}m" }.orEmpty()
+        }
     }
 
     private fun update(space: String, id: String, c: V2UpdateCard, text: String): SpaceChatItem.Update {
