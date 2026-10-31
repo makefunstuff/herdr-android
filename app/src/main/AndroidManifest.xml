@@ -10,6 +10,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <!-- The brief read aloud goes on with the screen off or the app closed: a foreground service that plays speech. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
@@ -156,6 +157,8 @@
         <!-- A notification's button, the app's own look at its machines while it is closed, the scheduled
              brief, and the brief read aloud. -->
         <service android:name=".push.WorkService" android:exported="false" android:foregroundServiceType="dataSync|mediaPlayback" />
+        <!-- The coordinator's voice: read aloud and heard with the screen off. -->
+        <service android:name=".voice.VoiceService" android:exported="false" android:foregroundServiceType="mediaPlayback|microphone" />
         <!-- The alarm for that look, set again when the phone restarts or the app updates. -->
         <receiver android:name=".push.WakeReceiver" android:exported="false">
             <intent-filter>

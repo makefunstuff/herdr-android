@@ -76,6 +76,9 @@ class AppContainer(app: Context) {
     val textSizes = com.makefunstuff.herdr.data.TextSizeStore(java.io.File(app.filesDir, "text-sizes.json"))
     /** The terminal's key bar and whether it keeps the screen on. */
     val keyBar = com.makefunstuff.herdr.data.KeyBarStore(java.io.File(app.filesDir, "key-bar.json"))
+    /** The coordinator's voice: its settings, and a still voice the scene sets (no sound, no microphone). */
+    val voiceSettings = com.makefunstuff.herdr.data.VoiceSettingsStore(java.io.File(app.filesDir, "voice-settings.json"))
+    val coordinatorVoice: com.makefunstuff.herdr.voice.CoordinatorVoice = preview.PreviewCoordinatorVoice(preview.PreviewCoordinatorVoice.next)
     /** The clock the screens read (a turn's "Working for 3m", the away card): the demo's fixed time. */
     val clock: () -> Long = { Demo.NOW }
     val bubbles: Bubbles = PreviewBubbles

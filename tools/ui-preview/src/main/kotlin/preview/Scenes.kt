@@ -2,6 +2,7 @@
 // A scene starts from Demo's machines; `route` opens a screen, `actions` taps on what it shows.
 package preview
 
+import com.makefunstuff.herdr.core.voice.VoiceState
 import com.makefunstuff.herdr.Links
 import com.makefunstuff.herdr.Routes
 import com.makefunstuff.herdr.bubble.BubbleChat
@@ -488,6 +489,21 @@ fun scenes(): List<Scene> = listOf(
         tapLabel("Record a voice message")
         tapLabel("Send voice message")
     }),
+    // The coordinator's voice: turned on with the headphones, reading a reply (a tap stops it), hearing you
+    // hands-free, and the phone's own voice while the server is away, muted.
+    Scene("coordinator-v2-hear", route = Routes.coordinator(DEVBOX, DemoV2.APP), setup = { shepherdr() }, actions = { tapLabel("Hear the coordinator") }),
+    Scene("coordinator-v2-hear-speaking", route = Routes.coordinator(DEVBOX, DemoV2.APP), setup = {
+        shepherdr()
+        voice = VoiceState(on = true, machineId = DEVBOX, space = DemoV2.APP, spaceName = "herdr-android", phase = VoiceState.Phase.Speaking, level = 0.6f, speed = 1.2f)
+    }),
+    Scene("coordinator-v2-hear-listening", route = Routes.coordinator(DEVBOX, DemoV2.APP), setup = {
+        shepherdr()
+        voice = VoiceState(on = true, machineId = DEVBOX, space = DemoV2.APP, spaceName = "herdr-android", phase = VoiceState.Phase.Listening, handsFree = true, level = 0.8f)
+    }),
+    Scene("coordinator-v2-hear-phone", route = Routes.coordinator(DEVBOX, DemoV2.APP), setup = {
+        shepherdr()
+        voice = VoiceState(on = true, machineId = DEVBOX, space = DemoV2.APP, spaceName = "herdr-android", muted = true, engine = VoiceState.Engine.Phone)
+    }),
     // Every chat stays at its newest: scrolled up, the ↓ (with a count once more comes in) takes you down; a new
     // message brings you down from further up, a New line above it; another space opens at its newest.
     Scene("coordinator-up", route = Routes.coordinator(DEVBOX), setup = { longTalk() }, actions = { scrollTo(6) }),
@@ -776,6 +792,9 @@ fun scenes(): List<Scene> = listOf(
     Scene("settings", route = Routes.MACHINES, actions = { tapLabel("Settings") }),
     // Text size: the chats' and the terminal's, each its own.
     Scene("settings-text", route = Routes.SETTINGS, heightDp = 1300, setup = { textSizes = com.makefunstuff.herdr.data.TextSizeStore.Sizes(chat = 1.3f, terminal = 14f) }),
+    Scene("settings-voice", route = Routes.SETTINGS, heightDp = 1700, setup = {
+        voiceSettings = com.makefunstuff.herdr.data.VoiceSettingsStore.Settings(key = "sk-demo-key", speed = 1.2f)
+    }, actions = { tapText("Test") }),
     Scene("settings-new-key", route = Routes.SETTINGS, actions = { tapText("New key") }),
     Scene("key-setup", key = IdentityStore.State.Missing),
     // The fingerprint before what can't be undone, and the app lock: its settings (one action turned off, the lock

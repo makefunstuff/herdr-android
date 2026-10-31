@@ -81,7 +81,15 @@ import com.makefunstuff.herdr.ui.common.VoiceMessage
 import com.makefunstuff.herdr.ui.common.rememberVoiceMessages
 import com.makefunstuff.herdr.core.chat.VoiceNotes
 import com.makefunstuff.herdr.ui.common.toast
+import com.makefunstuff.herdr.ui.design.BarIcon
 import com.makefunstuff.herdr.ui.design.BubbleShape
+import com.makefunstuff.herdr.ui.design.VoiceBar
+import com.makefunstuff.herdr.ui.design.VoiceBarActions
+import com.makefunstuff.herdr.voice.rememberVoiceMic
+import com.makefunstuff.herdr.core.voice.VoiceState
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.ui.input.pointer.pointerInput
 import com.makefunstuff.herdr.ui.design.ChatComposer
 import com.makefunstuff.herdr.ui.design.ChatSurface
 import com.makefunstuff.herdr.ui.design.ComposerIconButton
@@ -266,6 +274,11 @@ internal fun SpaceCoordinator(nav: NavController, machineId: String, session: Ho
     stick.SentWith(voice.notes.map { it.id })
     val typing = typingInShortWindow()
     val c = Herdr.colors
+    // The coordinator's voice: on for one chat at a time, this one's bar shown over its composer.
+    val speech = container.coordinatorVoice
+    val heard by speech.state.collectAsStateWithLifecycle()
+    val voiceHere = heard.on && heard.machineId == machineId && heard.space == space?.id
+    val askMic = rememberVoiceMic()
     Scaffold(
         containerColor = c.ground,
         topBar = {
@@ -273,6 +286,17 @@ internal fun SpaceCoordinator(nav: NavController, machineId: String, session: Ho
                 "Coordinator",
                 subtitle = listOfNotNull(space?.let(::spaceName), state.machine.label, stateWords(t, state.online, state.status.label())).joinToString(" · "),
                 onBack = { nav.popBackStack() },
+                actions = {
+                    BarIcon(
+                        HerdrIcons.Headphones, if (voiceHere) "Turn voice off" else "Hear the coordinator",
+                        onClick = {
+                            val s = space
+                            if (voiceHere) speech.stop()
+                            else if (s != null) askMic { speech.start(machineId, s.id, spaceName(s)) }
+                        },
+                        enabled = space != null, selected = voiceHere,
+                    )
+                },
             )
         },
     ) { padding ->
@@ -289,6 +313,18 @@ internal fun SpaceCoordinator(nav: NavController, machineId: String, session: Ho
                                 val at = items.indexOfFirst { it.holds(card) }
                                 if (at >= 0) scope.launch { list.animateScrollToItem(items.size - at - if (foot) 0 else 1) }
                             }
+                        }
+                        if (voiceHere) {
+                            VoiceBar(
+                                heard,
+                                remember(speech) {
+                                    VoiceBarActions(
+                                        talk = speech::talk, hush = speech::hush, handsFree = speech::setHandsFree,
+                                        mute = speech::setMuted, speed = speech::setSpeed, close = speech::stop,
+                                    )
+                                },
+                                Modifier.padding(horizontal = Space.screen).padding(bottom = Space.xs),
+                            )
                         }
                         replyTo?.let { r -> ReplyingTo(r, Modifier.padding(horizontal = Space.screen).padding(bottom = Space.xs)) { replyTo = null } }
                         ChatComposer(
@@ -326,7 +362,12 @@ internal fun SpaceCoordinator(nav: NavController, machineId: String, session: Ho
                             state = list,
                             // Newest at the bottom: it stays at its end when the keyboard opens or the message box grows.
                             reverseLayout = true,
-                            modifier = Modifier.fillMaxSize(),
+                            // A touch anywhere in the chat stops the voice at once (and does what it touched too).
+                            modifier = Modifier.fillMaxSize().then(
+                                if (voiceHere && heard.phase == VoiceState.Phase.Speaking) Modifier.pointerInput(Unit) {
+                                    awaitEachGesture { awaitFirstDown(requireUnconsumed = false); speech.hush() }
+                                } else Modifier,
+                            ),
                             contentPadding = PaddingValues(start = Space.screen, end = Space.screen, top = Space.m, bottom = bottom + Space.xs),
                             verticalArrangement = Arrangement.spacedBy(Space.m, Alignment.Bottom),
                         ) {

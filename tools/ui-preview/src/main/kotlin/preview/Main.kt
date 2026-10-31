@@ -130,6 +130,10 @@ class SceneData {
     var selection: Pair<com.makefunstuff.herdr.ui.terminal.CellPoint, com.makefunstuff.herdr.ui.terminal.CellPoint>? = null
     /** The phone's microphone and how long it records, for voice messages (PreviewMic). */
     var mic: PreviewMic.Setup = PreviewMic.Setup()
+    /** The coordinator's voice as the scene starts (PreviewCoordinatorVoice): off, or on in a chat and what it does. */
+    var voice: com.makefunstuff.herdr.core.voice.VoiceState = com.makefunstuff.herdr.core.voice.VoiceState()
+    /** Its settings (VoiceSettingsStore), as saved before the app opens. */
+    var voiceSettings: com.makefunstuff.herdr.data.VoiceSettingsStore.Settings? = null
     fun host(id: String): FakeMachine = hosts.getValue(id)
 }
 
@@ -209,6 +213,7 @@ fun render(scene: Scene, dark: Boolean, file: File) {
     PreviewScanner.code = data.scanned
     PreviewTerminal.selection = data.selection
     PreviewMic.set(data.mic)
+    PreviewCoordinatorVoice.next = data.voice
     PreviewScanner.hostKeys = data.reachable
     PreviewUnlock.screenLock = data.screenLock
     PreviewUnlock.answer = data.unlockAnswer
@@ -216,6 +221,7 @@ fun render(scene: Scene, dark: Boolean, file: File) {
     data.looked.forEach { (key, at) -> com.makefunstuff.herdr.data.LookedStore(context.filesDir.resolve("looked.json")).mark(key.substringBefore('/'), key.substringAfter('/'), at) }
     data.composer?.let { context.filesDir.resolve("composer.json").writeText(Json.encodeToString(com.makefunstuff.herdr.data.ComposerStore.State.serializer(), it)) }
     data.keyBar?.let { context.filesDir.resolve("key-bar.json").writeText(Json.encodeToString(com.makefunstuff.herdr.data.KeyBarStore.Saved.serializer(), it)) }
+    data.voiceSettings?.let { context.filesDir.resolve("voice-settings.json").writeText(Json.encodeToString(com.makefunstuff.herdr.data.VoiceSettingsStore.Settings.serializer(), it)) }
     data.textSizes?.let { context.filesDir.resolve("text-sizes.json").writeText(Json.encodeToString(com.makefunstuff.herdr.data.TextSizeStore.Sizes.serializer(), it)) }
     data.guard?.let { context.filesDir.resolve("guard.json").writeText(Json.encodeToString(com.makefunstuff.herdr.data.GuardState.serializer(), it)) }
     if (data.held.isNotEmpty()) context.filesDir.resolve("held.json").writeText(Json.encodeToString(ListSerializer(Alert.serializer()), data.held))

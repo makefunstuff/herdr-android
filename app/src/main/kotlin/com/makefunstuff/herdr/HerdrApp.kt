@@ -158,6 +158,11 @@ class AppContainer(app: Application) {
     }
     /** The terminal's key bar and whether it keeps the screen on. */
     val keyBar = com.makefunstuff.herdr.data.KeyBarStore(java.io.File(app.filesDir, "key-bar.json"))
+    /** The coordinator's voice: its server, voice and speed. */
+    val voiceSettings = com.makefunstuff.herdr.data.VoiceSettingsStore(java.io.File(app.filesDir, "voice-settings.json"))
+    /** The coordinator's replies read aloud, and your words heard and sent. */
+    val coordinatorVoice: com.makefunstuff.herdr.voice.CoordinatorVoice =
+        com.makefunstuff.herdr.voice.AndroidCoordinatorVoice(app, scope, hosts, voiceSettings)
     /** The clock the screens read (a turn's "Working for 3m", the away card). */
     val clock: () -> Long = System::currentTimeMillis
     val bubbles: Bubbles = AndroidBubbles(app)
