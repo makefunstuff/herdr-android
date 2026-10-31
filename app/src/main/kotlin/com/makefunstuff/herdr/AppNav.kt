@@ -155,6 +155,7 @@ object Routes {
     const val HEALTH = "health/{mid}"
     /** A machine's AI providers: limits, spend, balances, and what used them. */
     const val USAGE = "usage/{mid}"
+    const val LOGINS = "logins/{mid}"
     /** From outside the app (the tile, the widgets, a share): see [com.makefunstuff.herdr.ui.share.Ask]. */
     const val ASK = "ask/{to}"
     /** The code on the machines: which machine, then its repositories and checkouts; then one checkout and what is in it. */
@@ -193,6 +194,7 @@ object Routes {
     fun admin(mid: String, tab: Int = 0) = "admin/$mid?tab=$tab"
     fun health(mid: String) = "health/$mid"
     fun usage(mid: String) = "usage/$mid"
+    fun logins(mid: String) = "logins/$mid"
     fun codeRepos(mid: String) = "code/$mid"
     fun codeAt(spot: CodeSpot, tab: CheckoutTab? = null) = "code/${spot.machine}/at?${spot.query()}" + (tab?.let { "&tab=${it.name}" } ?: "")
     fun codeFile(spot: CodeSpot, path: String, line: Int? = null) =
@@ -362,6 +364,7 @@ internal fun NavGraphBuilder.screens(nav: NavHostController, agents: @Composable
     }
     composable(Routes.HEALTH) { HealthScreen(nav, it.arguments?.getString("mid").orEmpty()) }
     composable(Routes.USAGE) { com.makefunstuff.herdr.ui.usage.UsageScreen(nav, it.arguments?.getString("mid").orEmpty()) }
+    composable(Routes.LOGINS) { com.makefunstuff.herdr.ui.logins.LoginsScreen(nav, it.arguments?.getString("mid").orEmpty()) }
     composable(Routes.BOARD) {
         BoardScreen(nav, it.arguments?.getString("mid").orEmpty(), it.arguments?.getString("task")?.let(Uri::decode), alone = it.arguments?.getString("alone") == "1")
     }

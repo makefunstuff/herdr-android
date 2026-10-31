@@ -78,6 +78,8 @@ class FakeMachine(
     var health: FakeHealth = FakeHealth(),
     /** Its AI providers, as herdr-usage reads them there; null answers no usage command. */
     var usage: FakeUsage? = null,
+    /** Its agent CLIs' logins, as herdr-logins reads them there; null answers no logins command. */
+    var logins: FakeLogins? = null,
     /** herdr-push's journal there (`herdr-push journal`, for the brief); null where herdr-push isn't installed. */
     var journal: JsonObject? = null,
     /** Its repositories, for the code browser; null answers no code command. */
@@ -139,6 +141,7 @@ class FakeMachine(
         quick?.run(command)?.let { return it }
         health.run(command)?.let { return it }
         usage?.run(command)?.let { return it }
+        logins?.run(command)?.let { return it }
         val w = Shell.words(command)
         return when {
             "pgrep" in command -> ok("server\t/home/demo/.local/bin/herdr\therdr $version\n")
@@ -188,6 +191,8 @@ class FakeMachine(
         val w = Shell.words(command)
         // `herdr-core connect` on the socket the probe found (HcDetection.connectCommand).
         if ("HC_SOCKET" in command && command.contains(" connect")) core?.let { return it.connect() }
+        // A sign-in (herdr-logins run): what it says until the person has something to do; what they type is taken.
+        logins?.events(command)?.let { events -> return stream { _, out -> events.forEach { out.println(it) }; out.flush() } }
         return when {
             "@@missing" in command -> stream { _, out ->
                 // TranscriptFollower: kind, value, agent, bytes after "follow".

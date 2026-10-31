@@ -43,6 +43,7 @@ import com.makefunstuff.herdr.ui.common.LocalContainer
 import com.makefunstuff.herdr.ui.design.HerdrIcons
 import com.makefunstuff.herdr.ui.design.QuietCard
 import com.makefunstuff.herdr.ui.health.HealthTile
+import com.makefunstuff.herdr.ui.logins.LoginsRow
 import com.makefunstuff.herdr.ui.theme.Herdr
 import com.makefunstuff.herdr.ui.theme.Space
 import com.makefunstuff.herdr.ui.usage.UsageRow
@@ -52,7 +53,7 @@ import kotlinx.coroutines.delay
 /**
  * A machine's places, over its workspaces: Board, Coordinator and Health as tiles in one row, each
  * with its live line. Up to three fit a phone's row; Usage takes the row's place when there is room
- * (no board), else a one-line row under the tiles.
+ * (no board), else a one-line row under the tiles. Agent logins is a row under them, next to Usage.
  */
 @Composable
 internal fun MachinePlaces(
@@ -62,6 +63,7 @@ internal fun MachinePlaces(
     onHealth: () -> Unit,
     onUsage: () -> Unit,
     onRoutines: () -> Unit = {},
+    onLogins: () -> Unit = {},
 ) {
     val state by session.state.collectAsStateWithLifecycle()
     val board = state.hasBoard
@@ -83,6 +85,7 @@ internal fun MachinePlaces(
         }
     }
     if (state.online && board) UsageRow(session, onUsage, modifier = Modifier.padding(top = Space.s))
+    if (state.online) LoginsRow(session, onLogins, modifier = Modifier.padding(top = Space.s))
     if (state.online && board) RoutinesRow(session, onRoutines, modifier = Modifier.padding(top = Space.s))
 }
 

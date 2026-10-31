@@ -81,7 +81,7 @@ How it works and what it touches: [`host/herdr-push/README.md`](host/herdr-push/
 2. Add it to `~/.ssh/authorized_keys` on the machine running herdr.
 3. In **Machines**, tap **Add machine**, then **Type the address instead**, and enter `user@host[:port]`. The app pins the host key on first connect.
 
-Machines reachable only through another one can use it as a jump host ("Connect through"). For zero-touch or read-only machines, **Allow host scripts** (on by default) can be turned off so the app skips copying its helper scripts (`herdr-usage`, `herdr-push`) there. From a machine's menu, **Import herdr machines** adds the machines its herdr already knows (`herdr machine list`).
+Machines reachable only through another one can use it as a jump host ("Connect through"). For zero-touch or read-only machines, **Allow host scripts** (on by default) can be turned off so the app skips copying its helper scripts (`herdr-usage`, `herdr-logins`, `herdr-push`) there. From a machine's menu, **Import herdr machines** adds the machines its herdr already knows (`herdr machine list`).
 
 ## How it talks to herdr
 
@@ -202,6 +202,10 @@ Each machine has its own logins, so each has a **Usage** page (the **Usage** lin
 **At a glance**, the top bar of the Agents screen carries the tightest limit across the machines ("Claude 82% · resets 17:00", amber near it), a tap from its usage page; the status widget shows the same line. **Where agents are chosen**, **Start an agent** on a task lists its agent and the ones the board falls back to, each with what it has left ("18% left · resets 11:00", "$7.63 left", "local, no limit"), to start it with another one; adding a task that starts at once names its agent and what that has left. **Warnings** come as notifications at 80% and 95%, when a limit runs out, and when the board's fallback takes a task over because of a limit ("codex took over from claude: out of allowance until 17:00"); **Limits** in the notification settings switches them off, and quiet hours hold them.
 
 It is all read on the machine, over SSH, by [herdr-usage](host/herdr-usage/README.md) (Python 3, copied there by the app): Claude Code's and Codex's own usage APIs with their own logins, the providers' balance and spend APIs with the keys already there, and the agents' session records for what each task and agent used. No key comes to the phone. Readings are cached on the machine for a few minutes and on the phone until the next one, so the page opens at once; while the app is in front, each connected machine is read again every 10 minutes, and while it is closed its own looks (and herdr-push's warnings) keep the limits current for the widget. A limit whose reset time has passed since it was read counts as fresh everywhere, and an agent whose provider's key or login failed says so in the agent choices. Which source each provider's numbers come from, and why: [`host/herdr-usage/README.md`](host/herdr-usage/README.md).
+
+### Agent logins
+
+Each machine also has an **Agent logins** line under Usage (or **⋯ → Agent logins**): which agent CLIs are signed in there (Claude Code, Codex, pi, opencode, Gemini CLI), how, and when each login runs out, amber when one runs out soon or a key sits in a shell profile, red once one ran out. From there you can sign in again (Codex's device code shows on the phone; for Claude you paste the code its page shows back into the app), paste a key (Codex's, or one pi provider's) or sign out (opencode's logins one by one; its sign-in asks with menus, so the app shows how to run it there), after the fingerprint. Each is that CLI's own command, run on the machine over the app's SSH session by [herdr-logins](host/herdr-logins/README.md); a key or code goes in as the command's input, never on a command line, in shell history or on the phone, and a key pi takes from a command (a keyring) is never replaced. A key exported from `~/.bashrc` (or another profile) gets a warning with the steps to move it; the app edits no profile. A board task whose agent needs a login has a **Sign in** button that opens this.
 
 ## Notifications while the app is closed
 
@@ -397,6 +401,7 @@ It needs JDK 17, no Android SDK, and takes about half an hour for all 200 scenes
 - `tools/ui-preview/`: the screen previews. `./gradlew -p tools/ui-preview render`.
 - `host/herdr-push/`: the watcher that runs on a machine and pushes to the phone (Python 3; core carries it as a resource, and its tests run it).
 - `host/herdr-usage/`: the AI providers' usage reader, run on a machine for its usage page and herdr-push's warnings (Python 3; core carries it, and its tests run it).
+- `host/herdr-logins/`: the agent CLIs' logins on a machine, and signing them in or out there with their own commands (Python 3; core carries it, and its tests run it against fake CLIs).
 - `host/herdr-quick/`: the AI quick commands' durable worker (Node.js and pi-durable; core carries it, and the app copies it to a machine as it runs one).
 
 ## Contributing

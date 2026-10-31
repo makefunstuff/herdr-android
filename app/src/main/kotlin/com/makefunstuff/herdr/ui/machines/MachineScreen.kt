@@ -198,6 +198,7 @@ fun MachineScreen(nav: NavController, machineId: String) {
                     MenuRow("Worktrees", HerdrIcons.FolderGit2, { menu = false; nav.navigate(Routes.worktrees(machineId)) })
                     MenuRow("Health and cleanup", HerdrIcons.Activity, { menu = false; nav.navigate(Routes.health(machineId)) })
                     MenuRow("Usage and limits", HerdrIcons.Gauge, { menu = false; nav.navigate(Routes.usage(machineId)) })
+                    MenuRow("Agent logins", HerdrIcons.KeyRound, { menu = false; nav.navigate(Routes.logins(machineId)) })
                     MenuRow("Edit machine", HerdrIcons.Pencil, { menu = false; nav.navigate(Routes.edit(machineId)) })
                 }
             }
@@ -231,6 +232,7 @@ fun MachineScreen(nav: NavController, machineId: String) {
                         onHealth = { nav.navigate(Routes.health(machineId)) },
                         onUsage = { nav.navigate(Routes.usage(machineId)) },
                         onRoutines = { nav.navigate(Routes.routines(machineId)) },
+                        onLogins = { nav.navigate(Routes.logins(machineId)) },
                     )
                 }
             }

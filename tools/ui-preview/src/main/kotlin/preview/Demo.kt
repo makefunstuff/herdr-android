@@ -417,11 +417,13 @@ object Demo {
             code = FakeCode(),
             quick = FakeQuick(),
             usage = FakeUsage(),
+            logins = FakeLogins(),
             agentCommands = AGENT_COMMANDS,
             ports = DEVBOX_PORTS,
         ),
         GPU to FakeMachine(
             GPU,
+            logins = FakeLogins(gemini = false, profile = false),
             snapshot = gpu(),
             screens = mapOf("w1:p1" to resource("screen-codex-eval.txt")),
             transcripts = mapOf(EVAL_SESSION to resource("codex-eval.jsonl")),
