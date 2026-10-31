@@ -27,7 +27,10 @@ fun rememberBoards(): List<HomeBoard> {
     val hosts by container.hosts.hosts.collectAsStateWithLifecycle()
     val lists by container.boards.lists.collectAsStateWithLifecycle()
     return remember(hosts, lists) {
-        hosts.filter { it.online && it.hasWorkBoard }.mapNotNull { h -> lists[h.machine.id]?.let { HomeBoard(h.machine.id, h.machine.label, it.tasks, it.work) } }
+        hosts.filter { it.online && it.hasWorkBoard }.mapNotNull { h ->
+            // A Shepherdr 2 machine's list counts only as Shepherdr sent it, never an old herdr-projects launcher's.
+            lists[h.machine.id]?.takeIf { !h.onShepherdr2 || it.work != null }?.let { HomeBoard(h.machine.id, h.machine.label, it.tasks, it.work) }
+        }
     }
 }
 

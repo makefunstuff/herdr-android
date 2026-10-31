@@ -680,7 +680,6 @@ private fun StatusStrip(status: AgentStatus, label: String?, activity: String?, 
         Spacer(Modifier.width(Space.s))
         Text(
             when (status) {
-                AgentStatus.Blocked -> status.title()
                 AgentStatus.Unknown -> label?.takeIf { it != "unknown" } ?: "Status unknown"
                 else -> status.title()
             },

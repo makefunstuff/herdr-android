@@ -73,6 +73,7 @@ import com.makefunstuff.herdr.core.guard.Guarded
 import com.makefunstuff.herdr.ui.common.LocalGuard
 import com.makefunstuff.herdr.core.board.BoardFilter
 import com.makefunstuff.herdr.core.board.BoardStatus
+import com.makefunstuff.herdr.core.board.WorkTasks
 import com.makefunstuff.herdr.core.board.BoardTask
 import com.makefunstuff.herdr.core.shepherdr.V2Board
 import com.makefunstuff.herdr.core.push.Alerts
@@ -114,10 +115,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
-/** The board's colour for this status, in the current theme. */
+/** The colour of this status's one word ([BoardStatus.word]), in the current theme: the same on every board. */
 @Composable
 @ReadOnlyComposable
-fun BoardStatus.color(): Color = Herdr.colors.tone(tone)
+fun BoardStatus.color(): Color = Herdr.colors.tone(WorkTasks.status(this).tone)
 
 /** What a person is part-way through doing to a task: asked for words, or asked to be sure. */
 sealed interface Pending {
@@ -387,7 +388,8 @@ fun BoardScreen(nav: NavController, machineId: String, openTask: String? = null,
                                     CustomAccessibilityAction("More actions") { actionsFor = t; true },
                                 )
                             val live = agentOf(t)
-                            TaskRow(t, onOpen = { openId = t.id }, onMenu = { actionsFor = t }, actions = actions, onAgent = live?.let { a -> { openAgent(a.paneId) } })
+                            // A section of one state (To do, Done) says it in its heading; Needs you and Working hold several.
+                            TaskRow(t, onOpen = { openId = t.id }, onMenu = { actionsFor = t }, actions = actions, onAgent = live?.let { a -> { openAgent(a.paneId) } }, showWord = title == "Needs you" || title == "Working")
                         }
                     }
                 } }
