@@ -98,6 +98,19 @@ private fun FakeMachine.v2Says(chat: String, id: String, text: String) {
 /** Lets a chat read the machine again (the Coordinators read every few seconds). */
 private fun androidx.compose.ui.test.ComposeUiTest.waitForRead(seconds: Int = 9) = repeat(seconds * 2) { Thread.sleep(500); settle(1) }
 
+/** devbox's API-3 blocked on a login rather than a question: its agent's CLI isn't signed in there. */
+private fun SceneData.needsLogin() {
+    val b = host(DEVBOX).board!!
+    b.tasks = kotlinx.serialization.json.JsonArray(b.tasks.map { t ->
+        val o = t as kotlinx.serialization.json.JsonObject
+        if ((o["id"] as? kotlinx.serialization.json.JsonPrimitive)?.content != "api-server/3") t
+        else kotlinx.serialization.json.JsonObject(o + mapOf(
+            "kind" to kotlinx.serialization.json.JsonPrimitive("auth"),
+            "msg" to kotlinx.serialization.json.JsonPrimitive("Claude Code isn't signed in on devbox"),
+        ))
+    })
+}
+
 /** The shell's test run selected, and what herdr reads for it. */
 private fun SceneData.selectTests() {
     selection = com.makefunstuff.herdr.ui.terminal.CellPoint(16, 0) to com.makefunstuff.herdr.ui.terminal.CellPoint(19, 39)
@@ -263,6 +276,23 @@ fun scenes(): List<Scene> = listOf(
     Scene("usage-start-failed", route = Routes.board(DEVBOX, "herdr-android/10"), setup = {
         host(DEVBOX).usage!!.errors = mapOf("deepseek" to "the key or login was refused: Authentication Fails")
     }, actions = { tapExact("Start an agent") }),
+
+    // A machine's agent logins: each CLI signed in or not, how and until when, and the keys in ~/.bashrc.
+    Scene("logins", route = Routes.logins(DEVBOX)),
+    // Claude's login ran out two days ago: red, with Sign in.
+    Scene("logins-expired", route = Routes.logins(DEVBOX), setup = { host(DEVBOX).logins!!.claudeDays = -2 }),
+    Scene("logins-error", route = Routes.logins(DEVBOX), setup = { host(DEVBOX).logins!!.refuse = "Reading the logins needs python3 on devbox, and it isn't installed" }),
+    // A CLI's actions; signing Codex in again with its device code (the code to type on the phone); Claude's browser
+    // code pasted back; a key for a pi provider with none yet; how to move the keys out of ~/.bashrc.
+    Scene("logins-menu", route = Routes.logins(DEVBOX), actions = { tapExact("Codex") }),
+    Scene("logins-codex", route = Routes.logins(DEVBOX), actions = { tapExact("Codex"); tapText("Sign in again") }),
+    Scene("logins-claude", route = Routes.logins(DEVBOX), actions = { tapExact("Claude Code"); tapText("Sign in again") }),
+    Scene("logins-key", route = Routes.logins(DEVBOX), actions = {
+        tapExact("pi"); tapText("Add a provider's key"); typeInto("Provider", "groq"); typeInto("Key", "gsk_demo0000000000000000")
+    }),
+    Scene("logins-profile", route = Routes.logins(DEVBOX), actions = { tapText("Show me how to move them") }),
+    // A task whose agent needs a login: Sign in opens the machine's agent logins.
+    Scene("task-login", route = Routes.board(DEVBOX, "api-server/3"), setup = { needsLogin() }),
 
     // An agent's chat: its transcript, a blocked agent's question, a Codex transcript.
     Scene("chat", route = Routes.agent(DEVBOX, APP_AGENT)),

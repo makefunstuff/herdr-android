@@ -1,0 +1,602 @@
+#!/usr/bin/env python3
+# version: 1
+"""herdr-logins: which agent CLIs are signed in on a machine, and signing them in or out there.
+
+Herdr for Android copies it to a machine over SSH and runs it there. Every login stays on that
+machine: the status that comes back says signed in or not, how, and when it runs out, never a
+token or a key.
+
+  herdr-logins status                       every CLI's login, and keys in shell profiles, as one JSON line
+  herdr-logins run <cli> <action> [provider]
+                                            one sign-in or sign-out, as JSON lines (below)
+  herdr-logins version
+
+Actions, each through the CLI's own command:
+
+  claude  login    claude auth login: the link comes to the phone, the code the browser shows goes back
+          logout   claude auth logout
+  codex   login    codex login --device-auth: the link and the code to type there come to the phone
+          key      codex login --with-api-key, the key on its stdin
+          logout   codex logout
+  opencode login P opencode auth login P, its questions relayed to the phone
+          logout P opencode auth logout P
+  pi      key P    pi has no command that takes a key, so only provider P's entry in its auth.json
+                   is written, under pi's own lock (auth.json.lock), as a new file of mode 600 swapped
+                   in; a key pi takes from a command (!…) or a variable ($…) is never replaced.
+                   Then checked with pi auth check --provider P --no-refresh.
+          logout P only provider P's entry is taken out, the same way (never a !… or $… one)
+
+A run reads what it is to type (a code, a key, an answer) as lines on its stdin, never as an argument,
+and writes events, one JSON object a line: {"event": "url", "url"}, {"event": "code", "code"},
+{"event": "ask", "text", "secret"}, {"event": "line", "text"} (what the CLI printed, with anything typed
+in masked) and last {"event": "done", "ok", "msg", "status"} with that CLI's status after it.
+
+Nothing is logged or kept: no file of its own, no shell history (no shell runs what is typed).
+
+Python 3.6 or newer alone, no packages. See host/herdr-logins/README.md in the herdr-android repo.
+"""
+
+import json
+import os
+import re
+import select
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+
+VERSION = "1"
+
+HOME = os.path.expanduser("~")
+CLAUDE_DIR = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.join(HOME, ".claude")
+CODEX_DIR = os.environ.get("CODEX_HOME") or os.path.join(HOME, ".codex")
+PI_DIR = os.environ.get("PI_CODING_AGENT_DIR") or os.path.join(HOME, ".pi", "agent")
+OPENCODE_DATA = os.path.join(os.environ.get("XDG_DATA_HOME") or os.path.join(HOME, ".local", "share"), "opencode")
+GEMINI_DIR = os.path.join(HOME, ".gemini")
+
+# The shell profiles a key may be exported from.
+PROFILES = [".bashrc", ".bash_profile", ".bash_login", ".profile", ".zshrc", ".zprofile", ".zshenv",
+            ".config/fish/config.fish"]
+
+ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(\x07|\x1b\\)|\x1b[()][A-Z0-9]|\x1b[=>]")
+URL = re.compile(r"https://[^\s\"'<>\x1b]+")
+# A code to type on a sign-in page: ABCD-1234, ABCD-EFGHI.
+CODE = re.compile(r"\b([A-Z0-9]{4,5}-[A-Z0-9]{4,5})\b")
+
+STATUS_TIMEOUT = 20
+RUN_TIMEOUT = float(os.environ.get("HERDR_LOGINS_TIMEOUT", "900"))
+
+
+def emit(obj):
+    sys.stdout.write(json.dumps(obj) + "\n")
+    sys.stdout.flush()
+
+
+def find_path():
+    """The login shell's PATH as well: the CLIs are often only there (mise, nvm, ~/.local/bin)."""
+    if os.environ.get("HERDR_LOGINS_NO_SHELL_PATH"):
+        return
+    shell = os.environ.get("SHELL") or "/bin/sh"
+    try:
+        out = subprocess.run([shell, "-lc", 'printf "\\n@@path %s\\n" "$PATH"'], stdin=subprocess.DEVNULL,
+                             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=10).stdout.decode("utf-8", "replace")
+    except Exception:
+        return
+    for line in out.splitlines():
+        if line.startswith("@@path "):
+            extra = [p for p in line[7:].split(":") if p]
+            have = os.environ.get("PATH", "").split(":")
+            os.environ["PATH"] = ":".join(have + [p for p in extra if p not in have])
+
+
+def run(argv, stdin=None, timeout=STATUS_TIMEOUT):
+    """[exit, stdout] of a CLI's own command, or [None, ""] when it isn't there or hangs."""
+    try:
+        p = subprocess.run(argv, input=stdin.encode() if stdin is not None else None,
+                           stdin=None if stdin is not None else subprocess.DEVNULL,
+                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=timeout,
+                           env=dict(os.environ, NO_COLOR="1", TERM="dumb"))
+        return p.returncode, ANSI.sub("", p.stdout.decode("utf-8", "replace"))
+    except Exception:
+        return None, ""
+
+
+def read_json(path):
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+
+def mtime(path):
+    try:
+        return int(os.stat(path).st_mtime)
+    except OSError:
+        return None
+
+
+def iso_seconds(s):
+    """Epoch seconds of an ISO time (2026-10-23T08:12:40.123456Z), or None."""
+    if not isinstance(s, str):
+        return None
+    m = re.match(r"(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d):(\d\d)", s)
+    if not m:
+        return None
+    import calendar
+    return calendar.timegm(tuple(int(x) for x in m.groups()) + (0, 0, 0))
+
+
+def ms_seconds(v):
+    return int(v / 1000) if isinstance(v, (int, float)) and v > 1e11 else (int(v) if isinstance(v, (int, float)) else None)
+
+
+# ---- each CLI's status --------------------------------------------------------------------------
+
+
+def claude():
+    c = {"id": "claude", "name": "Claude Code", "installed": bool(shutil.which("claude"))}
+    if not c["installed"]:
+        return dict(c, state="missing")
+    code, out = run(["claude", "auth", "status", "--json"])
+    try:
+        st = json.loads(out[out.index("{"):])
+    except Exception:
+        st = None
+    if st is None:
+        return dict(c, state="unknown", actions=["login"], msg="claude auth status gave no answer")
+    if not st.get("loggedIn"):
+        return dict(c, state="signed_out", how="Not signed in", actions=["login"])
+    method = st.get("authMethod") or ""
+    plan = st.get("subscriptionType") or ""
+    env = None
+    if os.environ.get("ANTHROPIC_API_KEY") and method not in ("claude.ai", "console"):
+        env = "ANTHROPIC_API_KEY"
+    elif os.environ.get("CLAUDE_CODE_OAUTH_TOKEN") and method not in ("claude.ai", "console"):
+        env = "CLAUDE_CODE_OAUTH_TOKEN"
+    if env:
+        return dict(c, state="signed_in", how="%s from the environment" % env, source="env", actions=[])
+    how = {"claude.ai": "Claude subscription", "console": "Anthropic Console (API billing)"}.get(method, method or "Signed in")
+    if plan and method == "claude.ai":
+        how += " (%s)" % plan.capitalize()
+    oauth = (read_json(os.path.join(CLAUDE_DIR, ".credentials.json")) or {}).get("claudeAiOauth") or {}
+    # expiresAt is the access token's few hours, renewed on its own; the login itself runs out with the refresh token.
+    return dict(c, state="signed_in", how=how, expires=ms_seconds(oauth.get("refreshTokenExpiresAt")),
+                actions=["login", "logout"])
+
+
+def codex():
+    c = {"id": "codex", "name": "Codex", "installed": bool(shutil.which("codex"))}
+    if not c["installed"]:
+        return dict(c, state="missing")
+    code, out = run(["codex", "login", "status"])
+    auth = read_json(os.path.join(CODEX_DIR, "auth.json")) or {}
+    renewed = iso_seconds(auth.get("last_refresh"))
+    text = out.lower()
+    if "not logged in" in text:
+        return dict(c, state="signed_out", how="Not signed in", actions=["login", "key"])
+    if "chatgpt" in text:
+        return dict(c, state="signed_in", how="ChatGPT login", renewed=renewed, actions=["login", "key", "logout"])
+    if "api key" in text:
+        # Its line shows part of the key: only that it is one comes back.
+        return dict(c, state="signed_in", how="OpenAI API key", actions=["login", "key", "logout"])
+    if "access token" in text:
+        return dict(c, state="signed_in", how="Access token", actions=["login", "key", "logout"])
+    return dict(c, state="unknown", actions=["login", "key"], msg="codex login status gave no answer")
+
+
+def pi_entries():
+    data = read_json(os.path.join(PI_DIR, "auth.json"))
+    return data if isinstance(data, dict) else {}
+
+
+def pi_source(entry):
+    """How pi takes a provider's secret: command (!…, a keyring), env ($NAME), typed, oauth."""
+    if not isinstance(entry, dict):
+        return "typed"
+    if entry.get("type") == "oauth":
+        return "oauth"
+    key = entry.get("key")
+    if isinstance(key, str) and key.startswith("!"):
+        return "command"
+    if isinstance(key, str) and key.startswith("$"):
+        return "env"
+    return "typed"
+
+
+def pi():
+    c = {"id": "pi", "name": "pi", "installed": bool(shutil.which("pi"))}
+    if not c["installed"]:
+        return dict(c, state="missing")
+    entries = pi_entries()
+    providers = []
+    for name in sorted(entries):
+        e = entries[name]
+        p = {"id": name, "source": pi_source(e)}
+        if isinstance(e, dict) and isinstance(e.get("expires"), (int, float)):
+            p["expires"] = ms_seconds(e["expires"])
+        providers.append(p)
+    if not providers:
+        return dict(c, state="signed_out", how="No provider set up", providers=[], actions=["key"])
+    return dict(c, state="signed_in", providers=providers, actions=["key", "logout"])
+
+
+def opencode():
+    c = {"id": "opencode", "name": "opencode", "installed": bool(shutil.which("opencode"))}
+    if not c["installed"]:
+        return dict(c, state="missing")
+    code, out = run(["opencode", "auth", "list"])
+    providers = []
+    for line in out.splitlines():
+        # "OpenAI        OAuth                       stored"
+        parts = re.split(r"\s{2,}", line.strip(" │┃|●○•\t"))
+        if len(parts) < 3 or parts[-1].lower() not in ("stored", "environment", "env"):
+            continue
+        name, method, where = parts[0], parts[1], parts[-1].lower()
+        if where != "stored" and re.fullmatch(r"[A-Z0-9_]+", method):
+            providers.append({"id": name, "source": "env", "method": method})
+        else:
+            providers.append({"id": name, "source": "oauth" if method.lower() == "oauth" else "typed", "method": method})
+    if code is None:
+        return dict(c, state="unknown", actions=["login"], msg="opencode auth list gave no answer")
+    stored = [p for p in providers if p["source"] != "env"]
+    return dict(c, state="signed_in" if stored else "signed_out", providers=providers,
+                how=None if stored else "No login stored", actions=["login", "logout"] if stored else ["login"])
+
+
+def gemini():
+    c = {"id": "gemini", "name": "Gemini CLI", "installed": bool(shutil.which("gemini"))}
+    if not c["installed"]:
+        return dict(c, state="missing")
+    if os.environ.get("GEMINI_API_KEY"):
+        return dict(c, state="signed_in", how="GEMINI_API_KEY from the environment", source="env", actions=[])
+    if os.path.exists(os.path.join(GEMINI_DIR, "oauth_creds.json")):
+        return dict(c, state="signed_in", how="Google login", renewed=mtime(os.path.join(GEMINI_DIR, "oauth_creds.json")), actions=[])
+    # Gemini CLI has no login command: its first run asks.
+    return dict(c, state="signed_out", how="Installed, no login", actions=[])
+
+
+CLIS = [("claude", claude), ("codex", codex), ("pi", pi), ("opencode", opencode), ("gemini", gemini)]
+
+
+# ---- keys in shell profiles -----------------------------------------------------------------------
+
+EXPORT = re.compile(r"^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)$")
+FISH = re.compile(r"^\s*set\s+(?:-[a-zA-Z]+\s+)*([A-Za-z_][A-Za-z0-9_]*)\s+(.*)$")
+SECRETISH = re.compile(r"(API_?KEY|TOKEN|SECRET|PASSWORD|ACCESS_KEY|AUTH)$|_KEY$", re.I)
+
+
+def profile_keys():
+    """Keys exported in plain text from a shell profile: the name, file and line, never the value."""
+    found = []
+    for rel in PROFILES:
+        path = os.path.join(HOME, rel)
+        try:
+            with open(path, errors="replace") as f:
+                lines = f.read().splitlines()
+        except OSError:
+            continue
+        for n, line in enumerate(lines, 1):
+            if line.lstrip().startswith("#"):
+                continue
+            m = (FISH if rel.endswith(".fish") else EXPORT).match(line)
+            if not m or not SECRETISH.search(m.group(1)):
+                continue
+            value = m.group(2).split(" #")[0].strip().strip("'\"")
+            # A value from a command or another variable isn't the key itself in the file.
+            if not value or value.startswith("$") or "`" in value:
+                continue
+            found.append({"file": "~/" + rel, "line": n, "name": m.group(1), "placeholder": len(value) < 16})
+    return found
+
+
+def status():
+    clis = []
+    for _, read in CLIS:
+        try:
+            clis.append(read())
+        except Exception as e:
+            clis.append({"id": _, "state": "unknown", "msg": str(e)[:200]})
+    return {"ok": True, "version": VERSION, "at": int(time.time()), "clis": clis, "profile": profile_keys()}
+
+
+def status_of(cli):
+    for name, read in CLIS:
+        if name == cli:
+            try:
+                return read()
+            except Exception:
+                return None
+    return None
+
+
+# ---- a sign-in or sign-out ----------------------------------------------------------------------
+
+
+class Masked:
+    """What was typed in, so it never comes back in the CLI's echo."""
+
+    def __init__(self):
+        self.secrets = []
+
+    def add(self, s):
+        if len(s) >= 4:
+            self.secrets.append(s)
+
+    def __call__(self, text):
+        for s in self.secrets:
+            text = text.replace(s, "•" * 8)
+        return text
+
+
+def drive(argv, secret_asks=False):
+    """Runs a CLI's own interactive command on a terminal of its own, relaying it as events.
+
+    What it prints goes out masked; links and codes once each; a line it waits on as an ask.
+    Each line on stdin is typed into it. Returns its exit status (None: it was stopped)."""
+    import pty
+    import signal
+    masked = Masked()
+    pid, fd = pty.fork()
+    if pid == 0:
+        env = dict(os.environ, TERM="dumb", NO_COLOR="1", COLUMNS="200",
+                   BROWSER=os.environ.get("HERDR_LOGINS_BROWSER", "true"))
+        try:
+            os.execvpe(argv[0], argv, env)
+        finally:
+            os._exit(127)
+    seen = set()
+    buf = ""
+    partial_at = None
+    asked = None
+    stdin_open = True
+    started = time.time()
+    pending = b""
+
+    def out_line(text):
+        text = masked(text).rstrip()
+        if not text.strip():
+            return
+        for u in URL.findall(text):
+            u = u.rstrip(".,)")
+            if u not in seen:
+                seen.add(u)
+                emit({"event": "url", "url": u})
+        for c in CODE.findall(text):
+            if c not in seen:
+                seen.add(c)
+                emit({"event": "code", "code": c})
+        emit({"event": "line", "text": text[:400]})
+
+    status = None
+    while True:
+        if time.time() - started > RUN_TIMEOUT:
+            os.kill(pid, signal.SIGTERM)
+            break
+        fds = [fd] + ([0] if stdin_open else [])
+        r, _, _ = select.select(fds, [], [], 0.3)
+        if fd in r:
+            try:
+                data = os.read(fd, 4096)
+            except OSError:
+                data = b""
+            if not data:
+                break
+            pending += data
+            try:
+                chunk = pending.decode("utf-8")
+                pending = b""
+            except UnicodeDecodeError:
+                continue
+            buf += ANSI.sub("", chunk).replace("\r\n", "\n")
+            # A lone \r redraws the line: keep what is after it.
+            while "\n" in buf:
+                line, buf = buf.split("\n", 1)
+                out_line(line.split("\r")[-1])
+            buf = buf.split("\r")[-1]
+            partial_at = time.time() if buf.strip() else None
+        if 0 in r:
+            line = sys.stdin.readline()
+            if not line:
+                stdin_open = False
+            else:
+                typed = line.rstrip("\n")
+                masked.add(typed)
+                os.write(fd, typed.encode() + b"\r")
+                asked = None
+        # A line it waits on (no newline after it, nothing more for a moment): a question.
+        if partial_at and time.time() - partial_at > 0.6 and buf.strip() != asked:
+            asked = buf.strip()
+            text = masked(asked)
+            out_line(text) if URL.search(text) or CODE.search(text) else None
+            emit({"event": "ask", "text": text[:400],
+                  "secret": secret_asks or bool(re.search(r"key|token|secret|password|code", text, re.I))})
+            partial_at = None
+        done, st = os.waitpid(pid, os.WNOHANG)
+        if done:
+            status = os.waitstatus_to_exitcode(st) if hasattr(os, "waitstatus_to_exitcode") else (st >> 8)
+            # What it printed last.
+            try:
+                while True:
+                    r, _, _ = select.select([fd], [], [], 0.1)
+                    if not r:
+                        break
+                    data = os.read(fd, 4096)
+                    if not data:
+                        break
+                    buf += ANSI.sub("", data.decode("utf-8", "replace")).replace("\r\n", "\n")
+            except OSError:
+                pass
+            for line in buf.split("\n"):
+                out_line(line.split("\r")[-1])
+            return status
+    try:
+        _, st = os.waitpid(pid, 0)
+        status = st >> 8
+    except ChildProcessError:
+        pass
+    if buf.strip():
+        out_line(buf)
+    return status
+
+
+def with_stdin(argv):
+    """A CLI's own command that takes the secret on its stdin (the first line of ours)."""
+    secret = sys.stdin.readline().rstrip("\n")
+    if not secret:
+        return None, "Nothing was typed in"
+    code, out = run(argv, stdin=secret + "\n", timeout=60)
+    masked = Masked()
+    masked.add(secret)
+    for line in masked(out).splitlines():
+        if line.strip():
+            emit({"event": "line", "text": line[:400]})
+    return code, None
+
+
+PI_PROVIDER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ._-]{0,63}$")
+
+
+def pi_edit(provider, change):
+    """Changes only [provider]'s entry of pi's auth.json, under pi's own lock (proper-lockfile's
+    auth.json.lock folder), as a new file of mode 600 swapped in. [change] gets the entries and
+    returns a message when it refuses."""
+    path = os.path.join(PI_DIR, "auth.json")
+    lock = path + ".lock"
+    os.makedirs(PI_DIR, mode=0o700, exist_ok=True)
+    for _ in range(50):
+        try:
+            os.mkdir(lock)
+            break
+        except FileExistsError:
+            time.sleep(0.1)
+    else:
+        return "pi is changing its logins right now: try again in a moment"
+    try:
+        entries = read_json(path) if os.path.exists(path) else {}
+        if not isinstance(entries, dict):
+            return "pi's auth.json isn't what it should be: left as it is"
+        refused = change(entries)
+        if refused:
+            return refused
+        fd, tmp = tempfile.mkstemp(prefix=".auth.json.", dir=PI_DIR)
+        try:
+            os.fchmod(fd, 0o600)
+            with os.fdopen(fd, "w") as f:
+                json.dump(entries, f, indent=2)
+                f.write("\n")
+            os.replace(tmp, path)
+        except Exception:
+            if os.path.exists(tmp):
+                os.unlink(tmp)
+            raise
+        return None
+    finally:
+        try:
+            os.rmdir(lock)
+        except OSError:
+            pass
+
+
+def pi_key(provider):
+    secret = sys.stdin.readline().rstrip("\n")
+    if not secret:
+        return "Nothing was typed in"
+
+    def put(entries):
+        old = entries.get(provider)
+        if old is not None and pi_source(old) in ("command", "env"):
+            return "pi takes %s's key from %s: it stays as it is" % (
+                provider, "a command (a keyring)" if pi_source(old) == "command" else "a variable")
+        if old is not None and pi_source(old) == "oauth":
+            return "%s is signed in to pi with a login: sign it out first" % provider
+        entries[provider] = dict(old or {}, type="api_key", key=secret)
+        return None
+
+    return pi_edit(provider, put)
+
+
+def pi_logout(provider):
+    def take(entries):
+        old = entries.get(provider)
+        if old is None:
+            return "pi has no login for %s" % provider
+        if pi_source(old) in ("command", "env"):
+            return "pi takes %s's key from %s: remove it there" % (
+                provider, "a command (a keyring)" if pi_source(old) == "command" else "a variable")
+        del entries[provider]
+        return None
+
+    return pi_edit(provider, take)
+
+
+def act(cli, action, provider):
+    """One sign-in or sign-out: (ok, msg)."""
+    if cli in ("opencode", "pi") and action != "login" and not (provider and PI_PROVIDER.match(provider)):
+        return False, "Which provider?"
+    if cli == "claude" and action == "login":
+        code = drive(["claude", "auth", "login"])
+        return code == 0, None if code == 0 else "claude auth login stopped (%s)" % code
+    if cli == "claude" and action == "logout":
+        code, out = run(["claude", "auth", "logout"], timeout=30)
+        return code == 0, None if code == 0 else (out.strip().splitlines() or ["claude auth logout failed"])[-1]
+    if cli == "codex" and action == "login":
+        code = drive(["codex", "login", "--device-auth"])
+        return code == 0, None if code == 0 else "codex login stopped (%s)" % code
+    if cli == "codex" and action == "key":
+        code, refused = with_stdin(["codex", "login", "--with-api-key"])
+        return code == 0, refused or (None if code == 0 else "codex didn't take the key")
+    if cli == "codex" and action == "logout":
+        code, out = run(["codex", "logout"], timeout=30)
+        return code == 0, None if code == 0 else (out.strip().splitlines() or ["codex logout failed"])[-1]
+    if cli == "opencode" and action == "login":
+        if provider and not PI_PROVIDER.match(provider):
+            return False, "Which provider?"
+        code = drive(["opencode", "auth", "login"] + ([provider] if provider else []))
+        return code == 0, None if code == 0 else "opencode auth login stopped (%s)" % code
+    if cli == "opencode" and action == "logout":
+        code = drive(["opencode", "auth", "logout", provider])
+        return code == 0, None if code == 0 else "opencode auth logout stopped (%s)" % code
+    if cli == "pi" and action == "key":
+        refused = pi_key(provider)
+        if refused:
+            return False, refused
+        code, out = run(["pi", "auth", "check", "--provider", provider, "--json", "--no-refresh"], timeout=30)
+        try:
+            ready = json.loads(out[out.index("{"):]).get("status") == "ready"
+        except Exception:
+            ready = False
+        emit({"event": "line", "text": "Checked with pi auth check --provider %s --no-refresh: %s" % (provider, "ready" if ready else "not ready")})
+        return ready, None if ready else "Saved, but pi says %s isn't ready with it" % provider
+    if cli == "pi" and action == "logout":
+        refused = pi_logout(provider)
+        return refused is None, refused
+    return False, "%s can't %s from here" % (cli, action)
+
+
+def main(argv):
+    if not argv or argv[0] in ("-h", "--help"):
+        print(__doc__)
+        return 0
+    if argv[0] == "version":
+        emit({"ok": True, "version": VERSION})
+        return 0
+    find_path()
+    if argv[0] == "status":
+        emit(status())
+        return 0
+    if argv[0] == "run" and len(argv) >= 3:
+        cli, action, provider = argv[1], argv[2], (argv[3] if len(argv) > 3 else None)
+        try:
+            ok, msg = act(cli, action, provider)
+        except Exception as e:
+            ok, msg = False, str(e)[:300]
+        emit({"event": "done", "ok": bool(ok), "msg": msg, "version": VERSION, "status": status_of(cli)})
+        return 0 if ok else 1
+    emit({"ok": False, "version": VERSION, "msg": "unknown command: " + " ".join(argv[:1])})
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

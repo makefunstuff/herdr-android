@@ -120,6 +120,8 @@ class AppContainer(app: Application) {
     val health = HealthStore()
     /** Each machine's providers and limits, as last read there (kept through restarts). */
     val usage = com.makefunstuff.herdr.data.UsageStore(java.io.File(app.filesDir, "usage.json"))
+    /** Each machine's agent logins, as last read there (only in memory). */
+    val logins = com.makefunstuff.herdr.data.LoginsStore()
     val quick = com.makefunstuff.herdr.data.QuickStore(java.io.File(app.filesDir, "quick.json"))
     val shares = Shares(java.io.File(app.filesDir, "shares.json"), java.io.File(app.cacheDir, "shared"))
     // Pictures waiting in a composer are the app's own files; pictures sent are a cache Android may clear.

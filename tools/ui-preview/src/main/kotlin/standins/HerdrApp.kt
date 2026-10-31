@@ -44,6 +44,8 @@ class AppContainer(app: Context) {
     val usage = com.makefunstuff.herdr.data.UsageStore(
         java.io.File(app.filesDir, "usage.json"), clock = { Demo.NOW }, zone = { java.time.ZoneOffset.UTC },
     )
+    // At the demo's fixed time, on UTC, so "good until 13 Nov" reads the same every run.
+    val logins = com.makefunstuff.herdr.data.LoginsStore(clock = { Demo.NOW }, zone = { java.time.ZoneOffset.UTC })
     val quick = com.makefunstuff.herdr.data.QuickStore(java.io.File(app.filesDir, "quick.json"))
     val shares = Shares(java.io.File(app.filesDir, "shares.json"), java.io.File(app.filesDir, "shared"))
     val images = com.makefunstuff.herdr.data.ImageStore(

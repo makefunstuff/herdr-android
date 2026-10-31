@@ -245,7 +245,7 @@ private fun nextStep(t: BoardTask): String? = when (t.status) {
     BoardStatus.PlanReady -> "The agent made a plan. Approve it to let work start, or send it back."
     BoardStatus.PickOne -> "Several attempts finished. Pick the one to keep."
     BoardStatus.Asks, BoardStatus.AsksOk -> "The agent is waiting for your answer."
-    BoardStatus.NeedsLogin -> "The agent needs a login on the machine. Tell it once that's done."
+    BoardStatus.NeedsLogin -> "The agent needs a login on the machine. Sign in, then tell it once that's done."
     BoardStatus.Stopped -> "The agent stopped (limit reached or stopped by hand). Retry, or finish with what's there."
     BoardStatus.Error -> "Something went wrong. See below, then retry or send the failure to the agent."
     BoardStatus.Todo -> "Not started. Start an agent when ready."
@@ -284,6 +284,8 @@ fun TaskDetailScreen(
     /** Its agent on the machine, when one of its panes is there: its status, its model, and a way to its chat. */
     live: AgentInfo? = null,
     onOpenAgent: (() -> Unit)? = null,
+    /** Opens the agent logins of the machine its agent runs on, for a task that needs one. */
+    onSignIn: (() -> Unit)? = null,
 ) {
     BackHandler(enabled = backEnabled, onBack = onBack)
     val owner = LocalLifecycleOwner.current
@@ -320,7 +322,7 @@ fun TaskDetailScreen(
         else -> TaskLine.who(agent, workers)
     }
     val reach = TaskAgent(who, live?.statusLabel.orEmpty(), onOpenAgent.takeIf { live != null })
-    TaskDetailContent(t, details, problem, busy, onBack, onAction, onPick, onMore, onCode, onQuick, onActivity, reach, note)
+    TaskDetailContent(t, details, problem, busy, onBack, onAction, onPick, onMore, onCode, onQuick, onActivity, reach, note, onSignIn)
 }
 
 /** The actions a task's card offers beside its primary one, as buttons: telling, stopping, retrying. */
@@ -347,6 +349,7 @@ fun TaskDetailContent(
     agent: TaskAgent = TaskAgent(d?.agent?.ifEmpty { null } ?: t.agent),
     /** The agent's closing note, for finished work. */
     note: String = "",
+    onSignIn: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val primary = BoardActions.primary(t)
@@ -419,6 +422,11 @@ fun TaskDetailContent(
                         )
                     }
                     if (d != null && d.waitsFor.isNotEmpty()) Text("Waits for ${d.waitsFor.joinToString(", ")}", style = MaterialTheme.typography.bodySmall, color = c.muted)
+                    if (t.status == BoardStatus.NeedsLogin && onSignIn != null) SecondaryButton(onSignIn) {
+                        Icon(HerdrIcons.KeyRound, null, Modifier.size(16.dp))
+                        Spacer(Modifier.width(Space.xs))
+                        Text("Sign in")
+                    }
                 }
             }
             problem?.let { ErrorMessage(it) }
