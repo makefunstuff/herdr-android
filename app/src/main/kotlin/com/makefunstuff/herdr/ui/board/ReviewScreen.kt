@@ -174,6 +174,15 @@ fun ReviewScreen(nav: NavController, startMachine: String? = null, startTask: St
         val s = sig(item.task)
         return cards[item.key]?.takeIf { it.sig == s } ?: CardData(s).also { cards[item.key] = it }
     }
+    // A Shepherdr 2 task has no review card (a notification tapped before the app knew its board): once
+    // its machine says it runs Shepherdr 2, the task opens on its board instead, as its agent's chat.
+    val startOnV2 = startMachine != null && startTask != null && hosts.any { it.machine.id == startMachine && it.onShepherdr2 }
+    LaunchedEffect(startOnV2) {
+        if (startOnV2 && startMachine != null && startTask != null) {
+            nav.popBackStack()
+            panes.openBoard(nav, startMachine, startTask, alone = true)
+        }
+    }
     val readNow = remember { Channel<Unit>(Channel.CONFLATED) }
     var busy by remember { mutableStateOf<String?>(null) }
     var ask by remember { mutableStateOf<Ask?>(null) }

@@ -26,6 +26,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -81,8 +82,10 @@ import com.makefunstuff.herdr.ui.design.typingInShortWindow
 import com.makefunstuff.herdr.ui.theme.Herdr
 import com.makefunstuff.herdr.ui.theme.Space
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.UUID
 
 /** What the task chat's ⋯ shows over it: its menu, or one of its details in full. */
@@ -159,16 +162,28 @@ internal fun TaskChatScreen(
     var draft by rememberDraft(DraftStore.task(machineId, t.id))
     val kind = V2Board.agentKind(t.agent).ifEmpty { "its agent" }
 
+    /** The screen is still open: a send that fails after it closed puts its words back in the saved draft instead. */
+    var open by remember { mutableStateOf(true) }
+    DisposableEffect(Unit) { onDispose { open = false } }
+
     fun send(text: String, reply: V2ReplyQuote?) {
         val line = OutgoingLine(UUID.randomUUID().toString(), text, reply)
         outgoing = outgoing + line
         scope.launch { list.animateScrollToItem(0) }
-        scope.launch {
-            runCatching { session.awaitWorkBoard().tell(t, text, cid = line.cid, reply = reply?.id) }.onFailure {
-                outgoing = outgoing - line
-                // Not lost: back in the message box, in front of anything typed since.
-                draft = if (draft.isBlank()) text else text + "\n" + draft
-                context.toast(it.message ?: "Couldn't send")
+        // On the app's scope: leaving the screen right after Send doesn't stop it.
+        container.scope.launch {
+            try {
+                session.awaitWorkBoard().tell(t, text, cid = line.cid, reply = reply?.id)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                withContext(Dispatchers.Main) {
+                    outgoing = outgoing - line
+                    // Not lost: back in the message box, in front of anything typed since.
+                    if (open) draft = if (draft.isBlank()) text else text + "\n" + draft
+                    else container.drafts.add(DraftStore.task(machineId, t.id), text)
+                    context.toast(e.message ?: "Couldn't send")
+                }
             }
         }
     }

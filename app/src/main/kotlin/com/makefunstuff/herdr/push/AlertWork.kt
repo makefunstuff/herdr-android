@@ -85,7 +85,27 @@ class AlertWork(
         }
     }
 
-    private suspend fun act(s: HostSession, alert: Alert, action: AlertAction, text: String): String = when (action.type) {
+    private suspend fun act(s: HostSession, alert: Alert, action: AlertAction, text: String): String {
+        val onTask = action.type == AlertAction.Type.Board || action.type == AlertAction.Type.TellTask || action.type == AlertAction.Type.AskCoordinator
+        return if (onTask && onShepherdr2(s)) actOnV2(s, alert, action, text) else actHere(s, alert, action, text)
+    }
+
+    /** A Shepherdr 2 task's action: a reply goes to its agent's chat, a yes merges it, a question goes to its space's coordinator. */
+    private suspend fun actOnV2(s: HostSession, alert: Alert, action: AlertAction, text: String): String {
+        val board = s.awaitWorkBoard()
+        val task = board.overview().tasks.firstOrNull { it.id == alert.taskId } ?: throw IOException("${alert.taskName.ifEmpty { alert.taskId }} isn't on the board any more")
+        return when (action.type) {
+            AlertAction.Type.TellTask -> board.tell(task, text).ifEmpty { "Sent: $text" }
+            AlertAction.Type.AskCoordinator -> {
+                board.say(task.space, Alerts.aboutTask(task.name, alert.text, text))
+                "Sent to the coordinator"
+            }
+            else -> if (action.boardAction == BoardAction.Approve) board.approve(task).ifEmpty { "${action.label}: done" }
+            else throw IOException("Open ${task.name} to do that on Shepherdr 2")
+        }
+    }
+
+    private suspend fun actHere(s: HostSession, alert: Alert, action: AlertAction, text: String): String = when (action.type) {
         AlertAction.Type.Choose -> {
             // Only press the option the notification showed, on the question it showed.
             AgentInput.choose(s.awaitAgent(alert.paneId), alert.paneId, action.question, action.option, action.optionLabel, action.details)
@@ -109,6 +129,13 @@ class AlertWork(
             board(s).send(Alerts.aboutTask(alert.taskName.ifEmpty { alert.taskId }, alert.text, text))
             "Sent to the Coordinator"
         }
+    }
+
+    /** Whether [s]'s board is Shepherdr 2, checked first when it wasn't yet. */
+    private suspend fun onShepherdr2(s: HostSession): Boolean {
+        s.awaitConnection()
+        if (!s.state.value.boardChecked) s.checkBoard()
+        return s.state.value.onShepherdr2
     }
 
     private suspend fun board(s: HostSession) = run {
