@@ -68,7 +68,7 @@ class TallyStore(private val file: File, private val machines: MachineStore, pri
         scope.launch {
             hosts.hosts.collect { states ->
                 if (!hosts.isForeground) return@collect
-                for (s in states) if (s.online) s.snapshot?.let { agents(s.machine.id, it) }
+                for (s in states) if (s.online && s.agentsKnown) s.view?.let { agents(s.machine.id, it) }
             }
         }
         scope.launch {

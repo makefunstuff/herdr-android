@@ -97,7 +97,7 @@ fun StartWorkScreen(nav: NavController, machineId: String? = null, text: String 
 
     // Where each way can run: a board task on a machine with a board, an agent on any machine online.
     val online = hosts.filter { it.online && it.machine.enabled }
-    val able = online.filter { !board || it.hasWorkBoard }
+    val able = online.filter { if (board) it.hasWorkBoard else it.classic } // an agent starts in classic herdr
     val host = able.firstOrNull { it.machine.id == chosen } ?: able.firstOrNull()
     val session = host?.let { container.hosts.session(it.machine.id) }
     val mid = host?.machine?.id

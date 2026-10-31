@@ -83,7 +83,7 @@ class LiveWork(
                 if (!hosts.isForeground || !on) return@collect
                 val now = System.currentTimeMillis()
                 for (s in states) {
-                    val snap = s.snapshot ?: continue
+                    val snap = s.view?.takeIf { s.agentsKnown } ?: continue
                     if (!s.online || store.state.value.machine(s.machine.id).off) continue
                     val id = s.machine.id
                     val again = now - (refreshed[id] ?: 0) > REFRESH_MS
@@ -181,10 +181,9 @@ class LiveWork(
 
     private suspend fun act(s: HostSession, item: LiveItem) = when (item.kind) {
         LiveItem.Kind.Agent -> {
-            val api = s.awaitApi()
-            val agent = api.snapshot().agents.firstOrNull { it.paneId == item.paneId }
-            if (agent?.agentStatus != AgentStatus.Working) throw IOException("It isn't working any more.")
-            AgentInput.keys(api, item.paneId, listOf("esc"), named = true)
+            val port = s.awaitAgent(item.paneId)
+            if (port.status(item.paneId) != AgentStatus.Working) throw IOException("It isn't working any more.")
+            AgentInput.keys(port, item.paneId, listOf("esc"), named = true)
             s.refresh()
         }
         LiveItem.Kind.Task -> {

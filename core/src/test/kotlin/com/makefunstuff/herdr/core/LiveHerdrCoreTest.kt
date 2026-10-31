@@ -75,12 +75,12 @@ class LiveHerdrCoreTest {
     }
 
     /**
-     * A machine without classic herdr: here a herdr session that doesn't exist, so classic herdr is
-     * "missing" as on a machine with only the desktop app. herdr-core is still found and followed,
-     * and the status still says what classic herdr lacks.
+     * A second machine in the app for another herdr session of the same host, whose session isn't
+     * there: herdr-core belongs to the default session's machine, so it isn't followed here too (its
+     * agents would show twice), and the status says what classic herdr lacks, as before.
      */
     @Test
-    fun findsHerdrCoreWhereClassicHerdrIsMissing() {
+    fun anotherSessionsMachineLeavesHerdrCoreToTheDefaultOne() {
         assumeTrue(keyPath != null && target != null, "set HERDR_LIVE_KEY and HERDR_LIVE_CORE to run")
         val identity = KeyImport.fromPrivateKey(File(keyPath!!).readText(), "test")
         val (user, host, port) = Machine.parseTarget(target!!)!!
@@ -90,13 +90,11 @@ class LiveHerdrCoreTest {
             val session = HostSession(machine, { identity }, { null }, scope)
             try {
                 session.start()
-                val s = withTimeout(60_000) { session.state.first { it.herdrCore != null } }
+                val s = withTimeout(60_000) { session.state.first { it.status is com.makefunstuff.herdr.core.host.HostStatus.Attention } }
+                kotlinx.coroutines.delay(5_000)
                 println("status: ${s.status}")
-                assertTrue(s.status is com.makefunstuff.herdr.core.host.HostStatus.Attention, "${s.status}")
-                assertEquals(null, s.snapshot)
-                val live = session.awaitHerdrCore().list().terminals.filter { it.live }
-                assertEquals(live.map { it.address }.toSet(), s.herdrCore!!.snapshot.panes.map { it.terminalId }.toSet())
-                println("herdr-core alone: ${s.herdrCore!!.snapshot.agents.size} agents, ${live.size} terminals")
+                assertEquals(null, session.state.value.herdrCore)
+                assertTrue(!session.state.value.online)
             } finally {
                 session.stop()
                 scope.cancel()

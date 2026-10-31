@@ -1,5 +1,6 @@
 package com.makefunstuff.herdr.ui.agents
 
+import com.makefunstuff.herdr.core.hc.HcMapping
 import com.makefunstuff.herdr.core.home.Home
 import com.makefunstuff.herdr.core.home.HomeAgent
 import com.makefunstuff.herdr.ui.design.confirmTap
@@ -130,7 +131,9 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
         return
     }
     val host by session.state.collectAsStateWithLifecycle()
-    val snapshot = host.snapshot
+    val snapshot = host.view
+    // One of herdr-core's terminals (the desktop app's), not a classic herdr pane.
+    val onCore = HcMapping.address(paneId) != null
     val agent = snapshot?.agents?.firstOrNull { it.paneId == paneId }
     val pane = snapshot?.pane(paneId)
     val status = agent?.agentStatus ?: pane?.agentStatus ?: AgentStatus.Unknown
@@ -214,7 +217,7 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
 
     fun keys(k: List<String>) {
         scope.launch {
-            runCatching { AgentInput.keys(session.awaitApi(), paneId, k, named = agent != null) }.onFailure { context.toast(it.message ?: "Couldn't send keys") }
+            runCatching { AgentInput.keys(session.awaitAgent(paneId), paneId, k, named = agent != null) }.onFailure { context.toast(it.message ?: "Couldn't send keys") }
             session.refresh()
         }
     }
@@ -243,13 +246,13 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
     }
 
     /** Carries out [block] on the question shown, which it checks is still on the agent's screen. */
-    fun answer(block: suspend (com.makefunstuff.herdr.core.api.HerdrApi) -> Unit) {
+    fun answer(block: suspend (com.makefunstuff.herdr.core.chat.AgentPort) -> Unit) {
         if (answering) return
         answering = true
         // A light confirmation under the thumb.
         view.confirmTap()
         scope.launch {
-            runCatching { block(session.awaitApi()) }.onFailure { context.toast(it.message ?: "Couldn't answer") }
+            runCatching { block(session.awaitAgent(paneId)) }.onFailure { context.toast(it.message ?: "Couldn't answer") }
             answering = false
             session.refresh()
         }
@@ -307,7 +310,7 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
         scope.launch { listState.animateScrollToItem(0) }
         scope.launch {
             runCatching {
-                val api = session.awaitApi()
+                val api = session.awaitAgent(paneId)
                 when {
                     tell != null -> AgentInput.refuseAndTell(api, paneId, tell.prompt, tell.index, text, named = agent != null)
                     own != null -> AgentInput.typeAnswer(api, paneId, own, text, named = agent != null)
@@ -344,7 +347,7 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
         chat.addPending(text)
         scope.launch { listState.animateScrollToItem(0) }
         try {
-            AgentInput.send(session.awaitApi(), paneId, text, named = agent != null, blocked = false)
+            AgentInput.send(session.awaitAgent(paneId), paneId, text, named = agent != null, blocked = false)
         } catch (t: Throwable) {
             chat.dropPending(text)
             throw t
@@ -367,7 +370,7 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
         chat.addPending(m.text)
         scope.launch { listState.animateScrollToItem(0) }
         scope.launch {
-            runCatching { AgentInput.send(session.awaitApi(), paneId, m.text, named = agent != null, blocked = false) }
+            runCatching { AgentInput.send(session.awaitAgent(paneId), paneId, m.text, named = agent != null, blocked = false) }
                 .onSuccess { container.composer.drop(chatKey, m.id) }
                 .onFailure {
                     chat.dropPending(m.text)
@@ -630,8 +633,9 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
             onCode = (agent?.cwd ?: pane?.foregroundCwd ?: pane?.cwd)?.ifBlank { null }?.takeIf { !inBubble }?.let { dir ->
                 { menu = false; nav.navigate(Routes.codeAt(CodeSpot(machineId, dir, pane = paneId))) }
             },
-            onActivity = if (inBubble) null else ({ menu = false; nav.navigate(Routes.activity(machineId, pane = paneId)) }),
-            onQuick = if (inBubble) null else ({
+            // herdr-core reports no session to follow, and quick commands type into classic herdr's panes.
+            onActivity = if (inBubble || onCore) null else ({ menu = false; nav.navigate(Routes.activity(machineId, pane = paneId)) }),
+            onQuick = if (inBubble || onCore) null else ({
                 menu = false
                 val name = agent?.let { it.name?.takeIf { n -> n.isNotBlank() } ?: it.displayName }
                 quick = QuickPlace(

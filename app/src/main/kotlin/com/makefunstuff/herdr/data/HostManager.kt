@@ -42,10 +42,10 @@ class HostManager(
         if (list.isEmpty()) flowOf(emptyList()) else combine(list.map { it.state }) { it.toList() }
     }.stateIn(scope, SharingStarted.Eagerly, emptyList())
 
-    /** Every agent on every connected machine. */
+    /** Every agent on every connected machine, classic herdr's and herdr-core's. */
     val agents: StateFlow<List<AgentRow>> = hosts.map { states ->
         states.flatMap { s ->
-            val snap = s.snapshot ?: return@flatMap emptyList()
+            val snap = s.view ?: return@flatMap emptyList()
             snap.agents.map { AgentRow(s.machine, it, snap.location(it.workspaceId, it.tabId)) }
         }
     }.stateIn(scope, SharingStarted.Eagerly, emptyList())

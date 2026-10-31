@@ -1,5 +1,9 @@
 package com.makefunstuff.herdr.push
 
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
+import com.makefunstuff.herdr.core.api.SessionSnapshot
+import com.makefunstuff.herdr.core.host.Sessions
 import com.makefunstuff.herdr.core.api.AgentStatus
 import com.makefunstuff.herdr.core.board.BoardAction
 import com.makefunstuff.herdr.core.chat.AgentInput
@@ -84,14 +88,14 @@ class AlertWork(
     private suspend fun act(s: HostSession, alert: Alert, action: AlertAction, text: String): String = when (action.type) {
         AlertAction.Type.Choose -> {
             // Only press the option the notification showed, on the question it showed.
-            AgentInput.choose(s.awaitApi(), alert.paneId, action.question, action.option, action.optionLabel, action.details)
+            AgentInput.choose(s.awaitAgent(alert.paneId), alert.paneId, action.question, action.option, action.optionLabel, action.details)
             s.refresh()
             "Answered: ${action.optionLabel}"
         }
         AlertAction.Type.ReplyAgent -> {
-            val api = s.awaitApi()
-            val agent = api.snapshot().agents.firstOrNull { it.paneId == alert.paneId } ?: throw IOException("That agent is gone.")
-            AgentInput.send(api, alert.paneId, text, named = true, blocked = agent.agentStatus == AgentStatus.Blocked)
+            val port = s.awaitAgent(alert.paneId)
+            val status = port.status(alert.paneId) ?: throw IOException("That agent is gone.")
+            AgentInput.send(port, alert.paneId, text, named = true, blocked = status == AgentStatus.Blocked)
             s.refresh()
             "Sent: $text"
         }
@@ -134,20 +138,31 @@ class AlertWork(
     }
 
     private suspend fun check(machineId: String) = hosts.borrow(machineId) { s ->
-        val api = s.awaitApi(30_000)
+        // Online for classic herdr, or for herdr-core alone (the desktop app's); herdr-core looked for too.
+        s.awaitConnection(30_000)
+        withTimeoutOrNull(15_000) { s.state.first { it.herdrCoreLooked || !it.online } }
+        val st = s.state.value
+        if (!st.online) throw IOException("${s.machine.label} went offline")
+        val api = if (st.classicMissing == null) s.awaitApi(30_000) else null
+        val core = st.herdrCore?.snapshot
+        if (api == null && core == null) throw IOException("Nothing answers on ${s.machine.label}")
         s.checkBoard()
         val board = if (s.state.value.hasBoard) s.awaitBoard() else null
-        val snapshot = api.snapshot()
+        // Classic herdr's agents and herdr-core's.
+        val snapshot = Sessions.merge(api?.snapshot(), core) ?: SessionSnapshot()
         val tasks = board?.let { PushLook.tasks(it) }
-        val events = PushLook.events(api, snapshot, tasks)
-        tally.agents(machineId, snapshot)
+        val events = PushLook.events({ pane -> s.awaitAgent(pane).read(pane, lines = 60, visible = true) }, snapshot, tasks)
+        // Only once both were read (herdr-core looked for, classic herdr not stopped): else agents would seem gone.
+        if (st.agentsKnown) tally.agents(machineId, snapshot)
         tasks?.let { tally.tasks(machineId, it) }
         val conn = s.awaitConnection()
         // Whether someone is at the machine, from its herdr-push (a machine without one can't tell).
         if (rules.holdAtMachine) HerdrPush.Client(conn, s.machine.label).presence()?.let { quiet.presence.record(machineId, s.machine.label, it, System.currentTimeMillis()) }
         inbox.apply(Alerts.all(machineId, s.machine.label, events), quiet = quiet.silent(), hold = quiet.check(), rules = rules)
-        watches.look(machineId, s.machine.label, snapshot.agents, tasks)
-        live.looked(machineId, s.machine.label, snapshot, tasks)
+        if (st.agentsKnown) {
+            watches.look(machineId, s.machine.label, snapshot.agents, tasks)
+            live.looked(machineId, s.machine.label, snapshot, tasks)
+        }
         // Low on RAM or disk, for a machine without herdr-push (where it runs, the push said so already: shown once).
         runCatching { HealthClient { cmd, timeout -> conn.run(cmd, timeout) }.sample() }.getOrNull()?.let { sample ->
             val report = HealthReport.of(sample, ProcLabels.label(sample, null, snapshot)) ?: return@let
@@ -188,7 +203,7 @@ class AlertWork(
     /** As the app leaves the screen: what its machines show now was seen, so a later look stays quiet about it. */
     fun leaving() {
         val changes = hosts.hosts.value.flatMap { h ->
-            val snap = h.snapshot ?: return@flatMap emptyList()
+            val snap = h.view ?: return@flatMap emptyList()
             if (!h.online) return@flatMap emptyList()
             snap.agents.map { a ->
                 Alerts.of(h.machine.id, h.machine.label, com.makefunstuff.herdr.core.push.PushEvent.Agent(a, snap.location(a.workspaceId, a.tabId)))

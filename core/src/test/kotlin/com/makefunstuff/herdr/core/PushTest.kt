@@ -252,6 +252,8 @@ class HerdrPushTest {
         val pb = ProcessBuilder("sh", "-c", command).directory(dir)
         pb.environment().putAll(env)
         pb.environment().remove("HERDR_SOCKET_PATH")
+        // This machine's own herdr-core (if one runs) stays out of the tests: a test gives its own.
+        pb.environment().putIfAbsent("HC_SOCKET", File(dir, "no-herdr-core.sock").path)
         val p = pb.start()
         p.outputStream.use { it.write(input.toByteArray()) }
         val out = p.inputStream.readBytes().toString(Charsets.UTF_8)
@@ -264,7 +266,7 @@ class HerdrPushTest {
     @Test
     fun bundledScriptIsTheOneInHost() {
         assertEquals(script.readText(), HerdrPush.script)
-        assertEquals("8", HerdrPush.version)
+        assertEquals("9", HerdrPush.version)
     }
 
     @Test
@@ -367,7 +369,7 @@ class HerdrPushTest {
             val (_, t) = assertNotNull(PushMessages.open(received[2], mapOf("m1" to key)))
             assertEquals(listOf<PushEvent>(PushEvent.Test), t.events)
             val status = HerdrPush.status(assertNotNull(HerdrPush.answer(sh(dir, env, HerdrPush.command("status")).out)), "phone1:m1")
-            assertEquals("8", status.version)
+            assertEquals("9", status.version)
             assertTrue(status.subscribed)
             assertNull(status.error)
 

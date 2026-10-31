@@ -169,6 +169,17 @@ fun scenes(): List<Scene> = listOf(
     Scene("machine-one-tab", route = Routes.machine(DEVBOX), actions = { tapLabel("Workspace actions") }),
     // A machine without the work board: Health and Usage are its tiles.
     Scene("machine-no-board", route = Routes.machine(GPU)),
+
+    // The Herdr desktop app's herdr-core (DemoCore): devbox runs it next to classic herdr, mac-mini alone. Its agents are on
+    // the Agents list and in Needs you, answered on the card (only its Claude asks here); the machines show its spaces,
+    // tabs and terminals; its Claude's chat is its screen; its shell opens as a live terminal.
+    Scene("agents-desktop", heightDp = 1700, setup = { home(); desktopApp() }),
+    Scene("agents-desktop-yes", setup = { home(); host(DEVBOX).snapshot = Demo.devbox(home = true, apiStatus = "working"); desktopApp() }, actions = { tapExact("Yes") }),
+    Scene("machines-desktop", route = Routes.MACHINES, setup = { desktopApp() }),
+    Scene("machine-desktop", route = Routes.machine(DEVBOX), heightDp = 1300, setup = { desktopApp() }),
+    Scene("machine-desktop-only", route = Routes.machine(Demo.MINI), setup = { desktopApp() }),
+    Scene("chat-desktop", route = Routes.agent(DEVBOX, DemoCore.CLAUDE), setup = { desktopApp() }),
+    Scene("terminal-desktop", route = Routes.terminal(DEVBOX, DemoCore.SHELL), setup = { desktopApp() }),
     Scene("machine-new", route = Routes.machine(DEVBOX), actions = { tapText("New") }),
     // Add machine: scanning the code herdr-push pair shows (the phone's own scanner is a system screen; the stand-in
     // reads studio's code), studio found on Tailscale, studio answering nowhere, and typing the address instead.

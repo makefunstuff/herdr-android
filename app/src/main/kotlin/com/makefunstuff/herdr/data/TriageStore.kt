@@ -44,7 +44,8 @@ class TriageStore(
      * and those of machines no longer in the app ([machines], every machine saved).
      */
     fun keep(hosts: List<HostState>, machines: Set<String>) {
-        val read = hosts.filter { it.snapshot != null }.map { it.machine.id }.toSet()
+        // Read once both classic herdr and herdr-core (found a moment later) were: else herdr-core's marks would go.
+        val read = hosts.filter { it.agentsKnown }.map { it.machine.id }.toSet()
         change { it.keep(HomeAgent.of(hosts), read, machines, now()) }
     }
 

@@ -108,7 +108,7 @@ fun noteTargets(host: HostState, top: String, spot: CodeSpot): List<NoteTarget> 
 /** Sends [text] to [target] on [session]'s machine. */
 suspend fun deliver(session: HostSession, target: NoteTarget, text: String) {
     when (target) {
-        is NoteTarget.Agent -> AgentInput.send(session.awaitApi(), target.paneId, text, named = true, blocked = target.blocked)
+        is NoteTarget.Agent -> AgentInput.send(session.awaitAgent(target.paneId), target.paneId, text, named = true, blocked = target.blocked)
         is NoteTarget.Task -> session.awaitBoard().run(listOf("tell", target.id, text))
         NoteTarget.Coordinator -> session.awaitBoard().send(text)
     }

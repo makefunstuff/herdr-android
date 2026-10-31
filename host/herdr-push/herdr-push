@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-# version: 8
+# version: 9
 """herdr-push: tells your phone when a herdr agent or a work board task needs you.
 
-It runs on the machine with herdr, watches its agents (`herdr api snapshot`) and, where the board
-is installed, its tasks (`herdr-projects list --json`), and sends a push to every phone that
-subscribed (Herdr for Android sets this up over SSH) when:
+It runs on the machine with herdr, watches its agents (`herdr api snapshot`, and the Herdr desktop
+app's in herdr-core, read on its socket where a core runs) and, where the board is installed, its
+tasks (`herdr-projects list --json`), and sends a push to every phone that subscribed (Herdr for
+Android sets this up over SSH) when:
 
   - an agent becomes blocked (it asks something) or finishes, and when that is over again;
   - a board task starts waiting for you (ready to approve, review failed, plan ready, pick one,
@@ -69,7 +70,7 @@ import urllib.parse
 import urllib.request
 import zlib
 
-VERSION = "8"
+VERSION = "9"
 NAME = "herdr-push"
 
 HOME = os.path.expanduser("~")
@@ -228,6 +229,8 @@ class Source:
         self.session = session or "default"
         self.herdr = herdr
         self.board = board
+        # herdr-core, read for the default session only (its agents belong to the machine, not a herdr session).
+        self.core = None
 
     @property
     def key(self):
@@ -261,7 +264,10 @@ class Source:
 
     def screen(self, pane):
         try:
-            text = self.run([self.herdr, "pane", "read", pane, "--source", "visible", "--lines", "60"])
+            if pane.startswith(HC_PREFIX):
+                text = self.core.screen(pane[len(HC_PREFIX):])
+            else:
+                text = self.run([self.herdr, "pane", "read", pane, "--source", "visible", "--lines", "60"])
         except Exception as e:  # noqa: BLE001 - a screen is a nicety
             log("can't read", pane, e)
             return None
@@ -301,6 +307,151 @@ class Source:
             if len(parts) >= 2 and parts[0] == "review.rounds" and parts[1].isdigit():
                 return int(parts[1])
         return None
+
+
+# ---- herdr-core (the Herdr desktop app's runtime) -------------------------------------------------
+
+# Agents people start in a terminal, by program name: agents before they report a status (as the app's HcMapping).
+HC_KNOWN = {"claude", "codex", "pi", "omp", "opencode", "gemini", "amp", "droid", "copilot", "cursor-agent", "goose",
+            "grok", "aider", "crush", "qwen"}
+HC_PREFIX = "hc:"
+
+
+def hc_socket():
+    """The default core's socket as hc finds it: HC_SOCKET, what the running core wrote in core.lock, the runtime folder."""
+    if os.environ.get("HC_SOCKET"):
+        return os.environ["HC_SOCKET"]
+    sess = os.environ.get("HC_SESSION") or "default"
+    state = os.path.join(os.environ.get("XDG_STATE_HOME") or os.path.join(HOME, ".local", "state"), "herdr-core", sess)
+    try:
+        with open(os.path.join(state, "core.lock")) as f:
+            s = f.readline().strip()
+        if s and os.path.exists(s):
+            return s
+    except OSError:
+        pass
+    run = os.environ.get("XDG_RUNTIME_DIR") or "/run/user/%d" % os.getuid()
+    if os.path.isdir(run):
+        return os.path.join(run, "herdr-core", sess + ".sock")
+    return os.path.join(state, sess + ".sock")
+
+
+class HerdrCore:
+    """herdr-core's API on its socket, one JSON-RPC line each way. Connecting to it never starts a core
+    (`hc` itself would), so a machine whose owner doesn't use the desktop app gets none."""
+
+    def __init__(self, path):
+        self.path = path
+        self.sock = None
+        self.f = None
+        self.n = 0
+
+    def call(self, method, params=None):
+        if self.f is None:
+            s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            # Short: a core that doesn't answer mustn't hold up classic herdr's notifications.
+            s.settimeout(3)
+            try:
+                s.connect(self.path)
+            except OSError:
+                s.close()
+                raise
+            self.sock, self.f = s, s.makefile("rwb")
+            self._rpc("hello", {"generation": 1})
+        return self._rpc(method, params or {})
+
+    def _rpc(self, method, params):
+        self.n += 1
+        self.f.write((json.dumps({"jsonrpc": "2.0", "id": self.n, "method": method, "params": params}) + "\n").encode())
+        self.f.flush()
+        while True:
+            line = self.f.readline()
+            if not line:
+                raise RuntimeError("herdr-core closed the connection")
+            out = json.loads(line.decode(errors="replace"))
+            # A late answer to a call that timed out isn't this one's.
+            if out.get("id") == self.n:
+                break
+        if out.get("error"):
+            raise RuntimeError(out["error"].get("message") or "herdr-core: error")
+        return out.get("result") or {}
+
+    def close(self):
+        for c in (self.f, self.sock):
+            try:
+                if c:
+                    c.close()
+            except OSError:
+                pass
+        self.sock = self.f = None
+
+    def screen(self, address):
+        return self.call("terminal.read", {"terminal": address, "lines": 0}).get("text", "")
+
+
+def hc_agent_name(t):
+    app = ((t.get("status") or {}).get("app") or "").strip().lower()
+    if app:
+        return {"claude-code": "claude", "claude": "claude", "pi-coding-agent": "pi"}.get(app, app[:-4] if app.endswith("-cli") else app)
+    fg = (t.get("foreground") or {}).get("name") or os.path.basename((t.get("argv") or [""])[0])
+    return fg if fg in HC_KNOWN else None
+
+
+def hc_snapshot(terminals):
+    """Live terminals as herdr's snapshot has agents: pane ids `hc:<address>`, the desktop app's spaces
+    and tabs from its labels (`herdr.space`, `herdr.tab`, `where`), the rest in "Other terminals"."""
+    live = [t for t in terminals if t.get("state", "live") == "live" and t.get("address")]
+    by = {t["address"]: t for t in terminals if t.get("address")}
+
+    def place(t):
+        cur = t
+        for _ in range(32):
+            labels = cur.get("labels") or {}
+            where = (labels.get("where") or "").strip()
+            space = labels.get("herdr.space")
+            if space or where:
+                names = where.split(" / ", 1) if where else []
+                sid = HC_PREFIX + (space or "where:" + names[0])
+                tab = labels.get("herdr.tab") or (names[1] if len(names) > 1 else cur["address"])
+                return (sid, (names[0] if names and names[0] else space or "Space"),
+                        sid + "/" + tab, (names[1] if len(names) > 1 and names[1] else tab))
+            parent = cur.get("parent")
+            if not parent or parent not in by:
+                break
+            cur = by[parent]
+        return HC_PREFIX + "!other", "Other terminals", HC_PREFIX + "!other/tab", "Terminals"
+
+    snap = {"workspaces": [], "tabs": [], "agents": []}
+    seen = set()
+    for t in sorted(live, key=lambda t: (t.get("created_ms") or 0, t["address"])):
+        sid, sname, tid, tname = place(t)
+        if sid not in seen:
+            seen.add(sid)
+            snap["workspaces"].append({"workspace_id": sid, "label": sname})
+        if tid not in seen:
+            seen.add(tid)
+            snap["tabs"].append({"tab_id": tid, "workspace_id": sid, "label": tname})
+        status = t.get("status") or {}
+        agent = hc_agent_name(t)
+        if not status and not agent:
+            continue
+        word = status.get("state") or "unknown"
+        a = {"pane_id": HC_PREFIX + t["address"], "workspace_id": sid, "tab_id": tid, "agent": agent, "display_agent": agent,
+             "name": t.get("name"), "title": status.get("msg") or status.get("title") or None,
+             "agent_status": "blocked" if word == "error" else word,
+             "state_change_seq": t.get("status_ms") or t.get("created_ms") or 0}
+        if t.get("turn"):
+            a["completion_seq"] = t["turn"]
+        snap["agents"].append(a)
+    return snap
+
+
+def merged(snap, core):
+    """herdr's snapshot with herdr-core's agents, spaces and tabs after its own."""
+    out = dict(snap)
+    for k in ("workspaces", "tabs", "agents"):
+        out[k] = list(snap.get(k) or []) + list(core.get(k) or [])
+    return out
 
 
 def trim_screen(text):
@@ -1138,6 +1289,50 @@ def sources(subs):
     return out
 
 
+# herdr-core's last snapshot per herdr session while this watcher runs, and when it was read: a core that
+# doesn't answer for a while (the desktop app restarting, an hc update, a stale socket) keeps its agents for
+# CORE_GRACE seconds, so a restart neither clears nor repeats their notifications; after that they are gone.
+_core_last = {}
+CORE_GRACE = float(os.environ.get("HERDR_PUSH_CORE_GRACE", "60"))
+# Classic herdr's last snapshot, likewise: while its server doesn't answer, herdr-core's agents are still told.
+_classic_last = {}
+
+
+def core_look(src, st, now):
+    """herdr-core's agents where a core runs (else None), with [src] set to read their screens."""
+    path = hc_socket()
+    try:
+        if not os.path.exists(path):
+            raise RuntimeError("no herdr-core socket")
+        src.core = HerdrCore(path)
+        snap = hc_snapshot(src.core.call("terminal.list").get("terminals") or [])
+        _core_last[src.key] = (snap, now)
+        st.pop("core_problem", None)
+        return snap
+    except Exception as e:  # noqa: BLE001 - classic herdr's agents are still told
+        if src.core:
+            src.core.close()
+        src.core = None
+        last = _core_last.get(src.key)
+        if last is None:
+            return None
+        if st.get("core_problem") != str(e):
+            log("herdr-core:", e)
+        st["core_problem"] = str(e)
+        if now - last[1] > CORE_GRACE:
+            _core_last.pop(src.key, None)
+            return None
+        return last[0]
+
+
+def log_once(st, field, *parts):
+    """Logs a problem once until it changes or is over (the field is cleared when it is)."""
+    text = " ".join(str(p) for p in parts)
+    if st.get(field) != text:
+        log(*parts)
+    st[field] = text
+
+
 def tick(state, n, dry_run=False, now=None):
     subs = subscribers()
     sent = {}
@@ -1150,7 +1345,8 @@ def tick(state, n, dry_run=False, now=None):
             seen_here.append(presence(now))
         return seen_here[0]
 
-    for key, (src, group) in sources(subs).items():
+    srcs = sources(subs)
+    for key, (src, group) in srcs.items():
         st = state.setdefault("sessions", {}).setdefault(key, {})
         live = any(s.get("live") for s in group)
         watch_tasks = watched(group, "watch_tasks")
@@ -1160,9 +1356,35 @@ def tick(state, n, dry_run=False, now=None):
         # What the journal saw last; its first look only learns how things stand.
         jst = st.setdefault("journal", {})
         noted = []
-        if src.herdr:
+        core = core_look(src, st, now) if src.session == "default" else None
+        # herdr-core's agents last told, on a machine without classic herdr: they go when the core does.
+        told_core = any(p.startswith(HC_PREFIX) for p in st.get("agents") or {})
+        if src.herdr or core is not None or told_core:
             try:
-                snap = src.snapshot()
+                snap = {"workspaces": [], "tabs": [], "agents": []}
+                if src.herdr:
+                    try:
+                        snap = src.snapshot()
+                        _classic_last[key] = snap
+                        st.pop("classic_problem", None)
+                    except Exception:  # noqa: BLE001 - herdr-core's agents are still told, classic herdr's kept as they were
+                        # Without classic herdr's last snapshot, one that had agents keeps them by not looking now.
+                        told_classic = any(not p.startswith(HC_PREFIX) for p in st.get("agents") or {})
+                        if key not in _classic_last and (told_classic or (core is None and not told_core)):
+                            raise
+                        log_once(st, "classic_problem", "herdr session %s:" % key, sys.exc_info()[1])
+                        snap = _classic_last.get(key, snap)
+                if core is not None:
+                    snap = merged(snap, core)
+                    # A core seen for the first time (herdr-push updated to read it): its agents
+                    # as they stand are learnt, not told, as on a first look.
+                    if not st.get("core_known"):
+                        for a in core.get("agents") or []:
+                            if "agents" in st:
+                                st["agents"].setdefault(a["pane_id"], a.get("agent_status", "unknown"))
+                            if "agents" in jst:
+                                jst["agents"].setdefault(a["pane_id"], "%s#%s" % (a.get("agent_status", "unknown"), a.get("state_change_seq", "")))
+                    st["core_known"] = True
                 first = "agents" not in st
                 told = agent_events(src, snap, st.setdefault("agents", {}), first)
                 events += told
@@ -1222,6 +1444,9 @@ def tick(state, n, dry_run=False, now=None):
             if dry_run or not mine:
                 continue
             send(sub, mine, record, here)
+    for src, _ in srcs.values():
+        if src.core:
+            src.core.close()
     if subs:
         ev = health_look(state.setdefault("health", {}), now)
         if ev is not None:

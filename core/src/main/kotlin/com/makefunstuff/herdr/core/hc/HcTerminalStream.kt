@@ -104,6 +104,9 @@ class HcTerminalStream(
      */
     fun programResized(cols: Int, rows: Int) {
         if (cols <= 0 || rows <= 0) return
+        // Noted as the viewer's too: the phone's next own size then differs from it and is sent.
+        this.cols = cols
+        this.rows = rows
         synchronized(emulator.lock) { emulator.resize(cols, rows) }
         _revision.update { it + 1 }
     }

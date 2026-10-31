@@ -1,5 +1,6 @@
 package com.makefunstuff.herdr.ui.agents
 
+import com.makefunstuff.herdr.core.hc.HcMapping
 import com.makefunstuff.herdr.ui.manage.ExplainSheet
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import com.makefunstuff.herdr.core.board.BoardTask
@@ -191,7 +192,7 @@ fun AgentsScreen(
         scope.launch {
             runCatching {
                 val session = container.hosts.session(q.machineId) ?: error("This machine isn't in the app any more")
-                AgentInput.choose(session.awaitApi(10_000), q.agent.agent.paneId, prompt.question, index, label, prompt.details)
+                AgentInput.choose(session.awaitAgent(q.agent.agent.paneId, 10_000), q.agent.agent.paneId, prompt.question, index, label, prompt.details)
                 session.refresh()
             }
                 .onSuccess {
@@ -219,7 +220,7 @@ fun AgentsScreen(
                 val session = container.hosts.session(w.machineId) ?: error("This machine isn't in the app any more")
                 when (r) {
                     is Reply.ToAgent -> {
-                        AgentInput.send(session.awaitApi(10_000), r.item.agent.agent.paneId, text, named = true, blocked = true)
+                        AgentInput.send(session.awaitAgent(r.item.agent.agent.paneId, 10_000), r.item.agent.agent.paneId, text, named = true, blocked = true)
                         session.refresh()
                         "Sent: $text"
                     }
@@ -272,9 +273,10 @@ fun AgentsScreen(
      * What an agent's long-press sheet offers besides its triage, as TalkBack's actions on its card
      * or row: its terminal, why it is in this state, and the sheet itself for the rest.
      */
-    fun sheetActions(a: HomeAgent, task: BoardTask?) = listOf(
+    fun sheetActions(a: HomeAgent, task: BoardTask?) = listOfNotNull(
         CustomAccessibilityAction("Open terminal") { panes.open(nav, Routes.terminal(a.machineId, a.agent.paneId)); true },
-        CustomAccessibilityAction("Why this state?") { why = a; true },
+        // Classic herdr explains its agents' states; herdr-core doesn't.
+        CustomAccessibilityAction("Why this state?") { why = a; true }.takeIf { HcMapping.address(a.agent.paneId) == null },
         CustomAccessibilityAction("More actions") { menuAgent = a to task; true },
     )
 

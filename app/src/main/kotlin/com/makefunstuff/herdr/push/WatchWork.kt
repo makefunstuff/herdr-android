@@ -39,7 +39,8 @@ class WatchWork(
             hosts.hosts.collect { states ->
                 if (store.state.value.watches.isEmpty()) return@collect
                 for (s in states) {
-                    val snap = s.snapshot ?: continue
+                    // Both classic herdr's agents and herdr-core's, or a watched one would seem gone.
+                    val snap = s.view?.takeIf { s.agentsKnown } ?: continue
                     if (s.online) look(s.machine.id, s.machine.label, snap.agents, null)
                 }
             }

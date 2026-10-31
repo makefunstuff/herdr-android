@@ -1,7 +1,6 @@
 package com.makefunstuff.herdr.core.push
 
 import com.makefunstuff.herdr.core.api.AgentStatus
-import com.makefunstuff.herdr.core.api.HerdrApi
 import com.makefunstuff.herdr.core.api.SessionSnapshot
 import com.makefunstuff.herdr.core.board.BoardClient
 import com.makefunstuff.herdr.core.board.BoardTask
@@ -159,19 +158,20 @@ object HerdrPush {
 
 /** The app's own look at a machine while it is closed: what herdr-push would have sent about it. */
 object PushLook {
-    /** Every agent and, with [board], every task, as events; the notifications sort out what is new. */
-    suspend fun events(api: HerdrApi, snapshot: SessionSnapshot, board: BoardClient?): List<PushEvent> =
-        events(api, snapshot, board?.let { tasks(it) })
 
     /** The board's tasks, or null when it didn't answer. */
     suspend fun tasks(board: BoardClient): List<BoardTask>? =
         runCatching { board.tasks() }.getOrElse { if (it is CancellationException) throw it; null }
 
-    suspend fun events(api: HerdrApi, snapshot: SessionSnapshot, tasks: List<BoardTask>?): List<PushEvent> {
+    /**
+     * Every agent of [snapshot] and every task, as events; the notifications sort out what is new. A
+     * blocked agent's screen is read with [screen] (classic herdr's pane, or herdr-core's terminal).
+     */
+    suspend fun events(screen: suspend (paneId: String) -> String, snapshot: SessionSnapshot, tasks: List<BoardTask>?): List<PushEvent> {
         val agents = snapshot.agents.map { a ->
             val screen = if (a.agentStatus == AgentStatus.Blocked) {
                 try {
-                    api.readPane(a.paneId, source = "visible", lines = 60).text
+                    screen(a.paneId)
                 } catch (e: CancellationException) {
                     throw e
                 } catch (_: Throwable) {
