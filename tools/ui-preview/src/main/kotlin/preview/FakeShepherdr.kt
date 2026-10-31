@@ -136,10 +136,10 @@ object DemoV2 {
            {"id":"$API","name":"api-server","machine":"devbox","status":"work","chat":"$API","githubRemote":true}
          ],
          "tasks":[
-           {"id":"AND-13","name":"Keep the Board card in place on reconnect","status":"ready","place":"$APP","agent":{"chat":"AND-13/Agent","status":"ready"},"pr":{"number":212,"url":"https://github.com/example/herdr-android/pull/212"}},
-           {"id":"AND-14","name":"Fix the flaky upload test","status":"need","place":"$APP","agent":{"chat":"AND-14/Agent","status":"need"},"report":{"msg":"Plan to approve","progress":10}},
-           {"id":"AND-15","name":"Voice input in the task composer","status":"work","place":"$APP","agent":{"chat":"AND-15/Agent","status":"work"},"report":{"msg":"Wiring the recognizer","progress":40}},
-           {"id":"API-7","name":"Speed up /jobs on large tables","status":"work","place":"$API","agent":{"chat":"API-7/Agent","status":"work"},"report":{"msg":"Adding the index","progress":60}}
+           {"id":"AND-13","name":"Keep the Board card in place on reconnect","status":"ready","place":"$APP","agent":{"chat":"AND-13/Agent","cli":"Claude Code","status":"ready"},"pr":{"number":212,"url":"https://github.com/example/herdr-android/pull/212"}},
+           {"id":"AND-14","name":"Fix the flaky upload test","status":"need","place":"$APP","agent":{"chat":"AND-14/Agent","cli":"Claude Code","status":"need"},"report":{"msg":"Plan to approve","progress":10}},
+           {"id":"AND-15","name":"Voice input in the task composer","status":"work","place":"$APP","agent":{"chat":"AND-15/Agent","cli":"Codex","status":"work"},"report":{"msg":"Wiring the recognizer","progress":40}},
+           {"id":"API-7","name":"Speed up /jobs on large tables","status":"work","place":"$API","agent":{"chat":"API-7/Agent","cli":"Codex","status":"work"},"report":{"msg":"Adding the index","progress":60}}
          ],
          "asks":{"$APP":"ask:merge-and-13"}}
     """.trimIndent()
@@ -167,6 +167,16 @@ object DemoV2 {
         ]}
     """.trimIndent()
 
+    /** AND-14's own chat: its agent's plan, the card the coordinator's chat copies. */
+    private val AND14_CHAT = """
+        {"key":"AND-14/Agent","cli":"Claude Code","working":false,"messages":[
+          {"id":"t1","who":"agent","at":1,"text":"The upload test fails about once in 30 runs: it reads the temp file back before it is closed. Here's my plan."},
+          {"id":"t2","who":"agent","at":2,"question":{"id":"plan-and-14","title":"Plan for AND-14","kind":"Plan",
+            "steps":["Run the upload test 50 times to catch the failure","Wait for the temp file to close before reading it back","Add a test that uploads while the connection drops"],
+            "choices":[{"label":"Approve"},{"label":"Send it back"}],"noteRequiredFor":1,"to":"AND-14 agent"}}
+        ]}
+    """.trimIndent()
+
     private val API_CHAT = """
         {"key":"$API","cli":"Codex","working":true,"messages":[
           {"id":"a1","who":"you","at":1,"text":"/jobs is slow on the big tenant again. Look into it?"},
@@ -185,5 +195,5 @@ object DemoV2 {
     )
 
     fun chats(): Map<String, JsonObject> =
-        listOf(APP_CHAT, HOME_CHAT, API_CHAT).associate { Json.parseToJsonElement(it).jsonObject.let { c -> c.getValue("key").jsonPrimitive.content to c } }
+        listOf(APP_CHAT, HOME_CHAT, API_CHAT, AND14_CHAT).associate { Json.parseToJsonElement(it).jsonObject.let { c -> c.getValue("key").jsonPrimitive.content to c } }
 }

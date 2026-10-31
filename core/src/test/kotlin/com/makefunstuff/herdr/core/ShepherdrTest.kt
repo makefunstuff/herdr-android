@@ -19,6 +19,8 @@ import com.makefunstuff.herdr.core.shepherdr.V2Event
 import com.makefunstuff.herdr.core.shepherdr.V2Events
 import com.makefunstuff.herdr.core.shepherdr.V2Snapshot
 import com.makefunstuff.herdr.core.shepherdr.V2Status
+import com.makefunstuff.herdr.core.shepherdr.V2Task
+import com.makefunstuff.herdr.core.shepherdr.V2TaskAgent
 import com.makefunstuff.herdr.core.shepherdr.V2TaskStatus
 import com.makefunstuff.herdr.core.shepherdr.V2Version
 import com.makefunstuff.herdr.core.shepherdr.V2WorkBoard
@@ -452,6 +454,30 @@ class ShepherdrTest {
             assertEquals(3, thread.lines.size)
             val two = withTimeout(10_000) { board.coordinatorThreads("p:beefy-machine:herdr-android").take(2).toList() }
             assertTrue(two[1].lines[1].text.endsWith("and one more."))
+        }
+    }
+
+    @Test
+    fun aTasksOwnChatFollowsItsAgentsChatAndWordsGoThere() = runBlocking {
+        FakeShepherdr().use { fake ->
+            fake.onSocket { ws ->
+                ws.sendText("""{"type":"snapshot","snapshot":{"places":[]}}""")
+                val watch = ws.readText()
+                assertTrue(watch.contains("HA-1/Agent"))
+                ws.sendText(fixture("chat-event.json").replace("p:beefy-machine:herdr-android", "HA-1/Agent"))
+                ws.readText()
+            }
+            val board = V2WorkBoard(ShepherdrClient(ForwardTransport({ ForwardTransport.socket(fake.port, it) })))
+            val task = V2Board.task(V2Task("HA-1", "Coordinator chat", place = "p:x", agent = V2TaskAgent("HA-1/Agent", cli = "Claude Code")))
+            assertEquals("Claude Code", task.agent)
+            assertEquals("claude", V2Board.agentKind(task.agent))
+            assertEquals("codex", V2Board.agentKind("Codex"))
+            val t = withTimeout(10_000) { board.taskThreads(task).first() }
+            assertEquals("HA-1/Agent", t.v2?.key)
+            assertEquals("p:x", t.space)
+            // A task before its agent starts has no chat to write to.
+            val e = runCatching { board.tell(task.copy(chat = ""), "Hi") }.exceptionOrNull()
+            assertEquals("HA-1 has no agent yet", e?.message)
         }
     }
 

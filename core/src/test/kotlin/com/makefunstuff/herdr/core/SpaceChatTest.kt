@@ -132,4 +132,29 @@ class SpaceChatTest {
         assertTrue(items[1] is SpaceChatItem.File)
         assertEquals(going, (items[2] as SpaceChatItem.Voice).note)
     }
+
+    @Test
+    fun aTasksChatFoldsEachTurnsStepsToOneLine() {
+        val c = (V2Events.parse(fixture("chat-event.json")) as V2Event.Chat).chat
+        // The coordinator's chat leaves them out; a task's agent chat shows each turn's as one line.
+        assertEquals(3, SpaceChat.items(c.key, c).size)
+        val items = SpaceChat.items(c.key, c, steps = true)
+        assertEquals(4, items.size)
+        val s = items[2] as SpaceChatItem.Steps
+        assertEquals("Inspected v2 API routes and types", s.rows.first())
+        assertEquals(80_605L, s.millis)
+        assertEquals("1m", SpaceChat.took(s.millis!!))
+        assertTrue(s.steps >= s.rows.size)
+        // A turn still at work has no length yet; one without steps shows nothing.
+        val live = chat("""{"key":"HA-1/Agent","messages":[
+              {"id":"a1","who":"agent","activity":{"id":"t1","at":1,"rows":[{"key":"k","kind":"edit","text":"Edited app.ts","steps":["s1"]}],"steps":3,"more":1}},
+              {"id":"a2","who":"agent","activity":{"id":"t2","at":1,"rows":[],"steps":0}}
+            ]}""")
+        val one = SpaceChat.items(live.key, live, steps = true).single() as SpaceChatItem.Steps
+        assertNull(one.millis)
+        assertEquals(listOf("Edited app.ts"), one.rows)
+        assertEquals(1, one.more)
+        assertEquals("40s", SpaceChat.took(40_000))
+        assertEquals("1h 5m", SpaceChat.took(3_900_000))
+    }
 }

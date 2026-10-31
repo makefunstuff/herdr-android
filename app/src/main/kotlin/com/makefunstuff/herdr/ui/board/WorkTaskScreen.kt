@@ -3,6 +3,7 @@ package com.makefunstuff.herdr.ui.board
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -46,15 +47,16 @@ import com.makefunstuff.herdr.core.host.HostSession
 import com.makefunstuff.herdr.ui.common.MarkdownText
 import com.makefunstuff.herdr.ui.common.Pill
 import com.makefunstuff.herdr.ui.common.openUrl
+import com.makefunstuff.herdr.ui.design.BarIcon
 import com.makefunstuff.herdr.ui.design.ErrorMessage
 import com.makefunstuff.herdr.ui.design.HerdrField
 import com.makefunstuff.herdr.ui.design.HerdrIcons
 import com.makefunstuff.herdr.ui.design.HerdrTopBar
 import com.makefunstuff.herdr.ui.design.InfoLine
 import com.makefunstuff.herdr.ui.design.LoadingState
+import com.makefunstuff.herdr.ui.design.MenuRow
 import com.makefunstuff.herdr.ui.design.PrimaryButton
 import com.makefunstuff.herdr.ui.design.QuietCard
-import com.makefunstuff.herdr.ui.design.SecondaryButton
 import com.makefunstuff.herdr.ui.design.StatusBadge
 import com.makefunstuff.herdr.ui.theme.Herdr
 import com.makefunstuff.herdr.ui.theme.Space
@@ -62,9 +64,10 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 
 /**
- * A Shepherdr 2 task, full screen: where it stands, the cards it waits on (answered here), what it
- * said once ready, its pull request, its brief, and Merge and Close. Read again while open, and at
- * once when the board says it changed.
+ * A Shepherdr 2 task without an agent's chat (one not started yet), full screen: where it stands, the
+ * cards it waits on (answered here), what it said once ready, its pull request, its brief; Merge at the
+ * bottom when it is ready, and Close in ⋯. Read again while open, and at once when the board says it
+ * changed. A task with an agent opens as its chat ([TaskChatScreen]).
  */
 @Composable
 internal fun WorkTaskScreen(
@@ -119,69 +122,76 @@ internal fun WorkTaskContent(
     val c = Herdr.colors
     val color = t.status.color()
     val canClose = t.status != WorkStatus.Done && t.status != WorkStatus.Merging
-    Scaffold(
-        containerColor = c.ground,
-        topBar = { HerdrTopBar(t.name, subtitle = space.ifEmpty { null }, onBack = onBack, backLabel = "Back to the board") },
-        bottomBar = {
-            if (busy != null || t.status == WorkStatus.Ready || canClose) Column(
-                Modifier.fillMaxWidth().background(c.ground).navigationBarsPadding().padding(horizontal = Space.screen, vertical = Space.m),
-                verticalArrangement = Arrangement.spacedBy(Space.s),
-            ) {
-                busy?.let { BusyLine(it) }
-                if (canClose) SecondaryButton(onClick = onClose, modifier = Modifier.fillMaxWidth(), enabled = busy == null) {
-                    Icon(HerdrIcons.CircleStop, null, Modifier.size(18.dp))
-                    Text("Close, nothing merged")
+    var menu by remember(t.id) { mutableStateOf(false) }
+    Box(Modifier.fillMaxSize()) {
+        Scaffold(
+            containerColor = c.ground,
+            topBar = {
+                HerdrTopBar(t.name, subtitle = space.ifEmpty { null }, onBack = onBack, backLabel = "Back to the board") {
+                    if (canClose) BarIcon(HerdrIcons.Ellipsis, "More", { menu = true })
                 }
-                if (t.status == WorkStatus.Ready) PrimaryButton(onClick = onMerge, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), enabled = busy == null) {
-                    Icon(HerdrIcons.GitMerge, null, Modifier.size(18.dp))
-                    Text("Merge")
-                }
-            }
-        },
-    ) { padding ->
-        Column(
-            Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = Space.screen).padding(top = Space.xs, bottom = Space.xl),
-            verticalArrangement = Arrangement.spacedBy(Space.l),
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(Space.s)) {
-                Text(t.title, style = MaterialTheme.typography.headlineSmall)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(Space.s), verticalArrangement = Arrangement.spacedBy(Space.xs)) {
-                    StatusBadge(t.status.label, color)
-                    if (t.pinned) Pill("pinned")
-                }
-            }
-            // Where it stands: the next step, its own line, progress.
-            val step = nextStep(t, d?.cards.orEmpty().size)
-            val p = t.progress?.takeIf { it > 0 && t.status == WorkStatus.Work }
-            if (step != null || t.line.isNotEmpty() || p != null) QuietCard(
-                padded = true,
-                color = if (t.status.needsYou) c.tint(color).compositeOver(c.ground) else c.card,
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(Space.s)) {
-                    Text(if (t.status.needsYou) "Needs you" else "Status", style = MaterialTheme.typography.titleSmall, color = color, modifier = Modifier.semantics { heading() })
-                    if (step != null) Text(step, style = MaterialTheme.typography.bodyLarge)
-                    if (t.line.isNotEmpty()) Preview(t.line, "status", lines = 3, color = c.muted)
-                    if (p != null) Row(verticalAlignment = Alignment.CenterVertically) {
-                        Progress(p, color, Modifier.weight(1f))
-                        Text("$p%", style = MaterialTheme.typography.labelMedium, color = c.faint, modifier = Modifier.padding(start = Space.m))
+            },
+            // Only the one thing it waits for sits under the thumb: Close is in ⋯.
+            bottomBar = {
+                if (busy != null || t.status == WorkStatus.Ready) Column(
+                    Modifier.fillMaxWidth().background(c.ground).navigationBarsPadding().padding(horizontal = Space.screen, vertical = Space.m),
+                    verticalArrangement = Arrangement.spacedBy(Space.s),
+                ) {
+                    busy?.let { BusyLine(it) }
+                    if (t.status == WorkStatus.Ready) PrimaryButton(onClick = onMerge, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), enabled = busy == null) {
+                        Icon(HerdrIcons.GitMerge, null, Modifier.size(18.dp))
+                        Text("Merge")
                     }
                 }
+            },
+        ) { padding ->
+            Column(
+                Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = Space.screen).padding(top = Space.xs, bottom = Space.xl),
+                verticalArrangement = Arrangement.spacedBy(Space.l),
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(Space.s)) {
+                    Text(t.title, style = MaterialTheme.typography.headlineSmall)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(Space.s), verticalArrangement = Arrangement.spacedBy(Space.xs)) {
+                        StatusBadge(t.status.label, color)
+                        if (t.pinned) Pill("pinned")
+                    }
+                }
+                // Where it stands: the next step, its own line, progress.
+                val step = nextStep(t, d?.cards.orEmpty().size)
+                val p = t.progress?.takeIf { it > 0 && t.status == WorkStatus.Work }
+                if (step != null || t.line.isNotEmpty() || p != null) QuietCard(
+                    padded = true,
+                    color = if (t.status.needsYou) c.tint(color).compositeOver(c.ground) else c.card,
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(Space.s)) {
+                        Text(if (t.status.needsYou) "Needs you" else "Status", style = MaterialTheme.typography.titleSmall, color = color, modifier = Modifier.semantics { heading() })
+                        if (step != null) Text(step, style = MaterialTheme.typography.bodyLarge)
+                        if (t.line.isNotEmpty()) Preview(t.line, "status", lines = 3, color = c.muted)
+                        if (p != null) Row(verticalAlignment = Alignment.CenterVertically) {
+                            Progress(p, color, Modifier.weight(1f))
+                            Text("$p%", style = MaterialTheme.typography.labelMedium, color = c.faint, modifier = Modifier.padding(start = Space.m))
+                        }
+                    }
+                }
+                problem?.let { ErrorMessage(it) }
+                if (d == null && problem == null) LoadingState("Reading the task")
+                d?.cards?.forEach { card -> QuestionCard(card, enabled = busy == null, onSend = onAnswer) }
+                if (d != null && d.summary.isNotEmpty()) Section("What it did", startOpen = true) { MarkdownText(d.summary, style = MaterialTheme.typography.bodyMedium) }
+                if (t.pr.isNotEmpty()) LinkRow("Pull request" + (prNumberOf(t.pr)?.let { " #$it" } ?: ""), t.pr.substringAfter("github.com/")) { context.openUrl(t.pr) }
+                if (d != null && d.plan.isNotEmpty()) Section("Plan", startOpen = false) {
+                    d.plan.forEachIndexed { i, s -> Text("${i + 1}. $s", style = MaterialTheme.typography.bodyMedium) }
+                }
+                if (d != null && d.brief.isNotEmpty()) Section("Brief", startOpen = d.cards.isEmpty() && d.summary.isEmpty()) {
+                    MarkdownText(d.brief, style = MaterialTheme.typography.bodyMedium)
+                }
+                if (d != null && (d.facts.isNotEmpty() || d.branch.isNotEmpty())) Section("Facts", startOpen = false) {
+                    if (d.branch.isNotEmpty()) InfoLine("Branch", d.branch)
+                    if (d.facts.isNotEmpty()) Text(d.facts, style = MaterialTheme.typography.bodySmall, color = c.muted)
+                }
             }
-            problem?.let { ErrorMessage(it) }
-            if (d == null && problem == null) LoadingState("Reading the task")
-            d?.cards?.forEach { card -> QuestionCard(card, enabled = busy == null, onSend = onAnswer) }
-            if (d != null && d.summary.isNotEmpty()) Section("What it did", startOpen = true) { MarkdownText(d.summary, style = MaterialTheme.typography.bodyMedium) }
-            if (t.pr.isNotEmpty()) LinkRow("Pull request" + (prNumberOf(t.pr)?.let { " #$it" } ?: ""), t.pr.substringAfter("github.com/")) { context.openUrl(t.pr) }
-            if (d != null && d.plan.isNotEmpty()) Section("Plan", startOpen = false) {
-                d.plan.forEachIndexed { i, s -> Text("${i + 1}. $s", style = MaterialTheme.typography.bodyMedium) }
-            }
-            if (d != null && d.brief.isNotEmpty()) Section("Brief", startOpen = d.cards.isEmpty() && d.summary.isEmpty()) {
-                MarkdownText(d.brief, style = MaterialTheme.typography.bodyMedium)
-            }
-            if (d != null && (d.facts.isNotEmpty() || d.branch.isNotEmpty())) Section("Facts", startOpen = false) {
-                if (d.branch.isNotEmpty()) InfoLine("Branch", d.branch)
-                if (d.facts.isNotEmpty()) Text(d.facts, style = MaterialTheme.typography.bodySmall, color = c.muted)
-            }
+        }
+        if (menu) BoardPanel("${t.name} · ${t.title}", onDismiss = { menu = false }) {
+            MenuRow("Close, nothing merged…", HerdrIcons.CircleStop, { menu = false; onClose() }, enabled = busy == null, destructive = true)
         }
     }
 }

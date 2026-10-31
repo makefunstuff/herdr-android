@@ -105,7 +105,8 @@ fun SearchScreen(nav: NavController, machineId: String? = null, initial: String 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val hosts by container.hosts.hosts.collectAsStateWithLifecycle()
-    val boards = rememberBoards()
+    // Shepherdr 2 boards too: their tasks open as their agents' chats.
+    val boards = rememberBoards(withShepherdr2 = true)
     val readNow = remember { Channel<Unit>(Channel.CONFLATED) }
     ReadBoards(readNow, everyMs = 30_000)
     var query by rememberSaveable { mutableStateOf(initial) }
@@ -148,7 +149,8 @@ fun SearchScreen(nav: NavController, machineId: String? = null, initial: String 
 
     fun openAgent(h: AgentHit) = panes.open(nav, Routes.agent(h.agent.machineId, h.agent.agent.paneId))
     fun openTask(t: TaskHit) {
-        if (Approvals.waits(t.task)) panes.open(nav, Routes.review(t.machineId, t.task.id)) else panes.openBoard(nav, t.machineId, t.task.id)
+        val v2 = hosts.firstOrNull { it.machine.id == t.machineId }?.onShepherdr2 == true
+        if (Approvals.waits(t.task) && !v2) panes.open(nav, Routes.review(t.machineId, t.task.id)) else panes.openBoard(nav, t.machineId, t.task.id)
     }
     fun startWork(text: String) = panes.open(nav, Routes.start(scoped, text.trim().ifEmpty { null }))
     var opening by remember { mutableStateOf<String?>(null) }
