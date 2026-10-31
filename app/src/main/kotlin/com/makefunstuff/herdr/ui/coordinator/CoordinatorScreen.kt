@@ -222,9 +222,10 @@ private fun BoardCoordinator(nav: NavController, machineId: String, session: Hos
         if (mine != null && SentMatch.count(mine.text, base.filter { it.you }.map { it.text }) <= mine.baseline) base + ChatLine(true, mine.text, pending = true) else base
     }
     // At the newest line, and brought down to every new one: the rules every chat shares. A line is
-    // known by its place, as the list keys it; the one on its way is yours, and sending already went down.
-    val lineKeys = remember(lines) { lines.mapIndexedNotNull { i, l -> lineKey(i, l).takeIf { !l.pending } } }
-    stick.Follow(lineKeys, content = lines)
+    // known by its place and words (its answer may come as new words on the same last line); the one
+    // on its way is yours, and sending already went down. The foot under it is followed too.
+    val lineKeys = remember(lines) { lines.mapIndexedNotNull { i, l -> said(i, l).takeIf { !l.pending } } }
+    stick.Follow(lineKeys, content = lines to hasFoot(v, tooOld, problem, waitNote))
     // A new answer, or the Coordinator done with one, may have added or started tasks.
     LaunchedEffect(lines.count { !it.you }, v?.busy) { if (v != null && !v.busy) readTasksNow.trySend(Unit) }
     val asks = remember(tasks, lines) { tasks?.let { CoordinatorAsk.of(it, lines.map { l -> l.text }) }.orEmpty() }
@@ -371,9 +372,8 @@ private fun BoardCoordinator(nav: NavController, machineId: String, session: Hos
                             if (hasFoot(v, tooOld, problem, waitNote)) item(key = "foot") { foot() }
                             val last = lines.lastIndex
                             itemsIndexed(lines.asReversed(), key = { i, l -> lineKey(last - i, l) }) { i, line ->
-                                val key = lineKey(last - i, line)
                                 Column(verticalArrangement = Arrangement.spacedBy(Space.m)) {
-                                    if (key == stick.unread) NewLine()
+                                    if (said(last - i, line) == stick.unread) NewLine()
                                     Bubble(line, byKey, openTask)
                                 }
                             }
@@ -520,6 +520,9 @@ private fun Bubble(line: ChatLine, tasks: Map<String, BoardTask>, onTask: (Board
 
 /** A line of the conversation in the list, by its place and side. */
 private fun lineKey(index: Int, line: ChatLine) = "$index/${line.you}"
+
+/** A line as a message: its place, side and words. */
+private fun said(index: Int, line: ChatLine) = "$index/${line.you}/${line.text.hashCode()}"
 
 /** Whether [Foot] says anything. */
 private fun hasFoot(v: CoordinatorView?, tooOld: Boolean, problem: String?, waitNote: String?) =

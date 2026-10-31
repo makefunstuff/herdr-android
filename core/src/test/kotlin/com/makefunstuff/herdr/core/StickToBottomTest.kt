@@ -62,6 +62,14 @@ class StickToBottomTest {
         assertFalse(up.seen(listOf("a", "b"), atEnd = false).toEnd)
     }
 
+    @Test fun aMessageFoldedAwayAndShownAgainIsNotNew() {
+        val up = StickToBottom().seen(three, true).next.moved(atEnd = false, three)
+        val folded = up.seen(listOf("a"), atEnd = false).next
+        val again = folded.seen(three, atEnd = false)
+        assertFalse(again.toEnd)
+        assertNull(again.next.unread)
+    }
+
     @Test fun theCountIsWhatCameSinceYouLeftTheEnd() {
         val s = StickToBottom().seen(three, true).next
         assertEquals(0, s.fresh(three + "d"))

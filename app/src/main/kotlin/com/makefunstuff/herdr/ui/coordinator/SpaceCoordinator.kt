@@ -160,11 +160,15 @@ internal fun SpaceCoordinator(nav: NavController, machineId: String, session: Ho
     // The home space's draft is the machine's, where a share puts its words.
     val draftKey = if (space == null || space.home) DraftStore.coordinator(machineId) else DraftStore.coordinator(machineId, space.id)
     var draft by rememberDraft(draftKey)
+    // A list of its own for each space, so another space opens at its newest too.
+    val list = remember(space?.id) { LazyListState() }
+    val stick = rememberStickToBottom(list)
     // A voice message: its file goes into Shepherdr's inbox, then to the coordinator as a file sent in its chat.
     val voice = rememberVoiceMessages(
         draftKey,
         online = state.online && board != null && space != null,
         upload = { file, name ->
+            stick.sent()
             val b = board ?: throw java.io.IOException("Shepherdr isn't reachable")
             val id = space?.id ?: throw java.io.IOException("No space to send it to")
             b.upload(id, name, file.readBytes(), VoiceNotes.MIME)
@@ -214,9 +218,6 @@ internal fun SpaceCoordinator(nav: NavController, machineId: String, session: Ho
     }
     val t = thread
     val items = remember(t, outgoing, voice.notes) { t?.v2?.let { SpaceChat.items(t.space, it, outgoing, voice.notes, container.clock()) }.orEmpty() }
-    // A list of its own for each space, so another space opens at its newest too.
-    val list = remember(space?.id) { LazyListState() }
-    val stick = rememberStickToBottom(list, remember(items) { items.map { it.id } }, content = items to t?.working)
 
     fun send(text: String, reply: V2ReplyQuote?) {
         val b = board ?: return
@@ -257,6 +258,8 @@ internal fun SpaceCoordinator(nav: NavController, machineId: String, session: Ho
     val waits = t?.cards.orEmpty()
     // Under the newest message: only when it says something, else it would be the newest item, and a reader just over it "up the chat".
     val foot = t?.working == true || (chatProblem ?: problem) != null || shared.waitNote != null
+    // At the newest message, and brought down to every new one: the rules every chat shares.
+    stick.Follow(remember(items) { items.map { it.id } }, content = items to foot)
     val typing = typingInShortWindow()
     val c = Herdr.colors
     Scaffold(

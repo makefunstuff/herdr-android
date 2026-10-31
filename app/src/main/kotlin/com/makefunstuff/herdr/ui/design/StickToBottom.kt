@@ -27,6 +27,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -41,14 +42,22 @@ import com.makefunstuff.herdr.ui.theme.Space
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
-/** A chat list kept to its newest message by [StickToBottom]'s rules: [rememberStickToBottom]. */
+/**
+ * A chat list kept to its newest message by [StickToBottom]'s rules: [rememberStickToBottom]. It
+ * follows the end until the reader scrolls away from it, and again once they come back: only a
+ * scroll lets go, not something added under the newest message or a scroll of its own.
+ */
 @Stable
-class ChatStick internal constructor(private val list: LazyListState, private val scope: CoroutineScope, atEnd: () -> Boolean) {
+class ChatStick internal constructor(private val list: LazyListState, private val scope: CoroutineScope, private val slop: Int) {
     internal var rules by mutableStateOf(StickToBottom())
     internal var messages by mutableStateOf(emptyList<String>())
 
-    /** Within about 80 px of the newest. */
-    val atEnd by derivedStateOf(atEnd)
+    /** At the newest message (within about 80 px), following it. */
+    var atEnd by mutableStateOf(true)
+        private set
+
+    /** Its own scroll down runs: where the list is meanwhile isn't the reader's doing. */
+    private var going = 0
 
     /** What came in since the reader left the end, for the ↓. */
     val fresh by derivedStateOf { rules.fresh(messages) }
@@ -56,36 +65,66 @@ class ChatStick internal constructor(private val list: LazyListState, private va
     /** The message the New line goes above. */
     val unread: String? get() = rules.unread
 
-    /** Down to the newest, as the ↓ does. */
+    /** Down to the newest, as the ↓ does. Its own job: a list's update doesn't stop it, a finger does. */
     fun toEnd() {
-        scope.launch { list.animateScrollToItem(0) }
+        atEnd = true
+        going++
+        scope.launch {
+            try {
+                list.animateScrollToItem(0)
+            } finally {
+                going--
+                // Stopped by a finger: where the reader is now says it.
+                if (going == 0) atEnd = here()
+            }
+        }
     }
 
-    /** You wrote: down to the newest, and what was new is behind you. */
+    /** You wrote (from any thread: a voice message is sent from the background): down to the newest, and what was new is behind you. */
     fun sent() {
-        rules = rules.sent()
-        toEnd()
+        scope.launch {
+            rules = rules.sent()
+            toEnd()
+        }
     }
 
-    /** Keeps the list to [messages] (see [rememberStickToBottom]). */
+    private fun here() = !list.canScrollBackward || StickToBottom.atEnd(list.firstVisibleItemIndex, list.firstVisibleItemScrollOffset, slop)
+
+    /**
+     * Keeps the list to [messages] (see [rememberStickToBottom]); [content] also changes whenever
+     * something is added under the newest message (the working line, a notice), so it is followed.
+     */
     @Composable
     fun Follow(messages: List<String>, content: Any? = null) {
         this.messages = messages
-        val current by rememberUpdatedState(messages)
         LaunchedEffect(this, messages, content) {
             val r = rules.seen(messages, atEnd)
             rules = r.next
-            if (r.toEnd) list.animateScrollToItem(0)
+            if (r.toEnd) toEnd()
         }
-        LaunchedEffect(this, atEnd) { rules = rules.moved(atEnd, current) }
+        // The reader's own scrolls: away from the end lets go, back near it follows again. Something added
+        // under the newest message moves the list's index, not the item on top or its offset: no scroll.
+        LaunchedEffect(this) {
+            var was: Pair<Any?, Int>? = null
+            snapshotFlow {
+                val first = list.firstVisibleItemIndex
+                list.layoutInfo.visibleItemsInfo.firstOrNull { it.index == first }?.key to list.firstVisibleItemScrollOffset
+            }.collect { now ->
+                if (going == 0 && now != was) atEnd = here()
+                was = now
+            }
+        }
+        val current by rememberUpdatedState(messages)
+        LaunchedEffect(this) { snapshotFlow { atEnd }.collect { rules = rules.moved(it, current) } }
     }
 }
 
 /**
  * The one way a chat stays at its newest, for the agent chat and both Coordinators, so they can't drift
  * apart: [list] is reversed (item 0 is the newest), [messages] are the keys that count as messages,
- * oldest first, and [content] changes whenever anything at the end may have grown (the working line,
- * an answer being written). A [list] remembered anew (another space) opens at the newest again.
+ * oldest first, and [content] changes whenever anything at the end may have grown or been added (the
+ * working line, an answer being written, a notice). A [list] remembered anew (another space) opens at
+ * the newest again.
  */
 @Composable
 fun rememberStickToBottom(list: LazyListState, messages: List<String>, content: Any? = null): ChatStick =
@@ -96,9 +135,7 @@ fun rememberStickToBottom(list: LazyListState, messages: List<String>, content: 
 fun rememberStickToBottom(list: LazyListState): ChatStick {
     val scope = rememberCoroutineScope()
     val slop = with(LocalDensity.current) { StickToBottom.SLOP_DP.dp.roundToPx() }
-    return remember(list) {
-        ChatStick(list, scope) { !list.canScrollBackward || StickToBottom.atEnd(list.firstVisibleItemIndex, list.firstVisibleItemScrollOffset, slop) }
-    }
+    return remember(list, slop) { ChatStick(list, scope, slop) }
 }
 
 /**

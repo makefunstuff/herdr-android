@@ -358,7 +358,7 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
     val voice = rememberVoiceMessages(
         chatKey,
         online = host.online,
-        upload = { file, name -> file.inputStream().use { session.upload(name, it) } },
+        upload = { file, name -> stick.sent(); file.inputStream().use { session.upload(name, it) } },
         deliver = { remote, _ -> deliverVoice(remote) },
         fetch = { remote -> session.fetchImage(remote) },
     )

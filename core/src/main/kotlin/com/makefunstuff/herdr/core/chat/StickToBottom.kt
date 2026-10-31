@@ -9,7 +9,7 @@ package com.makefunstuff.herdr.core.chat
  * The rules alone, on message keys: the app wires them to its list (`rememberStickToBottom`).
  */
 data class StickToBottom(
-    /** The messages last seen, by key; null before the first. */
+    /** Every message seen so far, by key (one folded away and shown again isn't new); null before the first. */
     val known: Set<String>? = null,
     /** The messages there when the reader left the end; null while at it. */
     val since: Set<String>? = null,
@@ -19,11 +19,11 @@ data class StickToBottom(
     /** What the list does after [messages] (their keys, oldest first) came in: whether it goes to the end. */
     class Seen(val next: StickToBottom, val toEnd: Boolean)
 
-    /** [messages] as they are now, the reader [atEnd] or not. */
+    /** [messages] as they are now, the reader at the end (following it) or not. */
     fun seen(messages: List<String>, atEnd: Boolean): Seen {
-        if (messages.isEmpty()) return Seen(copy(known = emptySet()), toEnd = false)
         val before = known
-        val now = copy(known = messages.toSet())
+        if (messages.isEmpty()) return Seen(copy(known = before ?: emptySet()), toEnd = false)
+        val now = copy(known = before.orEmpty() + messages)
         // Opened, or the first messages loaded: at the newest.
         if (before.isNullOrEmpty()) return Seen(now, toEnd = true)
         val new = messages.firstOrNull { it !in before }
@@ -31,7 +31,8 @@ data class StickToBottom(
             new == null -> Seen(now, toEnd = atEnd)
             atEnd -> Seen(now, toEnd = true)
             // Up the chat: down to the newest, a New line above the first message the reader didn't see come.
-            else -> Seen(now.copy(unread = since?.let { s -> messages.firstOrNull { it !in s } } ?: new), toEnd = true)
+            // (One already marked since the reader left keeps its line.)
+            else -> Seen(now.copy(unread = unread?.takeIf { u -> since != null && u !in since && u in messages } ?: new), toEnd = true)
         }
     }
 
