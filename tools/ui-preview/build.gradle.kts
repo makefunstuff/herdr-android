@@ -66,6 +66,12 @@ val androidOnly = listOf(
     "com/makefunstuff/herdr/brief/AndroidVoice.kt",
     "com/makefunstuff/herdr/guard/AndroidUnlock.kt",
     "com/makefunstuff/herdr/guard/ConfirmActivity.kt",
+    "com/makefunstuff/herdr/voice/AndroidCoordinatorVoice.kt",
+    "com/makefunstuff/herdr/voice/AudioOut.kt",
+    "com/makefunstuff/herdr/voice/MicIn.kt",
+    "com/makefunstuff/herdr/voice/PhoneSpeech.kt",
+    "com/makefunstuff/herdr/voice/VoiceService.kt",
+    "com/makefunstuff/herdr/voice/VoiceMic.kt",
 )
 
 sourceSets.main {
