@@ -60,6 +60,7 @@ class OneListTest {
         assertEquals("ready", WorkStatus.Ready.label)
         assertEquals("ready", BoardStatus.Approval.word)
         assertNull(BoardStatus.Approval.detail)
+        assertNull(BoardStatus.Asks.detail)
         for (s in listOf(BoardStatus.ReviewFailed, BoardStatus.PlanReady, BoardStatus.PickOne, BoardStatus.Asks, BoardStatus.AsksOk, BoardStatus.NeedsLogin, BoardStatus.Stopped, BoardStatus.Error)) {
             assertEquals("needs you", s.word, s.name)
         }

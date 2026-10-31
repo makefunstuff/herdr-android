@@ -38,8 +38,8 @@ enum class BoardStatus(val label: String, val tone: BoardTone, val needsYou: Boo
     /** Its badge: the one word for its state on every board ([WorkStatus.label]); [label] says it exactly. */
     val word: String get() = WorkTasks.status(this).label
 
-    /** What [word] leaves out, for the line under the title ("Review failed"); null when the word says it all. */
-    val detail: String? get() = label.takeIf { it != word && this != Approval && this != Archived }?.replaceFirstChar { it.uppercase() }
+    /** What [word] leaves out, for the line under the title ("Review failed"); null when the word says it all ("asks you" is "needs you"). */
+    val detail: String? get() = label.takeIf { it != word && this != Approval && this != Asks && this != Archived }?.replaceFirstChar { it.uppercase() }
 }
 
 /** One row of `list --json`. */
