@@ -289,7 +289,7 @@ class WaitingNews {
         /** What an item waits for: an agent's question (its state change), or a task's state. */
         fun sig(w: Waiting): String = when (w) {
             is Waiting.Question -> "q${w.agent.agent.stateChangeSeq}"
-            is Waiting.Task -> listOf(w.task.state, w.task.stage, w.task.kind, w.task.reviewRound).joinToString("|")
+            is Waiting.Task -> listOf(w.task.state, w.task.stage, w.task.kind, w.task.reviewRound, w.work?.line).joinToString("|")
             is Waiting.Coordinator -> "asks"
         }
     }

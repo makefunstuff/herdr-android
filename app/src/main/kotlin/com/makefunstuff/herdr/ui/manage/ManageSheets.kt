@@ -668,7 +668,7 @@ private fun AgentDetailRows(agent: AgentInfo?) {
     val context = LocalContext.current
     ManageRow("Name", detail = agent?.name?.takeIf { it.isNotBlank() } ?: "(none)")
     ManageRow("Agent", detail = agent?.agent ?: "(unknown)")
-    ManageRow("State", detail = agent?.let { if (it.statusWord() == it.agentStatusRaw) it.statusWord() else "${it.statusWord()} (${it.statusLabel})" } ?: "(unknown)")
+    ManageRow("State", detail = agent?.let { if (it.statusWord() == it.agentStatusRaw) it.statusWord() else "${it.statusWord()} (${it.agentStatusRaw})" } ?: "(unknown)")
     ManageRow("Pane", detail = agent?.paneId.orEmpty()) { context.copyToClipboard("pane id", agent?.paneId.orEmpty()) }
     ManageRow("Workspace · tab", detail = listOfNotNull(agent?.workspaceId, agent?.tabId).joinToString(" · "))
     ManageRow("Working dir", detail = pathShort(agent?.cwd) ?: "(unknown)")

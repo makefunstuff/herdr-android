@@ -150,10 +150,13 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
         Home.taskOf(home, Home.own(boards)[machineId].orEmpty())
     }
     // What the title bar says it works on: its task, else its own name (unless that is only its CLI's or a
-    // launcher's hash, `shep-1a2b…`), else what it says it does, else its workspace.
+    // launcher's hash, `shep-1a2b…`), else its workspace, else (herdr-core's catch-all "Other terminals") its
+    // terminal's title. Never its current step: the title stays put while it works.
     val workspaceLabel = agent?.let { snapshot?.workspace(it.workspaceId)?.label?.ifBlank { null } }
     val heading = task?.let { "${it.name} · ${it.title}" }
-        ?: name.takeIf { agent == null || !Home.isBareName(agent, it) } ?: activity ?: workspaceLabel ?: name
+        ?: name.takeIf { agent == null || !Home.isBareName(agent, it) }
+        ?: workspaceLabel?.takeIf { !it.startsWith("Other terminals") }
+        ?: agent?.terminalTitle?.ifBlank { null } ?: workspaceLabel ?: name
     // Floating over other apps as a bubble, from here; in that bubble, back to the app.
     val bubbleChat = remember(machineId, paneId) { BubbleChat.Agent(machineId, paneId) }
     val float = rememberFloat(bubbleChat, heading, host.machine.label)
