@@ -13,6 +13,11 @@ import com.makefunstuff.herdr.ui.code.CheckoutTab
 import com.makefunstuff.herdr.ui.code.CodeSpot
 import com.makefunstuff.herdr.ui.code.DiffSource
 import com.makefunstuff.herdr.ui.share.Ask
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
 import preview.Demo.API_AGENT
 import preview.Demo.APP_AGENT
 import preview.Demo.APP_SHELL
@@ -53,6 +58,45 @@ private fun SceneData.appDone() {
 private fun SceneData.shepherdr() {
     host(DEVBOX).shepherdr = DemoV2.board()
 }
+
+/** Earlier words with devbox's 1.x Coordinator, so its chat runs longer than the screen. */
+private fun SceneData.longTalk() {
+    val board = host(DEVBOX).board!!
+    val c = board.remote.getValue("coordinator").jsonObject
+    val earlier = (1..4).flatMap { i ->
+        listOf(obj("you" to true, "text" to "Earlier question $i: how is the nightly build doing?"), obj("you" to false, "text" to "Nightly build $i passed: 412 tests, no flaky ones this time."))
+    }
+    board.remote = JsonObject(board.remote + ("coordinator" to JsonObject(c + ("talk" to JsonArray(earlier + c.getValue("talk").jsonArray)))))
+}
+
+/** devbox's 1.x Coordinator answers again. */
+private fun FakeMachine.coordinatorSays(text: String) {
+    val board = board!!
+    val c = board.remote.getValue("coordinator").jsonObject
+    val talk = JsonArray(c.getValue("talk").jsonArray + obj("you" to false, "text" to text))
+    board.remote = JsonObject(board.remote + ("coordinator" to JsonObject(c + mapOf("talk" to talk, "said" to JsonPrimitive(text)))))
+}
+
+/** A long talk in website's coordinator chat on Shepherdr 2, longer than the screen. */
+private fun SceneData.longWebsiteChat() {
+    val v2 = host(DEVBOX).shepherdr!!
+    val talk = (1..6).flatMap { i ->
+        listOf(obj("id" to "w$i-q", "who" to "you", "at" to i, "text" to "Question $i: is the install page up to date?"), obj("id" to "w$i-a", "who" to "agent", "at" to i, "text" to "Check $i done: the install page matches 0.9, and its links all answer."))
+    }
+    v2.chats = v2.chats + (WEBSITE_CHAT to obj("key" to WEBSITE_CHAT, "cli" to "Claude Code", "working" to false, "messages" to JsonArray(talk)))
+}
+
+private const val WEBSITE_CHAT = "p:devbox:website"
+
+/** A new message in a space's coordinator chat on Shepherdr 2. */
+private fun FakeMachine.v2Says(chat: String, id: String, text: String) {
+    val v2 = shepherdr!!
+    val c = v2.chats.getValue(chat)
+    v2.chats = v2.chats + (chat to JsonObject(c + ("messages" to JsonArray(c.getValue("messages").jsonArray + obj("id" to id, "who" to "agent", "at" to 7, "text" to text)))))
+}
+
+/** Lets a chat read the machine again (the Coordinators read every few seconds). */
+private fun androidx.compose.ui.test.ComposeUiTest.waitForRead(seconds: Int = 9) = repeat(seconds * 2) { Thread.sleep(500); settle(1) }
 
 /** The shell's test run selected, and what herdr reads for it. */
 private fun SceneData.selectTests() {
@@ -405,6 +449,24 @@ fun scenes(): List<Scene> = listOf(
     Scene("coordinator-v2-voice-sent", route = Routes.coordinator(DEVBOX), setup = { shepherdr() }, actions = {
         tapLabel("Record a voice message")
         tapLabel("Send voice message")
+    }),
+    // Every chat stays at its newest: scrolled up, the ↓ (with a count once more comes in) takes you down; a new
+    // message brings you down from further up, a New line above it; another space opens at its newest.
+    Scene("coordinator-up", route = Routes.coordinator(DEVBOX), setup = { longTalk() }, actions = { scrollTo(6) }),
+    Scene("coordinator-new-message", route = Routes.coordinator(DEVBOX), setup = { longTalk() }, actions = { ctx ->
+        scrollTo(6)
+        ctx.data.host(DEVBOX).coordinatorSays("AND-6 is ready: the README has the four screenshots, dark and light.")
+        waitForRead()
+    }),
+    Scene("coordinator-v2-up", route = Routes.coordinator(DEVBOX, DemoV2.APP), setup = { shepherdr() }, actions = { scrollTo(4) }),
+    Scene("coordinator-v2-new-message", route = Routes.coordinator(DEVBOX, DemoV2.APP), setup = { shepherdr() }, actions = { ctx ->
+        scrollTo(4)
+        ctx.data.host(DEVBOX).v2Says(DemoV2.APP, "m7", "AND-15 is on its way: the recognizer is wired, the composer's mic comes next.")
+        waitForRead()
+    }),
+    Scene("coordinator-v2-switch", route = Routes.coordinator(DEVBOX, DemoV2.APP), setup = { shepherdr(); longWebsiteChat() }, actions = {
+        scrollTo(4)
+        tapText("website")
     }),
     // A task in an answer opens on the board.
     Scene("coordinator-task", route = Routes.coordinator(DEVBOX), actions = { tapText("Speed up /jobs on large tables") }),

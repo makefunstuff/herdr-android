@@ -96,6 +96,9 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import com.makefunstuff.herdr.ui.design.HerdrIcons
 import com.makefunstuff.herdr.ui.design.HerdrTopBar
 import com.makefunstuff.herdr.ui.design.LoadingState
+import com.makefunstuff.herdr.ui.design.NewLine
+import com.makefunstuff.herdr.ui.design.NewestButton
+import com.makefunstuff.herdr.ui.design.rememberStickToBottom
 import com.makefunstuff.herdr.ui.design.QuietButton
 import com.makefunstuff.herdr.ui.design.StateBlock
 import com.makefunstuff.herdr.ui.design.Toasts
@@ -164,6 +167,7 @@ private fun BoardCoordinator(nav: NavController, machineId: String, session: Hos
     val readNow = remember { Channel<Unit>(Channel.CONFLATED) }
     val readTasksNow = remember { Channel<Unit>(Channel.CONFLATED) }
     val list = rememberLazyListState()
+    val stick = rememberStickToBottom(list)
     val owner = LocalLifecycleOwner.current
 
     // The board's tasks, while the screen is in front: every quarter minute, and as soon as the Coordinator answers.
@@ -217,11 +221,10 @@ private fun BoardCoordinator(nav: NavController, machineId: String, session: Hos
         val base = v?.let { CoordinatorChat.lines(it, talk, mine?.takeIf { m -> m.text.trim() == it.sent.trim() }?.baseline) }.orEmpty()
         if (mine != null && SentMatch.count(mine.text, base.filter { it.you }.map { it.text }) <= mine.baseline) base + ChatLine(true, mine.text, pending = true) else base
     }
-    // The list is reversed, so it stays at its end by itself (new lines, the keyboard, a growing
-    // composer); this brings a reader who is just above the end back down to a new answer.
-    LaunchedEffect(lines.size, lines.lastOrNull()?.text?.length) {
-        if (lines.isNotEmpty() && list.firstVisibleItemIndex <= 1) list.animateScrollToItem(0)
-    }
+    // At the newest line, and brought down to every new one: the rules every chat shares. A line is
+    // known by its place, as the list keys it; the one on its way is yours, and sending already went down.
+    val lineKeys = remember(lines) { lines.mapIndexedNotNull { i, l -> lineKey(i, l).takeIf { !l.pending } } }
+    stick.Follow(lineKeys, content = lines)
     // A new answer, or the Coordinator done with one, may have added or started tasks.
     LaunchedEffect(lines.count { !it.you }, v?.busy) { if (v != null && !v.busy) readTasksNow.trySend(Unit) }
     val asks = remember(tasks, lines) { tasks?.let { CoordinatorAsk.of(it, lines.map { l -> l.text }) }.orEmpty() }
@@ -241,7 +244,7 @@ private fun BoardCoordinator(nav: NavController, machineId: String, session: Hos
         val before = SentMatch.count(text, talk.filter { it.you }.map { it.text })
         val tracked = view != null
         if (tracked) { outbox = SentMatch.Pending(text, before); outboxSeen = false }
-        scope.launch { list.animateScrollToItem(0) }
+        stick.sent()
         scope.launch {
             runCatching { session.awaitBoard().send(text, delegate) }
                 .onSuccess { msg ->
@@ -364,12 +367,20 @@ private fun BoardCoordinator(nav: NavController, machineId: String, session: Hos
                                 }
                             }
                         } else {
-                            item(key = "foot") { foot() }
+                            // Only when it says something: an empty one would be the newest item, and a reader just over it "up the chat".
+                            if (hasFoot(v, tooOld, problem, waitNote)) item(key = "foot") { foot() }
                             val last = lines.lastIndex
-                            itemsIndexed(lines.asReversed(), key = { i, l -> "${last - i}/${l.you}" }) { _, line -> Bubble(line, byKey, openTask) }
+                            itemsIndexed(lines.asReversed(), key = { i, l -> lineKey(last - i, l) }) { i, line ->
+                                val key = lineKey(last - i, line)
+                                Column(verticalArrangement = Arrangement.spacedBy(Space.m)) {
+                                    if (key == stick.unread) NewLine()
+                                    Bubble(line, byKey, openTask)
+                                }
+                            }
                         }
                     } }
                 }
+                if (lines.isNotEmpty()) NewestButton(stick, bottom)
             }
         }
     }
@@ -506,6 +517,14 @@ private fun Bubble(line: ChatLine, tasks: Map<String, BoardTask>, onTask: (Board
         }
     }
 }
+
+/** A line of the conversation in the list, by its place and side. */
+private fun lineKey(index: Int, line: ChatLine) = "$index/${line.you}"
+
+/** Whether [Foot] says anything. */
+private fun hasFoot(v: CoordinatorView?, tooOld: Boolean, problem: String?, waitNote: String?) =
+    tooOld || problem != null || waitNote != null ||
+        (v != null && (v.state == "working" || v.state == "starting" || v.queue > 0 || v.state == "blocked" || !v.readable || v.error.isNotEmpty()))
 
 /** Under the conversation: that it's working, that it waits for you on its screen, or what went wrong. */
 @Composable

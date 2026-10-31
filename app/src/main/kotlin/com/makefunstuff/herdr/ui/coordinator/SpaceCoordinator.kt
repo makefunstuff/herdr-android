@@ -21,7 +21,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -87,6 +87,9 @@ import com.makefunstuff.herdr.ui.design.HerdrField
 import com.makefunstuff.herdr.ui.design.HerdrIcons
 import com.makefunstuff.herdr.ui.design.HerdrTopBar
 import com.makefunstuff.herdr.ui.design.LoadingState
+import com.makefunstuff.herdr.ui.design.NewLine
+import com.makefunstuff.herdr.ui.design.NewestButton
+import com.makefunstuff.herdr.ui.design.rememberStickToBottom
 import com.makefunstuff.herdr.ui.design.PrimaryButton
 import com.makefunstuff.herdr.ui.design.QuietButton
 import com.makefunstuff.herdr.ui.design.QuietCard
@@ -211,15 +214,16 @@ internal fun SpaceCoordinator(nav: NavController, machineId: String, session: Ho
     }
     val t = thread
     val items = remember(t, outgoing, voice.notes) { t?.v2?.let { SpaceChat.items(t.space, it, outgoing, voice.notes, container.clock()) }.orEmpty() }
-    val list = rememberLazyListState()
-    LaunchedEffect(items.size) { if (items.isNotEmpty() && list.firstVisibleItemIndex <= 1) list.animateScrollToItem(0) }
+    // A list of its own for each space, so another space opens at its newest too.
+    val list = remember(space?.id) { LazyListState() }
+    val stick = rememberStickToBottom(list, remember(items) { items.map { it.id } }, content = items to t?.working)
 
     fun send(text: String, reply: V2ReplyQuote?) {
         val b = board ?: return
         val id = space?.id ?: return
         val line = OutgoingLine(UUID.randomUUID().toString(), text, reply)
         outgoing = outgoing + line
-        scope.launch { list.animateScrollToItem(0) }
+        stick.sent()
         scope.launch {
             runCatching { b.say(id, text, cid = line.cid, reply = reply?.id) }.onFailure {
                 outgoing = outgoing - line
@@ -251,6 +255,8 @@ internal fun SpaceCoordinator(nav: NavController, machineId: String, session: Ho
     }
 
     val waits = t?.cards.orEmpty()
+    // Under the newest message: only when it says something, else it would be the newest item, and a reader just over it "up the chat".
+    val foot = t?.working == true || (chatProblem ?: problem) != null || shared.waitNote != null
     val typing = typingInShortWindow()
     val c = Herdr.colors
     Scaffold(
@@ -274,7 +280,7 @@ internal fun SpaceCoordinator(nav: NavController, machineId: String, session: Ho
                         if (waits.isNotEmpty() && draft.isEmpty()) {
                             WaitsForYou(waits, Modifier.padding(horizontal = Space.screen).padding(bottom = Space.xs)) { card ->
                                 val at = items.indexOfFirst { it.holds(card) }
-                                if (at >= 0) scope.launch { list.animateScrollToItem(items.size - at) }
+                                if (at >= 0) scope.launch { list.animateScrollToItem(items.size - at - if (foot) 0 else 1) }
                             }
                         }
                         replyTo?.let { r -> ReplyingTo(r, Modifier.padding(horizontal = Space.screen).padding(bottom = Space.xs)) { replyTo = null } }
@@ -317,7 +323,7 @@ internal fun SpaceCoordinator(nav: NavController, machineId: String, session: Ho
                             contentPadding = PaddingValues(start = Space.screen, end = Space.screen, top = Space.m, bottom = bottom + Space.xs),
                             verticalArrangement = Arrangement.spacedBy(Space.m, Alignment.Bottom),
                         ) {
-                            item(key = "foot") {
+                            if (foot) item(key = "foot") {
                                 Column(verticalArrangement = Arrangement.spacedBy(Space.s)) {
                                     if (t.working) Working()
                                     (chatProblem ?: problem)?.let { Notice(it, c.red) }
@@ -332,16 +338,20 @@ internal fun SpaceCoordinator(nav: NavController, machineId: String, session: Ho
                                 }
                             }
                             items(items.asReversed(), key = { it.id }) { item ->
-                                ChatItem(
-                                    item, answering,
-                                    onAnswer = ::answer,
-                                    onReply = { q -> replyTo = q },
-                                    onRetry = { w -> outgoing = outgoing.filterNot { "cid:${it.cid}" == w.id }; send(w.text, w.reply) },
-                                )
+                                Column(verticalArrangement = Arrangement.spacedBy(Space.m)) {
+                                    if (item.id == stick.unread) NewLine()
+                                    ChatItem(
+                                        item, answering,
+                                        onAnswer = ::answer,
+                                        onReply = { q -> replyTo = q },
+                                        onRetry = { w -> outgoing = outgoing.filterNot { "cid:${it.cid}" == w.id }; send(w.text, w.reply) },
+                                    )
+                                }
                             }
                         }
                     }
                 }
+                if (t != null) NewestButton(stick, bottom)
             }
         }
     }

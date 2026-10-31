@@ -13,7 +13,6 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -62,7 +61,6 @@ import com.makefunstuff.herdr.core.chat.ChatTurns
 import com.makefunstuff.herdr.core.chat.EditCalls
 import com.makefunstuff.herdr.core.chat.ToolLine
 import com.makefunstuff.herdr.ui.code.AddedRemoved
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import com.makefunstuff.herdr.core.host.Images
@@ -615,24 +613,6 @@ fun AwayCard(away: Away, onHide: () -> Unit, modifier: Modifier = Modifier) {
                 }
             }
         }
-    }
-}
-
-/** "↓ 2 new messages": over the composer while the reader is scrolled up and more came in. */
-@Composable
-fun NewMessagesPill(count: Int, onClick: () -> Unit) {
-    val c = Herdr.colors
-    val shape = RoundedCornerShape(50)
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.heightIn(min = 48.dp).padding(vertical = 6.dp)
-            .shadow(8.dp, shape).clip(shape).background(c.card).border(1.dp, c.line, shape)
-            .clickable(role = androidx.compose.ui.semantics.Role.Button, onClickLabel = "Go to the newest", onClick = onClick)
-            .padding(horizontal = Space.l, vertical = Space.s),
-    ) {
-        Icon(HerdrIcons.ArrowDown, null, Modifier.size(16.dp), tint = c.text)
-        Spacer(Modifier.width(Space.s))
-        Text(if (count == 1) "1 new message" else "$count new messages", style = MaterialTheme.typography.labelLarge, color = c.text)
     }
 }
 

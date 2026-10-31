@@ -37,7 +37,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -76,7 +75,6 @@ import com.makefunstuff.herdr.core.chat.ModelPill
 import com.makefunstuff.herdr.core.usage.UsageRules
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateMapOf
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.lifecycle.compose.LifecycleStartEffect
 import kotlinx.coroutines.delay
 import java.time.Instant
@@ -103,7 +101,9 @@ import com.makefunstuff.herdr.data.DraftStore
 import com.makefunstuff.herdr.ui.design.HerdrIcons
 import com.makefunstuff.herdr.ui.design.HerdrTopBar
 import com.makefunstuff.herdr.ui.design.LoadingState
-import com.makefunstuff.herdr.ui.design.RoundAction
+import com.makefunstuff.herdr.ui.design.NewLine
+import com.makefunstuff.herdr.ui.design.NewestButton
+import com.makefunstuff.herdr.ui.design.rememberStickToBottom
 import com.makefunstuff.herdr.ui.design.QuietButton
 import com.makefunstuff.herdr.ui.common.StatusDot
 import androidx.compose.foundation.background
@@ -170,6 +170,7 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
     var menu by remember { mutableStateOf(false) }
     var quick by remember { mutableStateOf<QuickPlace?>(null) }
     val listState = rememberLazyListState()
+    val stick = rememberStickToBottom(listState)
     // Pictures for the agent wait in the composer (and are copied to its machine) until the message goes.
     val tray = rememberImageTray(DraftStore.agent(machineId, paneId), machineId, session, host.online)
     // A file for the agent: copied to its machine, then named at the start of the draft.
@@ -307,7 +308,7 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
         // Counted before the send, so a transcript that is quicker than this call still confirms it.
         if (!blocked || tell != null) chat.addPending(text)
         // What you just said is the newest line: bring the chat to its end, also if you had scrolled up.
-        scope.launch { listState.animateScrollToItem(0) }
+        stick.sent()
         scope.launch {
             runCatching {
                 val api = session.awaitAgent(paneId)
@@ -345,7 +346,7 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
             return
         }
         chat.addPending(text)
-        scope.launch { listState.animateScrollToItem(0) }
+        stick.sent()
         try {
             AgentInput.send(session.awaitAgent(paneId), paneId, text, named = agent != null, blocked = false)
         } catch (t: Throwable) {
@@ -368,7 +369,7 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
         heldSending = true
         awayHidden = true
         chat.addPending(m.text)
-        scope.launch { listState.animateScrollToItem(0) }
+        stick.sent()
         scope.launch {
             runCatching { AgentInput.send(session.awaitAgent(paneId), paneId, m.text, named = agent != null, blocked = false) }
                 .onSuccess { container.composer.drop(chatKey, m.id) }
@@ -426,16 +427,8 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
     // The newest turn's header says it works; with the strip hidden for the keyboard and no such header, a line under the chat does.
     val thinking = rows.any { it is ChatRow.Thinking || (it is ChatRow.Thought && it.live) }
     val workingLine = status == AgentStatus.Working && typing && !liveHead && !thinking
-    val atBottom by remember(workingLine) { derivedStateOf { listState.firstVisibleItemIndex <= if (workingLine) 1 else 0 } }
-    // Stay pinned to the newest message unless the reader scrolled up.
-    LaunchedEffect(rows.lastOrNull()?.key, rows.size, status) {
-        if (atBottom) listState.animateScrollToItem(0)
-    }
-    // Scrolled up: what was there then, so what came in since is counted as new.
-    val currentRows by rememberUpdatedState(rows)
-    var shown by remember { mutableStateOf<Set<String>?>(null) }
-    LaunchedEffect(atBottom) { shown = if (atBottom) null else currentRows.map { it.key }.toSet() }
-    val fresh = shown?.let { keys -> rows.count { it.isMessage && it.key !in keys } } ?: 0
+    // At the newest message, and brought down to every new one: the rules every chat shares.
+    stick.Follow(remember(rows) { rows.filter { it.isMessage }.map { it.key } }, content = rows to workingLine)
     // What happened since the chat was last on screen, until hidden or until you write.
     val away = remember(state.turns, since, back, ahead, live) {
         AwaySummary.of(state.turns, since + ahead, back + ahead, live != null)
@@ -592,20 +585,14 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
                     ) {
                         if (workingLine) item(key = "working") { WorkingLine(activity) }
                         items(rows.asReversed(), key = { it.key }) { row ->
-                            ChatRowView(row, onToggle = { head -> opened[head.turn] = !head.open }, onThought = { t -> opened[t.key] = !t.open })
+                            Column(verticalArrangement = Arrangement.spacedBy(Space.m)) {
+                                if (row.key == stick.unread) NewLine()
+                                ChatRowView(row, onToggle = { head -> opened[head.turn] = !head.open }, onThought = { t -> opened[t.key] = !t.open })
+                            }
                         }
                     } }
                 }
-                if (!atBottom && fresh > 0) {
-                    // What came in while you read further up, counted.
-                    Box(Modifier.align(Alignment.BottomCenter).padding(bottom = bottom + Space.xs)) {
-                        NewMessagesPill(fresh) { scope.launch { listState.animateScrollToItem(0) } }
-                    }
-                } else if (!atBottom) {
-                    Box(Modifier.align(Alignment.BottomEnd).padding(end = Space.m, bottom = bottom + Space.xs)) {
-                        RoundAction(HerdrIcons.ArrowDown, "Newest", primary = false) { scope.launch { listState.animateScrollToItem(0) } }
-                    }
-                }
+                NewestButton(stick, bottom)
             }
         }
     }
