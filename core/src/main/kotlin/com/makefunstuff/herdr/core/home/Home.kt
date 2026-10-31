@@ -5,6 +5,8 @@ import com.makefunstuff.herdr.core.api.AgentStatus
 import com.makefunstuff.herdr.core.board.BoardAction
 import com.makefunstuff.herdr.core.board.BoardStatus
 import com.makefunstuff.herdr.core.board.BoardTask
+import com.makefunstuff.herdr.core.board.WorkOverview
+import com.makefunstuff.herdr.core.board.WorkTask
 import com.makefunstuff.herdr.core.host.HostState
 import com.makefunstuff.herdr.core.push.LiveItems
 
@@ -32,8 +34,8 @@ data class HomeAgent(
     val finish: Long get() = agent.completionSeq ?: agent.stateChangeSeq
 }
 
-/** A board's tasks as the app last read them on one machine. */
-data class HomeBoard(val machineId: String, val machineLabel: String, val tasks: List<BoardTask>)
+/** A board's tasks as the app last read them on one machine; on Shepherdr 2, [work] is the board as it sent them. */
+data class HomeBoard(val machineId: String, val machineLabel: String, val tasks: List<BoardTask>, val work: WorkOverview? = null)
 
 /** Something on the Needs you list. [key] stays the same while it waits, whatever it waits for. */
 sealed interface Waiting {
@@ -48,8 +50,17 @@ sealed interface Waiting {
         override val machineId: String get() = agent.machineId
     }
 
-    /** A board task waiting for the human, with its agent when one is running on that machine. */
-    data class Task(override val machineId: String, val machineLabel: String, override val task: BoardTask, val agent: HomeAgent?) : Waiting {
+    /**
+     * A board task waiting for the human, with its agent when one is running on that machine. A Shepherdr 2
+     * task is [work] too ([task] is its v1 row): it is answered and merged through Shepherdr.
+     */
+    data class Task(
+        override val machineId: String,
+        val machineLabel: String,
+        override val task: BoardTask,
+        val agent: HomeAgent?,
+        val work: WorkTask? = null,
+    ) : Waiting {
         override val key: String get() = "task/$machineId/${task.id}"
     }
 }
@@ -130,7 +141,7 @@ data class Home(
                     .sortedBy { ORDER.indexOf(it.status).let { i -> if (i < 0) ORDER.size else i } }
                     .map { t ->
                         val agent = agents.firstOrNull { it.machineId == b.machineId && taskOf[it.key]?.id == t.id }
-                        Waiting.Task(b.machineId, b.machineLabel, t, agent)
+                        Waiting.Task(b.machineId, b.machineLabel, t, agent, b.work?.tasks?.firstOrNull { it.id == t.id })
                     }
             }
             // An agent whose task waits is that task's card; it isn't listed again below.

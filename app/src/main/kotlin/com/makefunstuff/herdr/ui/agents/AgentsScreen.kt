@@ -54,6 +54,10 @@ import com.makefunstuff.herdr.LocalPanes
 import com.makefunstuff.herdr.Routes
 import com.makefunstuff.herdr.core.board.Approvals
 import com.makefunstuff.herdr.core.board.BoardAction
+import com.makefunstuff.herdr.core.board.CardAnswer
+import com.makefunstuff.herdr.core.board.WorkCard
+import com.makefunstuff.herdr.core.board.WorkStatus
+import com.makefunstuff.herdr.core.board.WorkTask
 import com.makefunstuff.herdr.core.chat.AgentInput
 import com.makefunstuff.herdr.core.chat.BlockedPrompt
 import com.makefunstuff.herdr.core.home.AgentRow
@@ -99,7 +103,7 @@ private const val FOLDED = 4
 /** A card as it stood when it was answered here: it stays hidden until this changes. */
 private fun sig(w: Waiting): String = when (w) {
     is Waiting.Question -> "${w.agent.agent.stateChangeSeq}"
-    is Waiting.Task -> w.task.let { t -> listOf(t.state, t.stage, t.kind, t.msg, t.reviewRound, t.reviewPassed, t.approvalBlocked).joinToString("|") }
+    is Waiting.Task -> w.task.let { t -> listOf(t.state, t.stage, t.kind, t.msg, t.reviewRound, t.reviewPassed, t.approvalBlocked, w.work?.line).joinToString("|") }
 }
 
 /** What is being said back from a card: an answer to an agent's question, or words for a task's agent. */
@@ -224,7 +228,8 @@ fun AgentsScreen(
                         session.refresh()
                         "Sent: $text"
                     }
-                    is Reply.ToTask -> session.awaitBoard().act(BoardAction.Tell, r.item.task.id, text).ifEmpty { "Sent: $text" }
+                    is Reply.ToTask -> r.item.work?.let { session.awaitWorkBoard().tell(it, text).ifEmpty { "Sent: $text" } }
+                        ?: session.awaitBoard().act(BoardAction.Tell, r.item.task.id, text).ifEmpty { "Sent: $text" }
                 }
             }
                 .onSuccess { handled[w.key] = sig(w); context.toast(it) }
@@ -262,9 +267,37 @@ fun AgentsScreen(
         carryOut(w, action, label)
     }
 
-    /** Finished work opens on its review card (what changed, the review, the checks); any other task on its board. */
+    /**
+     * A Shepherdr 2 task's [what] through Shepherdr: its merge (the fingerprint first, when that is on) or an
+     * answer to its card. The card hides once it is done, as a v1 task's does.
+     */
+    fun work(w: Waiting.Task, what: String, run: suspend (com.makefunstuff.herdr.core.board.WorkBoard) -> String) {
+        if (w.key in busy) return
+        busy[w.key] = "$what · ${w.task.name}"
+        scope.launch {
+            runCatching { run((container.hosts.session(w.machineId) ?: error("This machine isn't in the app any more")).awaitWorkBoard()) }
+                .onSuccess {
+                    handled[w.key] = sig(w)
+                    container.inbox.dismiss(Alerts.taskTag(w.machineId, w.task.id))
+                    context.toast(it.ifEmpty { "Done" })
+                }
+                .onFailure { refusal = Refusal(it.message ?: "Shepherdr refused") }
+            busy.remove(w.key)
+            readNow.trySend(Unit)
+        }
+    }
+
+    fun merge(w: Waiting.Task, t: WorkTask) = guard.run(Guarded.Merge, "Merge ${t.name}?", t.title) {
+        view.confirmTap()
+        work(w, "Merging") { it.approve(t) }
+    }
+
+    fun choose(w: Waiting.Task, card: WorkCard, i: Int) =
+        work(w, "Answering: ${card.question.choices.getOrNull(i)?.label.orEmpty()}") { it.answer(CardAnswer(card, i)).ifEmpty { "Answered" } }
+
+    /** Finished work opens on its review card (what changed, the review, the checks); any other task on its board, a Shepherdr 2 one as its chat. */
     fun openTask(w: Waiting.Task) {
-        if (Approvals.waits(w.task)) panes.open(nav, Routes.review(w.machineId, w.task.id)) else panes.openBoard(nav, w.machineId, w.task.id)
+        if (w.work == null && Approvals.waits(w.task)) panes.open(nav, Routes.review(w.machineId, w.task.id)) else panes.openBoard(nav, w.machineId, w.task.id)
     }
 
     fun openAgent(a: HomeAgent) = panes.open(nav, Routes.agent(a.machineId, a.agent.paneId))
@@ -383,7 +416,25 @@ fun AgentsScreen(
                                 sheet.dropLast(1) + triageActions.muteAction(AgentRow(w.agent, w.task, muted = w.agent.key in triage.muted)) + sheet.last()
                             },
                         )
-                        is Waiting.Task -> {
+                        is Waiting.Task -> if (w.work != null) {
+                            val t = w.work!!
+                            // The question it waits on, read from Shepherdr again whenever the task changes.
+                            val card by produceState<WorkCard?>(null, w.key, t.line, t.status) {
+                                value = if (t.status != WorkStatus.Need) null else runCatching {
+                                    container.hosts.session(w.machineId)?.awaitWorkBoard()?.details(t)?.cards?.firstOrNull()
+                                }.getOrNull()
+                            }
+                            WorkWaitingCard(
+                                w, t, space = boards.firstOrNull { it.machineId == w.machineId }?.work?.spaces?.firstOrNull { it.id == t.space }?.name.orEmpty(),
+                                showMachine = showMachine,
+                                // It opens on the board's pane, not in the middle: never shown chosen here.
+                                selected = false,
+                                busy = busy[w.key], card = card,
+                                onOpen = { openTask(w) },
+                                onMerge = { merge(w, t) },
+                                onChoose = { c, i -> choose(w, c, i) },
+                            )
+                        } else {
                             val a = Home.answer(w.task)
                             TaskCard(
                                 w, showMachine,

@@ -92,7 +92,7 @@ internal fun BoardStrip(glance: BoardGlance, onOpen: () -> Unit) {
 internal fun TaskMention(t: BoardTask, note: String, onOpen: () -> Unit) {
     val c = Herdr.colors
     val color = t.status.color()
-    val state = listOfNotNull(t.status.label, t.progress?.takeIf { t.status == BoardStatus.Working }?.let { "$it%" }).joinToString(" · ")
+    val state = listOfNotNull(t.status.word, t.status.detail, t.progress?.takeIf { t.status == BoardStatus.Working }?.let { "$it%" }).joinToString(" · ")
     val said = remember(note, t.title) { TaskMentions.beyondTitle(note, t.title).ifBlank { null } }
     QuietCard(
         Modifier.padding(vertical = Space.xs).semantics(mergeDescendants = true) {

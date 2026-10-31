@@ -153,7 +153,7 @@ private fun Pill(p: PillItem, onOpen: () -> Unit) {
     }
 }
 
-/** "api-server · needs you: run db:migrate?", "AND-9 · ready to approve: Board view". */
+/** "api-server · needs you: run db:migrate?", "AND-9 · ready: Board view". */
 @Composable
 private fun words(w: Waiting): String = when (w) {
     is Waiting.Question -> {
@@ -161,7 +161,7 @@ private fun words(w: Waiting): String = when (w) {
         val who = w.task?.name ?: w.agent.workspace.ifEmpty { w.agent.agent.displayName }
         "$who · needs you: " + (asked?.question ?: w.agent.agent.subtitle ?: "waiting for your answer")
     }
-    is Waiting.Task -> "${w.task.name} · ${w.task.status.label}: ${w.task.title}"
+    is Waiting.Task -> "${w.task.name} · ${w.work?.status?.label ?: w.task.status.word}: ${w.task.title}"
 }
 
 /** Opens what [p] is about: the agent's chat, or the task (finished work at its review card). */
@@ -169,7 +169,7 @@ private fun open(nav: NavHostController, panes: Panes, p: PillItem) {
     when (p) {
         is PillItem.Needs -> when (val w = p.waiting) {
             is Waiting.Question -> panes.open(nav, Routes.agent(w.machineId, w.agent.agent.paneId))
-            is Waiting.Task -> if (Approvals.waits(w.task)) panes.open(nav, Routes.review(w.machineId, w.task.id)) else panes.openBoard(nav, w.machineId, w.task.id)
+            is Waiting.Task -> if (w.work == null && Approvals.waits(w.task)) panes.open(nav, Routes.review(w.machineId, w.task.id)) else panes.openBoard(nav, w.machineId, w.task.id)
         }
         is PillItem.Fired -> {
             val a = p.alert

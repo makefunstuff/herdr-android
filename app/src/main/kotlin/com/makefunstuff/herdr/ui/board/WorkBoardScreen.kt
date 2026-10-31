@@ -246,9 +246,10 @@ internal fun WorkBoardScreen(
                         LazyColumn(
                             Modifier.fillMaxSize(),
                             contentPadding = PaddingValues(start = Space.screen, end = Space.screen, top = Space.xs, bottom = 96.dp),
-                            verticalArrangement = Arrangement.spacedBy(Space.s),
+                            // Compact rows, close together: about twice as many as cards fit a screen.
+                            verticalArrangement = Arrangement.spacedBy(Space.xxs),
                         ) {
-                            problem?.let { p -> item(key = "problem") { ErrorMessage(p, onRetry = { readNow.trySend(Unit) }) } }
+                            problem?.let { p -> item(key = "problem") { ErrorMessage(p, Modifier.padding(vertical = Space.xs), onRetry = { readNow.trySend(Unit) }) } }
                             if (needsYou.isNotEmpty() || asking.isNotEmpty()) {
                                 item(key = "h-needs") { SectionHeading("Needs you · ${needsYou.size + asking.size}", top = Space.xs) }
                                 items(needsYou, key = { "n-${it.id}" }) { t ->
@@ -340,79 +341,6 @@ internal fun WorkBoardScreen(
             BoardPanel("Shepherdr said no", onDismiss = { refusal = null }, accent = Herdr.colors.red, buttons = { PrimaryButton("OK") { refusal = null } }) {
                 MarkdownText(r)
             }
-        }
-    }
-}
-
-/**
- * A Shepherdr 2 task as a card, the board's way: a stripe in its status colour (wider when it needs you),
- * its id with its status, the title, what it does now, progress and its pull request. [space] names its
- * space where the list mixes them.
- */
-@Composable
-internal fun WorkTaskRow(t: WorkTask, onOpen: () -> Unit, space: String = "") {
-    val onAgent = if (t.chat.isNotEmpty()) onOpen else null
-    val c = Herdr.colors
-    val color = t.status.color()
-    val quiet = t.status == WorkStatus.Done
-    QuietCard(
-        Modifier.semantics(mergeDescendants = true) {
-            contentDescription = listOf(t.name, t.status.label, t.title, space).filter { it.isNotEmpty() }.joinToString(", ")
-            if (onAgent != null) customActions = listOf(CustomAccessibilityAction("Open agent") { onAgent(); true })
-        },
-        onClick = onOpen,
-        onClickLabel = if (onAgent != null) "Open its chat" else "Open details",
-    ) {
-        Row(Modifier.height(IntrinsicSize.Min)) {
-            Box(
-                Modifier.padding(start = Space.s, top = Space.m, bottom = Space.m).width(if (t.status.needsYou) 4.dp else 3.dp).fillMaxHeight()
-                    .clip(HerdrShapes.Pill).background(color),
-            )
-            Column(Modifier.padding(start = Space.m, end = Space.l, top = Space.m, bottom = Space.m)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(t.name, style = CodeStyle.copy(fontSize = 12.sp), color = c.strong)
-                    Spacer(Modifier.width(Space.s))
-                    StatusBadge(t.status.label, color)
-                    if (t.pinned) { Spacer(Modifier.width(Space.xs)); Pill("pinned") }
-                    Spacer(Modifier.weight(1f))
-                    if (space.isNotEmpty()) Text(
-                        space, style = MaterialTheme.typography.labelMedium, color = c.faint, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(start = Space.s).widthIn(max = 140.dp),
-                    )
-                    if (onAgent != null) AgentChip(t.agent, onAgent)
-                }
-                Text(
-                    t.title, style = MaterialTheme.typography.titleMedium, color = if (quiet) c.muted else c.text,
-                    maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = Space.s),
-                )
-                if (t.line.isNotEmpty() && !quiet) {
-                    Text(t.line, style = MaterialTheme.typography.bodyMedium, color = c.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
-                val p = t.progress
-                if (p != null && p > 0 && !quiet && t.status != WorkStatus.Ready) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = Space.s)) {
-                    Progress(p, color, Modifier.weight(1f))
-                    Text("$p%", style = MaterialTheme.typography.labelMedium, color = c.faint, modifier = Modifier.padding(start = Space.m))
-                }
-                prNumberOf(t.pr)?.let { n ->
-                    Text("PR #$n", style = MaterialTheme.typography.labelMedium, color = c.accent, modifier = Modifier.padding(top = Space.xs))
-                }
-            }
-        }
-    }
-}
-
-/** A space whose coordinator waits for you: opens its chat, where the question is. */
-@Composable
-internal fun CoordinatorAsksRow(s: WorkSpace, onOpen: () -> Unit) {
-    val c = Herdr.colors
-    QuietCard(onClick = onOpen, onClickLabel = "Open the coordinator chat", padded = true) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(HerdrIcons.MessagesSquare, null, tint = WorkStatus.Need.color(), modifier = Modifier.size(20.dp))
-            Column(Modifier.weight(1f).padding(start = Space.m)) {
-                Text("${s.name}'s coordinator asks you", style = MaterialTheme.typography.titleMedium, color = c.text)
-                Text("Answer it in the coordinator chat", style = MaterialTheme.typography.bodyMedium, color = c.muted)
-            }
-            Icon(HerdrIcons.ChevronRight, null, tint = c.muted, modifier = Modifier.size(20.dp))
         }
     }
 }
