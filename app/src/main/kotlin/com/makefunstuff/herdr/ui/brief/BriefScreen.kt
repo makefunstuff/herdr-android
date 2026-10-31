@@ -46,6 +46,7 @@ import com.makefunstuff.herdr.Routes
 import com.makefunstuff.herdr.brief.BriefWindow
 import com.makefunstuff.herdr.brief.Reading
 import com.makefunstuff.herdr.core.board.BoardStatus
+import com.makefunstuff.herdr.core.board.WorkTasks
 import com.makefunstuff.herdr.core.brief.Brief
 import com.makefunstuff.herdr.core.brief.BriefItem
 import com.makefunstuff.herdr.core.brief.BriefMachine
@@ -190,7 +191,7 @@ private fun BriefItem.color(): Color {
     val c = Herdr.colors
     return when (kind) {
         BriefItem.Kind.Failed -> c.red
-        BriefItem.Kind.Waiting -> BoardStatus.entries.firstOrNull { it.name == board }?.let { c.tone(it.tone) } ?: c.red
+        BriefItem.Kind.Waiting -> BoardStatus.entries.firstOrNull { it.name == board }?.let { c.tone(WorkTasks.status(it).tone) } ?: c.red
         BriefItem.Kind.Merged, BriefItem.Kind.Report, BriefItem.Kind.Done, BriefItem.Kind.Finished -> c.done
         BriefItem.Kind.Working -> c.working
     }
@@ -237,7 +238,8 @@ private fun ItemRow(i: BriefItem, brief: Brief, zone: ZoneId, showMachine: Boole
                         color = c.strong, maxLines = 1,
                     )
                     Spacer(Modifier.width(Space.s))
-                    StatusBadge(i.status, color)
+                    // A task's badge in the one word for its state, as on the boards.
+                    StatusBadge(BoardStatus.entries.firstOrNull { it.name == i.board }?.word ?: i.status, color)
                     Spacer(Modifier.weight(1f))
                     if (meta.isNotEmpty()) Text(
                         meta, style = MaterialTheme.typography.labelMedium, color = c.faint, maxLines = 1, overflow = TextOverflow.Ellipsis,

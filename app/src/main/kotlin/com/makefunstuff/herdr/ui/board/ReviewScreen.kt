@@ -161,7 +161,8 @@ fun ReviewScreen(nav: NavController, startMachine: String? = null, startTask: St
     val view = LocalView.current
     val owner = LocalLifecycleOwner.current
     val hosts by container.hosts.hosts.collectAsStateWithLifecycle()
-    val boards = hosts.filter { it.hasBoard }
+    // herdr-projects 1.x's: a Shepherdr 2 machine's task is merged from its own screens.
+    val boards = hosts.filter { it.hasBoard && !it.onShepherdr2 }
     val online = boards.filter { it.online }.map { it.machine.id }
     var lists by remember { mutableStateOf<Map<String, List<BoardTask>>>(emptyMap()) }
     var problems by remember { mutableStateOf<Map<String, String>>(emptyMap()) }

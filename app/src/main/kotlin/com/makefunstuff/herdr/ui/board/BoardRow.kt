@@ -29,7 +29,10 @@ import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.makefunstuff.herdr.core.board.BoardStatus
@@ -103,9 +106,21 @@ internal fun BoardRow(
     pinned: Boolean = false,
     onLongClick: (() -> Unit)? = null,
     actions: List<CustomAccessibilityAction> = emptyList(),
+    /** Its status's word first on its line, in its colour: where no section heading says it already. */
+    showWord: Boolean = true,
 ) {
     val c = Herdr.colors
     val quiet = status == WorkStatus.Done
+    val color = status.color()
+    // The word, unless the line starts with it already ("Ready to merge", "Merging: …").
+    val word = status.label.takeIf { showWord && !line.startsWith(it, ignoreCase = true) }
+    val second = buildAnnotatedString {
+        if (word != null) {
+            withStyle(SpanStyle(color = color)) { append(word) }
+            if (line.isNotEmpty()) append(" · ")
+        }
+        append(line)
+    }
     Row(
         Modifier.fillMaxWidth().heightIn(min = 56.dp).clip(RoundedCornerShape(8.dp))
             .combinedClickable(onClickLabel = onClickLabel, onClick = onOpen, onLongClickLabel = onLongClick?.let { "show more actions" }, onLongClick = onLongClick)
@@ -129,7 +144,7 @@ internal fun BoardRow(
                 )
                 if (pinned) Icon(HerdrIcons.Pin, "pinned", tint = c.muted, modifier = Modifier.padding(start = Space.xs).size(14.dp))
             }
-            if (line.isNotEmpty()) Text(line, style = MaterialTheme.typography.bodySmall, color = c.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (second.isNotEmpty()) Text(second, style = MaterialTheme.typography.bodySmall, color = c.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         if (onAgent != null || agent.isNotEmpty() || age.isNotEmpty()) Column(Modifier.padding(start = Space.s), horizontalAlignment = Alignment.End) {
             if (onAgent != null) AgentChip(agent, onAgent)
@@ -144,7 +159,7 @@ internal fun BoardRow(
 
 /** A Shepherdr 2 task as a [BoardRow]; [space] names its space where the list mixes them. */
 @Composable
-internal fun WorkTaskRow(t: WorkTask, onOpen: () -> Unit, space: String = "") {
+internal fun WorkTaskRow(t: WorkTask, onOpen: () -> Unit, space: String = "", showWord: Boolean = true) {
     val onAgent = if (t.chat.isNotEmpty()) onOpen else null
     val pr = prNumberOf(t.pr)?.let { "PR #$it" }
     BoardRow(
@@ -153,7 +168,7 @@ internal fun WorkTaskRow(t: WorkTask, onOpen: () -> Unit, space: String = "") {
         status = t.status,
         description = listOf(t.name, t.status.label, t.title, t.line, space).filter { it.isNotEmpty() }.joinToString(", "),
         onOpen = onOpen, onClickLabel = if (onAgent != null) "Open its chat" else "Open details",
-        progress = t.progress, eta = t.eta, agent = t.agent, onAgent = onAgent, age = t.age, pinned = t.pinned,
+        progress = t.progress, eta = t.eta, agent = t.agent, onAgent = onAgent, age = t.age, pinned = t.pinned, showWord = showWord,
     )
 }
 
@@ -169,6 +184,7 @@ internal fun TaskRow(
     actions: List<CustomAccessibilityAction> = emptyList(),
     /** Opens its agent's chat, while its agent's pane is on the machine. */
     onAgent: (() -> Unit)? = null,
+    showWord: Boolean = true,
 ) {
     val status = WorkTasks.status(t.status)
     val quiet = t.status == BoardStatus.Done || t.status == BoardStatus.Archived
@@ -181,7 +197,7 @@ internal fun TaskRow(
         description = listOfNotNull(t.name, t.status.word, t.status.detail, t.title).joinToString(", "),
         onOpen = onOpen, onClickLabel = "Open details",
         progress = t.progress, eta = t.eta, agent = t.agent, onAgent = onAgent, pinned = t.pinned,
-        onLongClick = onMenu, actions = actions,
+        onLongClick = onMenu, actions = actions, showWord = showWord,
     )
 }
 
