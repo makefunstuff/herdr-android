@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -520,7 +521,7 @@ private fun StepsLine(s: SpaceChatItem.Steps) {
         Modifier.fillMaxWidth().clickable(enabled = s.rows.isNotEmpty(), onClickLabel = if (open) "Fold the steps" else "Show the steps") { open = !open }
             .padding(horizontal = Space.xs, vertical = Space.xs),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.heightIn(min = 40.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(if (open) HerdrIcons.ChevronDown else HerdrIcons.ChevronRight, null, Modifier.size(14.dp), tint = c.faint)
             Spacer(Modifier.width(Space.xs))
             Text(head, style = MaterialTheme.typography.labelMedium, color = if (s.failed > 0) c.red else c.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)

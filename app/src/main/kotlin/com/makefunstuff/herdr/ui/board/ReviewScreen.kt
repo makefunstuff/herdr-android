@@ -178,7 +178,11 @@ fun ReviewScreen(nav: NavController, startMachine: String? = null, startTask: St
     // its machine says it runs Shepherdr 2, the task opens on its board instead, as its agent's chat.
     val startOnV2 = startMachine != null && startTask != null && hosts.any { it.machine.id == startMachine && it.onShepherdr2 }
     LaunchedEffect(startOnV2) {
-        if (startOnV2 && startMachine != null && startTask != null) {
+        if (!startOnV2 || startMachine == null || startTask == null) return@LaunchedEffect
+        // Only a task Shepherdr 2 lists: herdr-projects 1.x may run beside it, with review cards of its own.
+        val session = container.hosts.session(startMachine) ?: return@LaunchedEffect
+        val onV2 = runCatching { session.awaitWorkBoard().overview().tasks.any { it.id == startTask } }.getOrDefault(false)
+        if (onV2) {
             nav.popBackStack()
             panes.openBoard(nav, startMachine, startTask, alone = true)
         }

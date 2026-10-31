@@ -6,6 +6,8 @@ import com.makefunstuff.herdr.core.api.SessionSnapshot
 import com.makefunstuff.herdr.core.host.Sessions
 import com.makefunstuff.herdr.core.api.AgentStatus
 import com.makefunstuff.herdr.core.board.BoardAction
+import com.makefunstuff.herdr.core.board.WorkBoard
+import com.makefunstuff.herdr.core.board.WorkTask
 import com.makefunstuff.herdr.core.chat.AgentInput
 import com.makefunstuff.herdr.core.health.HealthClient
 import com.makefunstuff.herdr.core.health.HealthReport
@@ -87,13 +89,14 @@ class AlertWork(
 
     private suspend fun act(s: HostSession, alert: Alert, action: AlertAction, text: String): String {
         val onTask = action.type == AlertAction.Type.Board || action.type == AlertAction.Type.TellTask || action.type == AlertAction.Type.AskCoordinator
-        return if (onTask && onShepherdr2(s)) actOnV2(s, alert, action, text) else actHere(s, alert, action, text)
+        // Only a task Shepherdr 2 lists: a machine may run herdr-projects 1.x beside it, whose tasks stay its own.
+        val v2 = if (onTask && onShepherdr2(s)) s.awaitWorkBoard() else null
+        val task = v2?.overview()?.tasks?.firstOrNull { it.id == alert.taskId }
+        return if (v2 != null && task != null) actOnV2(v2, task, alert, action, text) else actHere(s, alert, action, text)
     }
 
     /** A Shepherdr 2 task's action: a reply goes to its agent's chat, a yes merges it, a question goes to its space's coordinator. */
-    private suspend fun actOnV2(s: HostSession, alert: Alert, action: AlertAction, text: String): String {
-        val board = s.awaitWorkBoard()
-        val task = board.overview().tasks.firstOrNull { it.id == alert.taskId } ?: throw IOException("${alert.taskName.ifEmpty { alert.taskId }} isn't on the board any more")
+    private suspend fun actOnV2(board: WorkBoard, task: WorkTask, alert: Alert, action: AlertAction, text: String): String {
         return when (action.type) {
             AlertAction.Type.TellTask -> board.tell(task, text).ifEmpty { "Sent: $text" }
             AlertAction.Type.AskCoordinator -> {

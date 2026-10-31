@@ -342,8 +342,8 @@ private fun TaskStrip(t: WorkTask, d: WorkTaskDetails?, busy: String?, onMerge: 
             prNumberOf(t.pr)?.let { n ->
                 Spacer(Modifier.width(Space.s))
                 Row(
-                    Modifier.clip(HerdrShapes.Pill).clickable(role = Role.Button, onClickLabel = "Open the pull request", onClick = onPr)
-                        .padding(horizontal = Space.xs, vertical = Space.xs),
+                    Modifier.heightIn(min = 48.dp).clip(HerdrShapes.Pill).clickable(role = Role.Button, onClickLabel = "Open the pull request", onClick = onPr)
+                        .padding(horizontal = Space.xs),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Icon(HerdrIcons.GitPullRequest, null, Modifier.size(14.dp), tint = c.accent)
