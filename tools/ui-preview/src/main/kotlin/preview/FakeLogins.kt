@@ -58,8 +58,9 @@ class FakeLogins(
                  {"id": "llama.cpp", "source": "typed"}, {"id": "mistral", "source": "command"}, {"id": "ollama", "source": "typed"},
                  {"id": "openrouter", "source": "command"}, {"id": "together", "source": "command"}], "actions": ["key", "logout"]}""",
             """{"id": "opencode", "name": "opencode", "installed": true, "state": "signed_in", "providers": [
-                 {"id": "OpenAI", "source": "oauth", "method": "OAuth"}, {"id": "llama.cpp", "source": "typed", "method": "API key"}],
-               "how": null, "actions": ["login", "logout"]}""",
+                 {"id": "openai", "name": "OpenAI", "source": "oauth", "method": "OAuth", "credential": "cred_demo_openai"},
+                 {"id": "llama.cpp", "name": "llama.cpp", "source": "typed", "method": "API key", "credential": "cred_demo_llama"}],
+               "how": null, "actions": ["logout"]}""",
             if (gemini) """{"id": "gemini", "name": "Gemini CLI", "installed": true, "state": "signed_out", "how": "Installed, no login", "actions": []}""" else null,
         )
         val keys = if (!profile) "" else """{"file": "~/.bashrc", "line": 12, "name": "OPENAI_API_KEY", "placeholder": true},

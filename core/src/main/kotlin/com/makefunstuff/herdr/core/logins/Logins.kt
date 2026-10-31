@@ -32,7 +32,15 @@ enum class LoginAction(val key: String) {
 }
 
 /** One provider of a CLI that has several (pi, opencode): how its secret is kept, never the secret. */
-data class LoginProvider(val id: String, val source: KeySource, val method: String? = null, val expires: Long? = null, val name: String = id)
+data class LoginProvider(
+    val id: String,
+    val source: KeySource,
+    val method: String? = null,
+    val expires: Long? = null,
+    val name: String = id,
+    /** opencode's id of this login (not a secret): what its sign-out names. */
+    val credential: String? = null,
+)
 
 /**
  * One agent CLI's login on a machine. [expires]: when the login runs out (epoch seconds), [renewed]:
@@ -130,6 +138,7 @@ object LoginsReader {
                     p.str("method"),
                     p.long("expires"),
                     p.str("name") ?: p.str("id")!!,
+                    p.str("credential"),
                 )
             },
             msg = o.str("msg"),

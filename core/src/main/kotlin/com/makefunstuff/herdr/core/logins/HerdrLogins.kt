@@ -73,11 +73,12 @@ object HerdrLogins {
         }
 
         /**
-         * Starts [action] for [cli] ([provider] for pi's and opencode's). The script there is the app's
+         * Starts [action] for [cli] ([provider] for pi's and opencode's, and opencode's [credential] id
+         * to sign out, so it opens no picker). The script there is the app's
          * version: [status] copied it when the screen opened.
          */
-        suspend fun begin(cli: String, action: LoginAction, provider: String? = null): LoginRun =
-            LoginRun(start(command(*listOfNotNull("run", cli, action.key, provider).toTypedArray())))
+        suspend fun begin(cli: String, action: LoginAction, provider: String? = null, credential: String? = null): LoginRun =
+            LoginRun(start(command(*listOfNotNull("run", cli, action.key, provider, credential?.takeIf { provider != null }).toTypedArray())))
 
         private fun outdated(r: CommandResult): Boolean {
             val v = (LoginsReader.answer(r.stdout)?.get("version") as? JsonPrimitive)?.content ?: return false

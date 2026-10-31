@@ -243,6 +243,8 @@ class LoginsTest {
         )
         assertEquals(listOf("openai" to KeySource.OAuth, "huggingface" to KeySource.Env), r.clis.first { it.id == "opencode" }.providers.map { it.id to it.source })
         assertEquals(listOf("OpenAI", "Hugging Face"), r.clis.first { it.id == "opencode" }.providers.map { it.name })
+        assertEquals(listOf("c1", null), r.clis.first { it.id == "opencode" }.providers.map { it.credential })
+        assertEquals(setOf(LoginAction.Logout), r.clis.first { it.id == "opencode" }.actions)
         assertEquals(LoginState.Missing, r.clis.first { it.id == "gemini" }.state)
         assertEquals(listOf("HF_TOKEN" to false, "OPENAI_API_KEY" to true), r.profile.map { it.name to it.placeholder })
         assertEquals(2, r.profile[0].line)
@@ -402,6 +404,17 @@ class LoginsTest {
         assertFalse(done.ok)
         assertTrue(done.msg!!.contains("pi is changing its logins"), done.msg)
         assertEquals("{}", auth.readText())
+    }
+
+    @Test
+    fun opencodeSignsOutTheLoginItNames() {
+        assumeTrue(python(), "python3 isn't installed")
+        val b = box()
+        b.cli("opencode", """case "$1 $2" in "auth logout") echo 'Logged out'; exit 0;; esac; echo '[]'""")
+        assertTrue(assertIs<LoginEvent.Done>(LoginsReader.event(run(b, "run", "opencode", "logout", "openai", "c1").last())).ok)
+        assertTrue("opencode auth logout openai c1 --standalone" in b.log.readLines())
+        // Without the login's id it would open a picker: refused.
+        assertFalse(assertIs<LoginEvent.Done>(LoginsReader.event(run(b, "run", "opencode", "logout", "openai").last())).ok)
     }
 
     @Test

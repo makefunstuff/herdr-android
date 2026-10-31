@@ -291,6 +291,8 @@ fun scenes(): List<Scene> = listOf(
         tapExact("pi"); tapText("Add a provider's key"); typeInto("Provider", "groq"); typeInto("Key", "gsk_demo0000000000000000")
     }),
     Scene("logins-profile", route = Routes.logins(DEVBOX), actions = { tapText("Show me how to move them") }),
+    // opencode: each login signed out by its id; its sign-in (menus the phone can't answer) shown as steps.
+    Scene("logins-opencode", route = Routes.logins(DEVBOX), actions = { tapExact("opencode") }),
     // A task whose agent needs a login: Sign in opens the machine's agent logins.
     Scene("task-login", route = Routes.board(DEVBOX, "api-server/3"), setup = { needsLogin() }),
 

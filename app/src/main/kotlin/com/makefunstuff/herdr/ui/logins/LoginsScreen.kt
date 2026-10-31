@@ -135,25 +135,23 @@ fun LoginsScreen(nav: NavController, machineId: String) {
 
     var menuFor by remember { mutableStateOf<CliLogin?>(null) }
     var keyFor by remember { mutableStateOf<KeyAsk?>(null) }
-    var providerFor by remember { mutableStateOf<CliLogin?>(null) }
-    var signOut by remember { mutableStateOf<Pair<CliLogin, String?>?>(null) }
+    var signOut by remember { mutableStateOf<Pair<CliLogin, LoginProvider?>?>(null) }
     var moving by remember { mutableStateOf(false) }
     var showHow by remember { mutableStateOf<CliLogin?>(null) }
     val runner = remember(machineId) { LoginRunner(store, container.hosts, session, scope) }
     val guard = LocalGuard.current
 
-    fun begin(cli: CliLogin, action: LoginAction, provider: String? = null, key: String? = null) {
+    fun begin(cli: CliLogin, action: LoginAction, provider: String? = null, key: String? = null, credential: String? = null) {
         val what = when (action) {
             LoginAction.Login -> "Sign in to ${cli.name}${provider?.let { " ($it)" }.orEmpty()} on $name?"
             LoginAction.Key -> "Give ${cli.name} a key on $name?"
             LoginAction.Logout -> "Sign ${cli.name}${provider?.let { " ($it)" }.orEmpty()} out on $name?"
         }
-        guard.run(Guarded.Login, what) { runner.start(cli, action, provider, key) }
+        guard.run(Guarded.Login, what) { runner.start(cli, action, provider, key, credential) }
     }
 
     fun signIn(cli: CliLogin) {
         when {
-            cli.id == "opencode" -> providerFor = cli
             LoginAction.Login in cli.actions -> begin(cli, LoginAction.Login)
             LoginAction.Key in cli.actions -> keyFor = KeyAsk(cli, null)
             else -> showHow = cli
@@ -246,10 +244,8 @@ fun LoginsScreen(nav: NavController, machineId: String) {
     keyFor?.let { ask ->
         KeySheet(ask, name, runner, onDismiss = { keyFor = null; runner.close() }, onSave = { provider, key -> begin(ask.cli, LoginAction.Key, provider, key) })
     }
-    providerFor?.let { cli ->
-        ProviderDialog(cli, onDismiss = { providerFor = null }, onGo = { p -> providerFor = null; begin(cli, LoginAction.Login, p) })
-    }
-    signOut?.let { (cli, provider) ->
+    signOut?.let { (cli, p) ->
+        val provider = p?.id
         HerdrDialog(
             onDismissRequest = { signOut = null },
             title = { Text("Sign ${cli.name}${provider?.let { " ($it)" }.orEmpty()} out on $name?") },
@@ -260,7 +256,7 @@ fun LoginsScreen(nav: NavController, machineId: String) {
                 )
             },
             dismissButton = { QuietButton({ signOut = null }) { Text("Cancel") } },
-            confirmButton = { QuietButton({ signOut = null; begin(cli, LoginAction.Logout, provider) }, color = Herdr.colors.red) { Text("Sign out") } },
+            confirmButton = { QuietButton({ signOut = null; begin(cli, LoginAction.Logout, provider, credential = p?.credential) }, color = Herdr.colors.red) { Text("Sign out") } },
         )
     }
     showHow?.let { cli -> HowDialog(cli, name) { showHow = null } }
@@ -375,7 +371,7 @@ private fun CliMenu(
     onDismiss: () -> Unit,
     onSignIn: () -> Unit,
     onKey: (String?) -> Unit,
-    onSignOut: (String?) -> Unit,
+    onSignOut: (LoginProvider?) -> Unit,
     onHow: () -> Unit,
 ) {
     HerdrMenu(expanded = true, onDismissRequest = onDismiss, title = "${cli.name} on $machine") {
@@ -395,9 +391,14 @@ private fun CliMenu(
         if (LoginAction.Logout in cli.actions && cli.providers.isEmpty()) ActionRow(
             "Sign out", detail = signOutCommand(cli, null), icon = HerdrIcons.LogOut, destructive = true, onClick = { onSignOut(null) },
         )
-        if (cli.actions.isEmpty()) ActionRow(
+        if (LoginAction.Login !in cli.actions && LoginAction.Key !in cli.actions) ActionRow(
             if (cli.env) "Signed in by a variable" else "How to sign in",
-            detail = if (cli.env) "Nothing to change from here" else "It has no login command", icon = HerdrIcons.Info, onClick = onHow,
+            detail = when {
+                cli.env -> "Nothing to change from here"
+                cli.id == "opencode" -> "Its sign-in asks with menus: run it on the machine"
+                else -> "It has no login command"
+            },
+            icon = HerdrIcons.Info, onClick = onHow,
         )
     }
 }
@@ -405,12 +406,11 @@ private fun CliMenu(
 private fun loginDetail(cli: CliLogin) = when (cli.id) {
     "claude" -> "claude auth login: you paste the page's code back here"
     "codex" -> "codex login --device-auth: the code to type shows here"
-    "opencode" -> "opencode auth login, for one provider"
     else -> null
 }
 
 @Composable
-private fun ProviderRow(cli: CliLogin, p: LoginProvider, onKey: (String?) -> Unit, onSignOut: (String?) -> Unit) {
+private fun ProviderRow(cli: CliLogin, p: LoginProvider, onKey: (String?) -> Unit, onSignOut: (LoginProvider?) -> Unit) {
     val where = when (p.source) {
         KeySource.Command -> "Key from a command (keyring): kept as it is"
         KeySource.Env -> "From ${p.method ?: "a variable"} in the environment"
@@ -418,7 +418,8 @@ private fun ProviderRow(cli: CliLogin, p: LoginProvider, onKey: (String?) -> Uni
         KeySource.Typed -> "Key typed in"
     }
     val canKey = cli.id == "pi" && p.source == KeySource.Typed
-    val canOut = LoginAction.Logout in cli.actions && (p.source == KeySource.Typed || p.source == KeySource.OAuth)
+    val canOut = LoginAction.Logout in cli.actions && (p.source == KeySource.Typed || p.source == KeySource.OAuth) &&
+        (cli.id != "opencode" || p.credential != null)
     ActionRow(
         p.name, detail = where,
         icon = if (p.source == KeySource.Command) HerdrIcons.Lock else HerdrIcons.KeyRound,
@@ -426,7 +427,7 @@ private fun ProviderRow(cli: CliLogin, p: LoginProvider, onKey: (String?) -> Uni
         trailing = if (!(canKey || canOut)) null else ({
             Row {
                 if (canKey) QuietButton({ onKey(p.id) }, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)) { Text("New key") }
-                if (canOut) QuietButton({ onSignOut(p.id) }, color = Herdr.colors.red, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)) { Text("Sign out") }
+                if (canOut) QuietButton({ onSignOut(p) }, color = Herdr.colors.red, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)) { Text("Sign out") }
             }
         }),
     )
@@ -442,29 +443,13 @@ private fun HowDialog(cli: CliLogin, machine: String, onDismiss: () -> Unit) {
                 when {
                     cli.env -> "${cli.how} on $machine. The app doesn't change variables: see the warning about keys in a shell profile."
                     cli.id == "gemini" -> "Gemini CLI has no login command: its first run asks how to sign in. Open a terminal on $machine, run gemini, and pick Login with Google."
+                    cli.id == "opencode" -> "opencode's sign-in picks the provider and its way of signing in from menus, which the phone can't answer. Open a terminal on $machine and run opencode auth login. A login can be signed out from here."
                     cli.id == "pi" -> "To sign pi in to a provider with a login, run pi on $machine and type /login. A key can be added from here."
                     else -> "${cli.name} can't be signed in from the phone."
                 },
             )
         },
         confirmButton = { QuietButton(onDismiss) { Text("OK") } },
-    )
-}
-
-@Composable
-private fun ProviderDialog(cli: CliLogin, onDismiss: () -> Unit, onGo: (String?) -> Unit) {
-    var provider by remember { mutableStateOf("") }
-    HerdrDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Sign in to ${cli.name}") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(Space.s)) {
-                Text("opencode auth login asks which provider; name it here (openai, anthropic, …), or leave it empty to pick from its list.")
-                HerdrField(provider, { provider = it.filter { ch -> ch.isLetterOrDigit() || ch in " ._-" }.take(64) }, singleLine = true, label = "Provider")
-            }
-        },
-        dismissButton = { QuietButton(onDismiss) { Text("Cancel") } },
-        confirmButton = { QuietButton({ onGo(provider.trim().ifEmpty { null }) }) { Text("Sign in") } },
     )
 }
 
@@ -503,14 +488,14 @@ internal class LoginRunner(
         private set
 
     /** Starts [action]; [key] (a key's run) is typed in as soon as it runs, and kept nowhere else. */
-    fun start(cli: CliLogin, action: LoginAction, provider: String?, key: String? = null) {
+    fun start(cli: CliLogin, action: LoginAction, provider: String?, key: String? = null, credential: String? = null) {
         close()
         val r = Running(cli, action, provider)
         current = r
         scope.launch {
             try {
                 hosts.borrow(session.machine.id) { s ->
-                    val run = store.client(s).begin(cli.id, action, provider)
+                    val run = store.client(s).begin(cli.id, action, provider, credential)
                     r.run = run
                     if (current !== r) { run.close(); return@borrow }
                     key?.let { run.type(it) }
