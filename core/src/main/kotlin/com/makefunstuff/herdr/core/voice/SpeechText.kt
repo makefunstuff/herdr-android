@@ -20,7 +20,8 @@ object SpeechText {
             .filter { it.isNotBlank() }.joinToString(" ")
         is SpaceChatItem.Artifact -> listOf(reply(item.intro), "It shared an artifact.").filter { it.isNotBlank() }.joinToString(" ")
         is SpaceChatItem.File -> if (item.you) null else "It sent a file, ${spokenName(item.name)}."
-        is SpaceChatItem.Voice, is SpaceChatItem.NewSession, is SpaceChatItem.Note -> null
+        // Tool steps are the work, not what it says: never read.
+        is SpaceChatItem.Voice, is SpaceChatItem.NewSession, is SpaceChatItem.Note, is SpaceChatItem.Steps -> null
     }?.takeIf { it.isNotBlank() }
 
     /** A question and its choices: "Rerun CI on main? Rerun it, skip the flaky test, or leave it for now." */
