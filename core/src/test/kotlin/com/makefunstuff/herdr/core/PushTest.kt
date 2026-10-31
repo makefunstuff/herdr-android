@@ -193,7 +193,7 @@ class AlertsTest {
     fun tasksThatNeedYou() {
         val approve = show(Alerts.of("m1", "devbox", task("""{"id":"herdr-android/7","title":"Board view","state":"blocked","kind":"permission","stage":"approval","msg":"Review passed","review":{"pass":true}}""")))
         assertEquals("task:m1:herdr-android/7", approve.tag)
-        assertEquals("AND-7 ready to approve", approve.title)
+        assertEquals("AND-7 ready", approve.title)
         assertEquals("Board view", approve.text)
         assertEquals("herdr-android/7", approve.taskId)
         assertEquals(listOf("Approve and merge", "Ask Coordinator"), approve.actions.map { it.label })
@@ -205,7 +205,7 @@ class AlertsTest {
         assertTrue(approve.review)
 
         val failed = show(Alerts.of("m1", "devbox", task("""{"id":"herdr-android/7","title":"Board view","state":"blocked","kind":"permission","stage":"approval","review":{"pass":false}}""")))
-        assertEquals("AND-7 review failed", failed.title)
+        assertEquals("AND-7 needs you · Review failed", failed.title)
         assertEquals(BoardAction.Review, failed.actions[0].boardAction)
         assertTrue(failed.sig != approve.sig)
 
@@ -214,7 +214,7 @@ class AlertsTest {
         assertEquals(BoardAction.ApprovePlan, plan.actions[0].boardAction)
 
         val asks = show(Alerts.of("m1", "devbox", task("""{"id":"herdr-android/7","title":"Board view","state":"blocked","kind":"question","stage":"working"}""")))
-        assertEquals("AND-7 asks you", asks.title)
+        assertEquals("AND-7 needs you", asks.title)
         assertTrue(!asks.review)
         assertEquals(listOf(AlertAction.Type.TellTask), asks.actions.map { it.type })
 
@@ -222,7 +222,7 @@ class AlertsTest {
         assertEquals("Continue", stopped.actions[0].label)
 
         val pick = show(Alerts.of("m1", "devbox", task("""{"id":"herdr-android/7","title":"Board view","state":"blocked","stage":"pick"}""")))
-        assertEquals("AND-7 pick one", pick.title)
+        assertEquals("AND-7 needs you · Pick one", pick.title)
         assertTrue(pick.review && plan.review && failed.review)
 
         assertEquals(
@@ -350,7 +350,7 @@ class HerdrPushTest {
             assertEquals(listOf("Approve", "Deny", "Reply"), agent.actions.map { it.label })
             assertTrue(agent.detail.endsWith("devbox · api › agents"))
             val task = assertIs<AlertChange.Show>(changes[1]).alert
-            assertEquals("AND-7 ready to approve", task.title)
+            assertEquals("AND-7 ready", task.title)
 
             // Answered on the desktop: the notifications come down.
             File(fake, "snapshot.json").writeText(agents("working"))
@@ -628,7 +628,7 @@ class HerdrPushTest {
             task(""""state":"blocked","stage":"approval","kind":"permission","review":{"pass":true}""")
             assertEquals(0, sh(dir, env, HerdrPush.command("once")).exit)
             val last = pushes("/live", key).last()
-            assertEquals(listOf("api needs you", "AND-7 ready to approve"), Alerts.all("m1", "devbox", last.events).map { (it as AlertChange.Show).alert.title })
+            assertEquals(listOf("api needs you", "AND-7 ready"), Alerts.all("m1", "devbox", last.events).map { (it as AlertChange.Show).alert.title })
             val (noAgents, noTasks) = LiveItems.of("m1", "devbox", live(last), last.at, 0)
             assertEquals(emptyList(), noAgents)
             assertEquals(emptyList(), noTasks)

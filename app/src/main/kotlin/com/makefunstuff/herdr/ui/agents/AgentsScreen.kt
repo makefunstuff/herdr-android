@@ -32,6 +32,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
@@ -104,6 +105,7 @@ private const val FOLDED = 4
 private fun sig(w: Waiting): String = when (w) {
     is Waiting.Question -> "${w.agent.agent.stateChangeSeq}"
     is Waiting.Task -> w.task.let { t -> listOf(t.state, t.stage, t.kind, t.msg, t.reviewRound, t.reviewPassed, t.approvalBlocked, w.work?.line).joinToString("|") }
+    is Waiting.Coordinator -> "asks"
 }
 
 /** What is being said back from a card: an answer to an agent's question, or words for a task's agent. */
@@ -182,6 +184,11 @@ fun AgentsScreen(
         Home.of(agents.filter { filter == null || it.machineId == filter }, boards.filter { filter == null || it.machineId == filter }, seen, triage, now)
     }
     val needsYou = home.needsYou.filter { handled[it.key] != sig(it) }
+    // A card answered here shows again once it changed and waits anew: a task that asked again, worded the same.
+    LaunchedEffect(home.needsYou) {
+        val now = home.needsYou.associate { it.key to sig(it) }
+        handled.keys.filter { now[it] != handled[it] }.forEach { handled.remove(it) }
+    }
     val showMachine = hosts.size > 1 && filter == null
     val anyBoard = hosts.any { it.hasBoard }
 
@@ -444,6 +451,7 @@ fun AgentsScreen(
                                 onAnswer = { a?.let { (action, label) -> act(w, action, label) } },
                             )
                         }
+                        is Waiting.Coordinator -> CoordinatorCard(w, showMachine) { panes.open(nav, Routes.coordinator(w.machineId, w.space.id)) }
                     }
                 }
                 val lines = Lines(

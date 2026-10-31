@@ -56,6 +56,30 @@ class OneListTest {
     }
 
     @Test
+    fun aShepherdr21TasksAgentIsFoundByItsTerminalsLabel() {
+        // Shepherdr 2.1 on herdr-core: a hashed terminal name in "Other terminals", its task in its labels.
+        val blocked = HomeAgent(
+            "devbox", "devbox",
+            AgentInfo(name = "shep-1a2b3c4d5e6f7a8b", agent = "claude", agentStatusRaw = "blocked", workspaceId = "w1", tabId = "t", paneId = "w1:p1", shepherdrTask = "AND-21"),
+            "Other terminals › Terminals",
+        )
+        val home = Home.of(listOf(blocked), listOf(v2))
+        assertEquals(listOf("agent/devbox/w1:p1", "task/devbox/AND-20"), home.needsYou.map { it.key })
+        assertEquals("AND-21", home.needsYou[0].task?.name)
+        assertTrue(Home.isBareName(blocked.agent, "shep-1a2b3c4d5e6f7a8b"))
+        assertTrue(Home.isBareName(blocked.agent, "Claude"))
+        assertFalse(Home.isBareName(blocked.agent, "api-fixer"))
+    }
+
+    @Test
+    fun aCoordinatorThatAsksWaitsOnTheOneList() {
+        val asking = work.copy(spaces = listOf(WorkSpace("p:app", "herdr-android", asks = true)))
+        val home = Home.of(emptyList(), listOf(v2.copy(work = asking)))
+        assertEquals(listOf("task/devbox/AND-20", "task/devbox/AND-21", "asks/devbox/p:app"), home.needsYou.map { it.key })
+        assertEquals("herdr-android", assertIs<Waiting.Coordinator>(home.needsYou[2]).space.name)
+    }
+
+    @Test
     fun everyBoardSaysEachStateInOneWord() {
         assertEquals("ready", WorkStatus.Ready.label)
         assertEquals("ready", BoardStatus.Approval.word)

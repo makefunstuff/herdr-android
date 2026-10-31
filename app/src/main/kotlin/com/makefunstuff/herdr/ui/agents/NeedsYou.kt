@@ -67,6 +67,7 @@ import com.makefunstuff.herdr.ui.design.QuietCard
 import com.makefunstuff.herdr.ui.design.SecondaryButton
 import com.makefunstuff.herdr.ui.design.StatusBadge
 import com.makefunstuff.herdr.ui.theme.CodeStyle
+import com.makefunstuff.herdr.ui.theme.statusWord
 import com.makefunstuff.herdr.ui.theme.Herdr
 import com.makefunstuff.herdr.ui.theme.Space
 import com.makefunstuff.herdr.ui.theme.color
@@ -323,6 +324,25 @@ fun TaskCard(
     }
 }
 
+/** A Shepherdr 2 space whose coordinator asks you something, as a card: Open goes to its chat, where the question is. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun CoordinatorCard(w: Waiting.Coordinator, showMachine: Boolean, onOpen: () -> Unit) {
+    val c = Herdr.colors
+    WaitingCard(false, onOpen, null, "Open the coordinator chat", emptyList()) {
+        CardHead(
+            mark = { Box(Modifier.size(22.dp), contentAlignment = Alignment.Center) { Icon(HerdrIcons.MessagesSquare, null, tint = c.text, modifier = Modifier.size(20.dp)) } },
+            title = "${w.space.name}'s coordinator asks you",
+            key = null,
+            meta = listOfNotNull("Answer it in the coordinator chat", w.machineLabel.takeIf { showMachine }),
+            badge = { StatusBadge(WorkStatus.Need.label, WorkStatus.Need.color()) },
+        )
+        FlowRow(Modifier.padding(start = 34.dp, top = Space.m), horizontalArrangement = Arrangement.spacedBy(Space.s)) {
+            AnswerButton("Open", null, primary = true, enabled = true, onClick = onOpen)
+        }
+    }
+}
+
 /**
  * A Shepherdr 2 task waiting for you as a card, as its task screen has it: the question its agent asks
  * ([card], once read) with a button per answer, or Merge when it is ready; and Open, its chat. A
@@ -428,7 +448,7 @@ fun AgentLine(
             .semantics(mergeDescendants = true) {
                 this.selected = selected
                 contentDescription = listOfNotNull(
-                    title, t?.name, a.displayName, if (row.new) "finished, new" else a.statusLabel,
+                    title, t?.name, a.displayName, if (row.new) "finished, new" else a.statusWord(),
                     "pinned".takeIf { row.pinned }, snoozed?.let { "snoozed $it" }, "muted".takeIf { row.muted },
                 ).joinToString(", ")
                 if (actions.isNotEmpty()) customActions = actions

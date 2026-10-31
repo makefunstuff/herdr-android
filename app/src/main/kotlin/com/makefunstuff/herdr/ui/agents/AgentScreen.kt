@@ -149,13 +149,14 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
         val home = HomeAgent(machineId, host.machine.label, a, snapshot?.location(a.workspaceId, a.tabId).orEmpty(), snapshot?.workspace(a.workspaceId)?.label.orEmpty())
         Home.taskOf(home, Home.own(boards)[machineId].orEmpty())
     }
-    // What the title bar says it works on: its task, else its own name (unless that is only its CLI's), else its workspace.
+    // What the title bar says it works on: its task, else its own name (unless that is only its CLI's or a
+    // launcher's hash, `shep-1a2b…`), else what it says it does, else its workspace.
     val workspaceLabel = agent?.let { snapshot?.workspace(it.workspaceId)?.label?.ifBlank { null } }
     val heading = task?.let { "${it.name} · ${it.title}" }
-        ?: name.takeIf { agent == null || it != agent.agent } ?: workspaceLabel ?: name
+        ?: name.takeIf { agent == null || !Home.isBareName(agent, it) } ?: activity ?: workspaceLabel ?: name
     // Floating over other apps as a bubble, from here; in that bubble, back to the app.
     val bubbleChat = remember(machineId, paneId) { BubbleChat.Agent(machineId, paneId) }
-    val float = rememberFloat(bubbleChat, name, host.machine.label)
+    val float = rememberFloat(bubbleChat, heading, host.machine.label)
     val inBubble = LocalBubble.current != null
 
     // The chat is open: its notification has done its job.
@@ -456,7 +457,7 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
             if (!typing) HerdrTopBar(
                 heading,
                 subtitle = listOfNotNull(
-                    agent?.agent?.takeIf { it != heading },
+                    agent?.agent?.takeIf { !it.equals(heading, ignoreCase = true) },
                     host.machine.label,
                     snapshot?.let { s -> pane?.let { s.location(it.workspaceId, it.tabId) } },
                 ).joinToString(" · "),

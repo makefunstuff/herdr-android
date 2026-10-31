@@ -31,6 +31,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.makefunstuff.herdr.LocalPanes
 import com.makefunstuff.herdr.Routes
+import com.makefunstuff.herdr.core.home.Waiting
 import com.makefunstuff.herdr.core.home.BoardGroup
 import com.makefunstuff.herdr.core.home.Home
 import com.makefunstuff.herdr.core.home.HomeAgent
@@ -86,8 +87,8 @@ fun BoardsScreen(nav: NavController) {
     val groups = remember(boards, works, machine) { BoardGroup.of(boards.filter { it.machineId !in works }, machine).associateBy { it.machineId } }
     // In the machines' order, each with its v1 group or its Shepherdr 2 board.
     val shown = boards.filter { machine == null || it.machineId == machine }
-    // The Needs you list's count, as both tabs' badge has it.
-    val waiting = rememberNeedsYou(boards).size
+    // What of the Needs you list (both tabs' badge) this tab shows: tasks and coordinators, on the machine chosen.
+    val waiting = rememberNeedsYou(boards).count { (it !is Waiting.Question || it.task != null) && (machine == null || it.machineId == machine) }
     // Adding a task: on the machine shown, or the one chosen first.
     var adding by remember { mutableStateOf<String?>(null) }
     var choosing by remember { mutableStateOf(false) }

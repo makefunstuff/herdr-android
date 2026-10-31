@@ -6,6 +6,7 @@ import com.makefunstuff.herdr.core.board.BoardAction
 import com.makefunstuff.herdr.core.board.BoardStatus
 import com.makefunstuff.herdr.core.board.BoardTask
 import com.makefunstuff.herdr.core.board.WorkOverview
+import com.makefunstuff.herdr.core.board.WorkSpace
 import com.makefunstuff.herdr.core.board.WorkTask
 import com.makefunstuff.herdr.core.host.HostState
 import com.makefunstuff.herdr.core.push.LiveItems
@@ -63,6 +64,12 @@ sealed interface Waiting {
     ) : Waiting {
         override val key: String get() = "task/$machineId/${task.id}"
     }
+
+    /** A Shepherdr 2 space whose coordinator asks the human something: it is answered in that coordinator's chat. */
+    data class Coordinator(override val machineId: String, val machineLabel: String, val space: WorkSpace) : Waiting {
+        override val key: String get() = "asks/$machineId/${space.id}"
+        override val task: BoardTask? get() = null
+    }
 }
 
 /**
@@ -99,9 +106,19 @@ data class Home(
 
     companion object {
         /** [agent]'s task among its own machine's board [tasks], by the names herdr-projects gives them; null when it works on none. */
-        fun taskOf(agent: HomeAgent, tasks: List<BoardTask>): BoardTask? = tasks.firstOrNull { t ->
-            t.machine.isEmpty() && !t.archived && LiveItems.belongs(agent.agent.name.orEmpty(), agent.workspace, t.id, t.name)
+        fun taskOf(agent: HomeAgent, tasks: List<BoardTask>): BoardTask? {
+            // Shepherdr 2.1 labels its task agents' terminals with their task.
+            agent.agent.shepherdrTask?.let { id -> return tasks.firstOrNull { it.id == id && !it.archived } }
+            return tasks.firstOrNull { t ->
+                t.machine.isEmpty() && !t.archived && LiveItems.belongs(agent.agent.name.orEmpty(), agent.workspace, t.id, t.name)
+            }
         }
+
+        /** [name] says nothing of what [agent] works on: it's only its CLI's (`claude`) or a launcher's hash (`shep-1a2b…`). */
+        fun isBareName(agent: AgentInfo, name: String): Boolean =
+            name.equals(agent.agent, ignoreCase = true) || name.equals(agent.displayAgent, ignoreCase = true) || HASH.matches(name)
+
+        private val HASH = Regex("""shep-[0-9a-f]{16}""")
 
         /**
          * The agent at work on [t] among [agents]: its worker before its reviewer (`sw-<repo>-<n>-r`, `…-r-0042`),
@@ -157,7 +174,8 @@ data class Home(
             val snoozed = rest.filter { it.key !in triage.pins && triage.snoozeOf(it, now) != null }.sortedWith(bySeq)
             val listed = rest.filter { it !in pinned && it !in snoozed }
             return Home(
-                needsYou = questions.sortedWith(bySeq).map { Waiting.Question(it, taskOf[it.key]) } + waiting,
+                needsYou = questions.sortedWith(bySeq).map { Waiting.Question(it, taskOf[it.key]) } + waiting +
+                    boards.flatMap { b -> b.work?.spaces.orEmpty().filter { it.asks }.map { Waiting.Coordinator(b.machineId, b.machineLabel, it) } },
                 pinned = pinned.map(::row),
                 working = listed.filter { it.agent.agentStatus == AgentStatus.Working }.sortedWith(bySeq).map(::row),
                 done = listed.filter(::isNew).sortedWith(bySeq).map(::row),
@@ -264,7 +282,7 @@ class WaitingNews {
 
     private fun source(w: Waiting) = when (w) {
         is Waiting.Question -> "agents:${w.machineId}"
-        is Waiting.Task -> "board:${w.machineId}"
+        is Waiting.Task, is Waiting.Coordinator -> "board:${w.machineId}"
     }
 
     companion object {
@@ -272,6 +290,7 @@ class WaitingNews {
         fun sig(w: Waiting): String = when (w) {
             is Waiting.Question -> "q${w.agent.agent.stateChangeSeq}"
             is Waiting.Task -> listOf(w.task.state, w.task.stage, w.task.kind, w.task.reviewRound).joinToString("|")
+            is Waiting.Coordinator -> "asks"
         }
     }
 }

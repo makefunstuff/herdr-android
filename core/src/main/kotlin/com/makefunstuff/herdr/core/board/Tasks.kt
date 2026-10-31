@@ -69,6 +69,9 @@ data class BoardTask(
     val repo: String get() = id.substringAfter(':').substringBefore('/')
     val number: String get() = id.substringAfterLast('/')
 
+    /** Its state's one word: [status]'s, or "merging" for a Shepherdr 2 task being merged (v1 has no such state). */
+    val word: String get() = if (state == "working" && stage == "merging") WorkStatus.Merging.label else status.word
+
     val status: BoardStatus get() = when {
         archived -> BoardStatus.Archived
         stage == "plan" && state == "blocked" -> BoardStatus.PlanReady
