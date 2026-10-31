@@ -111,8 +111,8 @@ class VoiceService : Service() {
         session.setPlaybackState(PlaybackState.Builder()
             .setActions(PlaybackState.ACTION_PLAY_PAUSE or PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE or PlaybackState.ACTION_STOP)
             .setState(if (s.phase == Phase.Speaking || s.phase == Phase.Listening) PlaybackState.STATE_PLAYING else PlaybackState.STATE_PAUSED, 0, 1f)
-            .addCustomAction(PlaybackState.CustomAction.Builder(MUTE, if (s.muted) "Unmute" else "Mute", R.drawable.ic_notification).build())
-            .addCustomAction(PlaybackState.CustomAction.Builder(STOP, "Stop", R.drawable.ic_notification).build())
+            .addCustomAction(PlaybackState.CustomAction.Builder(MUTE, if (s.muted) "Unmute" else "Mute", if (s.muted) R.drawable.ic_voice_unmute else R.drawable.ic_voice_mute).build())
+            .addCustomAction(PlaybackState.CustomAction.Builder(STOP, "Stop", R.drawable.ic_voice_stop).build())
             .build())
     }
 
