@@ -56,10 +56,13 @@ object SpeechText {
     fun plain(markdown: String): String {
         var t = markdown.replace("\r\n", "\n")
         // Fenced code: "a code block, 12 lines" (a short one-liner says "a line of code").
-        t = Regex("```[^\\n]*\\n([\\s\\S]*?)(?:```|$)").replace(t) { m ->
-            val lines = m.groupValues[1].trimEnd('\n').lines().count { it.isNotBlank() }
-            "\n" + (if (lines <= 1) "A line of code." else "A code block, $lines lines.") + "\n"
+        fun block(body: String): String {
+            val lines = body.trimEnd('\n').lines().count { it.isNotBlank() }
+            return "\n" + (if (lines <= 1) "A line of code." else "A code block, $lines lines.") + "\n"
         }
+        t = Regex("(```|~~~)[^\\n]*\\n([\\s\\S]*?)(?:\\1|$)").replace(t) { m -> block(m.groupValues[2]) }
+        // Indented code: four spaces (or a tab) after a blank line.
+        t = Regex("(?:^|\\n\\n)((?:(?: {4}|\\t)[^\\n]*(?:\\n|$))+)").replace(t) { m -> "\n" + block(m.groupValues[1]) }
         // Tables: "a table, 4 rows" (the header and its rule aren't rows).
         t = Regex("(?m)(^\\s*\\|.*\\|\\s*$\\n?)+").replace(t) { m ->
             val rows = m.value.lines().filter { it.isNotBlank() && !Regex("^\\s*\\|[\\s:|-]+\\|\\s*$").matches(it) }.size - 1

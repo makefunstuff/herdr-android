@@ -56,10 +56,13 @@ class VoiceService : Service() {
                 override fun onPlay() = button()
                 override fun onPause() = button()
                 override fun onStop() = voice.stop()
+                override fun onCustomAction(action: String, extras: android.os.Bundle?) {
+                    when (action) {
+                        MUTE -> voice.setMuted(!voice.state.value.muted)
+                        STOP -> voice.stop()
+                    }
+                }
             })
-            setPlaybackState(PlaybackState.Builder()
-                .setActions(PlaybackState.ACTION_PLAY_PAUSE or PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE or PlaybackState.ACTION_STOP)
-                .setState(PlaybackState.STATE_PLAYING, 0, 1f).build())
             isActive = true
         }
         scope.launch {
@@ -68,13 +71,17 @@ class VoiceService : Service() {
                 if (!s.on) {
                     ServiceCompat.stopForeground(this@VoiceService, ServiceCompat.STOP_FOREGROUND_REMOVE)
                     stopSelf()
-                } else getSystemService(NotificationManager::class.java).notify(ID, note(s))
+                } else {
+                    show(s)
+                    getSystemService(NotificationManager::class.java).notify(ID, note(s))
+                }
             }
         }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val s = voice.state.value
+        show(s)
         val types = if (Build.VERSION.SDK_INT >= 30) ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE else 0
         // Android wants the foreground at once, even for a button press after voice went off.
         runCatching { ServiceCompat.startForeground(this, ID, note(s), types) }
@@ -89,6 +96,24 @@ class VoiceService : Service() {
             stopSelf(startId)
         }
         return START_NOT_STICKY
+    }
+
+    /**
+     * The session as Android 13 and later draw the media notification from it: the words in its
+     * metadata, play/pause (talk, or stop the voice), and Mute and Stop as its own buttons.
+     */
+    private fun show(s: VoiceState) {
+        val session = session ?: return
+        session.setMetadata(android.media.MediaMetadata.Builder()
+            .putString(android.media.MediaMetadata.METADATA_KEY_TITLE, "Coordinator · ${s.spaceName.ifEmpty { "voice" }}")
+            .putString(android.media.MediaMetadata.METADATA_KEY_ARTIST, listOfNotNull(s.words, s.line.takeIf { it.isNotBlank() }?.take(120)).joinToString(": "))
+            .build())
+        session.setPlaybackState(PlaybackState.Builder()
+            .setActions(PlaybackState.ACTION_PLAY_PAUSE or PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE or PlaybackState.ACTION_STOP)
+            .setState(if (s.phase == Phase.Speaking || s.phase == Phase.Listening) PlaybackState.STATE_PLAYING else PlaybackState.STATE_PAUSED, 0, 1f)
+            .addCustomAction(PlaybackState.CustomAction.Builder(MUTE, if (s.muted) "Unmute" else "Mute", R.drawable.ic_notification).build())
+            .addCustomAction(PlaybackState.CustomAction.Builder(STOP, "Stop", R.drawable.ic_notification).build())
+            .build())
     }
 
     /** A headset's button, or Talk on the notification: stop the voice, else talk (a second press sends). */

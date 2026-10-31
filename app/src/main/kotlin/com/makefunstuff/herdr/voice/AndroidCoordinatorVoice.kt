@@ -6,6 +6,7 @@ import android.media.AudioAttributes
 import android.media.AudioDeviceInfo
 import android.media.AudioFocusRequest
 import android.media.AudioManager
+import android.os.Build
 import android.os.SystemClock
 import android.util.Log
 import androidx.core.content.ContextCompat
@@ -56,14 +57,18 @@ class AndroidCoordinatorVoice(
     private val out = AudioOut()
     private val phone = PhoneSpeech(context)
     private val audio = context.getSystemService(AudioManager::class.java)
+    // A call, or another app taking the speaker for itself, stops the voice.
     private val focus = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
         .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ASSISTANT).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build())
+        .setOnAudioFocusChangeListener { change -> if (change < 0 && change != AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK) hush() }
         .build()
 
     /** A reply to read, and when it came (for the time to first sound). */
     private data class Pending(val line: ReadQueue.Line, val at: Long)
 
     private var run: Job? = null
+    /** Work for this chat only (hearing, sending): stopping voice cancels it, so late words never reach another chat. */
+    private var runScope: CoroutineScope? = null
     private var lines = Channel<Pending>(Channel.UNLIMITED)
     @Volatile private var board: WorkBoard? = null
     /** When the server last failed; it is tried again [RETRY_MS] after. */
@@ -89,13 +94,15 @@ class AndroidCoordinatorVoice(
         lines = Channel(Channel.UNLIMITED)
         val queue = ReadQueue()
         ContextCompat.startForegroundService(context, Intent(context, VoiceService::class.java))
-        run = scope.launch {
+        val job = scope.launch {
             launch { follow(machineId, space, queue) }
             launch { speaking() }
             launch { out.level.collect { l -> if (_state.value.phase == Phase.Speaking) _state.update { it.copy(level = l) } } }
             launch { probe() }
             if (_state.value.handsFree) openMic()
         }
+        run = job
+        runScope = CoroutineScope(scope.coroutineContext + Job(job))
     }
 
     override fun stop() {
@@ -105,12 +112,15 @@ class AndroidCoordinatorVoice(
         phoneEars?.cancel()
         run?.cancel()
         run = null
+        runScope = null
         board = null
         _state.update { it.copy(on = false, phase = Phase.Ready, level = 0f, line = "", problem = null) }
     }
 
     override fun hush() {
         hushed = true
+        // Stops the voice, not just this line: what waited to be read is dropped too.
+        while (lines.tryReceive().isSuccess) Unit
         out.stop()
         phone.hush()
         if (_state.value.phase == Phase.Speaking) _state.update { it.copy(phase = Phase.Ready, level = 0f) }
@@ -128,11 +138,13 @@ class AndroidCoordinatorVoice(
             _state.update { it.copy(phase = Phase.Listening) }
         } else {
             if (phoneEars?.isActive == true) { phone.stopHearing(); return }
-            if (!pushing) return
+            // Hands-free, mid-turn: Send ends it now.
+            if (!pushing && !capturing) return
             pushing = false
             capturing = false
-            if (!_state.value.handsFree) closeMic()
+            ends.reset()
             finishTurn()
+            if (!_state.value.handsFree) closeMic()
         }
     }
 
@@ -156,6 +168,7 @@ class AndroidCoordinatorVoice(
     }
 
     override suspend fun test(): String {
+        if (_state.value.on) return "Turn the chat's voice off to test"
         val s = settings.state.value
         val engine = if (s.usable) runCatching { EdgeVoice(s.server, s.key) }.getOrNull() else null
         hushed = false
@@ -234,7 +247,9 @@ class AndroidCoordinatorVoice(
     /** Reads [lines] aloud, one after another; muted, they pass unsaid. */
     private suspend fun speaking() {
         for (p in lines) {
-            if (_state.value.muted || capturing || phoneEars?.isActive == true) continue
+            // While you talk it waits, and reads after.
+            while (capturing || phoneEars?.isActive == true || _state.value.phase == Phase.Hearing || _state.value.phase == Phase.Sending) delay(100)
+            if (_state.value.muted) continue
             speak(p.line.text, p.at)
         }
     }
@@ -244,7 +259,11 @@ class AndroidCoordinatorVoice(
         _state.update { it.copy(phase = Phase.Speaking, line = text) }
         val s = settings.state.value
         var heardAny = false
-        take()
+        if (!take()) {
+            // A call has the speaker: this one isn't read.
+            _state.update { it.copy(phase = Phase.Ready) }
+            return
+        }
         try {
             val engine = useServer()
             if (engine != null) {
@@ -316,11 +335,13 @@ class AndroidCoordinatorVoice(
     private fun openMic(): Boolean {
         if (mic.isOn) return true
         ends.reset()
+        useHeadsetMic()
         if (mic.start()) {
             // The service takes the microphone too now (it may not have had the permission when it started).
             runCatching { ContextCompat.startForegroundService(context, Intent(context, VoiceService::class.java)) }
             return true
         }
+        settings.setHandsFree(false)
         _state.update { it.copy(problem = "No microphone: allow it in the phone's settings", handsFree = false, phase = Phase.Ready) }
         pushing = false
         capturing = false
@@ -329,6 +350,7 @@ class AndroidCoordinatorVoice(
 
     private fun closeMic() {
         mic.stop()
+        if (Build.VERSION.SDK_INT >= 31) runCatching { audio.clearCommunicationDevice() }
         capturing = false
         synchronized(turn) { turn.clear(); before.clear() }
     }
@@ -348,11 +370,12 @@ class AndroidCoordinatorVoice(
         if (pushing || !_state.value.handsFree) return
         // Out of the loudspeaker, its own voice leaks past the echo canceller: only a clear voice breaks in.
         val speaking = _state.value.phase == Phase.Speaking
-        val level = if (speaking && !headset() && rms < BARGE_IN) 0f else rms
-        when (ends.feed(level)) {
+        // Those blocks aren't fed at all: as silence they would teach the endpointer a quiet room that isn't.
+        if (speaking && rms < BARGE_IN && !headset()) return
+        when (ends.feed(rms)) {
             Endpointer.Event.Started -> {
                 if (speaking) hush()
-                if (useServer() == null) { scope.launch { hearOnPhone() }; return }
+                if (useServer() == null) { scope.launch(kotlinx.coroutines.Dispatchers.Main) { hearOnPhone() }; return }
                 synchronized(turn) { turn.clear(); turn.addAll(before); before.clear() }
                 capturing = true
                 _state.update { it.copy(phase = Phase.Listening) }
@@ -375,7 +398,8 @@ class AndroidCoordinatorVoice(
             _state.update { it.copy(phase = Phase.Ready, level = 0f) }
             return
         }
-        scope.launch {
+        val chat = runScope ?: return
+        chat.launch {
             _state.update { it.copy(phase = Phase.Hearing, level = 0f) }
             val text = try {
                 val engine = useServer() ?: throw IOException("The server can't be reached")
@@ -395,7 +419,7 @@ class AndroidCoordinatorVoice(
         if (phoneEars?.isActive == true) return
         val reopen = mic.isOn
         mic.stop()
-        phoneEars = scope.launch {
+        phoneEars = (runScope ?: return).launch {
             _state.update { it.copy(phase = Phase.Listening, engine = VoiceState.Engine.Phone) }
             val words = phone.hear { l -> _state.update { it.copy(level = l) } }
             send(words)
@@ -423,12 +447,20 @@ class AndroidCoordinatorVoice(
         _state.update { if (it.phase == Phase.Sending) it.copy(phase = Phase.Ready) else it }
     }
 
-    private fun take() { audio.requestAudioFocus(focus) }
+    private fun take(): Boolean = audio.requestAudioFocus(focus) != AudioManager.AUDIOFOCUS_REQUEST_FAILED
     private fun release() { audio.abandonAudioFocusRequest(focus) }
+
+    /** A Bluetooth headset's microphone, when one is connected: you talk into it, not the phone. */
+    private fun useHeadsetMic() {
+        if (Build.VERSION.SDK_INT < 31) return
+        audio.availableCommunicationDevices.firstOrNull { it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO || it.type == AudioDeviceInfo.TYPE_BLE_HEADSET }
+            ?.let { runCatching { audio.setCommunicationDevice(it) } }
+    }
 
     /** Wired or Bluetooth headphones: nothing it says reaches the microphone. */
     private fun headset(): Boolean = audio.getDevices(AudioManager.GET_DEVICES_OUTPUTS).any {
-        it.type in setOf(AudioDeviceInfo.TYPE_WIRED_HEADPHONES, AudioDeviceInfo.TYPE_WIRED_HEADSET, AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
+        // Not A2DP: that is as often a car's or a room's speaker as headphones.
+        it.type in setOf(AudioDeviceInfo.TYPE_WIRED_HEADPHONES, AudioDeviceInfo.TYPE_WIRED_HEADSET,
             AudioDeviceInfo.TYPE_BLUETOOTH_SCO, AudioDeviceInfo.TYPE_USB_HEADSET, AudioDeviceInfo.TYPE_BLE_HEADSET)
     }
 

@@ -28,6 +28,8 @@ class VoiceRelayTest {
         val said = SpeechText.plain("Here's the fix:\n```kotlin\nfun a() {\n  b()\n}\n\nval c = 1\n```\nTests pass.")
         assertEquals("Here's the fix: A code block, 4 lines. Tests pass.", said)
         assertEquals("Run it: A line of code.", SpeechText.plain("Run it:\n```\n./gradlew test\n```"))
+        assertEquals("Then: A code block, 2 lines. Done.", SpeechText.plain("Then:\n~~~\nval x = foo(bar)\nprint(x)\n~~~\nDone."))
+        assertEquals("Like this: A code block, 2 lines. Done.", SpeechText.plain("Like this:\n\n    val x = foo(bar)\n    print(x)\n\nDone."))
     }
 
     @Test

@@ -17,6 +17,7 @@ import java.nio.ByteOrder
  *     … -a START                       on, for a chat named "Debug"
  *     … -a SAY --es text "Markdown"     read as a new coordinator reply (--es b64 <base64> for code and quotes)
  *     … -a HEAR --es file /data/local/tmp/turn.wav   (16 kHz mono 16-bit) heard as if you said it
+ *     … -a TALK_DOWN, then -a TALK_UP   push to talk on the microphone
  *     … -a STOP
  */
 class DebugVoiceReceiver : BroadcastReceiver() {
@@ -41,6 +42,9 @@ class DebugVoiceReceiver : BroadcastReceiver() {
                 voice.hearRecording(FloatArray(b.remaining()) { b.get(it) / 32768f })
             }
             "HUSH" -> voice.hush()
+            // Push to talk, as the bar's button: the phone's microphone between DOWN and UP.
+            "TALK_DOWN" -> voice.talk(true)
+            "TALK_UP" -> voice.talk(false)
             "STOP" -> voice.stop()
         }
     }

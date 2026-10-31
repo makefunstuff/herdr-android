@@ -145,10 +145,12 @@ class AudioOut(private val rate: Int = 24_000, prior: Jitter.Prior = Jitter.prio
             .setAudioFormat(AudioFormat.Builder().setSampleRate(rate).setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
                 .setEncoding(AudioFormat.ENCODING_PCM_FLOAT).build())
             .setBufferSizeInBytes(maxOf(min, rate * 4 / 5)) // 200 ms: the jitter buffer is the queue, not the track
-            .setPerformanceMode(AudioTrack.PERFORMANCE_MODE_LOW_LATENCY)
+            // A fast (low-latency) track can't change speed: only at 1× is it one.
+            .setPerformanceMode(if (speed == 1f) AudioTrack.PERFORMANCE_MODE_LOW_LATENCY else AudioTrack.PERFORMANCE_MODE_NONE)
             .setTransferMode(AudioTrack.MODE_STREAM)
             .build()
         if (speed != 1f) runCatching { track.playbackParams = PlaybackParams().setSpeed(speed).setPitch(1f) }
+            .onFailure { Log.w(TAG, "can't play at ${speed}x", it) }
         val slice = rate * Jitter.SLICE_MS / 1000
         var written = 0L
         var queued = 0L // samples waiting in [pending]
