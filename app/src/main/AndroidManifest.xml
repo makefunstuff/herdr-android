@@ -31,6 +31,8 @@
         <intent><action android:name="org.unifiedpush.android.distributor.REGISTER" /></intent>
         <!-- The phone's text to speech, which reads the brief aloud. -->
         <intent><action android:name="android.intent.action.TTS_SERVICE" /></intent>
+        <!-- The phone's speech recogniser: hears you for the coordinator while the voice server is away. -->
+        <intent><action android:name="android.speech.RecognitionService" /></intent>
     </queries>
 
     <!-- enableOnBackInvokedCallback: predictive back (Android 13 and up shows where back goes while

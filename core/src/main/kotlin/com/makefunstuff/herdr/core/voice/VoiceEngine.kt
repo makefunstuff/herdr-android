@@ -50,7 +50,7 @@ class EdgeVoice(
         val body = """{"model":${quote(speechModel)},"input":${quote(text)},"voice":${quote(voice)},"response_format":"pcm","stream":true}"""
         val pcm = PcmFloats()
         var stopped = false
-        request("/tts", "application/json", body.toByteArray(), readMs = 30_000) { bytes ->
+        request("/tts", "application/json", body.toByteArray(), readMs = 8_000) { bytes ->
             val f = pcm.feed(bytes)
             (f.isEmpty() || onAudio(f)).also { if (!it) stopped = true }
         }
@@ -91,7 +91,6 @@ class EdgeVoice(
                     c.requestMethod = "POST"
                     c.doOutput = true
                     c.setRequestProperty("Content-Type", type)
-                    c.setFixedLengthStreamingMode(body.size)
                     c.outputStream.use { it.write(body) }
                 }
                 val code = c.responseCode

@@ -69,7 +69,7 @@ class PhoneSpeech(private val context: Context) {
      * Hears one thing you say with the phone's recogniser: the words, or "" when nothing was heard.
      * [level] gets how loud you are, 0..1; [stopHearing] ends it with what was heard.
      */
-    suspend fun hear(level: (Float) -> Unit): String = withContext(Dispatchers.Main) {
+    suspend fun hear(onSpeech: () -> Unit = {}, level: (Float) -> Unit): String = withContext(Dispatchers.Main) {
         suspendCancellableCoroutine { cont ->
             val r = recognizer ?: SpeechRecognizer.createSpeechRecognizer(context).also { recognizer = it }
             r.setRecognitionListener(object : RecognitionListener {
@@ -80,7 +80,7 @@ class PhoneSpeech(private val context: Context) {
                 override fun onError(error: Int) { if (cont.isActive) cont.resume("") }
                 override fun onRmsChanged(rmsdB: Float) = level(((rmsdB + 2f) / 12f).coerceIn(0f, 1f))
                 override fun onReadyForSpeech(params: Bundle?) {}
-                override fun onBeginningOfSpeech() {}
+                override fun onBeginningOfSpeech() = onSpeech()
                 override fun onBufferReceived(buffer: ByteArray?) {}
                 override fun onEndOfSpeech() {}
                 override fun onPartialResults(partialResults: Bundle?) {}
@@ -88,7 +88,9 @@ class PhoneSpeech(private val context: Context) {
             })
             r.startListening(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
                 .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                .putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName))
+                .putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
+                // The server is often away because the phone is offline: hear on the phone where it can.
+                .putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true))
             cont.invokeOnCancellation { main.post { runCatching { r.cancel() } } }
         }
     }

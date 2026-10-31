@@ -16,7 +16,7 @@ import java.nio.ByteOrder
  *     adb shell am broadcast -n com.makefunstuff.herdr.debug/com.makefunstuff.herdr.voice.DebugVoiceReceiver -a SET --es server http://… --es key …
  *     … -a START                       on, for a chat named "Debug"
  *     … -a SAY --es text "Markdown"     read as a new coordinator reply (--es b64 <base64> for code and quotes)
- *     … -a HEAR --es file /data/local/tmp/turn.wav   (16 kHz mono 16-bit) heard as if you said it
+ *     … -a HEAR --es file <app files dir>/turn.wav   (16 kHz mono 16-bit, copied in with run-as) heard as if you said it
  *     … -a TALK_DOWN, then -a TALK_UP   push to talk on the microphone
  *     … -a STOP
  */
@@ -37,7 +37,8 @@ class DebugVoiceReceiver : BroadcastReceiver() {
                 voice.readAloud(SpaceChatItem.Words("say-" + System.nanoTime(), false, text))
             }
             "HEAR" -> {
-                val bytes = File(intent.getStringExtra("file") ?: return).readBytes()
+                val bytes = runCatching { File(intent.getStringExtra("file") ?: return).readBytes() }
+                    .getOrElse { android.util.Log.w(AudioOut.TAG, "can't read the recording", it); return }
                 val b = ByteBuffer.wrap(bytes, 44, bytes.size - 44).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer()
                 voice.hearRecording(FloatArray(b.remaining()) { b.get(it) / 32768f })
             }
