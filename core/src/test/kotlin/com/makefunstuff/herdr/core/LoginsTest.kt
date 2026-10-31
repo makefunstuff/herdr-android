@@ -47,13 +47,13 @@ class LoginsTest {
           {"id": "claude", "name": "Claude Code", "installed": true, "state": "signed_in", "how": "Claude subscription (Max)", "expires": ${now + 13 * 86400}, "actions": ["login", "logout"]},
           {"id": "codex", "name": "Codex", "installed": true, "state": "signed_in", "how": "ChatGPT login", "renewed": ${now - 8 * 86400}, "actions": ["login", "key", "logout"]},
           {"id": "pi", "name": "pi", "installed": true, "state": "signed_in", "providers": [
-            {"id": "basalt", "source": "command"}, {"id": "deepseek", "source": "command"}, {"id": "llama.cpp", "source": "typed"}], "actions": ["key", "logout"]},
+            {"id": "groq", "source": "command"}, {"id": "deepseek", "source": "command"}, {"id": "llama.cpp", "source": "typed"}], "actions": ["key", "logout"]},
           {"id": "opencode", "name": "opencode", "installed": true, "state": "signed_in", "providers": [
             {"id": "OpenAI", "source": "oauth", "method": "OAuth"}, {"id": "llama.cpp", "source": "typed", "method": "API key"}], "how": null, "actions": ["login", "logout"]},
           {"id": "gemini", "name": "Gemini CLI", "installed": true, "state": "signed_out", "how": "Installed, no login", "actions": []},
           {"id": "crush", "name": "Crush", "installed": false, "state": "missing"}],
-         "profile": [{"file": "~/.bashrc", "line": 16, "name": "OPENAI_API_KEY", "placeholder": true},
-                     {"file": "~/.bashrc", "line": 34, "name": "HF_TOKEN", "placeholder": false}]}
+         "profile": [{"file": "~/.bashrc", "line": 12, "name": "OPENAI_API_KEY", "placeholder": true},
+                     {"file": "~/.bashrc", "line": 27, "name": "HF_TOKEN", "placeholder": false}]}
     """.trimIndent().replace("\n", " ") + "\n"
 
     @Test
@@ -77,7 +77,7 @@ class LoginsTest {
         )
         val steps = LoginWords.moveSteps(r.profileKeys.single())
         assertTrue(steps[0].contains("hf auth login"))
-        assertEquals("Open ~/.bashrc on the machine and delete line 34 (export HF_TOKEN=…)", steps[1])
+        assertEquals("Open ~/.bashrc on the machine and delete line 27 (export HF_TOKEN=…)", steps[1])
     }
 
     @Test
@@ -144,6 +144,80 @@ class LoginsTest {
         return out.lines().filter { it.isNotBlank() }
     }
 
+    /** A run's events with its stdin kept open (closing it ends the run), answering each ask with [answers] in turn. */
+    private fun events(b: Box, vararg args: String, answers: List<String> = emptyList()): List<LoginEvent> {
+        val p = process(b, *args)
+        val left = ArrayDeque(answers)
+        val seen = mutableListOf<LoginEvent>()
+        val reader = p.inputStream.bufferedReader()
+        while (true) {
+            val e = LoginsReader.event(reader.readLine() ?: break) ?: continue
+            seen += e
+            if (e is LoginEvent.Ask && left.isNotEmpty()) { p.outputStream.write((left.removeFirst() + "\n").toByteArray()); p.outputStream.flush() }
+            if (e is LoginEvent.Done) break
+        }
+        p.outputStream.close()
+        p.waitFor(20, TimeUnit.SECONDS)
+        return seen
+    }
+
+    @Test
+    fun aRunThatTimesOutFails() {
+        assumeTrue(python(), "python3 isn't installed")
+        val b = box()
+        b.cli("codex", """[ "$1 $2" = "login --device-auth" ] && { echo 'https://auth.openai.com/codex/device'; sleep 30; }; echo 'Not logged in'""")
+        // A shorter HERDR_LOGINS_TIMEOUT than [process] gives; its stdin stays open.
+        val pb = ProcessBuilder(listOf("python3", script.absolutePath, "run", "codex", "login")).directory(b.home)
+        pb.environment().apply {
+            clear(); put("HOME", b.home.absolutePath); put("PATH", b.bin.absolutePath + ":/usr/bin:/bin")
+            put("HERDR_LOGINS_NO_SHELL_PATH", "1"); put("HERDR_LOGINS_TIMEOUT", "2")
+        }
+        val q = pb.start()
+        val out = q.inputStream.bufferedReader().readText()
+        q.outputStream.close()
+        q.waitFor(20, TimeUnit.SECONDS)
+        val done = assertIs<LoginEvent.Done>(out.lines().mapNotNull(LoginsReader::event).last())
+        assertFalse(done.ok, out)
+        assertEquals(LoginState.SignedOut, done.status?.state)
+    }
+
+    @Test
+    fun closingTheRunStopsTheCli() {
+        assumeTrue(python(), "python3 isn't installed")
+        val b = box()
+        val alive = File(b.home, "alive")
+        b.cli("claude", """[ "$1 $2" = "auth login" ] && { echo 'visit: https://claude.ai/oauth/authorize?x=1'; printf 'Paste code here > '; while :; do touch '${alive.absolutePath}'; sleep 0.2; done; }; echo '{"loggedIn": false}'""")
+        val p = process(b, "run", "claude", "login")
+        val reader = p.inputStream.bufferedReader()
+        while (true) if (LoginsReader.event(reader.readLine() ?: break) is LoginEvent.Ask) break
+        val started = System.currentTimeMillis()
+        p.outputStream.close()
+        assertTrue(p.waitFor(10, TimeUnit.SECONDS), "the run didn't end when its stdin closed")
+        assertTrue(System.currentTimeMillis() - started < 8_000)
+        val last = alive.lastModified()
+        Thread.sleep(800)
+        assertEquals(last, alive.lastModified(), "the CLI still runs")
+        assertFalse(assertIs<LoginEvent.Done>(LoginsReader.event(reader.readText().lines().last { it.isNotBlank() })).ok)
+    }
+
+    @Test
+    fun aRefusedCodeIsAskedForAgain() {
+        assumeTrue(python(), "python3 isn't installed")
+        val b = box()
+        b.cli(
+            "claude",
+            """if [ "$1 $2" = "auth login" ]; then
+              echo 'visit: https://claude.ai/oauth/authorize?x=1'; printf 'Paste code here > '
+              read a; echo 'Invalid code. Please make sure the full code was copied.'
+              read c; [ "${'$'}c" = good-code-123 ] && { echo 'Login successful.'; exit 0; }; exit 1; fi
+            echo '{"loggedIn": true, "authMethod": "claude.ai"}'""",
+        )
+        val seen = events(b, "run", "claude", "login", answers = listOf("bad-code-123", "good-code-123"))
+        val asks = seen.filterIsInstance<LoginEvent.Ask>()
+        assertEquals(listOf(false, true), asks.map { it.again }, seen.toString())
+        assertTrue(assertIs<LoginEvent.Done>(seen.last()).ok, seen.toString())
+    }
+
     @Test
     fun statusReadsWithoutSecrets() {
         assumeTrue(python(), "python3 isn't installed")
@@ -172,7 +246,7 @@ class LoginsTest {
         assertEquals(listOf("HF_TOKEN" to false, "OPENAI_API_KEY" to true), r.profile.map { it.name to it.placeholder })
         assertEquals(2, r.profile[0].line)
         // Only status commands ran.
-        assertEquals(setOf("claude auth status --json", "codex login status", "opencode auth list"), b.log.readLines().toSet())
+        assertEquals(setOf("claude auth status --json", "codex login status", "opencode auth list --standalone"), b.log.readLines().toSet())
     }
 
     @Test
@@ -201,7 +275,7 @@ class LoginsTest {
               sleep 1; echo 'Successfully logged in'; exit 0; fi
             echo 'Logged in using ChatGPT'""",
         )
-        val events = run(b, "run", "codex", "login").mapNotNull(LoginsReader::event)
+        val events = events(b, "run", "codex", "login")
         assertTrue(LoginEvent.Link("https://auth.openai.com/codex/device") in events, events.toString())
         assertTrue(LoginEvent.Code("QK7F-29XD") in events, events.toString())
         val done = assertIs<LoginEvent.Done>(events.last())
@@ -232,6 +306,7 @@ class LoginsTest {
             seen += e
             if (e is LoginEvent.Ask) {
                 assertTrue(e.secret)
+                assertFalse(e.again)
                 p.outputStream.write("browser-code-1234#state\n".toByteArray()); p.outputStream.flush()
             }
             if (e is LoginEvent.Done) break
@@ -258,6 +333,10 @@ class LoginsTest {
         assertEquals(setOf(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE), Files.getPosixFilePermissions(auth.toPath()))
         assertFalse(File(auth.path + ".lock").exists())
         assertTrue(b.log.readLines().none { "gsk" in it })
+
+        val bang = assertIs<LoginEvent.Done>(LoginsReader.event(run(b, "run", "pi", "key", "mistral", input = "!rm -rf ~/x\n").last()))
+        assertFalse(bang.ok)
+        assertFalse("mistral" in auth.readText())
 
         val refused = assertIs<LoginEvent.Done>(LoginsReader.event(run(b, "run", "pi", "key", "deepseek", input = "typed-over\n").last()))
         assertFalse(refused.ok)

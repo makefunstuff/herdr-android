@@ -5,7 +5,7 @@ import com.makefunstuff.herdr.core.ssh.CommandResult
 
 /**
  * A machine's agent CLIs as herdr-logins reads them there (`status`), and what a sign-in says as it
- * runs (`run`): the shapes the script prints, as read on a real machine (host/herdr-logins), at the
+ * runs (`run`): the shapes the script prints, as host/herdr-logins prints them, at the
  * demo's time. No CLI is run and nothing is signed in or out.
  */
 class FakeLogins(
@@ -54,16 +54,16 @@ class FakeLogins(
             """{"id": "codex", "name": "Codex", "installed": true, "state": "signed_in", "how": "ChatGPT login", "renewed": ${now - 8 * 86_400L},
                "actions": ["login", "key", "logout"]}""",
             """{"id": "pi", "name": "pi", "installed": true, "state": "signed_in", "providers": [
-                 {"id": "anthropic", "source": "typed"}, {"id": "basalt", "source": "command"}, {"id": "deepseek", "source": "command"},
-                 {"id": "llama.cpp", "source": "typed"}, {"id": "opencode-go", "source": "command"}, {"id": "opencode-go-claude", "source": "typed"},
-                 {"id": "openrouter", "source": "command"}, {"id": "strata", "source": "command"}], "actions": ["key", "logout"]}""",
+                 {"id": "anthropic", "source": "typed"}, {"id": "deepseek", "source": "command"}, {"id": "groq", "source": "command"},
+                 {"id": "llama.cpp", "source": "typed"}, {"id": "mistral", "source": "command"}, {"id": "ollama", "source": "typed"},
+                 {"id": "openrouter", "source": "command"}, {"id": "together", "source": "command"}], "actions": ["key", "logout"]}""",
             """{"id": "opencode", "name": "opencode", "installed": true, "state": "signed_in", "providers": [
                  {"id": "OpenAI", "source": "oauth", "method": "OAuth"}, {"id": "llama.cpp", "source": "typed", "method": "API key"}],
                "how": null, "actions": ["login", "logout"]}""",
             if (gemini) """{"id": "gemini", "name": "Gemini CLI", "installed": true, "state": "signed_out", "how": "Installed, no login", "actions": []}""" else null,
         )
-        val keys = if (!profile) "" else """{"file": "~/.bashrc", "line": 16, "name": "OPENAI_API_KEY", "placeholder": true},
-            {"file": "~/.bashrc", "line": 34, "name": "HF_TOKEN", "placeholder": false}"""
+        val keys = if (!profile) "" else """{"file": "~/.bashrc", "line": 12, "name": "OPENAI_API_KEY", "placeholder": true},
+            {"file": "~/.bashrc", "line": 27, "name": "HF_TOKEN", "placeholder": false}"""
         return """{"ok": true, "version": "${HerdrLogins.VERSION}", "at": $now, "clis": [${clis.joinToString(", ")}], "profile": [$keys]}"""
             .replace("\n", " ")
     }

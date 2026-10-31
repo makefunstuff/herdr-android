@@ -59,6 +59,7 @@ import com.makefunstuff.herdr.core.logins.LoginState
 import com.makefunstuff.herdr.core.logins.LoginWords
 import com.makefunstuff.herdr.core.logins.LoginsReport
 import com.makefunstuff.herdr.core.logins.ProfileKey
+import com.makefunstuff.herdr.data.HostManager
 import com.makefunstuff.herdr.data.LoginsStore
 import com.makefunstuff.herdr.ui.common.EmptyState
 import com.makefunstuff.herdr.ui.common.LocalContainer
@@ -138,16 +139,16 @@ fun LoginsScreen(nav: NavController, machineId: String) {
     var signOut by remember { mutableStateOf<Pair<CliLogin, String?>?>(null) }
     var moving by remember { mutableStateOf(false) }
     var showHow by remember { mutableStateOf<CliLogin?>(null) }
-    val runner = remember(machineId) { LoginRunner(store, session, scope) }
+    val runner = remember(machineId) { LoginRunner(store, container.hosts, session, scope) }
     val guard = LocalGuard.current
 
-    fun begin(cli: CliLogin, action: LoginAction, provider: String? = null) {
+    fun begin(cli: CliLogin, action: LoginAction, provider: String? = null, key: String? = null) {
         val what = when (action) {
             LoginAction.Login -> "Sign in to ${cli.name}${provider?.let { " ($it)" }.orEmpty()} on $name?"
             LoginAction.Key -> "Give ${cli.name} a key on $name?"
             LoginAction.Logout -> "Sign ${cli.name}${provider?.let { " ($it)" }.orEmpty()} out on $name?"
         }
-        guard.run(Guarded.Login, what) { runner.start(cli, action, provider) }
+        guard.run(Guarded.Login, what) { runner.start(cli, action, provider, key) }
     }
 
     fun signIn(cli: CliLogin) {
@@ -243,7 +244,7 @@ fun LoginsScreen(nav: NavController, machineId: String) {
         )
     }
     keyFor?.let { ask ->
-        KeySheet(ask, name, runner, onDismiss = { keyFor = null; runner.close() }, onSave = { provider -> begin(ask.cli, LoginAction.Key, provider) })
+        KeySheet(ask, name, runner, onDismiss = { keyFor = null; runner.close() }, onSave = { provider, key -> begin(ask.cli, LoginAction.Key, provider, key) })
     }
     providerFor?.let { cli ->
         ProviderDialog(cli, onDismiss = { providerFor = null }, onGo = { p -> providerFor = null; begin(cli, LoginAction.Login, p) })
@@ -481,47 +482,56 @@ internal class Running(val cli: CliLogin, val action: LoginAction, val provider:
     val lines = mutableStateListOf<String>()
     var done by mutableStateOf<LoginEvent.Done?>(null)
     var sent by mutableStateOf(false)
+
+    /** What the CLI said to what was typed when it asks again (a code it refused). */
+    var refused by mutableStateOf<String?>(null)
 }
 
-/** Starts and holds the one run of a screen; its status goes into [store] when it ends. */
+/**
+ * Starts and holds the one run of a screen; its status goes into [store] when it ends. The machine
+ * is borrowed for the run ([HostManager.borrow]), so opening the sign-in page in the browser, which
+ * puts the app in the background, doesn't close the SSH session the run goes over.
+ */
 @Stable
-internal class LoginRunner(private val store: LoginsStore, private val session: HostSession, private val scope: CoroutineScope) {
+internal class LoginRunner(
+    private val store: LoginsStore,
+    private val hosts: HostManager,
+    private val session: HostSession,
+    private val scope: CoroutineScope,
+) {
     var current by mutableStateOf<Running?>(null)
         private set
 
-    /** A key typed in the key sheet, given to the run as soon as it starts, then dropped. */
-    private var pendingKey: String? = null
-
-    fun start(cli: CliLogin, action: LoginAction, provider: String?) {
-        val key = pendingKey.takeIf { action == LoginAction.Key }
+    /** Starts [action]; [key] (a key's run) is typed in as soon as it runs, and kept nowhere else. */
+    fun start(cli: CliLogin, action: LoginAction, provider: String?, key: String? = null) {
         close()
         val r = Running(cli, action, provider)
         current = r
-        pendingKey = key
         scope.launch {
             try {
-                val run = store.client(session).begin(cli.id, action, provider)
-                r.run = run
-                pendingKey?.let { run.type(it) }
-                pendingKey = null
-                run.events.collect { e ->
-                    when (e) {
-                        is LoginEvent.Link -> if (r.link == null) r.link = e.url
-                        is LoginEvent.Code -> if (r.code == null) r.code = e.code
-                        is LoginEvent.Ask -> { r.ask = e; r.sent = false }
-                        is LoginEvent.Line -> { r.lines.add(e.text); if (r.lines.size > 40) r.lines.removeAt(0) }
-                        is LoginEvent.Done -> {
-                            r.done = e
-                            e.status?.let { store.put(session.machine.id, it) }
+                hosts.borrow(session.machine.id) { s ->
+                    val run = store.client(s).begin(cli.id, action, provider)
+                    r.run = run
+                    if (current !== r) { run.close(); return@borrow }
+                    key?.let { run.type(it) }
+                    run.events.collect { e ->
+                        when (e) {
+                            is LoginEvent.Link -> if (r.link == null) r.link = e.url
+                            is LoginEvent.Code -> if (r.code == null) r.code = e.code
+                            is LoginEvent.Ask -> { r.refused = if (e.again) r.lines.lastOrNull() else null; r.ask = e; r.sent = false }
+                            is LoginEvent.Line -> { r.lines.add(e.text); if (r.lines.size > 40) r.lines.removeAt(0) }
+                            is LoginEvent.Done -> {
+                                r.done = e
+                                e.status?.let { store.put(session.machine.id, it) }
+                            }
                         }
                     }
                 }
             } catch (e: CancellationException) {
                 throw e
             } catch (t: Throwable) {
-                r.done = LoginEvent.Done(false, t.plainMessage(), null)
+                if (r.done == null) r.done = LoginEvent.Done(false, t.plainMessage(), null)
             } finally {
-                pendingKey = null
                 r.run?.close()
             }
             // Read the rest again: a sign-in can change what another CLI sees (a shared key).
@@ -529,19 +539,16 @@ internal class LoginRunner(private val store: LoginsStore, private val session: 
         }
     }
 
-    /** The key for the next [start], kept only until it is typed in. */
-    fun holdKey(key: String) { pendingKey = key }
-
     fun type(line: String) {
         val r = current ?: return
         r.sent = true
         scope.launch { runCatching { r.run?.type(line) }.onFailure { r.done = LoginEvent.Done(false, it.plainMessage(), null) } }
     }
 
+    /** Ends the run: closing its stream ends the CLI on the machine too. */
     fun close() {
         current?.run?.close()
         current = null
-        pendingKey = null
     }
 }
 
@@ -598,12 +605,12 @@ private fun RunSheet(r: Running, machine: String, runner: LoginRunner) {
                     PrimaryButton({ runCatching { uri.openUri(link) } }) {
                         Icon(HerdrIcons.ExternalLink, null, Modifier.size(16.dp)); Spacer(Modifier.width(Space.xs)); Text("Open ${host(link)}")
                     }
-                    if (ask != null) AskField(ask, r.sent, label = "Code from the page", onSend = runner::type)
+                    if (ask != null) AskField(ask, r.sent, r.refused, label = "Code from the page", onSend = runner::type)
                     else Waiting("Waiting for ${r.cli.name}…")
                 }
                 ask != null -> {
                     Text(ask.text, style = MaterialTheme.typography.bodyMedium)
-                    AskField(ask, r.sent, label = "Answer", onSend = runner::type)
+                    AskField(ask, r.sent, r.refused, label = "Answer", onSend = runner::type)
                 }
                 else -> Waiting(if (r.action == LoginAction.Logout) "Signing out…" else "Starting ${r.cli.name}'s sign-in on $machine…")
             }
@@ -633,13 +640,15 @@ private fun Waiting(text: String) {
 }
 
 @Composable
-private fun AskField(ask: LoginEvent.Ask, sent: Boolean, label: String, onSend: (String) -> Unit) {
+private fun AskField(ask: LoginEvent.Ask, sent: Boolean, refused: String?, label: String, onSend: (String) -> Unit) {
     var value by remember(ask) { mutableStateOf("") }
     HerdrField(
         value, { value = it.replace("\n", "").replace("\r", "") }, singleLine = true, label = label,
         visualTransformation = if (ask.secret && label != "Code from the page") PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
         keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, keyboardType = if (ask.secret) KeyboardType.Password else KeyboardType.Text),
         enabled = !sent,
+        isError = refused != null && !sent,
+        supportingText = refused?.takeIf { !sent }?.let { { Text(it) } },
     )
     if (sent) Waiting("Sent. Waiting for it…")
     else PrimaryButton({ onSend(value.trim()); value = "" }, enabled = value.isNotBlank()) { Text("Send") }
@@ -647,7 +656,7 @@ private fun AskField(ask: LoginEvent.Ask, sent: Boolean, label: String, onSend: 
 
 /** Paste a key: Codex's, or one provider's of pi. Saved and checked on the machine, then dropped here. */
 @Composable
-private fun KeySheet(ask: KeyAsk, machine: String, runner: LoginRunner, onDismiss: () -> Unit, onSave: (String?) -> Unit) {
+private fun KeySheet(ask: KeyAsk, machine: String, runner: LoginRunner, onDismiss: () -> Unit, onSave: (String?, String) -> Unit) {
     val c = Herdr.colors
     val context = LocalContext.current
     val pi = ask.cli.id == "pi"
@@ -691,9 +700,7 @@ private fun KeySheet(ask: KeyAsk, machine: String, runner: LoginRunner, onDismis
             if (r != null && done == null) Waiting("Saving and checking on $machine…")
             else PrimaryButton(
                 {
-                    runner.holdKey(key)
-                    key = ""
-                    onSave(if (pi) provider.trim() else null)
+                    onSave(if (pi) provider.trim() else null, key)
                 },
                 enabled = key.length >= 8 && (!pi || provider.isNotBlank()) && keyring == null,
                 modifier = Modifier.fillMaxWidth(),

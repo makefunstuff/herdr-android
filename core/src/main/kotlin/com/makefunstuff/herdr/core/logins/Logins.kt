@@ -71,8 +71,8 @@ sealed class LoginEvent {
     /** A code to type on that page. */
     data class Code(val code: String) : LoginEvent()
 
-    /** The CLI waits for something typed: [secret] hides it as it is typed. */
-    data class Ask(val text: String, val secret: Boolean) : LoginEvent()
+    /** The CLI waits for something typed: [secret] hides it as it is typed; [again]: it refused what was typed and waits on. */
+    data class Ask(val text: String, val secret: Boolean, val again: Boolean = false) : LoginEvent()
 
     /** A line it printed (with anything typed in masked). */
     data class Line(val text: String) : LoginEvent()
@@ -141,7 +141,7 @@ object LoginsReader {
         return when (o.str("event")) {
             "url" -> o.str("url")?.let { LoginEvent.Link(it) }
             "code" -> o.str("code")?.let { LoginEvent.Code(it) }
-            "ask" -> LoginEvent.Ask(o.str("text").orEmpty(), o.bool("secret") == true)
+            "ask" -> LoginEvent.Ask(o.str("text").orEmpty(), o.bool("secret") == true, o.bool("again") == true)
             "line" -> o.str("text")?.let { LoginEvent.Line(it) }
             "done" -> LoginEvent.Done(o.bool("ok") == true, o.str("msg"), (o["status"] as? JsonObject)?.let(::cli))
             else -> null

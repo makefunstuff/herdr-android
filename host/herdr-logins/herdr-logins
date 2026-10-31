@@ -93,10 +93,10 @@ def find_path():
 def run(argv, stdin=None, timeout=STATUS_TIMEOUT):
     """[exit, stdout] of a CLI's own command, or [None, ""] when it isn't there or hangs."""
     try:
-        p = subprocess.run(argv, input=stdin.encode() if stdin is not None else None,
-                           stdin=None if stdin is not None else subprocess.DEVNULL,
-                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=timeout,
-                           env=dict(os.environ, NO_COLOR="1", TERM="dumb"))
+        # Python 3.6 refuses stdin= next to input=, even as None.
+        io = {"input": stdin.encode()} if stdin is not None else {"stdin": subprocess.DEVNULL}
+        p = subprocess.run(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=timeout,
+                           env=dict(os.environ, NO_COLOR="1", TERM="dumb"), **io)
         return p.returncode, ANSI.sub("", p.stdout.decode("utf-8", "replace"))
     except Exception:
         return None, ""
@@ -157,7 +157,12 @@ def claude():
         env = "CLAUDE_CODE_OAUTH_TOKEN"
     if env:
         return dict(c, state="signed_in", how="%s from the environment" % env, source="env", actions=[])
-    how = {"claude.ai": "Claude subscription", "console": "Anthropic Console (API billing)"}.get(method, method or "Signed in")
+    if method not in ("claude.ai", "console"):
+        # A key from a helper command, a token, a cloud provider: set up on the machine, nothing to change from here.
+        how = {"api_key_helper": "Key from a helper command (apiKeyHelper)", "api_key": "API key",
+               "oauth_token": "Long-lived token", "third_party": "A cloud provider (Bedrock, Vertex…)"}.get(method, "Signed in")
+        return dict(c, state="signed_in", how=how, source="env", actions=[])
+    how = {"claude.ai": "Claude subscription", "console": "Anthropic Console (API billing)"}[method]
     if plan and method == "claude.ai":
         how += " (%s)" % plan.capitalize()
     oauth = (read_json(os.path.join(CLAUDE_DIR, ".credentials.json")) or {}).get("claudeAiOauth") or {}
@@ -226,7 +231,10 @@ def opencode():
     c = {"id": "opencode", "name": "opencode", "installed": bool(shutil.which("opencode"))}
     if not c["installed"]:
         return dict(c, state="missing")
-    code, out = run(["opencode", "auth", "list"])
+    # --standalone: opencode 2's own background service isn't started (and left running) for a look.
+    code, out = run(["opencode", "auth", "list", "--standalone"])
+    if code != 0:
+        code, out = run(["opencode", "auth", "list"])
     providers = []
     for line in out.splitlines():
         # "OpenAI        OAuth                       stored"
@@ -264,7 +272,9 @@ CLIS = [("claude", claude), ("codex", codex), ("pi", pi), ("opencode", opencode)
 
 EXPORT = re.compile(r"^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)$")
 FISH = re.compile(r"^\s*set\s+(?:-[a-zA-Z]+\s+)*([A-Za-z_][A-Za-z0-9_]*)\s+(.*)$")
-SECRETISH = re.compile(r"(API_?KEY|TOKEN|SECRET|PASSWORD|ACCESS_KEY|AUTH)$|_KEY$", re.I)
+SECRETISH = re.compile(r"(API_?KEY|_TOKEN|^TOKEN|SECRET|PASSWORD|ACCESS_KEY)$", re.I)
+# A value that is a path is no key.
+NOT_A_KEY = re.compile(r"^[~/.]")
 
 
 def profile_keys():
@@ -285,7 +295,7 @@ def profile_keys():
                 continue
             value = m.group(2).split(" #")[0].strip().strip("'\"")
             # A value from a command or another variable isn't the key itself in the file.
-            if not value or value.startswith("$") or "`" in value:
+            if not value or value.startswith("$") or "`" in value or NOT_A_KEY.match(value):
                 continue
             found.append({"file": "~/" + rel, "line": n, "name": m.group(1), "placeholder": len(value) < 16})
     return found
@@ -330,13 +340,40 @@ class Masked:
         return text
 
 
+def exit_code(st):
+    """A wait status as an exit code; a signal is negative (never 0, so never a success)."""
+    if os.WIFSIGNALED(st):
+        return -os.WTERMSIG(st)
+    return os.WEXITSTATUS(st)
+
+
+def stop(pid):
+    """Ends a CLI that is still running: SIGTERM, then SIGKILL after a few seconds."""
+    import signal
+    for sig, wait in ((signal.SIGTERM, 3.0), (signal.SIGKILL, 3.0)):
+        try:
+            os.kill(pid, sig)
+        except OSError:
+            return
+        end = time.time() + wait
+        while time.time() < end:
+            try:
+                done, _ = os.waitpid(pid, os.WNOHANG)
+            except ChildProcessError:
+                return
+            if done:
+                return
+            time.sleep(0.05)
+
+
 def drive(argv, secret_asks=False):
     """Runs a CLI's own interactive command on a terminal of its own, relaying it as events.
 
-    What it prints goes out masked; links and codes once each; a line it waits on as an ask.
-    Each line on stdin is typed into it. Returns its exit status (None: it was stopped)."""
+    What it prints goes out masked; links and codes once each; a line it waits on as an ask (and
+    again when it answers what was typed with a line but keeps waiting, a code it refused). Each line
+    on stdin is typed into it; stdin closing (the phone gave up) ends it. Returns its exit status, or
+    None when it was stopped (stdin closed, or it ran out of time)."""
     import pty
-    import signal
     masked = Masked()
     pid, fd = pty.fork()
     if pid == 0:
@@ -350,14 +387,17 @@ def drive(argv, secret_asks=False):
     buf = ""
     partial_at = None
     asked = None
-    stdin_open = True
+    last_ask = None
+    said_after_typed = None
+    typed_at = None
+    inbuf = b""
     started = time.time()
     pending = b""
 
     def out_line(text):
         text = masked(text).rstrip()
         if not text.strip():
-            return
+            return False
         for u in URL.findall(text):
             u = u.rstrip(".,)")
             if u not in seen:
@@ -368,54 +408,74 @@ def drive(argv, secret_asks=False):
                 seen.add(c)
                 emit({"event": "code", "code": c})
         emit({"event": "line", "text": text[:400]})
+        return True
 
-    status = None
+    def ask(text, again=False):
+        emit({"event": "ask", "text": text[:400], "again": again,
+              "secret": secret_asks or bool(re.search(r"key|token|secret|password|code", text, re.I))})
+
+    def take(data):
+        nonlocal buf, partial_at, said_after_typed
+        buf += ANSI.sub("", data).replace("\r\n", "\n")
+        # A lone \r redraws the line: keep what is after it.
+        while "\n" in buf:
+            line, buf = buf.split("\n", 1)
+            if out_line(line.split("\r")[-1]) and typed_at is not None:
+                said_after_typed = time.time()
+        buf = buf.split("\r")[-1]
+        partial_at = time.time() if buf.strip() else None
+
     while True:
         if time.time() - started > RUN_TIMEOUT:
-            os.kill(pid, signal.SIGTERM)
-            break
-        fds = [fd] + ([0] if stdin_open else [])
-        r, _, _ = select.select(fds, [], [], 0.3)
+            stop(pid)
+            emit({"event": "line", "text": "It took too long and was stopped"})
+            return None
+        r, _, _ = select.select([fd, 0], [], [], 0.3)
         if fd in r:
             try:
                 data = os.read(fd, 4096)
             except OSError:
                 data = b""
-            if not data:
-                break
-            pending += data
-            try:
-                chunk = pending.decode("utf-8")
-                pending = b""
-            except UnicodeDecodeError:
-                continue
-            buf += ANSI.sub("", chunk).replace("\r\n", "\n")
-            # A lone \r redraws the line: keep what is after it.
-            while "\n" in buf:
-                line, buf = buf.split("\n", 1)
-                out_line(line.split("\r")[-1])
-            buf = buf.split("\r")[-1]
-            partial_at = time.time() if buf.strip() else None
+            if data:
+                pending += data
+                try:
+                    chunk = pending.decode("utf-8")
+                    pending = b""
+                    take(chunk)
+                except UnicodeDecodeError:
+                    pass
         if 0 in r:
-            line = sys.stdin.readline()
-            if not line:
-                stdin_open = False
-            else:
-                typed = line.rstrip("\n")
+            got = os.read(0, 4096)
+            if not got:
+                # The phone closed the run: the CLI goes with it.
+                stop(pid)
+                return None
+            inbuf += got
+            while b"\n" in inbuf:
+                line, inbuf = inbuf.split(b"\n", 1)
+                typed = line.decode("utf-8", "replace").rstrip("\r")
                 masked.add(typed)
                 os.write(fd, typed.encode() + b"\r")
                 asked = None
+                typed_at = time.time()
+                said_after_typed = None
         # A line it waits on (no newline after it, nothing more for a moment): a question.
         if partial_at and time.time() - partial_at > 0.6 and buf.strip() != asked:
             asked = buf.strip()
             text = masked(asked)
-            out_line(text) if URL.search(text) or CODE.search(text) else None
-            emit({"event": "ask", "text": text[:400],
-                  "secret": secret_asks or bool(re.search(r"key|token|secret|password|code", text, re.I))})
+            if URL.search(text) or CODE.search(text):
+                out_line(text)
+            last_ask = text
+            ask(text)
+            typed_at = None
             partial_at = None
+        # It answered what was typed with a line and waits on (a refused code): ask again.
+        elif said_after_typed and last_ask and time.time() - said_after_typed > 1.5:
+            ask(last_ask, again=True)
+            typed_at = None
+            said_after_typed = None
         done, st = os.waitpid(pid, os.WNOHANG)
         if done:
-            status = os.waitstatus_to_exitcode(st) if hasattr(os, "waitstatus_to_exitcode") else (st >> 8)
             # What it printed last.
             try:
                 while True:
@@ -425,20 +485,12 @@ def drive(argv, secret_asks=False):
                     data = os.read(fd, 4096)
                     if not data:
                         break
-                    buf += ANSI.sub("", data.decode("utf-8", "replace")).replace("\r\n", "\n")
+                    take(data.decode("utf-8", "replace"))
             except OSError:
                 pass
-            for line in buf.split("\n"):
-                out_line(line.split("\r")[-1])
-            return status
-    try:
-        _, st = os.waitpid(pid, 0)
-        status = st >> 8
-    except ChildProcessError:
-        pass
-    if buf.strip():
-        out_line(buf)
-    return status
+            if buf.strip():
+                out_line(buf.split("\r")[-1])
+            return exit_code(st)
 
 
 def with_stdin(argv):
@@ -470,6 +522,13 @@ def pi_edit(provider, change):
             os.mkdir(lock)
             break
         except FileExistsError:
+            # proper-lockfile counts a lock untouched for 10 s as stale; a pi that died left it.
+            try:
+                if time.time() - os.stat(lock).st_mtime > 30:
+                    os.rmdir(lock)
+                    continue
+            except OSError:
+                pass
             time.sleep(0.1)
     else:
         return "pi is changing its logins right now: try again in a moment"
@@ -480,13 +539,15 @@ def pi_edit(provider, change):
         refused = change(entries)
         if refused:
             return refused
-        fd, tmp = tempfile.mkstemp(prefix=".auth.json.", dir=PI_DIR)
+        # Through a symlink (dotfiles) to the file it points at, as pi writes it.
+        target = os.path.realpath(path)
+        fd, tmp = tempfile.mkstemp(prefix=".auth.json.", dir=os.path.dirname(target))
         try:
             os.fchmod(fd, 0o600)
             with os.fdopen(fd, "w") as f:
                 json.dump(entries, f, indent=2)
                 f.write("\n")
-            os.replace(tmp, path)
+            os.replace(tmp, target)
         except Exception:
             if os.path.exists(tmp):
                 os.unlink(tmp)
@@ -503,6 +564,9 @@ def pi_key(provider):
     secret = sys.stdin.readline().rstrip("\n")
     if not secret:
         return "Nothing was typed in"
+    if secret[0] in "!$":
+        # pi would run it as a command, or read it as a variable's name.
+        return "A key can't start with ! or $"
 
     def put(entries):
         old = entries.get(provider)
