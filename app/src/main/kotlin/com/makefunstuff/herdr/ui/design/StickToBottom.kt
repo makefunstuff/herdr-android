@@ -88,6 +88,16 @@ class ChatStick internal constructor(private val list: LazyListState, private va
         }
     }
 
+    /** Sending that shows as [items] first (voice messages, by id): one added goes down, as sending does. */
+    @Composable
+    fun SentWith(items: List<String>) {
+        val seen = remember(this) { mutableSetOf<String>().apply { addAll(items) } }
+        LaunchedEffect(this, items) {
+            if (items.any { it !in seen }) sent()
+            seen.addAll(items)
+        }
+    }
+
     private fun here() = !list.canScrollBackward || StickToBottom.atEnd(list.firstVisibleItemIndex, list.firstVisibleItemScrollOffset, slop)
 
     /**

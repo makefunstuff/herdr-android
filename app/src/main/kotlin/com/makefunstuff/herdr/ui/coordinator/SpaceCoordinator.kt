@@ -168,7 +168,6 @@ internal fun SpaceCoordinator(nav: NavController, machineId: String, session: Ho
         draftKey,
         online = state.online && board != null && space != null,
         upload = { file, name ->
-            stick.sent()
             val b = board ?: throw java.io.IOException("Shepherdr isn't reachable")
             val id = space?.id ?: throw java.io.IOException("No space to send it to")
             b.upload(id, name, file.readBytes(), VoiceNotes.MIME)
@@ -260,6 +259,7 @@ internal fun SpaceCoordinator(nav: NavController, machineId: String, session: Ho
     val foot = t?.working == true || (chatProblem ?: problem) != null || shared.waitNote != null
     // At the newest message, and brought down to every new one: the rules every chat shares.
     stick.Follow(remember(items) { items.map { it.id } }, content = items to foot)
+    stick.SentWith(voice.notes.map { it.id })
     val typing = typingInShortWindow()
     val c = Herdr.colors
     Scaffold(

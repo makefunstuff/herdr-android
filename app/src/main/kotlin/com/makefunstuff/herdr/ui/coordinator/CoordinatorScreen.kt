@@ -222,9 +222,9 @@ private fun BoardCoordinator(nav: NavController, machineId: String, session: Hos
         if (mine != null && SentMatch.count(mine.text, base.filter { it.you }.map { it.text }) <= mine.baseline) base + ChatLine(true, mine.text, pending = true) else base
     }
     // At the newest line, and brought down to every new one: the rules every chat shares. A line is
-    // known by its place and words (its answer may come as new words on the same last line); the one
+    // known by its place, as the list keys it (an answer being written grows on the same line); the one
     // on its way is yours, and sending already went down. The foot under it is followed too.
-    val lineKeys = remember(lines) { lines.mapIndexedNotNull { i, l -> said(i, l).takeIf { !l.pending } } }
+    val lineKeys = remember(lines) { lines.mapIndexedNotNull { i, l -> lineKey(i, l).takeIf { !l.pending } } }
     stick.Follow(lineKeys, content = lines to hasFoot(v, tooOld, problem, waitNote))
     // A new answer, or the Coordinator done with one, may have added or started tasks.
     LaunchedEffect(lines.count { !it.you }, v?.busy) { if (v != null && !v.busy) readTasksNow.trySend(Unit) }
@@ -373,7 +373,7 @@ private fun BoardCoordinator(nav: NavController, machineId: String, session: Hos
                             val last = lines.lastIndex
                             itemsIndexed(lines.asReversed(), key = { i, l -> lineKey(last - i, l) }) { i, line ->
                                 Column(verticalArrangement = Arrangement.spacedBy(Space.m)) {
-                                    if (said(last - i, line) == stick.unread) NewLine()
+                                    if (lineKey(last - i, line) == stick.unread) NewLine()
                                     Bubble(line, byKey, openTask)
                                 }
                             }
@@ -520,9 +520,6 @@ private fun Bubble(line: ChatLine, tasks: Map<String, BoardTask>, onTask: (Board
 
 /** A line of the conversation in the list, by its place and side. */
 private fun lineKey(index: Int, line: ChatLine) = "$index/${line.you}"
-
-/** A line as a message: its place, side and words. */
-private fun said(index: Int, line: ChatLine) = "$index/${line.you}/${line.text.hashCode()}"
 
 /** Whether [Foot] says anything. */
 private fun hasFoot(v: CoordinatorView?, tooOld: Boolean, problem: String?, waitNote: String?) =

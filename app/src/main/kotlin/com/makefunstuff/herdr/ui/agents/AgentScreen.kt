@@ -358,7 +358,7 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
     val voice = rememberVoiceMessages(
         chatKey,
         online = host.online,
-        upload = { file, name -> stick.sent(); file.inputStream().use { session.upload(name, it) } },
+        upload = { file, name -> file.inputStream().use { session.upload(name, it) } },
         deliver = { remote, _ -> deliverVoice(remote) },
         fetch = { remote -> session.fetchImage(remote) },
     )
@@ -429,6 +429,7 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
     val workingLine = status == AgentStatus.Working && typing && !liveHead && !thinking
     // At the newest message, and brought down to every new one: the rules every chat shares.
     stick.Follow(remember(rows) { rows.filter { it.isMessage }.map { it.key } }, content = rows to workingLine)
+    stick.SentWith(voice.notes.map { it.id })
     // What happened since the chat was last on screen, until hidden or until you write.
     val away = remember(state.turns, since, back, ahead, live) {
         AwaySummary.of(state.turns, since + ahead, back + ahead, live != null)
