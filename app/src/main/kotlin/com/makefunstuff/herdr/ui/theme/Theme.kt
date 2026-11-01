@@ -347,6 +347,10 @@ fun AgentStatus.title(): String = when (this) {
     AgentStatus.Unknown -> "Other"
 }
 
+/** Its state in the one word every screen uses ("needs you", not herdr-core's "question"); a state the app lacks as herdr says it. */
+fun com.makefunstuff.herdr.core.api.AgentInfo.statusWord(): String =
+    if (agentStatus == AgentStatus.Unknown) statusLabel else agentStatus.title().lowercase()
+
 /**
  * The terminal's colours: the web UI's `--term-*` tokens (panel ground, text, amber cursor) over
  * xterm.js's default ANSI colours, which the web UI keeps; any cell's text is held at 4.5:1 on its

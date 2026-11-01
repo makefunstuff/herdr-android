@@ -44,6 +44,12 @@ import androidx.compose.ui.unit.sp
 import com.makefunstuff.herdr.core.api.AgentStatus
 import com.makefunstuff.herdr.core.board.BoardAction
 import com.makefunstuff.herdr.core.board.BoardTask
+import com.makefunstuff.herdr.core.board.WorkCard
+import com.makefunstuff.herdr.core.chat.Markdown
+import com.makefunstuff.herdr.core.board.WorkStatus
+import com.makefunstuff.herdr.core.board.WorkTask
+import com.makefunstuff.herdr.core.shepherdr.V2Board
+import com.makefunstuff.herdr.ui.board.prNumberOf
 import com.makefunstuff.herdr.core.chat.BlockedPrompt
 import com.makefunstuff.herdr.core.home.AgentRow
 import com.makefunstuff.herdr.core.home.HomeAgent
@@ -61,6 +67,7 @@ import com.makefunstuff.herdr.ui.design.QuietCard
 import com.makefunstuff.herdr.ui.design.SecondaryButton
 import com.makefunstuff.herdr.ui.design.StatusBadge
 import com.makefunstuff.herdr.ui.theme.CodeStyle
+import com.makefunstuff.herdr.ui.theme.statusWord
 import com.makefunstuff.herdr.ui.theme.Herdr
 import com.makefunstuff.herdr.ui.theme.Space
 import com.makefunstuff.herdr.ui.theme.color
@@ -291,7 +298,7 @@ fun TaskCard(
                 (w.agent?.agent?.displayName ?: t.agent).takeIf { it.isNotEmpty() && says.isEmpty() },
                 w.machineLabel.takeIf { showMachine },
             ),
-            badge = { StatusBadge(t.status.label, t.status.color()) },
+            badge = { StatusBadge(t.status.word, t.status.color()) },
         )
         if (busy != null) {
             Box(Modifier.padding(start = 22.dp, top = Space.s)) { BusyLine(busy) }
@@ -313,6 +320,97 @@ fun TaskCard(
                 AnswerButton(answer.second, icon, primary = primary, enabled = true, onClick = onAnswer)
             }
             AnswerButton("Open", null, primary = answer == null, enabled = true, onClick = onOpen)
+        }
+    }
+}
+
+/** A Shepherdr 2 space whose coordinator asks you something, as a card: Open goes to its chat, where the question is. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun CoordinatorCard(w: Waiting.Coordinator, showMachine: Boolean, onOpen: () -> Unit) {
+    val c = Herdr.colors
+    WaitingCard(false, onOpen, null, "Open the coordinator chat", emptyList()) {
+        CardHead(
+            mark = { Box(Modifier.size(22.dp), contentAlignment = Alignment.Center) { Icon(HerdrIcons.MessagesSquare, null, tint = c.text, modifier = Modifier.size(20.dp)) } },
+            title = "${w.space.name}'s coordinator asks you",
+            key = null,
+            meta = listOfNotNull("Answer it in the coordinator chat", w.machineLabel.takeIf { showMachine }),
+            badge = { StatusBadge(WorkStatus.Need.label, WorkStatus.Need.color()) },
+        )
+        FlowRow(Modifier.padding(start = 34.dp, top = Space.m), horizontalArrangement = Arrangement.spacedBy(Space.s)) {
+            AnswerButton("Open", null, primary = true, enabled = true, onClick = onOpen)
+        }
+    }
+}
+
+/**
+ * A Shepherdr 2 task waiting for you as a card, as its task screen has it: the question its agent asks
+ * ([card], once read) with a button per answer, or Merge when it is ready; and Open, its chat. A
+ * question that needs more than a tap (several picks, a note, words of your own) is answered there.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun WorkWaitingCard(
+    w: Waiting.Task,
+    work: WorkTask,
+    space: String,
+    showMachine: Boolean,
+    selected: Boolean,
+    busy: String?,
+    card: WorkCard?,
+    onOpen: () -> Unit,
+    onMerge: () -> Unit,
+    onChoose: (WorkCard, Int) -> Unit,
+) {
+    val c = Herdr.colors
+    val q = card?.question
+    // A tap answers it only where the task screen would send that pick as it is.
+    // A plan, or choices that explain themselves, are read on the task screen first.
+    val taps = q != null && !q.multi && card.replyTo.isEmpty() && q.choices.size in 1..3 && q.kind != "Plan" && q.steps.isNullOrEmpty()
+    fun tap(i: Int) = if (q?.noteRequiredFor == i) onOpen() else onChoose(card!!, i)
+    val actions = if (busy != null) emptyList() else when {
+        work.status == WorkStatus.Ready -> listOf(CustomAccessibilityAction("Merge") { onMerge(); true })
+        taps -> q!!.choices.mapIndexed { i, ch -> CustomAccessibilityAction("Answer: ${ch.label}") { tap(i); true } }
+        else -> emptyList()
+    }
+    WaitingCard(selected, onOpen, null, "Open chat", actions) {
+        CardHead(
+            mark = {
+                if (work.agent.isNotEmpty()) AgentMark(V2Board.agentKind(work.agent))
+                else Box(Modifier.size(22.dp), contentAlignment = Alignment.Center) { Icon(HerdrIcons.SquareKanban, null, tint = c.text, modifier = Modifier.size(20.dp)) }
+            },
+            title = work.title,
+            key = work.name,
+            meta = listOfNotNull(
+                work.line.takeIf { it.isNotEmpty() && q == null },
+                prNumberOf(work.pr)?.let { "PR #$it" },
+                space.takeIf { it.isNotEmpty() },
+                w.machineLabel.takeIf { showMachine },
+            ),
+            badge = { StatusBadge(work.status.label, work.status.color()) },
+        )
+        if (q != null) Text(
+            Markdown.plain(q.title.ifEmpty { q.asks ?: "Waiting for your answer" }),
+            style = MaterialTheme.typography.bodyLarge, color = c.text, maxLines = 3, overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(start = 34.dp, top = Space.s),
+        )
+        if (busy != null) {
+            Box(Modifier.padding(start = 22.dp, top = Space.s)) { BusyLine(busy) }
+            return@WaitingCard
+        }
+        FlowRow(
+            Modifier.padding(start = 34.dp, top = Space.m),
+            horizontalArrangement = Arrangement.spacedBy(Space.s),
+            verticalArrangement = Arrangement.spacedBy(Space.s),
+        ) {
+            when {
+                work.status == WorkStatus.Ready -> AnswerButton("Merge", HerdrIcons.Check, primary = true, enabled = true, onClick = onMerge)
+                taps -> q!!.choices.forEachIndexed { i, ch ->
+                    AnswerButton(ch.label.let { if (it.length <= 24) it else it.take(23).trimEnd() + "…" }, null, primary = false, enabled = true) { tap(i) }
+                }
+            }
+            // A question it can't answer here is answered in the chat: Open says so by being the main one.
+            AnswerButton("Open", null, primary = work.status != WorkStatus.Ready && !taps && q != null, enabled = true, onClick = onOpen)
         }
     }
 }
@@ -350,7 +448,7 @@ fun AgentLine(
             .semantics(mergeDescendants = true) {
                 this.selected = selected
                 contentDescription = listOfNotNull(
-                    title, t?.name, a.displayName, if (row.new) "finished, new" else a.statusLabel,
+                    title, t?.name, a.displayName, if (row.new) "finished, new" else a.statusWord(),
                     "pinned".takeIf { row.pinned }, snoozed?.let { "snoozed $it" }, "muted".takeIf { row.muted },
                 ).joinToString(", ")
                 if (actions.isNotEmpty()) customActions = actions

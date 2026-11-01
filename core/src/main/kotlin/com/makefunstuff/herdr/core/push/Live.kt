@@ -182,7 +182,8 @@ object LiveItems {
 
     /** [belongs] by the parts it looks at: the agent's name and workspace, the task's id and short key (both on one machine). */
     fun belongs(agentName: String, workspace: String, taskId: String, taskName: String): Boolean {
-        val key = taskName.takeIf { it != taskId && '-' in it }
+        // A short key (`AND-12`; on Shepherdr 2 the id itself, `HA-10`), never a v1 id (`herdr-android/3`).
+        val key = taskName.takeIf { '-' in it && '/' !in it }
         if (key != null && (workspace == key || workspace.startsWith("$key "))) return true
         val name = agentName.ifEmpty { return false }
         val repo = taskId.substringBeforeLast('/').lowercase().map { if (it in 'a'..'z' || it in '0'..'9') it else '-' }.joinToString("").take(16)

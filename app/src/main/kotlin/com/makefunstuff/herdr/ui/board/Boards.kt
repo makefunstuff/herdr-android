@@ -9,24 +9,41 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import com.makefunstuff.herdr.core.board.WorkOverview
+import com.makefunstuff.herdr.core.home.Home
+import com.makefunstuff.herdr.core.home.HomeAgent
 import com.makefunstuff.herdr.core.home.HomeBoard
+import com.makefunstuff.herdr.core.home.Waiting
 import com.makefunstuff.herdr.ui.common.LocalContainer
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
- * The boards of the connected machines that have one, as last read, in the machines' order. Shepherdr 2's
- * only with [withShepherdr2] (the Board tab, Start work): the screens that act on a task through
- * herdr-projects (Agents, search) leave them out.
+ * The boards of the connected machines that have one, as last read, in the machines' order: herdr-projects
+ * 1.x's and Shepherdr 2's, whose [HomeBoard.work] is the board as it sent it (a task there acts through Shepherdr).
  */
 @Composable
-fun rememberBoards(withShepherdr2: Boolean = false): List<HomeBoard> {
+fun rememberBoards(): List<HomeBoard> {
     val container = LocalContainer.current
     val hosts by container.hosts.hosts.collectAsStateWithLifecycle()
     val lists by container.boards.lists.collectAsStateWithLifecycle()
-    return remember(hosts, lists, withShepherdr2) {
-        hosts.filter { it.online && (if (withShepherdr2) it.hasWorkBoard else it.hasBoard && !it.onShepherdr2) }.mapNotNull { h -> lists[h.machine.id]?.let { HomeBoard(h.machine.id, h.machine.label, it.tasks) } }
+    return remember(hosts, lists) {
+        hosts.filter { it.online && it.hasWorkBoard }.mapNotNull { h ->
+            // A Shepherdr 2 machine's list counts only as Shepherdr sent it, never an old herdr-projects launcher's.
+            lists[h.machine.id]?.takeIf { !h.onShepherdr2 || it.work != null }?.let { HomeBoard(h.machine.id, h.machine.label, it.tasks, it.work) }
+        }
     }
+}
+
+/**
+ * The Needs you list as every machine's agents and boards make it (the Agents screen's, before its
+ * machine filter): what both tabs count, so the Agents and Board badges never differ.
+ */
+@Composable
+fun rememberNeedsYou(boards: List<HomeBoard> = rememberBoards()): List<Waiting> {
+    val container = LocalContainer.current
+    val hosts by container.hosts.hosts.collectAsStateWithLifecycle()
+    val seen by container.seen.marks.collectAsStateWithLifecycle()
+    return remember(hosts, boards, seen) { Home.of(HomeAgent.of(hosts), boards, seen).needsYou }
 }
 
 /** The Shepherdr 2 boards of the connected machines, as last read, by machine id: their spaces and tasks. */

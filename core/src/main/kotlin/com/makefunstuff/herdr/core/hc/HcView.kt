@@ -211,6 +211,7 @@ object HcMapping {
                 stateChangeSeq = t.statusMs ?: t.createdMs,
                 completionSeq = t.turn.takeIf { it > 0 },
                 cwd = t.foreground?.cwd ?: t.cwd,
+                shepherdrTask = t.labels["shepherdr.task"]?.takeIf { it.isNotBlank() && t.labels["shepherdr.role"] == "task" },
             )
         }
         // The desktop app's spaces first, the terminals it doesn't show after them.

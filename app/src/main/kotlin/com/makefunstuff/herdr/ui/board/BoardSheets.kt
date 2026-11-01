@@ -110,6 +110,7 @@ import com.makefunstuff.herdr.ui.design.StatusBadge
 import com.makefunstuff.herdr.ui.design.SwitchRow
 import com.makefunstuff.herdr.ui.design.sheetColor
 import com.makefunstuff.herdr.ui.theme.Herdr
+import com.makefunstuff.herdr.ui.theme.statusWord
 import com.makefunstuff.herdr.ui.theme.Radius
 import com.makefunstuff.herdr.ui.theme.Space
 import kotlinx.coroutines.CancellationException
@@ -321,7 +322,7 @@ fun TaskDetailScreen(
         model != null -> "$agent · ${ModelUse.name(model) ?: model}"
         else -> TaskLine.who(agent, workers)
     }
-    val reach = TaskAgent(who, live?.statusLabel.orEmpty(), onOpenAgent.takeIf { live != null })
+    val reach = TaskAgent(who, live?.statusWord().orEmpty(), onOpenAgent.takeIf { live != null })
     TaskDetailContent(t, details, problem, busy, onBack, onAction, onPick, onMore, onCode, onQuick, onActivity, reach, note, onSignIn)
 }
 
@@ -397,7 +398,7 @@ fun TaskDetailContent(
             Column(verticalArrangement = Arrangement.spacedBy(Space.s)) {
                 Text(t.title, style = MaterialTheme.typography.headlineSmall)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(Space.s), verticalArrangement = Arrangement.spacedBy(Space.xs)) {
-                    StatusBadge(t.status.label, color)
+                    StatusBadge(t.status.word, color)
                     if (t.research) Pill("research")
                     if (t.pinned) Pill("pinned")
                 }

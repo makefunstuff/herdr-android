@@ -142,9 +142,24 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
     val activity = agent?.let { it.title?.takeIf { t -> t.isNotBlank() } ?: it.terminalTitle?.takeIf { t -> t.isNotBlank() } }
 
     val name = agent?.let { it.name?.takeIf { n -> n.isNotBlank() } ?: it.displayName } ?: pane?.displayName ?: paneId
+    // The task it works on, from the boards as last read (Shepherdr 2's too): it names the chat and its sheet.
+    val boards = com.makefunstuff.herdr.ui.board.rememberBoards()
+    val task = remember(boards, agent, snapshot) {
+        val a = agent ?: return@remember null
+        val home = HomeAgent(machineId, host.machine.label, a, snapshot?.location(a.workspaceId, a.tabId).orEmpty(), snapshot?.workspace(a.workspaceId)?.label.orEmpty())
+        Home.taskOf(home, Home.own(boards)[machineId].orEmpty())
+    }
+    // What the title bar says it works on: its task, else its own name (unless that is only its CLI's or a
+    // launcher's hash, `shep-1a2b…`), else its workspace, else (herdr-core's catch-all "Other terminals") its
+    // terminal's title. Not its step message, which changes with every step.
+    val workspaceLabel = agent?.let { snapshot?.workspace(it.workspaceId)?.label?.ifBlank { null } }
+    val heading = task?.let { "${it.name} · ${it.title}" }
+        ?: name.takeIf { agent == null || !Home.isBareName(agent, it) }
+        ?: workspaceLabel?.takeIf { !it.startsWith("Other terminals") }
+        ?: agent?.terminalTitle?.ifBlank { null } ?: workspaceLabel ?: name
     // Floating over other apps as a bubble, from here; in that bubble, back to the app.
     val bubbleChat = remember(machineId, paneId) { BubbleChat.Agent(machineId, paneId) }
-    val float = rememberFloat(bubbleChat, name, host.machine.label)
+    val float = rememberFloat(bubbleChat, heading, host.machine.label)
     val inBubble = LocalBubble.current != null
 
     // The chat is open: its notification has done its job.
@@ -443,9 +458,9 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
         containerColor = Herdr.colors.ground,
         topBar = {
             if (!typing) HerdrTopBar(
-                name,
+                heading,
                 subtitle = listOfNotNull(
-                    agent?.agent?.takeIf { it != agent.name },
+                    agent?.agent?.takeIf { !it.equals(heading, ignoreCase = true) },
                     host.machine.label,
                     snapshot?.let { s -> pane?.let { s.location(it.workspaceId, it.tabId) } },
                 ).joinToString(" · "),
@@ -599,13 +614,6 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
     }
 
     if (menu) {
-        // The task it works on, from the boards as last read: it names the sheet.
-        val boards = com.makefunstuff.herdr.ui.board.rememberBoards()
-        val task = remember(boards, agent, snapshot) {
-            val a = agent ?: return@remember null
-            val home = HomeAgent(machineId, host.machine.label, a, snapshot?.location(a.workspaceId, a.tabId).orEmpty(), snapshot?.workspace(a.workspaceId)?.label.orEmpty())
-            Home.taskOf(home, Home.own(boards)[machineId].orEmpty())
-        }
         AgentActionsSheet(
             task = task,
             session = session,
@@ -676,7 +684,6 @@ private fun StatusStrip(status: AgentStatus, label: String?, activity: String?, 
         Spacer(Modifier.width(Space.s))
         Text(
             when (status) {
-                AgentStatus.Blocked -> "Waiting for you"
                 AgentStatus.Unknown -> label?.takeIf { it != "unknown" } ?: "Status unknown"
                 else -> status.title()
             },

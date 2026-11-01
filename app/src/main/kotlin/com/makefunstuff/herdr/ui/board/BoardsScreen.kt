@@ -31,6 +31,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.makefunstuff.herdr.LocalPanes
 import com.makefunstuff.herdr.Routes
+import com.makefunstuff.herdr.core.home.Waiting
 import com.makefunstuff.herdr.core.home.BoardGroup
 import com.makefunstuff.herdr.core.home.Home
 import com.makefunstuff.herdr.core.home.HomeAgent
@@ -73,7 +74,7 @@ fun BoardsScreen(nav: NavController) {
     val hosts by container.hosts.hosts.collectAsStateWithLifecycle()
     // Each task's agent on its machine: its chat opens from the card.
     val agents = remember(hosts) { HomeAgent.of(hosts) }
-    val boards = rememberBoards(withShepherdr2 = true)
+    val boards = rememberBoards()
     // Shepherdr 2 machines: their spaces and tasks as the board sent them.
     val works = rememberWorkBoards()
     val problems = rememberBoardProblems()
@@ -86,7 +87,11 @@ fun BoardsScreen(nav: NavController) {
     val groups = remember(boards, works, machine) { BoardGroup.of(boards.filter { it.machineId !in works }, machine).associateBy { it.machineId } }
     // In the machines' order, each with its v1 group or its Shepherdr 2 board.
     val shown = boards.filter { machine == null || it.machineId == machine }
-    val waiting = remember(boards) { BoardGroup.waiting(boards) }
+    // What of the Needs you list (both tabs' badge) this tab shows: tasks and coordinators, on the machine chosen;
+    // the rest (agents that ask with no task) is named, so the count adds up to the badge.
+    val needsYou = rememberNeedsYou(boards)
+    val waiting = needsYou.count { (it !is Waiting.Question || it.task != null) && (machine == null || it.machineId == machine) }
+    val elsewhere = if (machine == null) needsYou.size - waiting else 0
     // Adding a task: on the machine shown, or the one chosen first.
     var adding by remember { mutableStateOf<String?>(null) }
     var choosing by remember { mutableStateOf(false) }
@@ -95,7 +100,10 @@ fun BoardsScreen(nav: NavController) {
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         containerColor = Herdr.colors.ground,
         topBar = {
-            HerdrTopBar("Board", subtitle = if (boards.isEmpty()) null else if (waiting > 0) "$waiting need you" else "Nothing waits for you") {
+            HerdrTopBar("Board", subtitle = if (boards.isEmpty()) null else listOfNotNull(
+                if (waiting > 0) "$waiting need${if (waiting == 1) "s" else ""} you" else if (elsewhere == 0) "Nothing waits for you" else null,
+                elsewhere.takeIf { it > 0 }?.let { if (waiting > 0) "$it more on Agents" else "$it on Agents" },
+            ).joinToString(" · ")) {
                 BarIcon(HerdrIcons.Search, "Search tasks, agents and chats", { panes.open(nav, Routes.search()) })
                 BarIcon(HerdrIcons.Layers, "Review finished work", { panes.open(nav, Routes.review()) })
                 BarIcon(HerdrIcons.CalendarClock, "Routines", { panes.open(nav, Routes.routines(machine)) })
@@ -129,10 +137,11 @@ fun BoardsScreen(nav: NavController) {
                 else -> LazyColumn(
                     Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(start = Space.screen, end = Space.screen, top = Space.xs, bottom = 96.dp),
-                    verticalArrangement = Arrangement.spacedBy(Space.s),
+                    // Compact rows, close together: about twice as many as cards fit a screen.
+                    verticalArrangement = Arrangement.spacedBy(Space.xxs),
                 ) {
                     problems.forEach { (label, p) ->
-                        item(key = "problem/$label") { ErrorMessage("$label's board: $p", onRetry = { readNow.trySend(Unit) }) }
+                        item(key = "problem/$label") { ErrorMessage("$label's board: $p", Modifier.padding(vertical = Space.xs), onRetry = { readNow.trySend(Unit) }) }
                     }
                     shown.forEachIndexed { i, b ->
                         works[b.machineId]?.let { w ->

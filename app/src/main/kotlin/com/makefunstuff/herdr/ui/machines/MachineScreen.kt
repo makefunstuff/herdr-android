@@ -102,6 +102,7 @@ import com.makefunstuff.herdr.ui.manage.PaneActionsSheet
 import com.makefunstuff.herdr.ui.manage.TabActionsSheet
 import com.makefunstuff.herdr.ui.manage.WorkspaceActionsSheet
 import com.makefunstuff.herdr.ui.theme.Herdr
+import com.makefunstuff.herdr.ui.theme.statusWord
 import com.makefunstuff.herdr.ui.theme.Space
 import com.makefunstuff.herdr.ui.theme.color
 import com.makefunstuff.herdr.ui.theme.status
@@ -457,7 +458,7 @@ private fun PaneLine(pane: PaneInfo, snap: SessionSnapshot, onOpen: () -> Unit, 
             buildAnnotatedString {
                 append(name)
                 if (agent != null) withStyle(SpanStyle(color = if (status == AgentStatus.Unknown) c.muted else status.color())) {
-                    append(" · " + agent.statusLabel)
+                    append(" · " + agent.statusWord())
                 }
                 else withStyle(SpanStyle(color = c.muted)) {
                     (pane.foregroundCwd ?: pane.cwd)?.let { append(" · " + it.replace(Regex("^/(home|Users)/[^/]+"), "~")) }

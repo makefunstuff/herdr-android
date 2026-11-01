@@ -222,7 +222,7 @@ object Alerts {
                 sig = listOf(t.state, t.stage, t.kind, t.reviewRound, t.reviewPassed, t.approvalBlocked).joinToString("|"),
                 kind = if (wentWrong(t)) Alert.Kind.WentWrong else Alert.Kind.NeedsYou,
                 machineId = machineId,
-                title = "${t.name} ${s.label}",
+                title = "${t.name} ${s.word}" + (s.detail?.let { " · $it" } ?: ""),
                 text = t.title,
                 detail = listOf(t.title, t.msg, machineLabel).filter { it.isNotBlank() }.joinToString("\n"),
                 taskId = t.id,

@@ -162,6 +162,8 @@ data class AgentInfo(
     @SerialName("completion_seq") val completionSeq: Long? = null,
     val cwd: String? = null,
     @SerialName("agent_session") val agentSession: AgentSessionRef? = null,
+    /** The Shepherdr 2.1 task it is the agent of, from its terminal's labels (herdr-core); null for any other (its reviewer too). */
+    @SerialName("shepherdr_task") val shepherdrTask: String? = null,
 ) {
     val agentStatus: AgentStatus get() = AgentStatus.of(agentStatusRaw)
 

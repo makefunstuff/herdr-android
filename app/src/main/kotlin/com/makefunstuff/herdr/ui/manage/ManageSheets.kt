@@ -7,6 +7,7 @@ import com.makefunstuff.herdr.ui.design.SheetTitle
 import com.makefunstuff.herdr.ui.design.MenuSection
 import com.makefunstuff.herdr.ui.design.KeyChip
 import com.makefunstuff.herdr.ui.theme.Space
+import com.makefunstuff.herdr.ui.theme.statusWord
 import com.makefunstuff.herdr.ui.design.HerdrIcons
 import com.makefunstuff.herdr.ui.design.QuietButton
 import androidx.compose.foundation.layout.Box
@@ -631,7 +632,7 @@ fun agentTitle(agent: AgentInfo?, paneLabel: String, task: BoardTask?): Pair<Str
         else -> named ?: agent.displayName
     }
     val title = task?.title?.takeIf { it.isNotBlank() } ?: agent.subtitle?.takeIf { it != who && it != named } ?: who
-    val subtitle = listOfNotNull(task?.name?.takeIf { it.isNotBlank() }, who.takeIf { it != title }, agent.statusLabel.takeIf { it.isNotBlank() })
+    val subtitle = listOfNotNull(task?.name?.takeIf { it.isNotBlank() }, who.takeIf { it != title }, agent.statusWord().takeIf { it.isNotBlank() })
     return title to subtitle.distinct().joinToString(" · ")
 }
 
@@ -667,7 +668,7 @@ private fun AgentDetailRows(agent: AgentInfo?) {
     val context = LocalContext.current
     ManageRow("Name", detail = agent?.name?.takeIf { it.isNotBlank() } ?: "(none)")
     ManageRow("Agent", detail = agent?.agent ?: "(unknown)")
-    ManageRow("State", detail = agent?.let { if (it.statusLabel == it.agentStatusRaw) it.statusLabel else "${it.statusLabel} (${it.agentStatusRaw})" } ?: "(unknown)")
+    ManageRow("State", detail = agent?.let { if (it.statusWord() == it.agentStatusRaw) it.statusWord() else "${it.statusWord()} (${it.agentStatusRaw})" } ?: "(unknown)")
     ManageRow("Pane", detail = agent?.paneId.orEmpty()) { context.copyToClipboard("pane id", agent?.paneId.orEmpty()) }
     ManageRow("Workspace · tab", detail = listOfNotNull(agent?.workspaceId, agent?.tabId).joinToString(" · "))
     ManageRow("Working dir", detail = pathShort(agent?.cwd) ?: "(unknown)")

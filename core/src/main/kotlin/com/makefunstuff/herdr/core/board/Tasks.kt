@@ -33,6 +33,13 @@ enum class BoardStatus(val label: String, val tone: BoardTone, val needsYou: Boo
     Error("went wrong", BoardTone.Red, true),
     Done("done", BoardTone.Teal),
     Archived("archived", BoardTone.Grey),
+    ;
+
+    /** Its badge: the one word for its state on every board ([WorkStatus.label]); [label] says it exactly. */
+    val word: String get() = WorkTasks.status(this).label
+
+    /** What [word] leaves out, for the line under the title ("Review failed"); null when the word says it all ("asks you" is "needs you"). */
+    val detail: String? get() = label.takeIf { it != word && this != Approval && this != Asks && this != Archived }?.replaceFirstChar { it.uppercase() }
 }
 
 /** One row of `list --json`. */
@@ -61,6 +68,9 @@ data class BoardTask(
     val machine: String get() = if (':' in id) id.substringBefore(':') else ""
     val repo: String get() = id.substringAfter(':').substringBefore('/')
     val number: String get() = id.substringAfterLast('/')
+
+    /** Its state's one word: [status]'s, or "merging" for a Shepherdr 2 task being merged (v1 has no such state). */
+    val word: String get() = if (state == "working" && stage == "merging") WorkStatus.Merging.label else status.word
 
     val status: BoardStatus get() = when {
         archived -> BoardStatus.Archived

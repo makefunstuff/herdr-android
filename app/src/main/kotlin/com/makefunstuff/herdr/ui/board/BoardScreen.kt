@@ -73,6 +73,7 @@ import com.makefunstuff.herdr.core.guard.Guarded
 import com.makefunstuff.herdr.ui.common.LocalGuard
 import com.makefunstuff.herdr.core.board.BoardFilter
 import com.makefunstuff.herdr.core.board.BoardStatus
+import com.makefunstuff.herdr.core.board.WorkTasks
 import com.makefunstuff.herdr.core.board.BoardTask
 import com.makefunstuff.herdr.core.shepherdr.V2Board
 import com.makefunstuff.herdr.core.push.Alerts
@@ -114,10 +115,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
-/** The board's colour for this status, in the current theme. */
+/** The colour of this status's one word ([BoardStatus.word]), in the current theme: the same on every board. */
 @Composable
 @ReadOnlyComposable
-fun BoardStatus.color(): Color = Herdr.colors.tone(tone)
+fun BoardStatus.color(): Color = Herdr.colors.tone(WorkTasks.status(this).tone)
 
 /** What a person is part-way through doing to a task: asked for words, or asked to be sure. */
 sealed interface Pending {
@@ -349,10 +350,11 @@ fun BoardScreen(nav: NavController, machineId: String, openTask: String? = null,
                 ) { LazyColumn(
                     Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(start = Space.screen, end = Space.screen, top = Space.xs, bottom = 96.dp),
-                    verticalArrangement = Arrangement.spacedBy(Space.s),
+                    // Compact rows, close together: about twice as many as cards fit a screen.
+                    verticalArrangement = Arrangement.spacedBy(Space.xxs),
                 ) {
-                    problem?.let { p -> item(key = "problem") { ErrorMessage(p, onRetry = { readNow.trySend(Unit) }) } }
-                    if (waiting > 0 && !archived && query.isBlank()) item(key = "review") { ReviewEntryCard(waiting, onOpen = { openReview(null) }) }
+                    problem?.let { p -> item(key = "problem") { ErrorMessage(p, Modifier.padding(vertical = Space.xs), onRetry = { readNow.trySend(Unit) }) } }
+                    if (waiting > 0 && !archived && query.isBlank()) item(key = "review") { Box(Modifier.padding(vertical = Space.xs)) { ReviewEntryCard(waiting, onOpen = { openReview(null) }) } }
                     if (groups.isEmpty()) {
                         item(key = "empty") {
                             StateBlock(
@@ -386,7 +388,8 @@ fun BoardScreen(nav: NavController, machineId: String, openTask: String? = null,
                                     CustomAccessibilityAction("More actions") { actionsFor = t; true },
                                 )
                             val live = agentOf(t)
-                            TaskRow(t, onOpen = { openId = t.id }, onMenu = { actionsFor = t }, actions = actions, onAgent = live?.let { a -> { openAgent(a.paneId) } })
+                            // A section of one state (To do, Done) says it in its heading; Needs you and Working hold several.
+                            TaskRow(t, onOpen = { openId = t.id }, onMenu = { actionsFor = t }, actions = actions, onAgent = live?.let { a -> { openAgent(a.paneId) } }, showWord = title == "Needs you" || title == "Working")
                         }
                     }
                 } }
@@ -456,79 +459,6 @@ internal fun Progress(p: Int, color: Color, modifier: Modifier = Modifier) {
         gapSize = 0.dp, drawStopIndicator = {},
         modifier = modifier.height(4.dp).clip(HerdrShapes.Pill),
     )
-}
-
-/**
- * A task as a card, the board's way: a stripe in the status colour, the key with its status and
- * agent, the title, what it is doing, progress and its pull request. Tasks that need you get a wider stripe.
- */
-@Composable
-internal fun TaskRow(
-    t: BoardTask,
-    onOpen: () -> Unit,
-    onMenu: () -> Unit,
-    actions: List<CustomAccessibilityAction> = emptyList(),
-    /** Opens its agent's chat, while its agent's pane is on the machine. */
-    onAgent: (() -> Unit)? = null,
-) {
-    val c = Herdr.colors
-    val color = t.status.color()
-    val quiet = t.status == BoardStatus.Done || t.status == BoardStatus.Archived
-    val doing = remember(t.msg) { TaskLine.line(t.msg) }
-    QuietCard(
-        Modifier.semantics(mergeDescendants = true) {
-            contentDescription = "${t.name}, ${t.status.label}${if (t.needsYou) ", needs you" else ""}, ${t.title}"
-            val all = actions + listOfNotNull(onAgent?.let { o -> CustomAccessibilityAction("Open agent") { o(); true } })
-            if (all.isNotEmpty()) customActions = all
-        },
-        onClick = onOpen,
-        onLongClick = onMenu,
-        onClickLabel = "Open details",
-    ) {
-        Row(Modifier.height(IntrinsicSize.Min)) {
-            Box(Modifier.padding(start = Space.s, top = Space.m, bottom = Space.m).width(if (t.needsYou) 4.dp else 3.dp).fillMaxHeight().clip(HerdrShapes.Pill).background(color))
-            Column(Modifier.padding(start = Space.m, end = Space.l, top = Space.m, bottom = Space.m)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(t.name, style = CodeStyle.copy(fontSize = 12.sp), color = c.strong)
-                    Spacer(Modifier.width(Space.s))
-                    StatusBadge(t.status.label, color)
-                    if (t.research) { Spacer(Modifier.width(Space.xs)); Pill("research") }
-                    Spacer(Modifier.weight(1f))
-                    if (onAgent != null) AgentChip(t.agent, onAgent)
-                    else if (t.agent.isNotEmpty()) Text(
-                        t.agent, style = MaterialTheme.typography.labelMedium, color = c.faint, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(start = Space.s).widthIn(max = 120.dp),
-                    )
-                }
-                Text(
-                    t.title,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = if (quiet) c.muted else c.text,
-                    maxLines = 2, overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(top = Space.s),
-                )
-                if (doing.isNotEmpty() && !quiet) {
-                    Text(doing, style = MaterialTheme.typography.bodyMedium, color = c.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
-                val p = t.progress
-                if ((p != null || t.eta != null) && !quiet) {
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = Space.s)) {
-                        if (p != null) Progress(p, color, Modifier.weight(1f)) else Spacer(Modifier.weight(1f))
-                        Text(
-                            listOfNotNull(p?.let { "$it%" }, t.eta?.let { "${it}m left" }).joinToString(" · "),
-                            style = MaterialTheme.typography.labelMedium, color = c.faint, modifier = Modifier.padding(start = Space.m),
-                        )
-                    }
-                }
-                if (t.pr.isNotEmpty()) {
-                    Text(
-                        "PR " + t.prNumber.let { if (it.isEmpty()) t.pr else "#$it" },
-                        style = MaterialTheme.typography.labelMedium, color = c.accent, modifier = Modifier.padding(top = Space.xs),
-                    )
-                }
-            }
-        }
-    }
 }
 
 /**

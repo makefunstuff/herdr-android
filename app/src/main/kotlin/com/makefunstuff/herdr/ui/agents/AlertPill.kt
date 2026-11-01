@@ -134,6 +134,7 @@ private fun Pill(p: PillItem, onOpen: () -> Unit) {
                     val agent = when (val w = p.waiting) {
                         is Waiting.Question -> w.agent
                         is Waiting.Task -> w.agent
+                        is Waiting.Coordinator -> null
                     }
                     if (agent != null) AgentMark(agent.agent.agent, size = 26.dp)
                     else Icon(HerdrIcons.SquareKanban, null, tint = Color(0xFFF0A830), modifier = Modifier.padding(4.dp).size(18.dp))
@@ -153,7 +154,7 @@ private fun Pill(p: PillItem, onOpen: () -> Unit) {
     }
 }
 
-/** "api-server · needs you: run db:migrate?", "AND-9 · ready to approve: Board view". */
+/** "api-server · needs you: run db:migrate?", "AND-9 · ready: Board view". */
 @Composable
 private fun words(w: Waiting): String = when (w) {
     is Waiting.Question -> {
@@ -161,7 +162,8 @@ private fun words(w: Waiting): String = when (w) {
         val who = w.task?.name ?: w.agent.workspace.ifEmpty { w.agent.agent.displayName }
         "$who · needs you: " + (asked?.question ?: w.agent.agent.subtitle ?: "waiting for your answer")
     }
-    is Waiting.Task -> "${w.task.name} · ${w.task.status.label}: ${w.task.title}"
+    is Waiting.Task -> "${w.task.name} · ${w.work?.status?.label ?: w.task.status.word}: ${w.task.title}"
+    is Waiting.Coordinator -> "${w.space.name}'s coordinator · needs you"
 }
 
 /** Opens what [p] is about: the agent's chat, or the task (finished work at its review card). */
@@ -169,7 +171,8 @@ private fun open(nav: NavHostController, panes: Panes, p: PillItem) {
     when (p) {
         is PillItem.Needs -> when (val w = p.waiting) {
             is Waiting.Question -> panes.open(nav, Routes.agent(w.machineId, w.agent.agent.paneId))
-            is Waiting.Task -> if (Approvals.waits(w.task)) panes.open(nav, Routes.review(w.machineId, w.task.id)) else panes.openBoard(nav, w.machineId, w.task.id)
+            is Waiting.Task -> if (w.work == null && Approvals.waits(w.task)) panes.open(nav, Routes.review(w.machineId, w.task.id)) else panes.openBoard(nav, w.machineId, w.task.id)
+            is Waiting.Coordinator -> panes.open(nav, Routes.coordinator(w.machineId, w.space.id))
         }
         is PillItem.Fired -> {
             val a = p.alert
@@ -200,9 +203,11 @@ private fun front(route: String?, args: (String) -> String?): Front? {
 private fun Waiting.isOpen(route: String?, args: (String) -> String?): Boolean {
     val f = front(route, args) ?: return false
     if (f.machine != machineId) return false
+    if (this is Waiting.Coordinator) return f.coordinator
     val agent = when (this) {
         is Waiting.Question -> agent
         is Waiting.Task -> agent
+        is Waiting.Coordinator -> null
     }
     return (f.pane != null && agent?.agent?.paneId == f.pane) ||
         (f.task != null && task?.id == f.task) ||

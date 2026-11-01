@@ -106,7 +106,7 @@ fun SearchScreen(nav: NavController, machineId: String? = null, initial: String 
     val scope = rememberCoroutineScope()
     val hosts by container.hosts.hosts.collectAsStateWithLifecycle()
     // Shepherdr 2 boards too: their tasks open as their agents' chats.
-    val boards = rememberBoards(withShepherdr2 = true)
+    val boards = rememberBoards()
     val readNow = remember { Channel<Unit>(Channel.CONFLATED) }
     ReadBoards(readNow, everyMs = 30_000)
     var query by rememberSaveable { mutableStateOf(initial) }
@@ -320,9 +320,9 @@ private fun TaskRow(t: TaskHit, showMachine: Boolean, onClick: () -> Unit) {
     val status = t.task.status
     ListRow(
         "${t.task.name} · ${t.task.title}",
-        subtitle = listOfNotNull(if (showMachine) "${t.machineLabel} board" else t.task.repo, status.label).joinToString(" · "),
+        subtitle = listOfNotNull(if (showMachine) "${t.machineLabel} board" else t.task.repo, status.detail ?: t.task.word).joinToString(" · "),
         leading = { IconTile(HerdrIcons.SquareKanban, size = 36.dp) },
-        trailing = if (t.task.needsYou) ({ StatusBadge(status.label, status.color()) }) else null,
+        trailing = if (t.task.needsYou) ({ StatusBadge(status.word, status.color()) }) else null,
         onClickLabel = "Open the task",
         onClick = onClick,
     )

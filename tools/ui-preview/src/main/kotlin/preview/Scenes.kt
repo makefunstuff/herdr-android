@@ -163,6 +163,9 @@ fun scenes(): List<Scene> = listOf(
     // then answering from the card, the machine filter, Mark seen, a calm morning, and the agent's long-press sheet.
     Scene("agents", setup = { home() }),
     Scene("agents-all", heightDp = 1500, setup = { home() }),
+    // devbox on Shepherdr 2: its tasks that ask or are ready wait on Needs you too, answered or merged from the card.
+    Scene("agents-v2", heightDp = 1700, setup = { home(); v2() }),
+    Scene("agents-v2-answer", heightDp = 1700, setup = { home(); v2() }, actions = { settle(); tapText("Last answered 2 min ago") }),
     Scene("agents-reply", setup = { home() }, actions = { tapText("Reply") }),
     // Answered from its card: the question is read again and answered, the approved task leaves the list.
     Scene("agents-yes", setup = { home() }, actions = { tapText("Yes") }),
@@ -300,6 +303,8 @@ fun scenes(): List<Scene> = listOf(
     // An agent's chat: its transcript, a blocked agent's question, a Codex transcript.
     Scene("chat", route = Routes.agent(DEVBOX, APP_AGENT)),
     Scene("chat-blocked", route = Routes.agent(DEVBOX, API_AGENT)),
+    // An agent at work on a board task: the title bar names the task, the agent and where it runs under it.
+    Scene("chat-task", route = Routes.agent(DEVBOX, APP_AGENT), setup = { home() }),
     // The question docked over the composer, made for thumbs: "No, tell it…" folds it while the reply is written;
     // on a phone with no screen lock, "Always for npm run" asks for a tap on Confirm instead of the fingerprint.
     Scene("prompt-tell", route = Routes.agent(DEVBOX, API_AGENT), actions = { tapText("No, tell it…") }),
