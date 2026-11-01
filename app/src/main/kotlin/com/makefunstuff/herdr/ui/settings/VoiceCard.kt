@@ -56,7 +56,7 @@ fun VoiceCard() {
             supportingText = {
                 Text(
                     if (s.server.isNotBlank() && EdgeVoice.normalize(s.server) == null) "Write it as http://address:port"
-                    else "An http:// server is reached through the chat's machine, as that machine sees it",
+                    else "An http:// server is reached through a machine's SSH connection, as the machine sees it",
                 )
             },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
