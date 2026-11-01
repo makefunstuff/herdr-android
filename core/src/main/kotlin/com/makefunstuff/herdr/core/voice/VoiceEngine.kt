@@ -141,8 +141,8 @@ class EdgeVoice(
         /**
          * The host and port a plain-http [url] is reached at through a machine's SSH connection (`ssh -L`,
          * as the machine sees them): Android lets the app speak plain http only to the phone itself, so a
-         * server on the home network is asked through the machine, at home or away. Null for https, the
-         * phone's own loopback, or what isn't an address.
+         * server on the home network (or on the machine itself, `localhost`) is asked through the machine,
+         * at home or away. Null for https, or what isn't an address.
          */
         fun throughMachine(url: String): Pair<String, Int>? {
             val u = normalize(url) ?: return null
@@ -150,9 +150,7 @@ class EdgeVoice(
             val rest = u.removePrefix("http://")
             val host = if (rest.startsWith("[")) rest.substringBefore("]") + "]" else rest.substringBeforeLast(':')
             val port = (if (rest.startsWith("[")) rest.substringAfter("]").removePrefix(":") else rest.substringAfterLast(':', "")).toIntOrNull() ?: 80
-            val bare = host.removePrefix("[").removeSuffix("]").lowercase()
-            if (bare == "localhost" || bare == "::1" || bare.startsWith("127.")) return null
-            return bare to port
+            return host.removePrefix("[").removeSuffix("]").lowercase() to port
         }
 
         /** 16-bit mono WAV from float PCM. */

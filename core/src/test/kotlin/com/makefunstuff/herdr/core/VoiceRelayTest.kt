@@ -115,9 +115,9 @@ class VoiceRelayTest {
         assertEquals("10.0.0.5" to 80, EdgeVoice.throughMachine("http://10.0.0.5"))
         assertEquals("fd00::5" to 18101, EdgeVoice.throughMachine("http://[fd00::5]:18101"))
         assertNull(EdgeVoice.throughMachine("https://voice.home"))
-        assertNull(EdgeVoice.throughMachine("http://localhost:18101"))
-        assertNull(EdgeVoice.throughMachine("http://127.0.0.1:18101"))
-        assertNull(EdgeVoice.throughMachine("http://[::1]:18101"))
+        // The machine's own loopback, not the phone's.
+        assertEquals("localhost" to 18101, EdgeVoice.throughMachine("http://localhost:18101"))
+        assertEquals("::1" to 18101, EdgeVoice.throughMachine("http://[::1]:18101"))
         assertNull(EdgeVoice.throughMachine(""))
     }
 

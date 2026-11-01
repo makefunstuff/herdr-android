@@ -388,7 +388,7 @@ class AndroidCoordinatorVoice(
         tunnel?.let { (k, f) -> if (k == key) return f else f.close() }
         return PortForward(host, port, preferred = 0) { h, p ->
             val session = hosts.session(machineId) ?: throw IOException("This machine isn't in the app any more")
-            runBlocking { session.awaitConnection(8_000) }.openTcp(h, p)
+            runBlocking { session.awaitConnection(3_000) }.openTcp(h, p)
         }.also { tunnel = key to it }
     }
 
