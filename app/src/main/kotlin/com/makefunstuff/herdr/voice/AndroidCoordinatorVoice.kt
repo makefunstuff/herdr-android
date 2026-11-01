@@ -203,11 +203,15 @@ class AndroidCoordinatorVoice(
 
     override suspend fun test(): String {
         if (_state.value.on) return "Turn the chat's voice off to test"
+        return try { testVoice() } finally { if (!_state.value.on) closeTunnel() }
+    }
+
+    private suspend fun testVoice(): String {
         val s = settings.state.value
-        // Finds the machine a plain-http server answers through; what fails shows in the test below.
-        if (s.usable) runCatching { reach(s) }
+        // Finds the machine a plain-http server answers through; if none does, the test below says why.
+        if (s.usable) try { reach(s) } catch (e: CancellationException) { throw e } catch (_: Exception) {}
         val engine = if (s.usable) engineFor(s) else null
-        if (s.usable && engine == null) return "No machine connected to reach the voice server through"
+        if (s.usable && engine == null) return "No machine is connected to reach the voice server through"
         hushed = false
         if (engine != null) {
             try {
@@ -378,12 +382,14 @@ class AndroidCoordinatorVoice(
     /** The machine a plain-http voice server last answered through: the chat's machine may not reach it. */
     @Volatile private var via: String? = null
 
-    /** The machines to reach a plain-http voice server through, best first: [via], the chat's, the connected ones. */
+    /**
+     * The machines to reach a plain-http voice server through, best first: [via], the chat's (kept
+     * connected while voice is on), the connected ones. Never one it would have to connect for this.
+     */
     private fun machines(): List<String> {
-        val list = hosts.hosts.value
-        val online = list.filter { it.online }.map { it.machine.id }
-        return (listOfNotNull(via, _state.value.machineId.takeIf { it.isNotEmpty() }) + online.ifEmpty { list.filter { it.machine.enabled }.map { it.machine.id } })
-            .distinct().filter { hosts.session(it) != null }
+        val chat = _state.value.machineId.takeIf { it.isNotEmpty() && _state.value.on }
+        val online = hosts.hosts.value.filter { it.online }.map { it.machine.id }
+        return (listOfNotNull(via?.takeIf { it == chat || it in online }, chat) + online).distinct().filter { hosts.session(it) != null }
     }
 
     /**
@@ -419,6 +425,8 @@ class AndroidCoordinatorVoice(
         tunnel?.let { (k, f) -> if (k == key) return f else f.close() }
         return PortForward(host, port, preferred = 0) { h, p ->
             val session = hosts.session(machineId) ?: throw IOException("This machine isn't in the app any more")
+            // Only the chat's machine is waited for (voice keeps it connected); another isn't connected for this.
+            if (machineId != _state.value.machineId && !session.state.value.online) throw IOException("${session.machine.label} isn't connected")
             runBlocking { session.awaitConnection(6_000) }.openTcp(h, p)
         }.also { tunnel = key to it }
     }
