@@ -245,7 +245,7 @@ fun scenes(): List<Scene> = listOf(
     // called by their task or space; on the Agents list with the rest (tapping one opens its task's chat), and on
     // the machine screen with the session named.
     Scene("agents-shepherdr21", heightDp = 1700, setup = { home(); shepherdr21() }),
-    Scene("agents-shepherdr21-open", heightDp = 1700, setup = { home(); shepherdr21() }, actions = { tapText("Adding an index on jobs.created_at") }),
+    Scene("agents-shepherdr21-open", heightDp = 1700, setup = { home(); shepherdr21() }, actions = { tapText("AND-19 · claude") }),
     Scene("machine-shepherdr21", route = Routes.machine(DEVBOX), heightDp = 1300, setup = { shepherdr21() }),
     Scene("machines-shepherdr21", route = Routes.MACHINES, setup = { shepherdr21() }),
     // A task's chat takes voice messages too (into Shepherdr's inbox, then the chat as its file), as the Coordinator's.
