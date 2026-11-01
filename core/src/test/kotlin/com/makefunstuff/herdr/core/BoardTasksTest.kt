@@ -28,7 +28,7 @@ class BoardTasksTest {
         assertEquals(BoardStatus.Working, a.status)
         assertEquals(3, a.progress)
         assertEquals("pi", a.agent)
-        val failed = tasks.first { it.id == "jpl/1" }
+        val failed = tasks.first { it.id == "dev/1" }
         assertEquals(BoardStatus.Error, failed.status)
         assertTrue(failed.research)
         assertTrue(failed.needsYou)
@@ -46,7 +46,7 @@ class BoardTasksTest {
         val keys = BoardTasks.keys(plain, tasks)
         assertEquals("AND-12", keys["herdr-android/12"])
         assertEquals("HML-1", keys["homelab/1"])
-        assertEquals("HOME-1", keys["jpl/1"])
+        assertEquals("HOME-1", keys["dev/1"])
         // A list of another length can't be matched.
         assertTrue(BoardTasks.keys("AND-12 x", tasks).isEmpty())
     }
@@ -94,7 +94,7 @@ class BoardTasksTest {
         assertTrue(d.failure!!.next.startsWith("Investigate the reviewer failure"))
         assertTrue(d.failure!!.agentCanFix)
         assertEquals("no valid verdict", d.reviews.single().error)
-        assertEquals("https://beefy-machine.tail7cc0c.ts.net:8750/homelab/1/report/report.md", d.reportLink)
+        assertEquals("https://devbox.tail1234.ts.net:8750/homelab/1/report/report.md", d.reportLink)
         assertEquals("23s", d.time!!.used)
         assertEquals("none", d.tokens!!.limit)
     }

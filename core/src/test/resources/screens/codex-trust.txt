@@ -1,6 +1,6 @@
 
   Folder access
-  /tmp/claude-1000/-home-jpl--herdr-worktrees-herdr-andro
+  /tmp/claude-1000/-home-dev--herdr-worktrees-herdr-andro
   id-work-2-replace-agent-terminals-with-n/518745e3-9052-
   4b3c-81ca-5ddd766812d8/scratchpad/proj
 

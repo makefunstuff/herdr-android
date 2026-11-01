@@ -1,7 +1,7 @@
 {
  "type": "chat",
  "chat": {
-  "key": "p:beefy-machine:herdr-android",
+  "key": "p:devbox:herdr-android",
   "cli": "Claude Code",
   "messages": [
    {

@@ -82,7 +82,7 @@ class TaskLineTest {
 
     @Test
     fun pathsShrinkToTheirName() {
-        assertEquals("Edited Main.kt and its test", TaskLine.clean("Edited /home/jpl/src/app/Main.kt and its test"))
+        assertEquals("Edited Main.kt and its test", TaskLine.clean("Edited /home/dev/src/app/Main.kt and its test"))
         assertEquals("Wrote report.md", TaskLine.clean("Wrote ~/.herdr-projects/reports/x/5/report.md"))
         // A route is not a path on the machine, and a link's target stays whole.
         assertEquals("Moved from /api/v1/users to /api/v2/users", TaskLine.clean("Moved from /api/v1/users to /api/v2/users"))

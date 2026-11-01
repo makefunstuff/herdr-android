@@ -179,7 +179,7 @@ object Demo {
         machine(DEVBOX, "devbox", port = 2201),
         machine(GPU, "gpu-box", via = DEVBOX),
         machine(CI, "ci-runner", via = DEVBOX),
-        machine(MINI, "mac-mini", host = "192.168.1.40", user = "jpl"),
+        machine(MINI, "mac-mini", host = "mac-mini.local"),
     )
 
     private fun machine(id: String, label: String, host: String = label, port: Int = 22, user: String = "demo", via: String? = null) =

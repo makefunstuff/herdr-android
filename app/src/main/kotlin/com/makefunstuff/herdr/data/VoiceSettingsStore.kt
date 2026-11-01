@@ -12,13 +12,13 @@ import java.io.File
 
 /**
  * How the coordinator's voice sounds and where it comes from: the voice server's address and key
- * (the owner's LFM3 server; the phone's own voice when it can't be reached), whose voice, how fast,
+ * (an LFM3 server; the phone's own voice when there is none or it can't be reached), whose voice, how fast,
  * and whether it listens hands-free. Kept in the app's own files through restarts.
  */
 class VoiceSettingsStore(private val file: File) {
     @Serializable
     data class Settings(
-        val server: String = EdgeVoice.HOME,
+        val server: String = "",
         val key: String = "",
         /** "female" or "male". */
         val voice: String = "female",

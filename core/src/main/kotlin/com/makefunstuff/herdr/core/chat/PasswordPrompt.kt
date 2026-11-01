@@ -2,8 +2,8 @@ package com.makefunstuff.herdr.core.chat
 
 /**
  * A terminal that waits for a secret: sudo, ssh, a key's passphrase, a card's PIN. What stands
- * before the cursor ends in a colon after one of those words ("[sudo] password for jpl:", "Enter
- * passphrase for key '/home/jpl/.ssh/id_ed25519':"), and the phone offers a masked field for the
+ * before the cursor ends in a colon after one of those words ("[sudo] password for dev:", "Enter
+ * passphrase for key '/home/dev/.ssh/id_ed25519':"), and the phone offers a masked field for the
  * answer instead of the keyboard's own, which would show it and learn it. A line that is your own
  * typing after a prompt (`$ echo Password:`, `> the db password:`) asks nothing.
  */

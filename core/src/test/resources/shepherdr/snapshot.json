@@ -1,33 +1,33 @@
 {
  "name": "Shepherdr",
- "host": "beefy-machine",
+ "host": "devbox",
  "places": [
   {
-   "id": "p:beefy-machine:~",
+   "id": "p:devbox:~",
    "name": "home",
-   "machine": "beefy-machine",
+   "machine": "devbox",
    "home": true,
    "level": 1,
    "status": "work",
    "mode": "regular",
-   "chat": "p:beefy-machine:~"
+   "chat": "p:devbox:~"
   },
   {
-   "id": "p:beefy-machine:herdr-android",
+   "id": "p:devbox:herdr-android",
    "name": "herdr-android",
-   "machine": "beefy-machine",
+   "machine": "devbox",
    "level": 2,
    "status": "work",
    "mode": "regular",
-   "chat": "p:beefy-machine:herdr-android",
+   "chat": "p:devbox:herdr-android",
    "githubRemote": true
   }
  ],
  "machines": [
   {
-   "id": "m:beefy-machine",
-   "machine": "beefy-machine",
-   "name": "beefy-machine",
+   "id": "m:devbox",
+   "machine": "devbox",
+   "name": "devbox",
    "status": "idle",
    "health": {
     "meters": [
@@ -57,7 +57,7 @@
    "id": "HA-1",
    "name": "Shepherdr 2 client in core",
    "status": "work",
-   "place": "p:beefy-machine:herdr-android",
+   "place": "p:devbox:herdr-android",
    "sub": "Working",
    "age": "now",
    "branch": "work/1-shepherdr-2-client-in-core",
@@ -81,7 +81,7 @@
    "id": "HA-2",
    "name": "Board and task screens on v2",
    "status": "queued",
-   "place": "p:beefy-machine:herdr-android",
+   "place": "p:devbox:herdr-android",
    "sub": "After HA-1",
    "age": "now",
    "branch": "work/2-board-and-task-screens-on-v2",
@@ -108,7 +108,7 @@
    "id": "HA-3",
    "name": "Coordinator chat on v2",
    "status": "queued",
-   "place": "p:beefy-machine:herdr-android",
+   "place": "p:devbox:herdr-android",
    "sub": "After HA-1",
    "age": "now",
    "branch": "work/3-coordinator-chat-on-v2",
@@ -133,14 +133,14 @@
   }
  ],
  "automations": {
-  "p:beefy-machine:~": [],
-  "p:beefy-machine:herdr-android": []
+  "p:devbox:~": [],
+  "p:devbox:herdr-android": []
  },
  "artifacts": [],
  "asks": {},
  "last": {
-  "p:beefy-machine:~": 1793229804577,
-  "p:beefy-machine:herdr-android": 1793229961474
+  "p:devbox:~": 1793229804577,
+  "p:devbox:herdr-android": 1793229961474
  },
  "read": {
   "*": 1793229804570

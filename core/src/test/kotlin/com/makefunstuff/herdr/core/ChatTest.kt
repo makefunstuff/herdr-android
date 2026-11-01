@@ -29,7 +29,7 @@ class BlockedPromptTest {
     fun claudePermission() {
         val p = assertNotNull(BlockedPrompt.parse(screen("claude-permission.txt")))
         assertEquals("Do you want to proceed?", p.question)
-        assertEquals(listOf("Yes", "Yes, and always allow access to /tmp/claude-1000/-home-jpl--herdr-worktrees-herdr-android-work-2-replace-agent-terminals-with-n/518745e3-9052-4b3c-81ca-5ddd766812d8/scratchpad/proj from this project", "No"), p.options.map { it.label })
+        assertEquals(listOf("Yes", "Yes, and always allow access to /tmp/claude-1000/-home-dev--herdr-worktrees-herdr-android-work-2-replace-agent-terminals-with-n/518745e3-9052-4b3c-81ca-5ddd766812d8/scratchpad/proj from this project", "No"), p.options.map { it.label })
         assertEquals(listOf(1, 2, 3), p.options.map { it.number })
         assertEquals(0, p.selected)
         assertTrue("touch b.txt" in p.details, p.details.toString())

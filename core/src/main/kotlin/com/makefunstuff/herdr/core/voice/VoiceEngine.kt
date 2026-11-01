@@ -122,8 +122,6 @@ class EdgeVoice(
     companion object {
         /** LFM3 Omni: speaks (`/tts`) and hears. */
         const val OMNI = "lfm3-omni-2b"
-        /** The owner's server on the home network. */
-        const val HOME = "http://192.168.1.138:18101"
 
         /** `http(s)://host[:port]` with no path ("/v1" at the end is dropped), or null if it isn't one. */
         fun normalize(url: String): String? {
@@ -138,6 +136,23 @@ class EdgeVoice(
             val port = if (rest.startsWith("[")) rest.substringAfter("]").removePrefix(":") else rest.substringAfterLast(':', "")
             if (port.isNotEmpty() && port.toIntOrNull()?.takeIf { it in 1..65535 } == null) return null
             return "$scheme://$rest"
+        }
+
+        /**
+         * The host and port a plain-http [url] is reached at through a machine's SSH connection (`ssh -L`,
+         * as the machine sees them): Android lets the app speak plain http only to the phone itself, so a
+         * server on the home network is asked through the machine, at home or away. Null for https, the
+         * phone's own loopback, or what isn't an address.
+         */
+        fun throughMachine(url: String): Pair<String, Int>? {
+            val u = normalize(url) ?: return null
+            if (!u.startsWith("http://")) return null
+            val rest = u.removePrefix("http://")
+            val host = if (rest.startsWith("[")) rest.substringBefore("]") + "]" else rest.substringBeforeLast(':')
+            val port = (if (rest.startsWith("[")) rest.substringAfter("]").removePrefix(":") else rest.substringAfterLast(':', "")).toIntOrNull() ?: 80
+            val bare = host.removePrefix("[").removeSuffix("]").lowercase()
+            if (bare == "localhost" || bare == "::1" || bare.startsWith("127.")) return null
+            return bare to port
         }
 
         /** 16-bit mono WAV from float PCM. */

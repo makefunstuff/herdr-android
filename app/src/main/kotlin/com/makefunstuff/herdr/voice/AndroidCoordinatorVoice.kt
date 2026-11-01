@@ -11,6 +11,7 @@ import android.os.SystemClock
 import android.util.Log
 import androidx.core.content.ContextCompat
 import com.makefunstuff.herdr.core.board.WorkBoard
+import com.makefunstuff.herdr.core.ssh.PortForward
 import com.makefunstuff.herdr.core.shepherdr.SpaceChat
 import com.makefunstuff.herdr.core.shepherdr.SpaceChatItem
 import com.makefunstuff.herdr.core.voice.EdgeVoice
@@ -32,6 +33,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import java.io.IOException
 import java.util.UUID
 import kotlin.math.sqrt
@@ -360,8 +362,35 @@ class AndroidCoordinatorVoice(
         return engineFor(s)
     }
 
-    /** The voice server's engine: the one place it is made, so the homelab's voice service drops in here. */
-    private fun engineFor(s: VoiceSettingsStore.Settings): VoiceEngine? = runCatching { EdgeVoice(s.server, s.key) }.getOrNull()
+    /**
+     * The voice server's engine: the one place it is made, so the homelab's voice service drops in here.
+     * A plain-http server is asked through a machine's SSH connection ([tunnelTo]).
+     */
+    private fun engineFor(s: VoiceSettingsStore.Settings): VoiceEngine? = runCatching {
+        val (host, port) = EdgeVoice.throughMachine(s.server) ?: return@runCatching EdgeVoice(s.server, s.key)
+        EdgeVoice("http://127.0.0.1:${tunnelTo(host, port).localPort}", s.key)
+    }.getOrNull()
+
+    private var tunnel: Pair<Triple<String, String, Int>, PortForward>? = null
+
+    /**
+     * A port of the phone's loopback forwarded to [host]:[port] as a machine sees it: the chat's machine,
+     * else the first one connected, else the first one on. Each connection takes that machine's SSH
+     * connection of the moment, so it lives on through reconnects; a new machine or server makes a new one.
+     */
+    @Synchronized
+    private fun tunnelTo(host: String, port: Int): PortForward {
+        val list = hosts.hosts.value
+        val machineId = _state.value.machineId.takeIf { it.isNotEmpty() && hosts.session(it) != null }
+            ?: (list.firstOrNull { it.online } ?: list.firstOrNull { it.machine.enabled })?.machine?.id
+            ?: throw IOException("No machine to reach the voice server through")
+        val key = Triple(machineId, host, port)
+        tunnel?.let { (k, f) -> if (k == key) return f else f.close() }
+        return PortForward(host, port, preferred = 0) { h, p ->
+            val session = hosts.session(machineId) ?: throw IOException("This machine isn't in the app any more")
+            runBlocking { session.awaitConnection(8_000) }.openTcp(h, p)
+        }.also { tunnel = key to it }
+    }
 
     private fun away(e: Exception) {
         Log.w(AudioOut.TAG, "voice server away: ${e.message}")

@@ -63,19 +63,19 @@ class ShepherdrTest {
     @Test
     fun readsTheSnapshotThisMachineSent() {
         val s = ShepherdrJson.decodeFromString(V2Snapshot.serializer(), fixture("snapshot.json"))
-        assertEquals("beefy-machine", s.host)
-        assertEquals(listOf("p:beefy-machine:~", "p:beefy-machine:herdr-android"), s.places.map { it.id })
+        assertEquals("devbox", s.host)
+        assertEquals(listOf("p:devbox:~", "p:devbox:herdr-android"), s.places.map { it.id })
         val home = s.places[0]
         assertTrue(home.home)
-        assertEquals("p:beefy-machine:~", home.chat)
+        assertEquals("p:devbox:~", home.chat)
         assertEquals(V2Status.Work, home.status)
         assertEquals("herdr-android", s.places[1].name)
         assertTrue(s.places[1].githubRemote)
-        assertEquals("beefy-machine", s.machines.single().machine)
+        assertEquals("devbox", s.machines.single().machine)
         assertEquals(listOf("HA-1", "HA-2", "HA-3"), s.tasks.map { it.id })
         val t = s.task("HA-1")!!
         assertEquals(V2TaskStatus.Work, t.status)
-        assertEquals("p:beefy-machine:herdr-android", t.place)
+        assertEquals("p:devbox:herdr-android", t.place)
         assertEquals("HA-1/Agent", t.agent!!.chat)
         assertEquals("work/1-shepherdr-2-client-in-core", t.branch)
         assertEquals(listOf("HA-1"), s.task("HA-2")!!.after)
@@ -94,7 +94,7 @@ class ShepherdrTest {
         assertEquals("Shepherdr 2 client in core", t.title)
         assertEquals("HA-1/Agent", t.chat)
         assertEquals("Working", t.line)
-        assertEquals(listOf("HA-2", "HA-3"), o.tasksIn("p:beefy-machine:herdr-android").filter { it.status == WorkStatus.Queued }.map { it.id })
+        assertEquals(listOf("HA-2", "HA-3"), o.tasksIn("p:devbox:herdr-android").filter { it.status == WorkStatus.Queued }.map { it.id })
     }
 
     @Test
@@ -102,7 +102,7 @@ class ShepherdrTest {
         val s = ShepherdrJson.decodeFromString(V2Snapshot.serializer(), fixture("snapshot.json"))
         val changed = s.copy(
             tasks = s.tasks.mapIndexed { i, t -> if (i == 2) t.copy(status = V2TaskStatus.Need) else if (i == 1) t.copy(status = V2TaskStatus.Ready) else t },
-            asks = mapOf("p:beefy-machine:~" to "f1"),
+            asks = mapOf("p:devbox:~" to "f1"),
         )
         val o = V2Board.overview(changed)
         assertEquals(listOf("HA-3", "HA-2", "HA-1"), o.tasks.map { it.id })
@@ -124,12 +124,12 @@ class ShepherdrTest {
     fun readsTheChatEventThisMachineSent() {
         val e = V2Events.parse(fixture("chat-event.json")) as V2Event.Chat
         val c = e.chat
-        assertEquals("p:beefy-machine:herdr-android", c.key)
+        assertEquals("p:devbox:herdr-android", c.key)
         assertEquals(4, c.messages.size)
         assertTrue(c.messages[0].you)
         assertFalse(c.messages[1].you)
         assertTrue(c.messages[2].activity != null && c.messages[2].text == null)
-        val thread = V2Board.thread("p:beefy-machine:herdr-android", c)
+        val thread = V2Board.thread("p:devbox:herdr-android", c)
         // The turn's tool steps are no bubble.
         assertEquals(3, thread.lines.size)
         assertEquals(listOf(true, false, false), thread.lines.map { it.you })
@@ -196,7 +196,7 @@ class ShepherdrTest {
 
     @Test
     fun actionBodies() {
-        assertEquals("""{"type":"send","chat":"p:beefy-machine:~","text":"hello"}""", V2Actions.send("p:beefy-machine:~", "hello").toString())
+        assertEquals("""{"type":"send","chat":"p:devbox:~","text":"hello"}""", V2Actions.send("p:devbox:~", "hello").toString())
         assertEquals(
             """{"type":"send","chat":"HA-1/Agent","text":"yes","cid":"c1","reply":"m4","space":"p:m:x"}""",
             V2Actions.send("HA-1/Agent", "yes", reply = "m4", cid = "c1", space = "p:m:x").toString(),
@@ -347,7 +347,7 @@ class ShepherdrTest {
             val client = ShepherdrClient(ForwardTransport.over(forward))
             assertEquals(3, client.snapshot().tasks.size)
             assertEquals(2, client.waiting().count)
-            client.send("p:beefy-machine:~", "hello")
+            client.send("p:devbox:~", "hello")
             assertEquals("That chat is gone.", assertFailsWith<IOException> { client.send("gone", "hello") }.message)
             val cli = client.cli(listOf("merge", "HA-1"))
             assertFalse(cli.ok)
@@ -370,8 +370,8 @@ class ShepherdrTest {
                 fake.bodies("POST /api/action").last(),
             )
             assertFailsWith<IOException> { board.answer(CardAnswer(WorkCard("HA-8/Agent", plain, replyTo = "m77"), -1)) }
-            board.say("p:beefy-machine:~", "hi")
-            assertEquals("""{"type":"send","chat":"p:beefy-machine:~","text":"hi"}""", fake.bodies("POST /api/action").last())
+            board.say("p:devbox:~", "hi")
+            assertEquals("""{"type":"send","chat":"p:devbox:~","text":"hi"}""", fake.bodies("POST /api/action").last())
             forward.close()
         }
     }
@@ -415,7 +415,7 @@ class ShepherdrTest {
                 ws.sendText("""{"type":"snapshot","snapshot":${fixture("snapshot.json")}}""")
                 ws.sendText("""{"type":"build","id":"b1"}""")
                 val watch = ws.readText()
-                assertTrue(watch.contains("\"watch\"") && watch.contains("p:beefy-machine:herdr-android"))
+                assertTrue(watch.contains("\"watch\"") && watch.contains("p:devbox:herdr-android"))
                 ws.ping()
                 // A chat in two frames.
                 ws.sendText(chat.substring(0, 100), fin = false)
@@ -429,7 +429,7 @@ class ShepherdrTest {
             val first = link.next() as V2Event.Snapshot
             assertEquals(3, first.snapshot.tasks.size)
             assertEquals("build", (link.next() as V2Event.Other).type)
-            link.watch(listOf("p:beefy-machine:herdr-android"))
+            link.watch(listOf("p:devbox:herdr-android"))
             val c = link.next() as V2Event.Chat
             assertEquals(4, c.chat.messages.size)
             assertNull(link.next())
@@ -450,9 +450,9 @@ class ShepherdrTest {
                 ws.readText()
             }
             val board = V2WorkBoard(ShepherdrClient(ForwardTransport({ ForwardTransport.socket(fake.port, it) })))
-            val thread = board.coordinator("p:beefy-machine:herdr-android")
+            val thread = board.coordinator("p:devbox:herdr-android")
             assertEquals(3, thread.lines.size)
-            val two = withTimeout(10_000) { board.coordinatorThreads("p:beefy-machine:herdr-android").take(2).toList() }
+            val two = withTimeout(10_000) { board.coordinatorThreads("p:devbox:herdr-android").take(2).toList() }
             assertTrue(two[1].lines[1].text.endsWith("and one more."))
         }
     }
@@ -464,7 +464,7 @@ class ShepherdrTest {
                 ws.sendText("""{"type":"snapshot","snapshot":{"places":[]}}""")
                 val watch = ws.readText()
                 assertTrue(watch.contains("HA-1/Agent"))
-                ws.sendText(fixture("chat-event.json").replace("p:beefy-machine:herdr-android", "HA-1/Agent"))
+                ws.sendText(fixture("chat-event.json").replace("p:devbox:herdr-android", "HA-1/Agent"))
                 ws.readText()
             }
             val board = V2WorkBoard(ShepherdrClient(ForwardTransport({ ForwardTransport.socket(fake.port, it) })))
@@ -517,7 +517,7 @@ class ShepherdrTest {
             else CommandResult(0, fixture("snapshot.json") + "\n@@shepherdr-status@@200", "")
         }
         val board = V2WorkBoard(ShepherdrClient(curl))
-        val thread = board.coordinator("p:beefy-machine:herdr-android")
+        val thread = board.coordinator("p:devbox:herdr-android")
         assertEquals(3, thread.lines.size)
         // No live link: the flows read again.
         assertEquals(3, withTimeout(10_000) { board.overviews(everyMs = 10).take(2).toList() }.last().tasks.size)

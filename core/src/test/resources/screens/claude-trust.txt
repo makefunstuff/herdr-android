@@ -1,9 +1,9 @@
-[jpl@beefy-machine proj]$ claude --model haiku --permission-mode default
+[dev@devbox proj]$ claude --model haiku --permission-mode default
 
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  Accessing workspace:
 
- /tmp/claude-1000/-home-jpl--herdr-worktrees-herdr-android-work-2-replace-agent-terminals-with-n/518745e3-9052-4b3c-81c
+ /tmp/claude-1000/-home-dev--herdr-worktrees-herdr-android-work-2-replace-agent-terminals-with-n/518745e3-9052-4b3c-81c
  a-5ddd766812d8/scratchpad/proj
 
  Quick safety check: Is this a project you created or one you trust? (Like your own code, a well-known open source
