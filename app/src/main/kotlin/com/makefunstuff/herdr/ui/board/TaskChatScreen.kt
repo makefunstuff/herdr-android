@@ -208,7 +208,7 @@ internal fun TaskChatScreen(
             try {
                 session.awaitWorkBoard().tell(t, text, cid = line.cid, reply = reply?.id)
                 // Its chat not on screen (still read, or unreadable): nothing else would show that it went.
-                if (thread == null) withContext(Dispatchers.Main) { context.toast("Sent to $kind") }
+                if (thread == null) withContext(Dispatchers.Main) { context.toast("Sent to ${t.name}") }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Throwable) {
