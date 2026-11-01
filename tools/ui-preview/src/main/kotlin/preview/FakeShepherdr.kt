@@ -34,6 +34,12 @@ class FakeShepherdr(
         // A file up or down (CurlTransport.bytes): base64 both ways.
         if (w.firstOrNull() == "sh" && "/api/upload" in command) return bytes(201, upload(String(java.util.Base64.getMimeDecoder().decode(stdin.trim()), Charsets.ISO_8859_1)).toByteArray())
         if (w.firstOrNull() == "sh" && "/api/file" in command) return bytes(200, ByteArray(64))
+        // An artifact's picture, light or dark; no font here, so its pages fall back to the phone's.
+        if (w.firstOrNull() == "sh" && "/api/artifacts/" in command && "/thumb" in command) {
+            val id = Regex("""/api/artifacts/([^/?']+)/thumb""").find(command)?.groupValues?.get(1).orEmpty()
+            return if (artifacts().any { it == id }) bytes(200, DemoArtifacts.thumb(id, "dark=1" in command)) else bytes(404, ByteArray(0))
+        }
+        if (w.firstOrNull() == "sh" && "/api/font/" in command) return bytes(404, ByteArray(0))
         if ("@@shepherdr-chat@@" in command) {
             chatRefused?.let { return CommandResult(3, "", it) }
             val key = Regex("""const k=("(?:[^"\\]|\\.)*")""").find(command)?.groupValues?.get(1)
@@ -68,9 +74,20 @@ class FakeShepherdr(
             path == "/api/waiting" -> 200 to """{"count":${(snapshot["asks"] as? JsonObject)?.size ?: 0},"tags":[]}"""
             path == "/api/action" && method == "POST" -> 200 to act(Json.parseToJsonElement(stdin).jsonObject)
             path == "/api/cli" -> 200 to """{"out":"Done (demo)\n","code":0}"""
+            path.startsWith("/api/artifacts/") -> artifact(path.removePrefix("/api/artifacts/").substringBefore('?'))
             else -> 404 to """{"error":"Not found"}"""
         }
         return CommandResult(0, "$body\n@@shepherdr-status@@$status", "")
+    }
+
+    /** The ids of the artifacts its snapshot lists. */
+    private fun artifacts(): List<String> = (snapshot["artifacts"] as? JsonArray).orEmpty().mapNotNull { it.jsonObject["id"]?.jsonPrimitive?.content }
+
+    /** `/api/artifacts/<id>` (its page) or `<id>/data`. */
+    private fun artifact(rest: String): Pair<Int, String> {
+        val id = rest.substringBefore('/')
+        if (id !in artifacts()) return 404 to "no such artifact"
+        return if (rest.endsWith("/data")) 200 to DemoArtifacts.data(id) else 200 to (DemoArtifacts.PAGES[id] ?: "<html><head></head><body></body></html>")
     }
 
     private fun act(a: JsonObject): String {
@@ -97,6 +114,7 @@ class FakeShepherdr(
                 chats.keys.forEach { key -> change(key) { c -> JsonObject(c + ("messages" to JsonArray(messages(c).map { answered(it.jsonObject, q, choice) }))) } }
             }
         }
+        a["type"]?.jsonPrimitive?.content?.takeIf { it.startsWith("artifact-") }?.let { return """{"to":"herdr-android"}""" }
         return """{"ok":true}"""
     }
 

@@ -46,6 +46,10 @@ import com.makefunstuff.herdr.core.board.CoordinatorThread
 import com.makefunstuff.herdr.core.board.WorkStatus
 import com.makefunstuff.herdr.core.board.WorkTask
 import com.makefunstuff.herdr.core.board.WorkTaskDetails
+import com.makefunstuff.herdr.core.board.WorkBoard
+import com.makefunstuff.herdr.core.shepherdr.V2Artifact
+import com.makefunstuff.herdr.ui.artifacts.ChatArtifacts
+import com.makefunstuff.herdr.ui.artifacts.LocalChatArtifacts
 import com.makefunstuff.herdr.core.host.HostSession
 import com.makefunstuff.herdr.core.shepherdr.OutgoingLine
 import com.makefunstuff.herdr.core.shepherdr.SpaceChat
@@ -122,12 +126,26 @@ internal fun TaskChatScreen(
     onMerge: () -> Unit,
     onClose: () -> Unit,
     backEnabled: Boolean = true,
+    /** The machine's artifacts (null where Shepherdr keeps none, or until it answers), for the chat's artifact cards. */
+    artifacts: List<V2Artifact>? = null,
+    artifactsRead: Boolean = false,
+    /** Opens an artifact (at a version, or its latest for null), or the task's space's Artifacts list (null: none). */
+    onArtifact: (id: String, v: Int?) -> Unit = { _, _ -> },
+    onArtifacts: (() -> Unit)? = null,
 ) {
     val container = LocalContainer.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val state by session.state.collectAsStateWithLifecycle()
     var sheet by remember(t.id) { mutableStateOf<TaskSheet?>(null) }
+    // The board its artifact cards read their pictures through.
+    var board by remember { mutableStateOf<WorkBoard?>(null) }
+    LaunchedEffect(state.online) {
+        while (state.online && board == null) {
+            board = runCatching { session.awaitWorkBoard() }.getOrNull()
+            if (board == null) kotlinx.coroutines.delay(5_000)
+        }
+    }
     BackHandler(enabled = backEnabled && sheet == null, onBack = onBack)
 
     // Its brief, plan and facts: read when it opens (again until that works), and when the board says it changed.
@@ -309,7 +327,11 @@ internal fun TaskChatScreen(
                             val why = problem
                             if (why != null) ChatEmpty(HerdrIcons.CircleAlert, "Can't read its chat", why) else LoadingState("Reading the chat")
                         }
-                        else -> CompositionLocalProvider(LocalChatImages provides ChatImages(machineId, session, container.images, state.online), LocalVoiceMessages provides voice) { Box(Modifier.fillMaxSize()) {
+                        else -> CompositionLocalProvider(
+                            LocalChatImages provides ChatImages(machineId, session, container.images, state.online),
+                            LocalVoiceMessages provides voice,
+                            LocalChatArtifacts provides ChatArtifacts(machineId, artifacts, board, artifactsRead, onArtifact),
+                        ) { Box(Modifier.fillMaxSize()) {
                         LazyColumn(
                             state = list,
                             // Newest at the bottom: it stays at its end when the keyboard opens or the message box grows.
@@ -358,6 +380,7 @@ internal fun TaskChatScreen(
                     if (!d?.brief.isNullOrEmpty()) MenuRow("Brief", HerdrIcons.FileText, { sheet = TaskSheet.Brief })
                     if (!d?.plan.isNullOrEmpty()) MenuRow("Plan", HerdrIcons.ListChecks, { sheet = TaskSheet.Plan })
                     if (!d?.facts.isNullOrEmpty() || !d?.branch.isNullOrEmpty()) MenuRow("Facts", HerdrIcons.Info, { sheet = TaskSheet.Facts })
+                    if (onArtifacts != null) MenuRow("Artifacts", HerdrIcons.LayoutDashboard, { sheet = null; onArtifacts() })
                     if (t.pr.isNotEmpty()) MenuRow("Pull request" + (prNumberOf(t.pr)?.let { " #$it" } ?: ""), HerdrIcons.GitPullRequest, { sheet = null; context.openUrl(t.pr) })
                     if (d == null) LoadingState("Reading the task")
                     if (canClose) MenuRow("Close, nothing merged…", HerdrIcons.CircleStop, { sheet = null; onClose() }, enabled = busy == null, destructive = true)

@@ -23,6 +23,9 @@ object ImageCodec {
     /** The picture in [file], at most [maxEdge] pixels on its long side; null when it can't be read. */
     fun load(file: File, maxEdge: Int): ImageBitmap? = decode(ImageDecoder.createSource(file), maxEdge)?.asImageBitmap()
 
+    /** The picture in [bytes] (a PNG an artifact's check took), as [load] reads a file. */
+    fun load(bytes: ByteArray, maxEdge: Int): ImageBitmap? = decode(ImageDecoder.createSource(java.nio.ByteBuffer.wrap(bytes)), maxEdge)?.asImageBitmap()
+
     /** Writes [image] to [file] as [format]. */
     fun save(image: ImageBitmap, file: File, format: ImageSizing.Format) = write(image.asAndroidBitmap(), file, format)
 

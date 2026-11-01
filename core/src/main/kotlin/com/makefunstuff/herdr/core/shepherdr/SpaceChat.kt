@@ -66,8 +66,11 @@ sealed interface SpaceChatItem {
      */
     data class Voice(override val id: String, val you: Boolean, val path: String?, val millis: Long, val note: VoiceNote? = null) : SpaceChatItem
 
-    /** An artifact the coordinator posted: shown in Shepherdr itself, the app names it. */
-    data class Artifact(override val id: String, val artifact: String, val version: Int, val intro: String = "") : SpaceChatItem
+    /**
+     * An artifact posted in the chat, at [version], with the words that came with it ([intro]). [later]: the
+     * chat posts it again further down, so this one folds to a line, as a chat never repeats big cards.
+     */
+    data class Artifact(override val id: String, val artifact: String, val version: Int, val intro: String = "", val later: Boolean = false) : SpaceChatItem
 
     /** A thin "New session" line before the message after it. */
     data class NewSession(override val id: String) : SpaceChatItem
@@ -108,7 +111,10 @@ object SpaceChat {
     ): List<SpaceChatItem> {
         val failed = chat.failed.orEmpty().associate { it.cid to it.error }
         val out = ArrayList<SpaceChatItem>()
-        for (m in chat.messages) {
+        // Where each artifact is posted last: earlier posts of it fold.
+        val lastPost = HashMap<String, Int>()
+        chat.messages.forEachIndexed { i, m -> m.artifact?.let { lastPost[it.id] = i } }
+        for ((i, m) in chat.messages.withIndex()) {
             if (m.newSession) out += SpaceChatItem.NewSession("${m.id}#new")
             val text = ShepherdrText.clean(m.text.orEmpty())
             val card = m.card
@@ -118,7 +124,7 @@ object SpaceChat {
             when {
                 card != null -> out += update(space, m.id, card, text)
                 q != null -> out += SpaceChatItem.Question(m.id, WorkCard(chat.key, q), intro = text, answer = answered(q))
-                post != null -> out += SpaceChatItem.Artifact(m.id, post.id, post.v, intro = text)
+                post != null -> out += SpaceChatItem.Artifact(m.id, post.id, post.v, intro = text, later = (lastPost[post.id] ?: i) > i)
                 else -> {
                     if (text.isNotEmpty()) {
                         out += SpaceChatItem.Words(

@@ -1,5 +1,7 @@
 package com.makefunstuff.herdr.core.board
 
+import com.makefunstuff.herdr.core.shepherdr.ArtifactMessage
+import com.makefunstuff.herdr.core.shepherdr.V2Artifact
 import com.makefunstuff.herdr.core.shepherdr.V2Chat
 import com.makefunstuff.herdr.core.shepherdr.V2Choice
 import com.makefunstuff.herdr.core.shepherdr.V2Question
@@ -49,6 +51,8 @@ data class WorkSpace(
     val unreachable: Boolean = false,
     /** Its coordinator has a question open for you (v2's `asks`). */
     val asks: Boolean = false,
+    /** What its lists hold (v2's `level`): 2 its own, 1 its machine's (a home space), 0 every machine's. */
+    val level: Int = 2,
 )
 
 /** One task, in the same shape from both boards. */
@@ -79,8 +83,11 @@ data class WorkTask(
     val v1: BoardTask? = null,
 )
 
-/** Every space and its tasks, what needs you first. */
-data class WorkOverview(val spaces: List<WorkSpace>, val tasks: List<WorkTask>) {
+/**
+ * Every space and its tasks, what needs you first; and the [artifacts] agents made, on a Shepherdr that
+ * keeps them (null elsewhere: v1, a Shepherdr without them).
+ */
+data class WorkOverview(val spaces: List<WorkSpace>, val tasks: List<WorkTask>, val artifacts: List<V2Artifact>? = null) {
     val needsYou: List<WorkTask> get() = tasks.filter { it.status.needsYou }
     fun tasksIn(space: String): List<WorkTask> = tasks.filter { it.space == space }
 }
@@ -222,7 +229,28 @@ interface WorkBoard {
     /** A file sent in [task]'s own chat, read back by its [path]. */
     suspend fun taskFile(task: WorkTask, path: String): ByteArray =
         throw IOException("This board takes no files")
+
+    /** Artifact [a]'s page at version [v] as Shepherdr wraps it, in [dark] or light ([WorkOverview.artifacts]). */
+    suspend fun artifactPage(a: V2Artifact, v: Int, dark: Boolean): String = throw IOException(NO_ARTIFACTS)
+
+    /** Version [v]'s data alone, as JSON text. */
+    suspend fun artifactData(a: V2Artifact, v: Int): String = throw IOException(NO_ARTIFACTS)
+
+    /** The picture Shepherdr took of [a]'s latest version; null where it has none. */
+    suspend fun artifactThumb(a: V2Artifact, dark: Boolean): ByteArray? = null
+
+    /** The font artifacts are set in; null where there is none. */
+    suspend fun artifactFont(): ByteArray? = null
+
+    /**
+     * What you send from version [v] of [a] to its keeper: a page's Send ([ArtifactMessage.Send]), your words,
+     * or a note on what you picked in Mark up ([pick]). Whom it went to ("HA-1 agent").
+     */
+    suspend fun artifactSay(a: V2Artifact, v: Int, text: String, page: Boolean = false, pick: ArtifactMessage.Pick? = null): String =
+        throw IOException(NO_ARTIFACTS)
 }
+
+private const val NO_ARTIFACTS = "This board keeps no artifacts"
 
 object WorkTasks {
     /** v1's status in v2's words: anything that waits on you is Need, except the yes to merge. */

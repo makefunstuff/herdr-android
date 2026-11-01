@@ -143,6 +143,24 @@ class V2WorkBoard(private val connect: suspend () -> ShepherdrClient, private va
 
     override suspend fun taskFile(task: WorkTask, path: String): ByteArray = connect().file(agentChat(task), path)
 
+    override suspend fun artifactPage(a: V2Artifact, v: Int, dark: Boolean): String = connect().artifactPage(a.id, v, dark)
+
+    override suspend fun artifactData(a: V2Artifact, v: Int): String = connect().artifactData(a.id, v)
+
+    override suspend fun artifactThumb(a: V2Artifact, dark: Boolean): ByteArray? = if (a.thumb) connect().artifactThumb(a.id, dark) else null
+
+    override suspend fun artifactFont(): ByteArray? = connect().artifactFont()
+
+    override suspend fun artifactSay(a: V2Artifact, v: Int, text: String, page: Boolean, pick: ArtifactMessage.Pick?): String {
+        val action = when {
+            page -> V2ArtifactActions.send(a, v, text)
+            pick != null -> V2ArtifactActions.note(a, v, text, pick.target())
+            else -> V2ArtifactActions.say(a, v, text)
+        }
+        val o = connect().act(action)
+        return (o["to"] as? JsonPrimitive)?.contentOrNull ?: a.keeper
+    }
+
     private fun agentChat(task: WorkTask) = task.chat.ifEmpty { throw IOException("${task.name} has no agent yet") }
 
     /** Runs the `shepherdr` command; its last line, or its own reason in the exception. */
@@ -212,9 +230,10 @@ object V2Board {
                 needsYou = p.status == V2Status.Need || s.asks.containsKey(p.id) || tasks.any { it.space == p.id && it.status.needsYou },
                 unreachable = p.unreachableSince != null,
                 asks = s.asks.containsKey(p.id),
+                level = p.level,
             )
         }
-        return WorkOverview(spaces, tasks)
+        return WorkOverview(spaces, tasks, s.artifacts)
     }
 
     fun task(t: V2Task) = WorkTask(
