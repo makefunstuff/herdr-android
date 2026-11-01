@@ -13,7 +13,7 @@ import kotlin.coroutines.coroutineContext
 
 /**
  * Speech out and in on a server. Today that is the owner's LFM3 server in Edge mode ([EdgeVoice]);
- * the homelab's shared voice service (HOM-11) takes its place behind the same two calls.
+ * another voice service can take its place behind the same two calls.
  */
 interface VoiceEngine {
     /** Sample rate of what [speak] hands over. */

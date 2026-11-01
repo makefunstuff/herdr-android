@@ -208,11 +208,20 @@ class AndroidCoordinatorVoice(
 
     private suspend fun testVoice(): String {
         val s = settings.state.value
-        // Finds the machine a plain-http server answers through; if none does, the test below says why.
-        if (s.usable) try { reach(s) } catch (e: CancellationException) { throw e } catch (_: Exception) {}
-        val engine = if (s.usable) engineFor(s) else null
-        if (s.usable && engine == null) return "No machine is connected to reach the voice server through"
+        // A plain-http server: first the machine it answers through, else why none does (the phone's voice says so).
+        val missed = if (s.usable && EdgeVoice.throughMachine(s.server) != null) {
+            try { reach(s); null } catch (e: CancellationException) { throw e } catch (e: Exception) { e }
+        } else null
+        val engine = if (s.usable && missed == null) engineFor(s) else null
         hushed = false
+        if (missed != null) {
+            awaySince = SystemClock.elapsedRealtime()
+            val t0 = SystemClock.elapsedRealtime()
+            var first = 0L
+            take()
+            try { phone.say("The server can't be reached. This is the phone's voice.", s.speed) { first = SystemClock.elapsedRealtime() - t0 } } finally { release() }
+            return "${missed.message ?: "The server can't be reached"}. Phone voice: first sound in $first ms"
+        }
         if (engine != null) {
             try {
                 val t0 = SystemClock.elapsedRealtime()
@@ -367,11 +376,11 @@ class AndroidCoordinatorVoice(
         val s = settings.state.value
         if (!s.usable) { _state.update { it.copy(engine = VoiceState.Engine.Phone) }; return null }
         if (awaySince != 0L && SystemClock.elapsedRealtime() - awaySince < RETRY_MS) return null
-        return engineFor(s) ?: null.also { away(IOException("No machine to reach the voice server through")) }
+        return engineFor(s) ?: null.also { away(IOException("No machine is connected to reach the voice server through")) }
     }
 
     /**
-     * The voice server's engine: the one place it is made, so the homelab's voice service drops in here.
+     * The voice server's engine: the one place it is made, so another voice service drops in here.
      * A plain-http server is asked through a machine's SSH connection ([tunnelTo]).
      */
     private fun engineFor(s: VoiceSettingsStore.Settings, machineId: String? = machines().firstOrNull()): VoiceEngine? = runCatching {
@@ -398,7 +407,7 @@ class AndroidCoordinatorVoice(
      */
     private suspend fun reach(s: VoiceSettingsStore.Settings): Long {
         if (EdgeVoice.throughMachine(s.server) == null) return (engineFor(s) ?: throw IOException("Write the server as http://address:port")).ping()
-        var failed: Exception = IOException("No machine to reach the voice server through")
+        var failed: Exception = IOException("No machine is connected to reach the voice server through")
         for (id in machines()) {
             try {
                 return (engineFor(s, id) ?: continue).ping().also { via = id }
@@ -406,7 +415,9 @@ class AndroidCoordinatorVoice(
                 throw e
             } catch (e: Exception) {
                 if (e.message?.contains("refused the key") == true) throw e
-                failed = e
+                val label = hosts.session(id)?.machine?.label ?: id
+                // Through the tunnel a refused or unreachable server is only a closed socket: say where it was asked.
+                failed = IOException(if (hosts.session(id)?.state?.value?.online == false) "$label isn't connected" else "Can't reach the voice server from $label", e)
             }
         }
         throw failed
@@ -427,7 +438,7 @@ class AndroidCoordinatorVoice(
             val session = hosts.session(machineId) ?: throw IOException("This machine isn't in the app any more")
             // Only the chat's machine is waited for (voice keeps it connected); another isn't connected for this.
             if (machineId != _state.value.machineId && !session.state.value.online) throw IOException("${session.machine.label} isn't connected")
-            runBlocking { session.awaitConnection(6_000) }.openTcp(h, p)
+            runBlocking { session.awaitConnection(2_500) }.openTcp(h, p)
         }.also { tunnel = key to it }
     }
 

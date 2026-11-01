@@ -91,7 +91,7 @@ class PairingTest {
     fun saysHowAnAddressReachesTheMachine() {
         assertEquals(AddressKind.Tailscale, AddressKind.of("devbox.tail1234.ts.net"))
         assertEquals(AddressKind.Tailscale, AddressKind.of("100.84.3.12"))
-        assertEquals(AddressKind.Local, AddressKind.of("192.168.1.20"))
+        assertEquals(AddressKind.Local, AddressKind.of("192.168.0.20"))
         assertEquals(AddressKind.Local, AddressKind.of("10.0.0.5"))
         assertEquals(AddressKind.Local, AddressKind.of("172.20.1.1"))
         assertEquals(AddressKind.Local, AddressKind.of("devbox.lan"))
@@ -103,7 +103,7 @@ class PairingTest {
     @Test
     fun theQrCodeReadsBack() {
         assumeTrue(python(), "python3 isn't installed")
-        val link = "herdr://pair?v=1&n=devbox&u=demo&a=devbox.tail1234.ts.net,100.84.3.12,192.168.1.20&p=22&k=$fpUrl,$fpUrl,$fpUrl&c=$code&x=1792222540"
+        val link = "herdr://pair?v=1&n=devbox&u=demo&a=devbox.tail1234.ts.net,100.84.3.12,192.168.0.20&p=22&k=$fpUrl,$fpUrl,$fpUrl&c=$code&x=1792222540"
         val texts = listOf("x", link) + listOf(17, 40, 77, 120, 190, 260, 340, 420, 500, 600, 700, 800).map { n ->
             (link + link + link).take(n)
         }
