@@ -253,6 +253,16 @@ fun scenes(): List<Scene> = listOf(
         tapLabel("Record a voice message")
         tapLabel("Send voice message")
     }),
+    // Every agent's chat keeps its whole composer (text, attach, mic, Send): a herdr-core agent at work, Shepherdr 2.1's
+    // task agent and coordinator opened as agents, and the task's own chat.
+    Scene("chat-core-working", route = Routes.agent(DEVBOX, DemoCore.CODEX), setup = { desktopApp() }),
+    Scene("chat-shepherdr21-agent", route = Routes.agent(DEVBOX, "hc:@shepherdr:t4"), setup = { shepherdr21() }),
+    Scene("chat-shepherdr21-asks", route = Routes.agent(DEVBOX, "hc:@shepherdr:t2"), setup = { shepherdr21() }),
+    Scene("chat-shepherdr21-coordinator", route = Routes.agent(DEVBOX, "hc:@shepherdr:t1"), setup = { shepherdr21() }),
+    Scene("task-shepherdr21", route = Routes.board(DEVBOX, "AND-19"), setup = { shepherdr21() }),
+    // Its chat not read yet (or not readable): the composer is whole and writable all the same; and attaching a file.
+    Scene("task-shepherdr21-unread", route = Routes.board(DEVBOX, "AND-19"), setup = { shepherdr21(); host(DEVBOX).shepherdr?.chatRefused = "Couldn't read the chat" }),
+    Scene("task-shepherdr21-attach", route = Routes.board(DEVBOX, "AND-19"), setup = { shepherdr21() }, actions = { tapLabel("Attach files") }),
     Scene("machine-new", route = Routes.machine(DEVBOX), actions = { tapText("New") }),
     // Add machine: scanning the code herdr-push pair shows (the phone's own scanner is a system screen; the stand-in
     // reads studio's code), studio found on Tailscale, studio answering nowhere, and typing the address instead.

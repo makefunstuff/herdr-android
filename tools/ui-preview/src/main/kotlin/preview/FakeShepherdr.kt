@@ -21,6 +21,9 @@ class FakeShepherdr(
     /** Each chat as its live link sends it (`Chat`), by its key. */
     var chats: Map<String, JsonObject> = DemoV2.chats(),
 ) {
+    /** When set, reading any chat fails with these words (Shepherdr down, or the chat's file unreadable). */
+    var chatRefused: String? = null
+
     /** The bodies of `POST /api/action`, as sent. */
     val actions = ArrayList<JsonObject>()
 
@@ -32,6 +35,7 @@ class FakeShepherdr(
         if (w.firstOrNull() == "sh" && "/api/upload" in command) return bytes(201, upload(String(java.util.Base64.getMimeDecoder().decode(stdin.trim()), Charsets.ISO_8859_1)).toByteArray())
         if (w.firstOrNull() == "sh" && "/api/file" in command) return bytes(200, ByteArray(64))
         if ("@@shepherdr-chat@@" in command) {
+            chatRefused?.let { return CommandResult(3, "", it) }
             val key = Regex("""const k=("(?:[^"\\]|\\.)*")""").find(command)?.groupValues?.get(1)
                 ?.let { Json.parseToJsonElement(it).jsonPrimitive.content } ?: return CommandResult(3, "", "no chat")
             val chat = chats[key] ?: obj("key" to key, "messages" to JsonArray(emptyList()))
