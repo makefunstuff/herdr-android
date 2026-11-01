@@ -2,6 +2,7 @@
 // classic herdr) and on mac-mini (the desktop app alone), as hc lists them.
 package preview
 
+import kotlinx.serialization.json.JsonObject
 import preview.Demo.NOW
 
 object DemoCore {
@@ -62,6 +63,43 @@ object DemoCore {
         screens = mapOf("t1" to Demo.resource("screen-claude-app.txt"), "t2" to Demo.resource("screen-codex.txt")),
         name = "mac-mini",
     )
+
+    /**
+     * devbox's `shepherdr` session, where Shepherdr 2.1 runs its agents (DemoV2.board()'s): each space's
+     * coordinator and the tasks' agents, labelled as Shepherdr labels them, with its own names (`shep-…`).
+     */
+    fun shepherdr(): FakeCore {
+        fun agent(address: String, space: String, tab: String, task: String?, status: JsonObject, statusMs: Long, title: String, parent: String? = null, argv: String = "claude") =
+            FakeCore.terminal(
+                address, listOf(argv), if (task == null) "$HOME/src/$space" else "$HOME/.shepherdr/worktrees/$space/${task.lowercase()}", NOW - 60 * MIN,
+                name = "shep-" + address.padEnd(16, '0'), status = status, statusMs = statusMs, title = title, turn = 1, parent = parent,
+                labels = buildMap {
+                    put("shepherdr.chat", task?.let { "$it/Agent" } ?: "p:devbox:$space")
+                    put("shepherdr.role", if (task == null) "coordinator" else "task")
+                    put("shepherdr.space", "p:devbox:$space")
+                    task?.let { put("shepherdr.task", it) }
+                    put("where", "$space / $tab")
+                },
+            )
+        return FakeCore(
+            terminals = listOf(
+                agent("t1", "herdr-android", "coordinator", null, status("done", "claude-code", msg = "Queued AND-22 after AND-19"), NOW - 12 * MIN, "herdr-android"),
+                agent("t2", "herdr-android", "AND-21", "AND-21", status("blocked", "claude-code", kind = "question", msg = "Which key bar layout?"), NOW - 3 * MIN, "Key bar layouts", parent = "t1"),
+                agent("t3", "herdr-android", "AND-24", "AND-24", status("blocked", "codex", kind = "question"), NOW - 5 * MIN, "Alert rules", parent = "t1", argv = "codex"),
+                agent("t4", "herdr-android", "AND-19", "AND-19", status("working", "claude-code", msg = "Adding an index on jobs.created_at"), NOW - 1 * MIN, "Speed up /jobs on large tables", parent = "t1"),
+                agent("t5", "herdr-android", "AND-20", "AND-20", status("done", "claude-code", msg = "Ready: PR #212"), NOW - 20 * MIN, "Quiet hours", parent = "t1"),
+                agent("t6", "website", "coordinator", null, status("done", "claude-code"), NOW - 30 * MIN, "website"),
+                agent("t7", "website", "AND-18", "AND-18", status("working", "claude-code", msg = "Merging"), NOW - 2 * MIN, "Blog layout", parent = "t6"),
+            ),
+            name = "devbox",
+        )
+    }
+}
+
+/** devbox runs Shepherdr 2.1: its board, and its agents in herdr-core's `shepherdr` session; no desktop app. */
+fun SceneData.shepherdr21() {
+    host(Demo.DEVBOX).shepherdr = DemoV2.board().apply { version = "2.1.0" }
+    host(Demo.DEVBOX).coreSessions = mapOf("shepherdr" to DemoCore.shepherdr())
 }
 
 /** devbox runs the desktop app's herdr-core next to classic herdr; mac-mini runs only the desktop app. */

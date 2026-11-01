@@ -90,6 +90,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.UUID
+import androidx.compose.runtime.CompositionLocalProvider
+import com.makefunstuff.herdr.core.chat.VoiceNotes
+import com.makefunstuff.herdr.ui.common.LocalVoiceMessages
+import com.makefunstuff.herdr.ui.common.rememberVoiceMessages
 
 /** What the task chat's ⋯ shows over it: its menu, or one of its details in full. */
 private enum class TaskSheet { Menu, Said, Brief, Plan, Facts }
@@ -139,6 +143,14 @@ internal fun TaskChatScreen(
     var replyTo by remember(t.chat) { mutableStateOf<V2ReplyQuote?>(null) }
     /** The question cards an answer is on its way to, by question id. */
     var answering by remember(t.chat) { mutableStateOf<Set<String>>(emptySet()) }
+    // A voice message: its file goes into Shepherdr's inbox, then to the agent as a file sent in its chat (as the Coordinator's).
+    val voice = rememberVoiceMessages(
+        DraftStore.task(machineId, t.id),
+        online = state.online && t.chat.isNotEmpty(),
+        upload = { file, name -> session.awaitWorkBoard().uploadFor(t, name, file.readBytes(), VoiceNotes.MIME) },
+        deliver = { remote, id -> session.awaitWorkBoard().tellFiles(t, listOf(remote), cid = id) },
+        fetch = { remote -> session.awaitWorkBoard().taskFile(t, remote) },
+    )
     var problem by remember(t.chat) { mutableStateOf<String?>(null) }
     LaunchedEffect(t.id, t.chat, state.online) {
         if (!state.online) return@LaunchedEffect
@@ -147,7 +159,11 @@ internal fun TaskChatScreen(
                 session.awaitWorkBoard().taskThreads(t).collect { th ->
                     thread = th
                     problem = null
-                    th.v2?.let { outgoing = SpaceChat.stillOutgoing(it, outgoing) }
+                    th.v2?.let { chat ->
+                        outgoing = SpaceChat.stillOutgoing(chat, outgoing)
+                        // A voice message Shepherdr held, then couldn't hand over: on the phone again, with Retry.
+                        chat.failed?.takeIf { it.isNotEmpty() }?.let { f -> voice.refused(f.associate { it.cid to it.error }) }
+                    }
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -158,7 +174,7 @@ internal fun TaskChatScreen(
         }
     }
     val th = thread
-    val items = remember(th, outgoing) { th?.v2?.let { SpaceChat.items(th.space, it, outgoing, steps = true) }.orEmpty() }
+    val items = remember(th, outgoing, voice.notes) { th?.v2?.let { SpaceChat.items(th.space, it, outgoing, voice.notes, container.clock(), steps = true) }.orEmpty() }
     // A list of its own for each task, so another task opens at its newest too; kept to its newest message (StickToBottom).
     val list = remember(t.id) { LazyListState() }
     val stick = rememberStickToBottom(list)
@@ -253,6 +269,7 @@ internal fun TaskChatScreen(
                                 enabled = state.online && th != null,
                                 status = if (!state.online) "Not connected" else null,
                                 floating = true,
+                                voice = voice.recorder,
                             )
                         }
                     },
@@ -265,7 +282,7 @@ internal fun TaskChatScreen(
                             val why = problem
                             if (why != null) ChatEmpty(HerdrIcons.CircleAlert, "Can't read its chat", why) else LoadingState("Reading the chat")
                         }
-                        else -> Box(Modifier.fillMaxSize()) {
+                        else -> CompositionLocalProvider(LocalVoiceMessages provides voice) { Box(Modifier.fillMaxSize()) {
                         LazyColumn(
                             state = list,
                             // Newest at the bottom: it stays at its end when the keyboard opens or the message box grows.
@@ -299,7 +316,7 @@ internal fun TaskChatScreen(
                             }
                         }
                         NewestButton(stick, bottom)
-                        }
+                        } }
                     }
                 }
             }

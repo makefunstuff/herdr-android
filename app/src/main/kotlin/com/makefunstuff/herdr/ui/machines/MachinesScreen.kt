@@ -119,7 +119,7 @@ private fun MachineCard(host: HostState, via: String?, onOpen: () -> Unit, onRet
                 append(m.target)
                 append(" · session ").append(m.session)
                 host.herdrVersion?.takeIf { host.classicMissing == null }?.let { append(" · herdr ").append(it) }
-                host.herdrCore?.let { append(" · herdr-core ").append(it.version) }
+                host.herdrCore?.let { append(" · herdr-core ").append(it.version); if (it.sessions.isNotEmpty()) append(" (").append(it.sessions.joinToString()).append(")") }
                 via?.let { append(" · via ").append(it) }
             },
             style = MaterialTheme.typography.bodyMedium,

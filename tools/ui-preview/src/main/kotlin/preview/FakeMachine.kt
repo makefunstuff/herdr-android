@@ -74,6 +74,8 @@ class FakeMachine(
     var classic: Boolean = true,
     /** herdr-core (the desktop app's runtime) running there, or null where it doesn't. */
     var core: FakeCore? = null,
+    /** herdr-core's other sessions running there, by name (Shepherdr 2.1's `shepherdr`). */
+    var coreSessions: Map<String, FakeCore> = emptyMap(),
     /** What the health probe reads there (RAM, disks, processes, worktrees). */
     var health: FakeHealth = FakeHealth(),
     /** Its AI providers, as herdr-usage reads them there; null answers no usage command. */
@@ -111,7 +113,7 @@ class FakeMachine(
 
     fun run(command: String, stdin: String = ""): CommandResult {
         // herdr-core's probe (HcDetection): its socket and core, or nothing where none runs.
-        if ("core.lock" in command) return core?.probe() ?: ok("")
+        if ("core.lock" in command) return FakeCore.probe(core, coreSessions)
         shepherdr?.run(command, stdin)?.let { return it }
         Shell.words(command).let { w ->
             // Words in the chats (ChatSearch.command): the transcripts' lines that hold them, under each chat's mark.
@@ -190,7 +192,10 @@ class FakeMachine(
     fun start(command: String): RemoteProcess {
         val w = Shell.words(command)
         // `herdr-core connect` on the socket the probe found (HcDetection.connectCommand).
-        if ("HC_SOCKET" in command && command.contains(" connect")) core?.let { return it.connect() }
+        if ("HC_SOCKET" in command && command.contains(" connect")) {
+            // Another session's names it last (HC_SESSION).
+            (if ("HC_SESSION" in command) coreSessions[w.last()] else core)?.let { return it.connect() }
+        }
         // A sign-in (herdr-logins run): what it says until the person has something to do; what they type is taken.
         logins?.events(command)?.let { events -> return stream { _, out -> events.forEach { out.println(it) }; out.flush() } }
         return when {

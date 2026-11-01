@@ -54,6 +54,15 @@ enum class V2TaskStatus {
 data class V2Version(val root: String = "", val version: String = "", val supervisor: Long? = null) {
     /** The major version, 0 when it can't be read. */
     val major: Int get() = version.trim().removePrefix("v").substringBefore('.').toIntOrNull() ?: 0
+
+    /** The minor version, 0 when it can't be read. */
+    val minor: Int get() = version.trim().removePrefix("v").split('.').getOrNull(1)?.takeWhile(Char::isDigit)?.toIntOrNull() ?: 0
+
+    /**
+     * Shepherdr 2.1 or later, the standalone app on herdr-core: its API takes no `shepherdr` command
+     * (`/api/cli`), so a merge is the human's answer on the task's merge card.
+     */
+    val standalone: Boolean get() = major > 2 || major == 2 && minor >= 1
 }
 
 /** `GET /api/waiting`: how many things wait on you, and their alert tags. */
@@ -181,9 +190,11 @@ data class V2Question(
     val via: String? = null,
     /** "Claude Code asks". */
     val asks: String? = null,
+    /** Shepherdr 2.1: why it closed without the human's answer (expired, replaced); it was never answered. */
+    val closed: String? = null,
 ) {
     /** Still waiting for an answer. */
-    val open: Boolean get() = sent == null && said == null && via == null
+    val open: Boolean get() = sent == null && said == null && via == null && closed == null
 }
 
 /** What a needs-you card in a space's chat asks, from its task's chat (`CardAsk`). */
@@ -288,6 +299,8 @@ data class V2Snapshot(
     val asks: Map<String, String> = emptyMap(),
     val user: String = "",
     val demo: Boolean = false,
+    /** `core` on Shepherdr 2.1, whose agents run in herdr-core; none on 2.0 (classic herdr). */
+    val terminalTransport: String? = null,
     /** When each chat last had something new (ms), and how far each was read. */
     val last: Map<String, Double> = emptyMap(),
     val read: Map<String, Double> = emptyMap(),

@@ -119,6 +119,18 @@ class FakeCore(
 
     companion object {
         const val SOCKET = "/run/user/1000/herdr-core/default.sock"
+
+        /** The probe's answer for a machine running [default] (or not) and [others], other sessions by name. */
+        fun probe(default: FakeCore?, others: Map<String, FakeCore>): CommandResult {
+            if (others.isEmpty()) return default?.probe() ?: CommandResult(0, "", "")
+            val version = (default ?: others.values.first()).version
+            val lines = buildString {
+                if (default != null) append("socket\t$SOCKET\nlock\t4242\ncore\t$BIN\t4242\n")
+                others.keys.forEachIndexed { i, name -> append("session\t$name\t/run/user/1000/herdr-core/$name.sock\t${4300 + i}\t$BIN\n") }
+                append("bin\t$BIN\therdr-core $version\tcore\nbin\t$BIN\therdr-core $version\tpath\n")
+            }
+            return CommandResult(0, lines, "")
+        }
         const val BIN = "/home/demo/.local/bin/herdr-core"
 
         /** A terminal as hc lists it: in the desktop app's [space] and [tab] (null: one `hc run` started), with its 7501 [status]. */
@@ -135,14 +147,17 @@ class FakeCore(
             title: String = "",
             turn: Int = 0,
             foreground: String = argv.first(),
+            /** Its labels as they are, in place of the desktop app's (Shepherdr 2.1's own). */
+            labels: Map<String, String>? = null,
+            parent: String? = null,
         ): JsonObject = obj(
             "address" to address, "argv" to JsonArray(argv.map(::JsonPrimitive)), "cols" to 120, "rows" to 40,
             "created_ms" to created, "cwd" to cwd, "exit_code" to null,
             "foreground" to obj("argv" to arr(foreground), "cwd" to cwd, "name" to foreground, "pid" to 4300),
-            "labels" to if (space != null && tab != null) obj(
+            "labels" to if (labels != null) JsonObject(labels.mapValues { JsonPrimitive(it.value) }) else if (space != null && tab != null) obj(
                 "herdr.space" to space.first, "herdr.tab" to tab.first, "where" to "${space.second} / ${tab.second}",
             ) else obj(),
-            "name" to name, "parent" to null, "pid" to 4300, "reported" to (status != null), "state" to "live",
+            "name" to name, "parent" to parent, "pid" to 4300, "reported" to (status != null), "state" to "live",
             "status" to status, "status_ms" to statusMs, "title" to title, "turn" to turn,
         )
     }

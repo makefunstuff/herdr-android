@@ -54,12 +54,24 @@ class V2WorkBoard(private val connect: suspend () -> ShepherdrClient, private va
         )
     }
 
-    /** `shepherdr merge <id>`: merging is what a yes to a ready task means on Shepherdr 2. */
-    override suspend fun approve(task: WorkTask): String = cli(listOf("merge", task.id))
+    /**
+     * Merging is what a yes to a ready task means on Shepherdr 2: `shepherdr merge <id>` on 2.0; on
+     * 2.1, which takes no command from the app, Merge on the merge card its agent put up.
+     */
+    override suspend fun approve(task: WorkTask): String {
+        if (!V2Version(version = version).standalone) return cli(listOf("merge", task.id))
+        val client = connect()
+        val chat = agentChat(task)
+        val card = V2Board.mergeCard(task, client.chat(chat))
+            ?: throw IOException("${task.name} has no merge card open: its agent merges it on its own, or asks you in its chat first")
+        client.act(V2Actions.answer(chat, card.id, card.choices.indexOfFirst { it.label.equals("Merge", ignoreCase = true) }.coerceAtLeast(0)))
+        return "Merge sent to ${task.name}: its agent merges it"
+    }
 
     /** `close` (`shepherdr task close`): what it held back is named when it refuses for unmerged work. */
     override suspend fun close(task: WorkTask): String {
-        val o = connect().actRaw(V2Actions.close(task.id))
+        // 2.1 finds the task by its agent's chat (`HA-1/Agent`, its name before any agent runs too), 2.0 by its id.
+        val o = connect().actRaw(V2Actions.close(if (V2Version(version = version).standalone) task.chat.ifEmpty { "${task.id}/Agent" } else task.id))
         if (o.ok) return "${task.name} is done, nothing merged"
         throw IOException(V2Board.closeRefusal(task, o.json))
     }
@@ -120,6 +132,16 @@ class V2WorkBoard(private val connect: suspend () -> ShepherdrClient, private va
         connect().act(V2Actions.send(agentChat(task), text, reply = reply, cid = cid))
         return ""
     }
+
+    override suspend fun uploadFor(task: WorkTask, name: String, data: ByteArray, type: String): String =
+        connect().upload(agentChat(task), name, data, type)
+
+    override suspend fun tellFiles(task: WorkTask, paths: List<String>, cid: String?): String {
+        connect().act(V2Actions.send(agentChat(task), "", cid = cid, attachments = paths))
+        return ""
+    }
+
+    override suspend fun taskFile(task: WorkTask, path: String): ByteArray = connect().file(agentChat(task), path)
 
     private fun agentChat(task: WorkTask) = task.chat.ifEmpty { throw IOException("${task.name} has no agent yet") }
 
@@ -210,6 +232,15 @@ object V2Board {
         agent = t.agent?.cli.orEmpty(),
         pinned = t.pinned != null,
     )
+
+    /**
+     * The open merge card in [task]'s agent chat (Shepherdr 2.1 puts one up when a task that asks first
+     * is ready: "Merge HA-1?", Merge or Not yet); null where none is open.
+     */
+    fun mergeCard(task: WorkTask, chat: V2Chat): V2Question? = chat.openQuestions.lastOrNull { q ->
+        // Its exact title only: an agent's own "Merge the two configs?" is no merge card.
+        q.title.trim() == "Merge ${task.id}?" && q.choices.any { it.label == "Merge" }
+    }
 
     /** What a space's coordinator is asked, to add a task: its title, then the brief. */
     fun addRequest(title: String, brief: String): String = buildString {

@@ -142,7 +142,7 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
     // One of herdr-core's terminals: hc's own stream, and none of classic herdr's pane calls.
     val core = HcMapping.address(paneId)
     // The size the program draws at on the machine: its pane's in herdr's layout, or what herdr-core reports.
-    val hostSize = if (core != null) state.herdrCore?.sizes?.get(core)
+    val hostSize = if (core != null) state.herdrCore?.sizes?.get(paneId)
     else snapshot?.paneRect(paneId)?.let { it.width to it.height }
 
     // Its text size, its own (Settings → Text size), which pinching the terminal changes too.
@@ -187,7 +187,7 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
                 } else {
                     grid ?: (80 to 24)
                 }
-                val live: LiveTerminal = if (core != null) HcTerminalStream(session.awaitHerdrCore(30_000), core, cols, rows, container.scope)
+                val live: LiveTerminal = if (core != null) HcTerminalStream(session.awaitHerdrCore(30_000, paneId), core, cols, rows, container.scope)
                 else TerminalStream(conn, session.state.value.herdrMachine, paneId, cols, rows, container.scope)
                 live.also { it.open() }
             }

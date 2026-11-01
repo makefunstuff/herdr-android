@@ -241,6 +241,18 @@ fun scenes(): List<Scene> = listOf(
     Scene("machine-desktop-only", route = Routes.machine(Demo.MINI), setup = { desktopApp() }),
     Scene("chat-desktop", route = Routes.agent(DEVBOX, DemoCore.CLAUDE), setup = { desktopApp() }),
     Scene("terminal-desktop", route = Routes.terminal(DEVBOX, DemoCore.SHELL), setup = { desktopApp() }),
+    // Shepherdr 2.1 on devbox: its agents run in herdr-core's own `shepherdr` session, found beside classic herdr and
+    // called by their task or space; on the Agents list with the rest (tapping one opens its task's chat), and on
+    // the machine screen with the session named.
+    Scene("agents-shepherdr21", heightDp = 1700, setup = { home(); shepherdr21() }),
+    Scene("agents-shepherdr21-open", heightDp = 1700, setup = { home(); shepherdr21() }, actions = { tapText("AND-19 · claude") }),
+    Scene("machine-shepherdr21", route = Routes.machine(DEVBOX), heightDp = 1300, setup = { shepherdr21() }),
+    Scene("machines-shepherdr21", route = Routes.MACHINES, setup = { shepherdr21() }),
+    // A task's chat takes voice messages too (into Shepherdr's inbox, then the chat as its file), as the Coordinator's.
+    Scene("task-v2-voice-sent", route = Routes.board(DEVBOX, "AND-19"), setup = { shepherdr21() }, actions = {
+        tapLabel("Record a voice message")
+        tapLabel("Send voice message")
+    }),
     Scene("machine-new", route = Routes.machine(DEVBOX), actions = { tapText("New") }),
     // Add machine: scanning the code herdr-push pair shows (the phone's own scanner is a system screen; the stand-in
     // reads studio's code), studio found on Tailscale, studio answering nowhere, and typing the address instead.

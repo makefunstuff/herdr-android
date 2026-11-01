@@ -309,7 +309,7 @@ fun AgentsScreen(
         if (w.work == null && Approvals.waits(w.task)) panes.open(nav, Routes.review(w.machineId, w.task.id)) else panes.openBoard(nav, w.machineId, w.task.id)
     }
 
-    fun openAgent(a: HomeAgent) = panes.open(nav, Routes.agent(a.machineId, a.agent.paneId))
+    fun openAgent(a: HomeAgent) = panes.openAgent(nav, a.machineId, a.agent, hosts.any { it.machine.id == a.machineId && it.onShepherdr2 })
 
     /**
      * What an agent's long-press sheet offers besides its triage, as TalkBack's actions on its card
@@ -539,7 +539,7 @@ fun AgentsScreen(
         NoticesSheet(
             rows = noticeRows,
             showMachine = hosts.size > 1,
-            onOpenAgent = { mid, pane -> showNotices = false; panes.open(nav, Routes.agent(mid, pane)) },
+            onOpenAgent = { mid, pane -> showNotices = false; panes.openPane(nav, hosts.firstOrNull { it.machine.id == mid }, mid, pane) },
             onClear = { hosts.forEach { container.hosts.session(it.machine.id)?.clearNotices() } },
             onDismiss = { showNotices = false },
         )

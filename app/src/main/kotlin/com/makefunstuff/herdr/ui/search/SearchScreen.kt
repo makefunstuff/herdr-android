@@ -147,7 +147,7 @@ fun SearchScreen(nav: NavController, machineId: String? = null, initial: String 
     val chats = hosts.flatMap { h -> chatHits[h.machine.id].orEmpty().map { h to it } }
         .filter { (h, hit) -> filter == SearchFilter.All || h.view?.agents?.firstOrNull { it.paneId == hit.paneId }?.let { SearchFilter.of(it.agentStatus) } == filter }
 
-    fun openAgent(h: AgentHit) = panes.open(nav, Routes.agent(h.agent.machineId, h.agent.agent.paneId))
+    fun openAgent(h: AgentHit) = panes.openAgent(nav, h.agent.machineId, h.agent.agent, hosts.any { it.machine.id == h.agent.machineId && it.onShepherdr2 })
     fun openTask(t: TaskHit) {
         val v2 = hosts.firstOrNull { it.machine.id == t.machineId }?.onShepherdr2 == true
         if (Approvals.waits(t.task) && !v2) panes.open(nav, Routes.review(t.machineId, t.task.id)) else panes.openBoard(nav, t.machineId, t.task.id)
@@ -248,7 +248,7 @@ fun SearchScreen(nav: NavController, machineId: String? = null, initial: String 
                     leading = { IconTile(HerdrIcons.MessageSquare, size = 36.dp) },
                     titleLines = 2,
                     onClickLabel = "Open the chat",
-                    onClick = { panes.open(nav, Routes.agent(h.machine.id, hit.paneId)) },
+                    onClick = { panes.openPane(nav, h, h.machine.id, hit.paneId) },
                 )
             }
             if (looking > 0 && query.trim().length >= ChatSearch.MIN_QUERY) item(key = "looking") {

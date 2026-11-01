@@ -267,9 +267,11 @@ fun MachineScreen(nav: NavController, machineId: String) {
             if (core != null) {
                 val spaces = core.snapshot.workspaces
                 item(key = "herdr-core") {
-                    SectionHeading("Desktop app" + if (spaces.isEmpty()) "" else " · ${spaces.size}", top = Space.m)
+                    // Its other sessions too (Shepherdr 2.1's own): then it is herdr-core's, not the desktop app's alone.
+                    SectionHeading((if (core.sessions.isEmpty()) "Desktop app" else "herdr-core") + if (spaces.isEmpty()) "" else " · ${spaces.size}", top = Space.m)
                     Text(
-                        "herdr-core ${core.version}: its spaces, tabs and terminals",
+                        if (core.sessions.isEmpty()) "herdr-core ${core.version}: its spaces, tabs and terminals"
+                        else "herdr-core ${core.version}, sessions ${core.sessions.joinToString()}: their spaces, tabs and terminals",
                         style = MaterialTheme.typography.bodySmall, color = Herdr.colors.muted, modifier = Modifier.padding(bottom = Space.xs),
                     )
                 }
@@ -343,7 +345,16 @@ fun MachineScreen(nav: NavController, machineId: String) {
         NoticesSheet(
             rows = rows,
             showMachine = false,
-            onOpenAgent = { _, pane -> showNotices = false; nav.navigate(Routes.agent(machineId, pane)) },
+            onOpenAgent = { _, pane ->
+                showNotices = false
+                // A Shepherdr 2.1 agent's notice opens its task's chat or Coordinator, as from the Agents list.
+                val agent = state.view?.agents?.firstOrNull { it.paneId == pane }?.takeIf { state.onShepherdr2 }
+                nav.navigate(
+                    agent?.shepherdrTask?.let { Routes.board(machineId, it, alone = true) }
+                        ?: agent?.shepherdrSpace?.let { Routes.coordinator(machineId, it) }
+                        ?: Routes.agent(machineId, pane),
+                )
+            },
             onClear = { session.clearNotices() },
             onDismiss = { showNotices = false },
         )

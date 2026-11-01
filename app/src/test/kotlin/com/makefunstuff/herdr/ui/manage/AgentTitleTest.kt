@@ -13,22 +13,22 @@ class AgentTitleTest {
     private val task = BoardTask("herdr-android/12", "AND-12", "Speed up /jobs", "blocked", "work", "", "claude", "", null, null, false, "", false, false, 0, null, false)
 
     @Test fun theTaskNamesIt() {
-        assertEquals("Speed up /jobs" to "AND-12 · claude · blocked", agentTitle(agent(), "w1:p1", task))
+        assertEquals("Speed up /jobs" to "AND-12 · claude · needs you", agentTitle(agent(), "w1:p1", task))
     }
 
     @Test fun withoutATaskWhatItDoesOrItsName() {
-        assertEquals("Fix the login form" to "claude · blocked", agentTitle(agent(title = "Fix the login form"), "w1:p1", null))
+        assertEquals("Fix the login form" to "claude · needs you", agentTitle(agent(title = "Fix the login form"), "w1:p1", null))
         // Was "claude" over "blocked · claude".
-        assertEquals("claude" to "blocked", agentTitle(agent(), "w1:p1", null))
+        assertEquals("claude" to "needs you", agentTitle(agent(), "w1:p1", null))
     }
 
     @Test fun anAgentWithItsOwnNameKeepsItsKind() {
-        assertEquals("Speed up /jobs" to "AND-12 · reviewer (claude) · blocked", agentTitle(agent(name = "reviewer"), "w1:p1", task))
+        assertEquals("Speed up /jobs" to "AND-12 · reviewer (claude) · needs you", agentTitle(agent(name = "reviewer"), "w1:p1", task))
         // herdr-projects names its agents after the task: the task says it already.
-        assertEquals("Speed up /jobs" to "AND-12 · claude · blocked", agentTitle(agent(name = "sw-herdr-android-12"), "w1:p1", task))
-        assertEquals("Speed up /jobs" to "AND-12 · claude · blocked", agentTitle(agent(name = "claude"), "w1:p1", task))
+        assertEquals("Speed up /jobs" to "AND-12 · claude · needs you", agentTitle(agent(name = "sw-herdr-android-12"), "w1:p1", task))
+        assertEquals("Speed up /jobs" to "AND-12 · claude · needs you", agentTitle(agent(name = "claude"), "w1:p1", task))
         // Without a task its name is the title once, not the title and again under it.
-        assertEquals("reviewer (claude)" to "blocked", agentTitle(agent(name = "reviewer"), "w1:p1", null))
+        assertEquals("reviewer (claude)" to "needs you", agentTitle(agent(name = "reviewer"), "w1:p1", null))
     }
 
     @Test fun aPaneWithoutAnAgent() {

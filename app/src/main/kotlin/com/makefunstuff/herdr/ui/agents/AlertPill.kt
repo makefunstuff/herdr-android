@@ -38,6 +38,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
 import com.makefunstuff.herdr.Panes
@@ -45,8 +46,10 @@ import com.makefunstuff.herdr.Routes
 import com.makefunstuff.herdr.core.board.Approvals
 import com.makefunstuff.herdr.core.home.Waiting
 import com.makefunstuff.herdr.core.home.WaitingNews
+import com.makefunstuff.herdr.core.host.HostState
 import com.makefunstuff.herdr.core.push.Alert
 import com.makefunstuff.herdr.core.push.LiveItems
+import com.makefunstuff.herdr.ui.common.LocalContainer
 import com.makefunstuff.herdr.ui.design.AgentMark
 import com.makefunstuff.herdr.ui.design.HerdrIcons
 import com.makefunstuff.herdr.ui.design.HerdrShapes
@@ -86,6 +89,7 @@ fun AlertPill(
     var count by remember { mutableLongStateOf(0L) }
     val route = entry?.destination?.route
     val args: (String) -> String? = { k -> entry?.arguments?.getString(k) }
+    val hosts by LocalContainer.current.hosts.hosts.collectAsStateWithLifecycle()
     LaunchedEffect(needsYou, agentsRead, boardsRead) {
         val fresh = news.update(needsYou, agentsRead, boardsRead).filter { !it.isOpen(route, args) }
         // The Agents list in front shows it already.
@@ -110,7 +114,7 @@ fun AlertPill(
             // The last one stays drawn while it slides away.
             val last = remember { mutableStateOf(shown) }
             if (shown != null) last.value = shown
-            last.value?.let { p -> Pill(p) { item = null; open(nav, panes, p) } }
+            last.value?.let { p -> Pill(p) { item = null; open(nav, panes, p, hosts) } }
         }
     }
 }
@@ -167,17 +171,17 @@ private fun words(w: Waiting): String = when (w) {
 }
 
 /** Opens what [p] is about: the agent's chat, or the task (finished work at its review card). */
-private fun open(nav: NavHostController, panes: Panes, p: PillItem) {
+private fun open(nav: NavHostController, panes: Panes, p: PillItem, hosts: List<HostState>) {
     when (p) {
         is PillItem.Needs -> when (val w = p.waiting) {
-            is Waiting.Question -> panes.open(nav, Routes.agent(w.machineId, w.agent.agent.paneId))
+            is Waiting.Question -> panes.openAgent(nav, w.machineId, w.agent.agent, hosts.any { it.machine.id == w.machineId && it.onShepherdr2 })
             is Waiting.Task -> if (w.work == null && Approvals.waits(w.task)) panes.open(nav, Routes.review(w.machineId, w.task.id)) else panes.openBoard(nav, w.machineId, w.task.id)
             is Waiting.Coordinator -> panes.open(nav, Routes.coordinator(w.machineId, w.space.id))
         }
         is PillItem.Fired -> {
             val a = p.alert
             when {
-                a.paneId.isNotEmpty() -> panes.open(nav, Routes.agent(a.machineId, a.paneId))
+                a.paneId.isNotEmpty() -> panes.openPane(nav, hosts.firstOrNull { it.machine.id == a.machineId }, a.machineId, a.paneId)
                 a.taskId.isNotEmpty() && a.review -> panes.open(nav, Routes.review(a.machineId, a.taskId))
                 a.taskId.isNotEmpty() -> panes.openBoard(nav, a.machineId, a.taskId)
             }

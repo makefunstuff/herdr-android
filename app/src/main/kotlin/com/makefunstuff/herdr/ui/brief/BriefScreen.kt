@@ -90,6 +90,7 @@ fun BriefScreen(nav: NavController) {
     val view by work.view.collectAsStateWithLifecycle()
     val reading by work.voice.reading.collectAsStateWithLifecycle()
     val machines by container.machines.machines.collectAsStateWithLifecycle()
+    val hosts by container.hosts.hosts.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { work.refresh() }
 
     val brief = view.brief
@@ -139,7 +140,7 @@ fun BriefScreen(nav: NavController) {
                     }
                     items(items, key = { "$title:${it.ref}" }) { i ->
                         ItemRow(i, brief, zone, showMachine = brief.reached.size > 1, reading = reading?.line?.ref == i.ref) {
-                            if (i.isTask) panes.openBoard(nav, i.machineId, i.taskId) else panes.open(nav, Routes.agent(i.machineId, i.paneId))
+                            if (i.isTask) panes.openBoard(nav, i.machineId, i.taskId) else panes.openPane(nav, hosts.firstOrNull { it.machine.id == i.machineId }, i.machineId, i.paneId)
                         }
                     }
                 }
