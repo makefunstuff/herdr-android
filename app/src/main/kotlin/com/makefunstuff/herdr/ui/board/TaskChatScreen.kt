@@ -90,8 +90,15 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.UUID
-import androidx.compose.runtime.CompositionLocalProvider
 import com.makefunstuff.herdr.core.chat.VoiceNotes
+import com.makefunstuff.herdr.core.host.Attachments
+import com.makefunstuff.herdr.ui.common.rememberAttacher
+import com.makefunstuff.herdr.ui.design.ComposerIconButton
+import com.makefunstuff.herdr.ui.images.AttachMenu
+import com.makefunstuff.herdr.ui.images.ChatImages
+import com.makefunstuff.herdr.ui.images.ComposerTray
+import com.makefunstuff.herdr.ui.images.LocalChatImages
+import com.makefunstuff.herdr.ui.images.rememberImageTray
 import com.makefunstuff.herdr.ui.common.LocalVoiceMessages
 import com.makefunstuff.herdr.ui.common.rememberVoiceMessages
 
@@ -182,6 +189,10 @@ internal fun TaskChatScreen(
     stick.Follow(remember(items) { items.map { it.id } }, content = items to foot)
 
     var draft by rememberDraft(DraftStore.task(machineId, t.id))
+    // Files and pictures, as in an agent's own chat: copied to its machine, named in the message by their path.
+    val tray = rememberImageTray(DraftStore.task(machineId, t.id), machineId, session, state.online)
+    val attach = rememberAttacher(session, onAttached = { path -> draft = Attachments.withMention(draft, path) }, onImage = tray::add)
+    var attachMenu by remember { mutableStateOf(false) }
     val kind = V2Board.agentKind(t.agent).ifEmpty { "its agent" }
 
     /** The screen is still open: a send that fails after it closed puts its words back in the saved draft instead. */
@@ -196,6 +207,8 @@ internal fun TaskChatScreen(
         container.scope.launch {
             try {
                 session.awaitWorkBoard().tell(t, text, cid = line.cid, reply = reply?.id)
+                // Its chat not on screen (still read, or unreadable): nothing else would show that it went.
+                if (thread == null) withContext(Dispatchers.Main) { context.toast("Sent to ${t.name}") }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Throwable) {
@@ -211,10 +224,14 @@ internal fun TaskChatScreen(
     }
 
     fun sendDraft() {
-        val text = draft.trim()
-        if (text.isEmpty()) return
+        val typed = draft
+        val pictures = tray.images
+        // The pictures are named in front of what you typed.
+        val text = tray.message(typed)
+        if (text.isEmpty() || tray.waiting) return
         send(text, replyTo)
-        draft = DraftStore.afterSend(draft, draft)
+        draft = DraftStore.afterSend(draft, typed)
+        tray.sent(pictures)
         replyTo = null
     }
 
@@ -266,9 +283,19 @@ internal fun TaskChatScreen(
                                 onDraft = { draft = it },
                                 placeholder = if (t.status == WorkStatus.Ready) "Tell $kind what to change…" else "Tell $kind…",
                                 onSend = ::sendDraft,
-                                enabled = state.online && th != null,
-                                status = if (!state.online) "Not connected" else null,
+                                // Not waiting for its chat to be read: what you write goes to the agent all the same.
+                                enabled = state.online,
+                                status = when {
+                                    !state.online -> "Not connected"
+                                    attach.uploading -> "Uploading file…"
+                                    tray.waiting -> "Copying pictures…"
+                                    else -> null
+                                },
+                                holdSend = attach.uploading || tray.waiting,
+                                attachments = { ComposerTray(tray) },
+                                attached = !tray.isEmpty,
                                 floating = true,
+                                leading = { ComposerIconButton(HerdrIcons.Plus, "Attach files", enabled = state.online && !attach.uploading) { attachMenu = true } },
                                 voice = voice.recorder,
                             )
                         }
@@ -282,7 +309,7 @@ internal fun TaskChatScreen(
                             val why = problem
                             if (why != null) ChatEmpty(HerdrIcons.CircleAlert, "Can't read its chat", why) else LoadingState("Reading the chat")
                         }
-                        else -> CompositionLocalProvider(LocalVoiceMessages provides voice) { Box(Modifier.fillMaxSize()) {
+                        else -> CompositionLocalProvider(LocalChatImages provides ChatImages(machineId, session, container.images, state.online), LocalVoiceMessages provides voice) { Box(Modifier.fillMaxSize()) {
                         LazyColumn(
                             state = list,
                             // Newest at the bottom: it stays at its end when the keyboard opens or the message box grows.
@@ -322,6 +349,7 @@ internal fun TaskChatScreen(
             }
         }
 
+        if (attachMenu) AttachMenu(attach, tray, online = state.online, onDismiss = { attachMenu = false })
         val d = details
         when (sheet) {
             TaskSheet.Menu -> BoardPanel("${t.name} · ${t.title}", onDismiss = { sheet = null }) {
