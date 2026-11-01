@@ -140,7 +140,8 @@ object ArtifactPage {
 
     /**
      * The page's posts to its parent come back to its own window in a WebView: the ones for the app go on to
-     * [BRIDGE]. Peer connections (WebRTC), which no policy covers, are taken away before the page's code runs.
+     * [BRIDGE]. Peer connections (WebRTC), which no policy covers, are taken off its window before its code runs; a
+     * blank frame of its own still has them, as in Shepherdr's web UI.
      */
     private val RELAY = "(function(){['RTCPeerConnection','webkitRTCPeerConnection','RTCDataChannel','RTCIceCandidate'].forEach(function(n){" +
         "try{Object.defineProperty(window,n,{value:undefined,writable:false,configurable:false})}catch(x){}});" +
