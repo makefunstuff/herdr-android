@@ -11,6 +11,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import com.makefunstuff.herdr.core.api.AgentInfo
+import com.makefunstuff.herdr.core.host.HostState
 
 /** A window this wide or wider (a tablet, an open foldable, a large or desktop window) shows three panes side by side. */
 val WIDE = 840.dp
@@ -39,6 +41,26 @@ class Panes(
             popUpTo(nav.graph.findStartDestination().id) { saveState = true }
             launchSingleTop = true
         }
+    }
+
+    /**
+     * Opens [agent]'s chat from a list. One Shepherdr 2.1 started ([AgentInfo.shepherdrTask],
+     * [AgentInfo.shepherdrSpace]) on a machine whose board is Shepherdr 2 ([shepherdr]) opens where its
+     * cards and replies are: its task's chat, or its space's Coordinator. Its terminal stays on the
+     * machine's screen.
+     */
+    fun openAgent(nav: NavController, machineId: String, agent: AgentInfo, shepherdr: Boolean) {
+        if (shepherdr) {
+            agent.shepherdrTask?.let { return openBoard(nav, machineId, it, alone = true) }
+            agent.shepherdrSpace?.let { return open(nav, Routes.coordinator(machineId, it)) }
+        }
+        open(nav, Routes.agent(machineId, agent.paneId))
+    }
+
+    /** [openAgent] for a pane named by its id alone (a notice, a chat hit, the brief): [host]'s agent there, if it is one. */
+    fun openPane(nav: NavController, host: HostState?, machineId: String, paneId: String) {
+        val agent = host?.view?.agents?.firstOrNull { it.paneId == paneId }
+        if (agent != null) openAgent(nav, machineId, agent, host.onShepherdr2) else open(nav, Routes.agent(machineId, paneId))
     }
 
     /**

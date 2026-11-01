@@ -97,16 +97,33 @@ object HcMapping {
     private const val SPACE = "herdr.space"
     private const val TAB = "herdr.tab"
     private const val WHERE = "where"
+    private const val SHEPHERDR_TASK = "shepherdr.task"
+    private const val SHEPHERDR_ROLE = "shepherdr.role"
+    private const val SHEPHERDR_CHAT = "shepherdr.chat"
+    private const val SHEPHERDR_SPACE = "shepherdr.space"
 
     /** Agents people start in a terminal, by program name: shown before they report a status. */
     private val KNOWN = setOf(
         "claude", "codex", "pi", "omp", "opencode", "gemini", "amp", "droid", "copilot", "cursor-agent", "goose", "grok", "aider", "crush", "qwen",
     )
 
-    /** The hc address of a pane id from [snapshot], or null when it isn't one of herdr-core's. */
-    fun address(paneId: String): String? = paneId.takeIf { it.startsWith(PREFIX) }?.removePrefix(PREFIX)
+    /**
+     * The hc address of a pane id from [snapshot], or null when it isn't one of herdr-core's: `t7`
+     * for `hc:t7` (the default session's) and for `hc:@shepherdr:t7` (another session's, [session]).
+     */
+    fun address(paneId: String): String? {
+        val rest = paneId.takeIf { it.startsWith(PREFIX) }?.removePrefix(PREFIX) ?: return null
+        return if (rest.startsWith("@")) rest.substringAfter(':', "").ifEmpty { null } else rest
+    }
 
-    fun paneId(address: String): String = PREFIX + address
+    /** The herdr-core session a pane id is in: null for the default one's (`hc:t7`), `shepherdr` for `hc:@shepherdr:t7`. */
+    fun session(paneId: String): String? =
+        paneId.takeIf { it.startsWith("$PREFIX@") }?.removePrefix("$PREFIX@")?.substringBefore(':', "")?.ifEmpty { null }
+
+    /** What every id of [session]'s terminals starts with: [PREFIX] for the default session, `hc:@<session>:` for another. */
+    fun scope(session: String?): String = if (session == null) PREFIX else "$PREFIX@$session:"
+
+    fun paneId(address: String, session: String? = null): String = scope(session) + address
 
     /** The agent name the app knows (`claude` for Claude Code's `claude-code`), from its 7501 app or its program. */
     fun agentName(t: HcTerminal): String? {
@@ -134,27 +151,48 @@ object HcMapping {
 
     private data class Place(val spaceId: String, val spaceName: String, val tabId: String, val tabName: String)
 
-    private fun placeOf(t: HcTerminal, all: Map<String, HcTerminal>): Place {
+    private fun placeOf(t: HcTerminal, all: Map<String, HcTerminal>, scope: String): Place {
         var cur: HcTerminal? = t
         for (i in 0 until 32) {
             val c = cur ?: break
-            own(c)?.let { return it }
+            own(c, scope)?.let { return it }
             cur = c.parent?.let { all[sibling(c.address, it)] }
         }
         val machine = machineOf(t.address)
-        val id = if (machine == null) OTHER else "$OTHER@$machine"
+        val other = scope + OTHER.removePrefix(PREFIX)
+        val id = if (machine == null) other else "$other@$machine"
         return Place(id, if (machine == null) "Other terminals" else "Other terminals on $machine", "$id/tab", "Terminals")
     }
 
+    /**
+     * What Shepherdr 2.1 calls the agent it started (its labels `shepherdr.task`, `shepherdr.role`):
+     * the task (`HA-12`) or `<space> coordinator`, in place of the terminal's machine-made name
+     * (`shep-7f9b…`); null for any other terminal.
+     */
+    fun shepherdrName(t: HcTerminal): String? {
+        // The task for its own agent and its reviewers; its browsers carry the task's label too, and keep their names.
+        val task = t.labels[SHEPHERDR_TASK]?.takeIf { it.isNotBlank() }
+        when (t.labels[SHEPHERDR_ROLE]) {
+            "task" -> task?.let { return it }
+            "reviewer" -> task?.let { return "$it reviewer" }
+        }
+        if (t.labels[SHEPHERDR_ROLE] != "coordinator") return null
+        val space = t.labels[WHERE]?.split(" / ", limit = 2)?.firstOrNull()?.takeIf { it.isNotBlank() }
+        return if (space != null) "$space coordinator" else "Coordinator"
+    }
+
+    /** The Shepherdr chat of the agent Shepherdr 2.1 started in [t] (`HA-12/Agent`, or a space id for a coordinator); null for any other. */
+    fun shepherdrChat(t: HcTerminal): String? = t.labels[SHEPHERDR_CHAT]?.takeIf { it.isNotBlank() }
+
     /** Where the desktop app put it, from its labels; null where it didn't. */
-    private fun own(t: HcTerminal): Place? {
+    private fun own(t: HcTerminal, scope: String): Place? {
         val where = t.labels[WHERE]?.takeIf { it.isNotBlank() }
         val names = where?.split(" / ", limit = 2)
         val space = t.labels[SPACE]?.takeIf { it.isNotBlank() }
         val tab = t.labels[TAB]?.takeIf { it.isNotBlank() }
         if (space == null && where == null) return null
-        val scope = machineOf(t.address)?.let { "$it/" }.orEmpty()
-        val spaceId = PREFIX + scope + (space ?: "where:${names!![0]}")
+        val remote = machineOf(t.address)?.let { "$it/" }.orEmpty()
+        val spaceId = scope + remote + (space ?: "where:${names!![0]}")
         val tabKey = tab ?: names?.getOrNull(1)?.let { "where:$it" } ?: t.address
         return Place(
             spaceId = spaceId,
@@ -174,21 +212,27 @@ object HcMapping {
     private fun attention(words: List<String>): String =
         words.maxByOrNull { AgentStatus.of(it).attention }?.takeIf { AgentStatus.of(it) != AgentStatus.Unknown } ?: AgentStatus.Unknown.wire
 
-    /** Live terminals as a snapshot, spaces and tabs in the order their first terminal started, other terminals last. */
-    fun snapshot(terminals: Collection<HcTerminal>, version: String = "", generation: Int = HcConnection.GENERATION): SessionSnapshot {
+    /**
+     * Live terminals as a snapshot, spaces and tabs in the order their first terminal started, other
+     * terminals last. [session]: the herdr-core session they are in, null for the default one; every
+     * id then starts with its [scope], so two sessions' `t7` stay apart.
+     */
+    fun snapshot(terminals: Collection<HcTerminal>, version: String = "", generation: Int = HcConnection.GENERATION, session: String? = null): SessionSnapshot {
+        val scope = scope(session)
+        val other = scope + OTHER.removePrefix(PREFIX)
         val all = terminals.associateBy { it.address }
         val live = terminals.filter { it.live }.sortedWith(compareBy({ it.createdMs }, { it.address }))
-        val placed = live.map { it to placeOf(it, all) }
+        val placed = live.map { it to placeOf(it, all, scope) }
         val panes = placed.map { (t, p) ->
             val agent = agentName(t)
             PaneInfo(
-                paneId = paneId(t.address),
+                paneId = paneId(t.address, session),
                 terminalId = t.address,
                 workspaceId = p.spaceId,
                 tabId = p.tabId,
                 cwd = t.cwd,
                 foregroundCwd = t.foreground?.cwd,
-                label = t.name ?: if (agent == null) t.foreground?.name else null,
+                label = shepherdrName(t) ?: t.name ?: if (agent == null) t.foreground?.name else null,
                 agent = agent,
                 terminalTitle = t.title.ifBlank { null },
                 agentStatusRaw = if (isAgent(t)) statusWord(t) else AgentStatus.Unknown.wire,
@@ -198,7 +242,7 @@ object HcMapping {
         val agents = placed.filter { isAgent(it.first) }.map { (t, p) ->
             AgentInfo(
                 terminalId = t.address,
-                name = t.name,
+                name = shepherdrName(t) ?: t.name,
                 agent = agentName(t),
                 title = t.status?.msg?.ifBlank { null } ?: t.status?.title?.ifBlank { null },
                 terminalTitle = t.title.ifBlank { null },
@@ -207,15 +251,16 @@ object HcMapping {
                 tokensRaw = t.status?.progress?.let { JsonObject(mapOf("progress" to kotlinx.serialization.json.JsonPrimitive(it))) },
                 workspaceId = p.spaceId,
                 tabId = p.tabId,
-                paneId = paneId(t.address),
+                paneId = paneId(t.address, session),
                 stateChangeSeq = t.statusMs ?: t.createdMs,
                 completionSeq = t.turn.takeIf { it > 0 },
                 cwd = t.foreground?.cwd ?: t.cwd,
-                shepherdrTask = t.labels["shepherdr.task"]?.takeIf { it.isNotBlank() && t.labels["shepherdr.role"] == "task" },
+                shepherdrTask = t.labels[SHEPHERDR_TASK]?.takeIf { it.isNotBlank() && t.labels[SHEPHERDR_ROLE] == "task" },
+                shepherdrSpace = t.labels[SHEPHERDR_SPACE]?.takeIf { it.isNotBlank() && t.labels[SHEPHERDR_ROLE] == "coordinator" },
             )
         }
         // The desktop app's spaces first, the terminals it doesn't show after them.
-        val spaces = placed.map { it.second }.distinctBy { it.spaceId }.sortedBy { it.spaceId.startsWith(OTHER) }
+        val spaces = placed.map { it.second }.distinctBy { it.spaceId }.sortedBy { it.spaceId.startsWith(other) }
         val tabs = placed.map { it.second }.distinctBy { it.tabId }
         fun words(match: (PaneInfo) -> Boolean) = panes.filter(match).map { it.agentStatusRaw }
         return SessionSnapshot(

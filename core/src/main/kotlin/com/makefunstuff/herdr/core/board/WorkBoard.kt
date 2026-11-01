@@ -210,6 +210,18 @@ interface WorkBoard {
     /** Sends [text] into [task]'s own chat, to its agent; [cid] and [reply] as for [say]. */
     suspend fun tell(task: WorkTask, text: String, cid: String? = null, reply: String? = null): String =
         throw IOException("This board keeps no chat for a task")
+
+    /** [upload] for [task]'s agent: a file (a voice message) copied for its chat, its path there for [tellFiles]. */
+    suspend fun uploadFor(task: WorkTask, name: String, data: ByteArray, type: String): String =
+        throw IOException("This board takes no files")
+
+    /** [sayFiles] into [task]'s own chat, to its agent. */
+    suspend fun tellFiles(task: WorkTask, paths: List<String>, cid: String? = null): String =
+        throw IOException("This board takes no files")
+
+    /** A file sent in [task]'s own chat, read back by its [path]. */
+    suspend fun taskFile(task: WorkTask, path: String): ByteArray =
+        throw IOException("This board takes no files")
 }
 
 object WorkTasks {

@@ -71,7 +71,7 @@ class MainActivity : FragmentActivity() {
             intent.getBooleanExtra(OPEN_USAGE, false) -> Links.open(Routes.usage(machine))
             quick.isNotEmpty() -> Links.open(Routes.quickRuns(machine, quick))
             intent.getBooleanExtra(OPEN_COORDINATOR, false) -> Links.open(Routes.coordinator(machine))
-            pane.isNotEmpty() -> Links.open(Routes.agent(machine, pane))
+            pane.isNotEmpty() -> Links.open(agentRoute(machine, pane))
             // Finished work that waits for a yes: its review card, with the others after it. A Shepherdr 2
             // task has none: it opens on its board as its agent's chat, Merge on it.
             task.isNotEmpty() && intent.getBooleanExtra(OPEN_REVIEW, false) && !onShepherdr2(machine, task) -> Links.open(Routes.review(machine, task))
@@ -79,6 +79,18 @@ class MainActivity : FragmentActivity() {
             else -> Links.open(Routes.SETTINGS)
         }
         return true
+    }
+
+    /**
+     * Where a notification about [pane] on [machine] opens: for an agent Shepherdr 2.1 started, its
+     * task's chat or its space's Coordinator, where its cards are ([Panes.openAgent]); else its chat.
+     */
+    private fun agentRoute(machine: String, pane: String): String {
+        val host = (application as HerdrApp).container.hosts.hosts.value.firstOrNull { it.machine.id == machine }
+        val agent = host?.takeIf { it.onShepherdr2 }?.view?.agents?.firstOrNull { it.paneId == pane }
+        return agent?.shepherdrTask?.let { Routes.board(machine, it, alone = true) }
+            ?: agent?.shepherdrSpace?.let { Routes.coordinator(machine, it) }
+            ?: Routes.agent(machine, pane)
     }
 
     /** Whether [task] is a Shepherdr 2 task on [machine], as the app last read its board. */
