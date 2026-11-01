@@ -141,7 +141,10 @@ internal fun TaskChatScreen(
     // The board its artifact cards read their pictures through.
     var board by remember { mutableStateOf<WorkBoard?>(null) }
     LaunchedEffect(state.online) {
-        if (state.online && board == null) board = runCatching { session.awaitWorkBoard() }.getOrNull()
+        while (state.online && board == null) {
+            board = runCatching { session.awaitWorkBoard() }.getOrNull()
+            if (board == null) kotlinx.coroutines.delay(5_000)
+        }
     }
     BackHandler(enabled = backEnabled && sheet == null, onBack = onBack)
 

@@ -1,5 +1,6 @@
 package com.makefunstuff.herdr.core.shepherdr
 
+import com.makefunstuff.herdr.core.board.WorkSpace
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
@@ -7,9 +8,21 @@ import kotlinx.serialization.json.jsonObject
 
 /** Shepherdr 2's artifacts as the app shows them: which a space keeps, and what a page may send its keeper. */
 object Artifacts {
-    /** [space]'s artifacts, newest first, as Shepherdr's own Artifacts list has them. */
-    fun inSpace(all: List<V2Artifact>, space: String): List<V2Artifact> =
-        all.filter { it.place == space }.sortedByDescending { it.at }
+    /**
+     * [space]'s artifacts, newest first, as Shepherdr's own Artifacts list has them: a space's own; a home
+     * space's ([WorkSpace.level] 1) its machine's; the main home's (0) every machine's. [spaces] says where each lives.
+     */
+    fun inSpace(all: List<V2Artifact>, space: String, spaces: List<WorkSpace> = emptyList()): List<V2Artifact> {
+        val at = spaces.firstOrNull { it.id == space }
+        val machineOf = spaces.associate { it.id to it.machine }
+        return all.filter { a ->
+            when (at?.level) {
+                0 -> true
+                1 -> a.place == space || machineOf[a.place] == at.machine
+                else -> a.place == space
+            }
+        }.sortedByDescending { it.at }
+    }
 
     /** What a page sends, as its keeper gets it: on one line (it can't write a chat line of its own), at most 2000 characters. */
     fun line(text: String): String = text.replace(Regex("""\s*[\r\n]+\s*"""), " ").trim().take(2000)
@@ -92,14 +105,21 @@ sealed interface ArtifactMessage {
     }
 }
 
+/** Shepherdr didn't serve the artifact: it was deleted, or its artifacts are turned off there. Asking again won't help. */
+class ArtifactGone(message: String) : java.io.IOException(message)
+
 /**
  * An artifact's page sealed for the app's WebView, as Shepherdr's frame is for its browser: Shepherdr
- * wraps it (its colours, the bridge, its data, [ShepherdrClient.artifactPage]); the app adds the policy
- * the frame's headers carry, which a page loaded from text has none of, and passes the bridge's posts on.
+ * wraps it (its colours, the bridge, its data, [ShepherdrClient.artifactPage]); the app serves it at
+ * [PAGE] with the headers Shepherdr's frame has ([HEADERS]: a sandbox, so an opaque origin with no
+ * storage or dialogs, and the sealed policy before a byte of it is read), and passes the bridge's posts on.
  */
 object ArtifactPage {
     /** Where the page seems to come from: nowhere real. Only its font is served there ([FONT]); the rest is refused. */
     const val BASE = "https://artifact.herdr.invalid/api/artifacts/"
+
+    /** Where the app serves the page itself, from its WebView's request handler (never the network). */
+    const val PAGE = BASE + "page"
 
     /** The font the page names (`../font/InterVariable.woff2` from [BASE]). */
     const val FONT = "https://artifact.herdr.invalid/api/font/InterVariable.woff2"
@@ -109,19 +129,34 @@ object ArtifactPage {
 
     /** Shepherdr's frame policy (`SEALED` in `server/frame.ts`): its own inline code and styles, pictures as data, nothing loaded. */
     const val SEALED = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; media-src data: blob:; " +
-        "font-src data: 'self'; connect-src 'none'; form-action 'none'; base-uri 'none'; frame-src 'none'; object-src 'none'"
+        "font-src data: https://artifact.herdr.invalid; connect-src 'none'; form-action 'none'; base-uri 'none'; frame-src 'none'; object-src 'none'"
 
-    /** The page's posts to its parent come back to its own window in a WebView: the ones for the app go on to [BRIDGE]. */
-    private val RELAY = "(function(){var k={send:1,open:1,pick:1};addEventListener('message',function(e){var d=e.data;" +
+    /** The page's response headers, as `frameResponse` in `server/frame.ts` sends them. */
+    val HEADERS = mapOf(
+        "Content-Security-Policy" to "sandbox allow-scripts allow-forms; $SEALED",
+        "X-Content-Type-Options" to "nosniff",
+        "Cache-Control" to "no-store",
+    )
+
+    /**
+     * The page's posts to its parent come back to its own window in a WebView: the ones for the app go on to
+     * [BRIDGE]. Peer connections (WebRTC), which no policy covers, are taken away before the page's code runs.
+     */
+    private val RELAY = "(function(){['RTCPeerConnection','webkitRTCPeerConnection','RTCDataChannel','RTCIceCandidate'].forEach(function(n){" +
+        "try{Object.defineProperty(window,n,{value:undefined,writable:false,configurable:false})}catch(x){}});" +
+        "var k={send:1,open:1,pick:1};addEventListener('message',function(e){var d=e.data;" +
         "if(e.source!==window||!d||typeof d!=='object'||!k[d.shepherdr])return;try{$BRIDGE.post(JSON.stringify(d))}catch(x){}})})();"
 
-    private val HEAD = Regex("""<head(\s[^>]*)?>""", RegexOption.IGNORE_CASE)
+    private val DOCTYPE = Regex("""^\s*<!doctype[^>]*>""", RegexOption.IGNORE_CASE)
 
-    /** [html] as Shepherdr served it, with the policy and the relay first in its head, before anything of the page's runs. */
+    /**
+     * [html] as Shepherdr served it, with the policy again (beside [HEADERS]) and the relay at its very start,
+     * after only its doctype: the parser puts them in the head before anything of the page's, whatever it holds.
+     */
     fun seal(html: String): String {
         val ours = """<meta http-equiv="Content-Security-Policy" content="$SEALED"><script>$RELAY</script>"""
-        val head = HEAD.find(html) ?: return ours + html
-        return html.substring(0, head.range.last + 1) + ours + html.substring(head.range.last + 1)
+        val doctype = DOCTYPE.find(html) ?: return "<!doctype html>$ours$html"
+        return html.substring(0, doctype.range.last + 1) + ours + html.substring(doctype.range.last + 1)
     }
 
     /** Hands the page [data] (its JSON) without a reload: `window.shepherdr.data` and a `shepherdr:data` event. */

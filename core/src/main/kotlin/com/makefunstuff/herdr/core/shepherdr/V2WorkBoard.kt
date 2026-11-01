@@ -230,6 +230,7 @@ object V2Board {
                 needsYou = p.status == V2Status.Need || s.asks.containsKey(p.id) || tasks.any { it.space == p.id && it.status.needsYou },
                 unreachable = p.unreachableSince != null,
                 asks = s.asks.containsKey(p.id),
+                level = p.level,
             )
         }
         return WorkOverview(spaces, tasks, s.artifacts)

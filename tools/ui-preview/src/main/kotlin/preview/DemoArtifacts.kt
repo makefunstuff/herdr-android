@@ -96,3 +96,14 @@ fun SceneData.artifacts() {
     host(Demo.DEVBOX).shepherdr = v2
     host(Demo.DEVBOX).coreSessions = mapOf("shepherdr" to DemoCore.shepherdr())
 }
+
+/** [artifacts], and herdr-android's coordinator posted the release notes' first version earlier too: that post folds to a line. */
+fun SceneData.artifactPostedTwice() {
+    artifacts()
+    val v2 = host(Demo.DEVBOX).shepherdr!!
+    v2.chats[DemoV2.APP]?.let { c ->
+        val msgs = c.getValue("messages").jsonArray
+        val first = obj("id" to "m0", "who" to "agent", "at" to 1, "text" to "A first go at the release notes:", "artifact" to obj("id" to "rn09", "v" to 1))
+        v2.chats = v2.chats + (DemoV2.APP to JsonObject(c + ("messages" to JsonArray(msgs.take(4) + first + msgs.drop(4)))))
+    }
+}

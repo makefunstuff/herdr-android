@@ -128,7 +128,7 @@ fun ArtifactThumb(machineId: String, board: WorkBoard?, a: V2Artifact, modifier:
     val image by produceState(ArtifactThumbs.get(key), key, board, a.thumb) {
         if (value != null || board == null || !a.thumb) return@produceState
         value = withContext(Dispatchers.IO) {
-            runCatching { board.artifactThumb(a, dark)?.let { ImageCodec.load(it, 1200) } }.getOrNull()
+            runCatching { board.artifactThumb(a, dark)?.let { ImageCodec.load(it, 800) } }.getOrNull()
         }?.also { ArtifactThumbs.put(key, it) }
     }
     Box(modifier.clip(HerdrShapes.Tile).background(shepherdrBackground(dark)).hairline(HerdrShapes.Tile, c.line), contentAlignment = Alignment.Center) {
@@ -145,7 +145,7 @@ fun ArtifactThumb(machineId: String, board: WorkBoard?, a: V2Artifact, modifier:
  * says so. Where the machine keeps no artifacts the card only names it.
  */
 @Composable
-fun ArtifactPost(id: String, version: Int, intro: String, later: Boolean, you: Boolean = false) {
+fun ArtifactPost(id: String, version: Int, intro: String, later: Boolean) {
     val c = Herdr.colors
     val host = LocalChatArtifacts.current
     val known = host?.all
@@ -153,7 +153,7 @@ fun ArtifactPost(id: String, version: Int, intro: String, later: Boolean, you: B
     Column(verticalArrangement = Arrangement.spacedBy(Space.s)) {
         if (intro.isNotEmpty()) MarkdownText(intro, Modifier.padding(horizontal = Space.xs), style = MaterialTheme.typography.bodyLarge)
         when {
-            known == null || host.board == null -> QuietCard(padded = true) {
+            known == null -> QuietCard(padded = true) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(HerdrIcons.LayoutDashboard, null, Modifier.size(18.dp), tint = c.muted)
                     Spacer(Modifier.width(Space.s))
@@ -179,7 +179,7 @@ fun ArtifactPost(id: String, version: Int, intro: String, later: Boolean, you: B
                 }
             }
             else -> QuietCard(
-                Modifier.padding(start = if (you) 48.dp else 0.dp, end = if (you) 0.dp else 32.dp),
+                Modifier.padding(end = 32.dp),
                 onClick = { host.open(a.id, null) }, onClickLabel = "Open full screen",
             ) {
                 Row(Modifier.fillMaxWidth().padding(start = Space.l, end = Space.m, top = Space.m, bottom = Space.s), verticalAlignment = Alignment.CenterVertically) {

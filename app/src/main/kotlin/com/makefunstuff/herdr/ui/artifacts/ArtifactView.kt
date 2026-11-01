@@ -18,7 +18,6 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -31,11 +30,19 @@ import java.io.ByteArrayInputStream
 
 /** What the artifact screen tells the page it shows without loading it again: new data, what it sent went. */
 class ArtifactController {
-    internal var web: WebView? = null
+    internal var web: SealedWebView? = null
 
     /** Runs [script] (one of [ArtifactPage]'s) in the page, once it is there. */
     fun run(script: String) {
         web?.evaluateJavascript(script, null)
+    }
+
+    /** Hands the page new data ([ArtifactPage.data]); a page still loading gets it once it has. */
+    fun data(script: String) {
+        web?.let {
+            it.data = script
+            it.evaluateJavascript(script, null)
+        }
     }
 }
 
@@ -79,8 +86,15 @@ fun ArtifactView(
                     override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean = true
 
                     override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse {
-                        val bytes = (view as SealedWebView).font
-                        if (request.url.toString() == ArtifactPage.FONT && bytes != null) {
+                        val w = view as SealedWebView
+                        val url = request.url.toString()
+                        // The page itself, with the headers Shepherdr's frame has: sandboxed and sealed before it is read.
+                        if (request.isForMainFrame && url == w.served) {
+                            val html = w.page.orEmpty().toByteArray(Charsets.UTF_8)
+                            return WebResourceResponse("text/html", "utf-8", 200, "OK", ArtifactPage.HEADERS, ByteArrayInputStream(html))
+                        }
+                        val bytes = w.font
+                        if (url == ArtifactPage.FONT && bytes != null) {
                             return WebResourceResponse("font/woff2", null, 200, "OK", mapOf("Access-Control-Allow-Origin" to "*"), ByteArrayInputStream(bytes))
                         }
                         return WebResourceResponse("text/plain", "utf-8", 404, "Not here", emptyMap(), ByteArrayInputStream(ByteArray(0)))
@@ -91,6 +105,8 @@ fun ArtifactView(
                         // It opened in the light or dark it was fetched in: the app's own now, and Mark up as it stands.
                         w.evaluateJavascript(ArtifactPage.theme(w.dark), null)
                         if (w.markup) w.evaluateJavascript(ArtifactPage.markup(true), null)
+                        // Newer data that came while it loaded.
+                        w.data?.let { w.evaluateJavascript(it, null) }
                     }
                 }
                 webChromeClient = object : WebChromeClient() {
@@ -123,35 +139,64 @@ fun ArtifactView(
             }
             if (w.page != page) {
                 w.page = page
-                w.loadDataWithBaseURL(ArtifactPage.BASE, page, "text/html", "utf-8", null)
+                w.data = null
+                // A new address each time, so it never comes from a cache.
+                w.served = ArtifactPage.PAGE + "?n=" + (++w.loads)
+                w.loadUrl(w.served!!)
             }
+        },
+        onRelease = { w ->
+            if (controller.web === w) controller.web = null
+            w.destroy()
         },
         modifier = modifier,
     )
-    DisposableEffect(controller) {
-        onDispose {
-            controller.web?.destroy()
-            controller.web = null
-        }
-    }
 }
 
-/** The WebView with what it was last given, marking [gate] on every touch and every word typed into it. */
-private class SealedWebView(context: Context, private val gate: ArtifactSendGate) : WebView(context) {
-    var page: String? = null
+/**
+ * The WebView with what it was last given, marking [gate] on a tap (not a scroll or a long press) and on
+ * every word typed into it, as a browser grants a page a person's touch.
+ */
+internal class SealedWebView(context: Context, private val gate: ArtifactSendGate) : WebView(context) {
+    @Volatile var page: String? = null
+    /** The address [page] is served at now. */
+    @Volatile var served: String? = null
+    var loads = 0
     var dark = false
     var markup = false
+    /** The newest data handed to the page, again once it has loaded. */
+    var data: String? = null
     @Volatile var font: ByteArray? = null
+    private val slop = android.view.ViewConfiguration.get(context).scaledTouchSlop
+    private var downX = 0f
+    private var downY = 0f
+    private var downAt = 0L
 
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {
-        if (event.actionMasked == MotionEvent.ACTION_UP) gate.touched()
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                downX = event.x
+                downY = event.y
+                downAt = event.eventTime
+            }
+            MotionEvent.ACTION_UP -> {
+                val still = kotlin.math.abs(event.x - downX) <= slop && kotlin.math.abs(event.y - downY) <= slop
+                if (still && event.eventTime - downAt < android.view.ViewConfiguration.getLongPressTimeout()) gate.touched()
+            }
+        }
         return super.dispatchTouchEvent(event)
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        if (event.action == KeyEvent.ACTION_UP) gate.touched()
+        // Typing, not the volume or Back.
+        if (event.action == KeyEvent.ACTION_UP && typing(event)) gate.touched()
         return super.dispatchKeyEvent(event)
     }
+
+    private fun typing(e: KeyEvent) = e.isPrintingKey || e.keyCode in setOf(
+        KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER, KeyEvent.KEYCODE_DEL, KeyEvent.KEYCODE_FORWARD_DEL,
+        KeyEvent.KEYCODE_SPACE, KeyEvent.KEYCODE_TAB, KeyEvent.KEYCODE_DPAD_CENTER,
+    )
 
     /** The keyboard's words reach a page's field through this, not as key events. */
     override fun onCreateInputConnection(outAttrs: EditorInfo): InputConnection? {
@@ -160,7 +205,7 @@ private class SealedWebView(context: Context, private val gate: ArtifactSendGate
             override fun commitText(text: CharSequence?, newCursorPosition: Int): Boolean = super.commitText(text, newCursorPosition).also { gate.touched() }
             override fun setComposingText(text: CharSequence?, newCursorPosition: Int): Boolean = super.setComposingText(text, newCursorPosition).also { gate.touched() }
             override fun deleteSurroundingText(beforeLength: Int, afterLength: Int): Boolean = super.deleteSurroundingText(beforeLength, afterLength).also { gate.touched() }
-            override fun sendKeyEvent(event: KeyEvent): Boolean = super.sendKeyEvent(event).also { gate.touched() }
+            override fun sendKeyEvent(event: KeyEvent): Boolean = super.sendKeyEvent(event).also { if (typing(event)) gate.touched() }
             override fun performEditorAction(editorAction: Int): Boolean = super.performEditorAction(editorAction).also { gate.touched() }
         }
     }

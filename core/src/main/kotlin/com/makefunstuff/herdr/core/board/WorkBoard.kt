@@ -51,6 +51,8 @@ data class WorkSpace(
     val unreachable: Boolean = false,
     /** Its coordinator has a question open for you (v2's `asks`). */
     val asks: Boolean = false,
+    /** What its lists hold (v2's `level`): 2 its own, 1 its machine's (a home space), 0 every machine's. */
+    val level: Int = 2,
 )
 
 /** One task, in the same shape from both boards. */

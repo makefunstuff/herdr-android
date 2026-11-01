@@ -34,6 +34,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import com.makefunstuff.herdr.core.shepherdr.ArtifactGone
 import com.makefunstuff.herdr.core.shepherdr.ArtifactMessage
 import com.makefunstuff.herdr.core.shepherdr.ArtifactPage
 import com.makefunstuff.herdr.core.shepherdr.ArtifactSendGate
@@ -96,10 +97,6 @@ fun ArtifactScreen(nav: NavController, machineId: String, artifactId: String, v:
     var font by remember { mutableStateOf(ShepherdrFont.bytes) }
     val controller = remember { ArtifactController() }
     val gate = remember { ArtifactSendGate(container.clock) }
-    LaunchedEffect(board) {
-        val b = board ?: return@LaunchedEffect
-        if (font == null) font = runCatching { b.artifactFont() }.getOrNull()?.also { ShepherdrFont.bytes = it }
-    }
     // The page for the version wanted: the same page takes new data where it is; another page loads.
     LaunchedEffect(board, a?.id, want, a?.let { art -> want?.let(art::htmlOf) }) {
         val b = board ?: return@LaunchedEffect
@@ -111,7 +108,7 @@ fun ArtifactScreen(nav: NavController, machineId: String, artifactId: String, v:
             if (now.v == n) return@LaunchedEffect
             val data = runCatching { b.artifactData(art, n) }.getOrNull()
             if (data != null) {
-                controller.run(ArtifactPage.data(data))
+                controller.data(ArtifactPage.data(data))
                 shown = now.copy(v = n)
                 return@LaunchedEffect
             }
@@ -125,6 +122,10 @@ fun ArtifactScreen(nav: NavController, machineId: String, artifactId: String, v:
                 break
             } catch (e: CancellationException) {
                 throw e
+            } catch (gone: ArtifactGone) {
+                // Deleted, or artifacts turned off there: asking again won't bring it.
+                problem = gone.message
+                break
             } catch (t: Throwable) {
                 problem = t.message ?: "Couldn't read it from Shepherdr"
                 delay(5_000)

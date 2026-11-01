@@ -20,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.makefunstuff.herdr.Routes
+import com.makefunstuff.herdr.core.board.WorkSpace
 import com.makefunstuff.herdr.core.shepherdr.Artifacts
 import com.makefunstuff.herdr.ui.common.LocalContainer
 import com.makefunstuff.herdr.ui.coordinator.ChatEmpty
@@ -44,14 +45,15 @@ fun ArtifactsScreen(nav: NavController, machineId: String, space: String?) {
     }
     val shelf = rememberArtifactShelf(session)
     // The space's name, from the board, for the bar.
-    var spaceName by remember(space) { mutableStateOf<String?>(null) }
+    var spaces by remember(space) { mutableStateOf<List<WorkSpace>?>(null) }
     LaunchedEffect(shelf.board, space) {
         val b = shelf.board ?: return@LaunchedEffect
-        spaceName = runCatching { b.overview().spaces }.getOrNull()?.let { all -> (all.firstOrNull { it.id == space } ?: all.firstOrNull { it.home }) }
-            ?.let { if (it.home) "Home" else it.name }
+        spaces = runCatching { b.overview().spaces }.getOrNull()
     }
+    val spaceName = spaces?.firstOrNull { it.id == space }?.let { if (it.home) "Home" else it.name }
     val c = Herdr.colors
-    val list = shelf.all?.let { all -> if (space == null) all.sortedByDescending { it.at } else Artifacts.inSpace(all, space) }
+    // A home space lists its machine's too, which needs where each space is: its own only until that's read.
+    val list = shelf.all?.let { all -> if (space == null) all.sortedByDescending { it.at } else Artifacts.inSpace(all, space, spaces.orEmpty()) }
     Scaffold(
         containerColor = c.ground,
         topBar = {

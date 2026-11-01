@@ -29,6 +29,10 @@ class ArtifactController {
     fun run(script: String) {
         ran += script
     }
+
+    fun data(script: String) {
+        ran += script
+    }
 }
 
 @Composable

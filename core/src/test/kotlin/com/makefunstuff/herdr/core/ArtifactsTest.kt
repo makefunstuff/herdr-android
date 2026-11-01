@@ -45,6 +45,16 @@ class ArtifactsTest {
     fun aSpaceListsItsOwnArtifactsNewestFirst() {
         val all = snapshot.artifacts!!
         assertEquals(listOf("rn09", "wk3n"), Artifacts.inSpace(all, "p:a").map { it.id })
+        // A home space lists its machine's, the main home every machine's, as Shepherdr's lists do.
+        val spaces = listOf(
+            com.makefunstuff.herdr.core.board.WorkSpace("p:a", "app", machine = "m"),
+            com.makefunstuff.herdr.core.board.WorkSpace("p:h", "home", machine = "m", home = true, level = 1),
+            com.makefunstuff.herdr.core.board.WorkSpace("p:x", "elsewhere", machine = "n"),
+        )
+        assertEquals(listOf("bk", "rn09", "wk3n"), Artifacts.inSpace(all, "p:h", spaces).map { it.id })
+        assertEquals(listOf("rn09", "wk3n"), Artifacts.inSpace(all, "p:a", spaces).map { it.id })
+        assertEquals(emptyList(), Artifacts.inSpace(all, "p:x", spaces))
+        assertEquals(3, Artifacts.inSpace(all, "p:h", spaces.map { if (it.home) it.copy(level = 0) else it }).size)
         val wk = all.first { it.id == "wk3n" }
         // A version that only brought data shows the page before it.
         assertEquals(2, wk.htmlOf(3))
@@ -80,8 +90,14 @@ class ArtifactsTest {
         assertTrue(csp in 0 until sealed.indexOf("/*bridge*/"))
         assertTrue("connect-src 'none'" in sealed && "default-src 'none'" in sealed)
         assertTrue(sealed.indexOf(ArtifactPage.BRIDGE) < sealed.indexOf("/*bridge*/"))
-        // <header> is not <head>; a page without a head still gets the policy first.
-        assertTrue(ArtifactPage.seal("<p>Hi</p>").startsWith("<meta http-equiv=\"Content-Security-Policy\""))
+        // First after the doctype, so a script before its <head>, or a "<head>" in a comment, can't come first.
+        assertTrue(sealed.startsWith("<!doctype html><meta http-equiv=\"Content-Security-Policy\""))
+        val sly = ArtifactPage.seal("""<html><!-- <head> --><script>/*early*/</script><head></head></html>""")
+        assertTrue(sly.indexOf("Content-Security-Policy") < sly.indexOf("/*early*/"))
+        assertTrue(ArtifactPage.seal("<p>Hi</p>").startsWith("<!doctype html><meta http-equiv=\"Content-Security-Policy\""))
+        // Served with a sandbox, as Shepherdr's frame is; no peer connections either.
+        assertTrue(ArtifactPage.HEADERS.getValue("Content-Security-Policy").startsWith("sandbox allow-scripts allow-forms; default-src 'none'"))
+        assertTrue("RTCPeerConnection" in sealed)
         // What goes into the page: data as JSON, the theme, what was sent.
         assertEquals("window.postMessage({shepherdr:'data',data:{\"rows\":[1,2]}},'*');", ArtifactPage.data(ArtifactPage.dataOf("""{"data":{"rows":[1,2]}}""")))
         assertEquals("null", ArtifactPage.dataOf("""{"data":null}"""))
@@ -155,7 +171,7 @@ class ArtifactsTest {
         assertEquals(3, c.artifactThumb("wk3n", dark = false)!!.size)
         assertNull(c.artifactFont())
         val err = runCatching { c.artifactPage("gone", 1, dark = false) }.exceptionOrNull()
-        assertEquals("This artifact was deleted", err?.message)
+        assertTrue(err is com.makefunstuff.herdr.core.shepherdr.ArtifactGone)
         assertEquals(
             listOf(
                 "GET /api/artifacts/wk3n?v=2&full=1&device=phone&theme=dark",

@@ -172,7 +172,7 @@ class ShepherdrClient(private val transport: ShepherdrTransport) {
      */
     suspend fun artifactPage(id: String, v: Int, dark: Boolean): String {
         val r = transport.http("GET", artifactPath(id, "", "v=$v&full=1&device=phone&theme=${if (dark) "dark" else "light"}"))
-        if (r.status == 404) throw IOException("This artifact was deleted")
+        if (r.status == 404) throw ArtifactGone("Shepherdr doesn't serve it: it was deleted, or its artifacts are turned off")
         if (r.status !in 200..299) throw IOException("Shepherdr answered ${r.status}")
         return r.body
     }

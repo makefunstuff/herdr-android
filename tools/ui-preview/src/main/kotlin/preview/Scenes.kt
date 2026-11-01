@@ -518,6 +518,11 @@ fun scenes(): List<Scene> = listOf(
     Scene("artifact-versions", route = Routes.artifact(DEVBOX, "rn09"), setup = { artifacts() }, actions = { settle(); tapLabel("Versions") }),
     Scene("artifact-older", route = Routes.artifact(DEVBOX, "rn09", 1), setup = { artifacts() }),
     Scene("artifacts", route = Routes.artifacts(DEVBOX, DemoV2.APP), setup = { artifacts() }),
+    // An earlier post of one folds to a line; one deleted, a version no longer kept, a space with none yet.
+    Scene("coordinator-v2-artifact-folded", route = Routes.coordinator(DEVBOX, DemoV2.APP), heightDp = 1300, setup = { artifactPostedTwice() }),
+    Scene("artifact-gone", route = Routes.artifact(DEVBOX, "zz00"), setup = { artifacts() }),
+    Scene("artifact-not-kept", route = Routes.artifact(DEVBOX, "rn09", 9), setup = { artifacts() }),
+    Scene("artifacts-empty", route = Routes.artifacts(DEVBOX, "p:devbox:website"), setup = { artifacts() }),
     // A voice message to a space's coordinator: recording, then sent into Shepherdr's inbox and the chat as its file.
     Scene("coordinator-v2-voice", route = Routes.coordinator(DEVBOX), setup = { shepherdr() }, actions = { tapLabel("Record a voice message") }),
     Scene("coordinator-v2-voice-sent", route = Routes.coordinator(DEVBOX), setup = { shepherdr() }, actions = {
