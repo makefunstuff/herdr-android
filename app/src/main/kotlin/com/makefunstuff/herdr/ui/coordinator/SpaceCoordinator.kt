@@ -68,6 +68,10 @@ import com.makefunstuff.herdr.core.shepherdr.SpaceChat
 import com.makefunstuff.herdr.core.shepherdr.SpaceChatItem
 import com.makefunstuff.herdr.core.shepherdr.V2ReplyQuote
 import com.makefunstuff.herdr.data.DraftStore
+import com.makefunstuff.herdr.Routes
+import com.makefunstuff.herdr.ui.artifacts.ArtifactPost
+import com.makefunstuff.herdr.ui.artifacts.ChatArtifacts
+import com.makefunstuff.herdr.ui.artifacts.LocalChatArtifacts
 import com.makefunstuff.herdr.ui.board.AgentChip
 import com.makefunstuff.herdr.ui.common.LocalContainer
 import com.makefunstuff.herdr.ui.common.MarkdownText
@@ -287,6 +291,10 @@ internal fun SpaceCoordinator(nav: NavController, machineId: String, session: Ho
                 subtitle = listOfNotNull(space?.let(::spaceName), state.machine.label, stateWords(t, state.online, state.status.label())).joinToString(" · "),
                 onBack = { nav.popBackStack() },
                 actions = {
+                    // The space's artifacts, where Shepherdr keeps them.
+                    if (overview?.artifacts != null && space != null) {
+                        BarIcon(HerdrIcons.LayoutDashboard, "Artifacts", { nav.navigate(Routes.artifacts(machineId, space.id)) })
+                    }
                     BarIcon(
                         HerdrIcons.Headphones, if (voiceHere) "Turn voice off" else "Hear the coordinator",
                         onClick = {
@@ -357,7 +365,11 @@ internal fun SpaceCoordinator(nav: NavController, machineId: String, session: Ho
                         val why = chatProblem ?: problem
                         if (why != null) ChatEmpty(HerdrIcons.CircleAlert, "Can't reach Shepherdr", why) else LoadingState("Reading the chat")
                     }
-                    else -> CompositionLocalProvider(LocalChatImages provides ChatImages(machineId, session, container.images, state.online), LocalVoiceMessages provides voice) {
+                    else -> CompositionLocalProvider(
+                        LocalChatImages provides ChatImages(machineId, session, container.images, state.online),
+                        LocalVoiceMessages provides voice,
+                        LocalChatArtifacts provides ChatArtifacts(machineId, overview?.artifacts, board, read = overview != null) { id, v -> nav.navigate(Routes.artifact(machineId, id, v)) },
+                    ) {
                         LazyColumn(
                             state = list,
                             // Newest at the bottom: it stays at its end when the keyboard opens or the message box grows.
@@ -524,17 +536,7 @@ internal fun ChatItem(
             Spacer(Modifier.width(Space.xs))
             Text(item.name, style = MaterialTheme.typography.bodyMedium, color = c.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        is SpaceChatItem.Artifact -> Column(verticalArrangement = Arrangement.spacedBy(Space.s)) {
-            if (item.intro.isNotEmpty()) MarkdownText(item.intro, Modifier.padding(horizontal = Space.xs), style = MaterialTheme.typography.bodyLarge)
-            QuietCard(padded = true) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(HerdrIcons.LayoutDashboard, null, Modifier.size(18.dp), tint = c.muted)
-                    Spacer(Modifier.width(Space.s))
-                    Text("Artifact · version ${item.version}", style = MaterialTheme.typography.titleSmall, color = c.strong)
-                }
-                Text("It opens in Shepherdr on the machine.", style = MaterialTheme.typography.bodySmall, color = c.muted, modifier = Modifier.padding(start = 26.dp))
-            }
-        }
+        is SpaceChatItem.Artifact -> ArtifactPost(item.artifact, item.version, item.intro, item.later)
         is SpaceChatItem.NewSession -> Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.weight(1f)) { RowDivider(0.dp) }
             Text("New session", style = MaterialTheme.typography.labelMedium, color = c.muted, modifier = Modifier.padding(horizontal = Space.s))

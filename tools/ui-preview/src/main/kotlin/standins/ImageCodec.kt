@@ -16,13 +16,15 @@ import org.jetbrains.skia.Surface
 import java.io.File
 
 object ImageCodec {
-    fun load(file: File, maxEdge: Int): ImageBitmap? = decode(file, maxEdge)?.toComposeImageBitmap()
+    fun load(file: File, maxEdge: Int): ImageBitmap? = runCatching { file.readBytes() }.getOrNull()?.let { decode(it, maxEdge) }?.toComposeImageBitmap()
+
+    fun load(bytes: ByteArray, maxEdge: Int): ImageBitmap? = decode(bytes, maxEdge)?.toComposeImageBitmap()
 
     fun save(image: ImageBitmap, file: File, format: ImageSizing.Format) =
         write(Image.makeFromBitmap(image.asSkiaBitmap()), file, format)
 
     fun prepare(source: File, mime: String?, name: String, store: ImageStore): TrayImage? {
-        val image = decode(source, ImageSizing.MAX_EDGE) ?: return null
+        val image = runCatching { source.readBytes() }.getOrNull()?.let { decode(it, ImageSizing.MAX_EDGE) } ?: return null
         val format = ImageSizing.format(mime, name)
         val file = store.newFile(format.extension)
         write(image, file, format)
@@ -31,8 +33,8 @@ object ImageCodec {
         return TrayImage("shared-$safe", ImageSizing.rename(safe, format), file.path, image.width, image.height)
     }
 
-    private fun decode(file: File, maxEdge: Int): Image? = runCatching {
-        val full = Image.makeFromEncoded(file.readBytes())
+    private fun decode(bytes: ByteArray, maxEdge: Int): Image? = runCatching {
+        val full = Image.makeFromEncoded(bytes)
         val (w, h) = ImageSizing.fit(full.width, full.height, maxEdge)
         if (w == full.width && h == full.height) return@runCatching full
         val surface = Surface.makeRasterN32Premul(w, h)

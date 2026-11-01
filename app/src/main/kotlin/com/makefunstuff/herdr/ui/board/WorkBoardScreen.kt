@@ -306,6 +306,10 @@ internal fun WorkBoardScreen(
                 backEnabled = !middleCloses,
                 onMerge = { merge(open) },
                 onClose = { pending = WorkPending.Close(open) },
+                artifacts = o?.artifacts,
+                artifactsRead = o != null,
+                onArtifact = { id, v -> nav.navigate(Routes.artifact(machineId, id, v)) },
+                onArtifacts = if (o?.artifacts != null) ({ nav.navigate(Routes.artifacts(machineId, open.space)) }) else null,
             )
         } else if (openId != null && open != null) {
             WorkTaskScreen(

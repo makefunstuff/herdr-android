@@ -243,6 +243,50 @@ data class V2File(val name: String = "", val path: String = "")
 @Serializable
 data class V2ArtifactPost(val id: String, val v: Int = 0)
 
+/** One kept version of an artifact (`ArtifactVersion`), newest first in [V2Artifact.versions]. */
+@Serializable
+data class V2ArtifactVersion(
+    val n: Int,
+    /** When it came, short ("2m"). */
+    val `when`: String = "",
+    /** Who made it ("HA-1 agent"). */
+    val by: String = "",
+    val note: String? = null,
+    /** The version whose page it shows: one that brought only new data shows the page before it. */
+    val html: Int = 0,
+    /** What it brought when not a new page: `data` or `title`. */
+    val what: String? = null,
+)
+
+/**
+ * An artifact (`Artifact`): a page an agent made, kept in its space ([place]) and updated as new versions.
+ * Its page, data and pictures are read by id ([ShepherdrClient.artifactPage]).
+ */
+@Serializable
+data class V2Artifact(
+    val id: String,
+    val title: String = "",
+    val place: String = "",
+    /** Its latest version, and when that came (ms). */
+    val v: Int = 0,
+    val at: Double = 0.0,
+    val `when`: String = "",
+    val by: String = "",
+    /** Who what you send from it reaches: the agent that made the latest version, or its space's coordinator. */
+    val keeper: String = "",
+    /** Shepherdr's check took its picture, light and dark. */
+    val thumb: Boolean = false,
+    /** The chats its versions came from. */
+    val chats: List<String>? = null,
+    /** Newest first; only the last 20 are kept. */
+    val versions: List<V2ArtifactVersion> = emptyList(),
+) {
+    /** The version whose page version [n] shows. */
+    fun htmlOf(n: Int): Int = versions.firstOrNull { it.n == n }?.html?.takeIf { it > 0 } ?: n
+
+    fun version(n: Int): V2ArtifactVersion? = versions.firstOrNull { it.n == n }
+}
+
 @Serializable
 data class V2Message(
     val id: String,
@@ -304,6 +348,8 @@ data class V2Snapshot(
     /** When each chat last had something new (ms), and how far each was read. */
     val last: Map<String, Double> = emptyMap(),
     val read: Map<String, Double> = emptyMap(),
+    /** Every artifact; none on a Shepherdr that keeps none, where the app shows no artifacts. */
+    val artifacts: List<V2Artifact>? = null,
 ) {
     fun place(id: String): V2Place? = places.firstOrNull { it.id == id }
     fun task(id: String): V2Task? = tasks.firstOrNull { it.id == id }

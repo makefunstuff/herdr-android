@@ -167,6 +167,36 @@ class ShepherdrClient(private val transport: ShepherdrTransport) {
     }
 
     /**
+     * Artifact [id]'s page at version [v], wrapped by Shepherdr for a sealed frame: its colours (in [dark]
+     * or light), the bridge and its data; full screen at a phone's width (`GET /api/artifacts/<id>`).
+     */
+    suspend fun artifactPage(id: String, v: Int, dark: Boolean): String {
+        val r = transport.http("GET", artifactPath(id, "", "v=$v&full=1&device=phone&theme=${if (dark) "dark" else "light"}"))
+        if (r.status == 404) throw IOException("This artifact was deleted")
+        if (r.status !in 200..299) throw IOException("Shepherdr answered ${r.status}")
+        return r.body
+    }
+
+    /** Version [v]'s data alone, as JSON text (`null` for none), for a page that only takes new data. */
+    suspend fun artifactData(id: String, v: Int): String =
+        ArtifactPage.dataOf(ok(transport.http("GET", artifactPath(id, "/data", "v=$v"))).toString())
+
+    /** The picture Shepherdr's check took of its latest version, in [dark] or light (PNG); null where it has none. */
+    suspend fun artifactThumb(id: String, dark: Boolean): ByteArray? {
+        val r = transport.bytes("GET", artifactPath(id, "/thumb", if (dark) "dark=1" else ""))
+        return r.body.takeIf { r.status in 200..299 && it.isNotEmpty() }
+    }
+
+    /** Shepherdr's font, which artifacts are set in (`GET /api/font/InterVariable.woff2`). */
+    suspend fun artifactFont(): ByteArray? {
+        val r = transport.bytes("GET", "/api/font/InterVariable.woff2")
+        return r.body.takeIf { r.status in 200..299 && it.isNotEmpty() }
+    }
+
+    private fun artifactPath(id: String, part: String, query: String) =
+        "/api/artifacts/" + java.net.URLEncoder.encode(id, "UTF-8").replace("+", "%20") + part + query.takeIf { it.isNotEmpty() }?.let { "?$it" }.orEmpty()
+
+    /**
      * The `shepherdr` command with [args] (`["merge", "HA-1"]`), as the human would run it. Some wait
      * long (a merge waits for GitHub's checks), so there is no short timeout.
      */

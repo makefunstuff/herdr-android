@@ -177,6 +177,10 @@ object Routes {
     const val PREVIEW = "preview/{mid}?ws={ws}&port={port}"
     /** The board's automations as routines: one machine's ([mid]), or every connected board's. */
     const val ROUTINES = "routines?mid={mid}"
+    /** A Shepherdr space's artifacts ([space], its id; every one on the machine without). */
+    const val ARTIFACTS = "artifacts/{mid}?space={space}"
+    /** One artifact full screen, at its latest or at version [v]. */
+    const val ARTIFACT = "artifact/{mid}/{id}?v={v}"
 
     fun machine(id: String) = "machine/$id"
     fun edit(id: String? = null) = if (id == null) "edit" else "edit?id=$id"
@@ -185,6 +189,8 @@ object Routes {
     fun layout(mid: String, pane: String) = "layout/$mid/${Uri.encode(pane)}"
     fun coordinator(mid: String, space: String? = null) = "coordinator/$mid" + (space?.let { "?space=" + Uri.encode(it) } ?: "")
     fun ask(to: String) = "ask/$to"
+    fun artifacts(mid: String, space: String? = null) = "artifacts/$mid" + (space?.let { "?space=" + Uri.encode(it) } ?: "")
+    fun artifact(mid: String, id: String, v: Int? = null) = "artifact/$mid/${Uri.encode(id)}" + (v?.let { "?v=$it" } ?: "")
     fun board(mid: String, task: String? = null, alone: Boolean = false) =
         if (task == null) "board/$mid" else "board/$mid?task=${Uri.encode(task)}" + if (alone) "&alone=1" else ""
     fun review(mid: String? = null, task: String? = null) =
@@ -394,6 +400,15 @@ internal fun NavGraphBuilder.screens(nav: NavHostController, agents: @Composable
     }
     composable(Routes.COORDINATOR) {
         CoordinatorScreen(nav, it.arguments?.getString("mid").orEmpty(), it.arguments?.getString("space")?.let(Uri::decode)?.ifEmpty { null })
+    }
+    composable(Routes.ARTIFACTS) {
+        com.makefunstuff.herdr.ui.artifacts.ArtifactsScreen(nav, it.arguments?.getString("mid").orEmpty(), it.arguments?.getString("space")?.let(Uri::decode)?.ifEmpty { null })
+    }
+    composable(Routes.ARTIFACT) {
+        com.makefunstuff.herdr.ui.artifacts.ArtifactScreen(
+            nav, it.arguments?.getString("mid").orEmpty(), it.arguments?.getString("id")?.let(Uri::decode).orEmpty(),
+            v = it.arguments?.getString("v")?.toIntOrNull(),
+        )
     }
     composable(Routes.PREVIEW) {
         com.makefunstuff.herdr.ui.preview.DevServerScreen(

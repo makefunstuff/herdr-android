@@ -510,6 +510,14 @@ fun scenes(): List<Scene> = listOf(
         drafts[com.makefunstuff.herdr.data.DraftStore.coordinator(DEVBOX, DemoV2.API)] = "Also check the /jobs/export endpoint"
     }, actions = { tapLabel("Send") }),
     Scene("coordinator-v2-answered", route = Routes.coordinator(DEVBOX, DemoV2.APP), setup = { shepherdr() }, actions = { tapText("Let me look first") }),
+    // Shepherdr 2.1's artifacts: a card with its picture in a coordinator's chat and in a task's, full screen in the
+    // app's light or dark, its versions and an older one, and a space's Artifacts list.
+    Scene("coordinator-v2-artifact", route = Routes.coordinator(DEVBOX, DemoV2.APP), setup = { artifacts() }),
+    Scene("task-artifact", route = Routes.board(DEVBOX, "AND-19"), setup = { artifacts() }),
+    Scene("artifact", route = Routes.artifact(DEVBOX, "rn09"), setup = { artifacts() }),
+    Scene("artifact-versions", route = Routes.artifact(DEVBOX, "rn09"), setup = { artifacts() }, actions = { settle(); tapLabel("Versions") }),
+    Scene("artifact-older", route = Routes.artifact(DEVBOX, "rn09", 1), setup = { artifacts() }),
+    Scene("artifacts", route = Routes.artifacts(DEVBOX, DemoV2.APP), setup = { artifacts() }),
     // A voice message to a space's coordinator: recording, then sent into Shepherdr's inbox and the chat as its file.
     Scene("coordinator-v2-voice", route = Routes.coordinator(DEVBOX), setup = { shepherdr() }, actions = { tapLabel("Record a voice message") }),
     Scene("coordinator-v2-voice-sent", route = Routes.coordinator(DEVBOX), setup = { shepherdr() }, actions = {
