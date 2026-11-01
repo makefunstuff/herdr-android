@@ -61,7 +61,7 @@ class SharedMarkdownTest {
         assertNotNull(blocks.firstOrNull { it is Block.Heading })
         val reviewed = BoardTasks.details(res("details-reviewed.json"))
         val link = Markdown.inline(reviewed.msg).first { it.link != null }
-        assertEquals("https://claude.ai/artifact/9jyu8NtQZ1uudnnFLgwfwx", link.link)
+        assertEquals("https://claude.ai/artifact/demoReport0000000000001", link.link)
         assertTrue(Markdown.inline(reviewed.msg).any { it.bold })
     }
 }

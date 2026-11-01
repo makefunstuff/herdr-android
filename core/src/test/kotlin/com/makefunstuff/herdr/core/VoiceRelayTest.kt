@@ -102,11 +102,23 @@ class VoiceRelayTest {
 
     @Test
     fun serverAddresses() {
-        assertEquals("http://192.168.1.138:18101", EdgeVoice.normalize("192.168.1.138:18101/v1/"))
+        assertEquals("http://voice.lan:18101", EdgeVoice.normalize("voice.lan:18101/v1/"))
         assertEquals("https://voice.home", EdgeVoice.normalize("https://voice.home"))
         assertNull(EdgeVoice.normalize("ftp://x"))
         assertNull(EdgeVoice.normalize("http://x:99999"))
         assertNull(EdgeVoice.normalize("http://x/y"))
+    }
+
+    @Test
+    fun plainHttpGoesThroughTheMachine() {
+        assertEquals("voice.lan" to 18101, EdgeVoice.throughMachine("voice.lan:18101/v1/"))
+        assertEquals("10.0.0.5" to 80, EdgeVoice.throughMachine("http://10.0.0.5"))
+        assertEquals("fd00::5" to 18101, EdgeVoice.throughMachine("http://[fd00::5]:18101"))
+        assertNull(EdgeVoice.throughMachine("https://voice.home"))
+        // The machine's own loopback, not the phone's.
+        assertEquals("localhost" to 18101, EdgeVoice.throughMachine("http://localhost:18101"))
+        assertEquals("::1" to 18101, EdgeVoice.throughMachine("http://[::1]:18101"))
+        assertNull(EdgeVoice.throughMachine(""))
     }
 
     @Test

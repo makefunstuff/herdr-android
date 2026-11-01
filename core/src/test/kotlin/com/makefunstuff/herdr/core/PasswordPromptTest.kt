@@ -8,16 +8,16 @@ import kotlin.test.assertNull
 class PasswordPromptTest {
     @Test fun asksForSecrets() {
         listOf(
-            "[sudo] password for jpl:",
+            "[sudo] password for dev:",
             "Password:",
-            "jpl@devbox's password:",
-            "Enter passphrase for key '/home/jpl/.ssh/id_ed25519':",
+            "dev@devbox's password:",
+            "Enter passphrase for key '/home/dev/.ssh/id_ed25519':",
             "Enter PIN for 'PIV Card Holder pin (PIV_II)':",
-            "Password for 'https://jpl@github.com':",
+            "Password for 'https://dev@github.com':",
             "Enter pass phrase for server.key:",
             "Retype new password:",
             "(current) UNIX password:",
-            "Bad passphrase, try again for /home/jpl/.ssh/id_ed25519:",
+            "Bad passphrase, try again for /home/dev/.ssh/id_ed25519:",
         ).forEach { assertEquals(it, PasswordPrompt.ask("$it "), it) }
     }
 

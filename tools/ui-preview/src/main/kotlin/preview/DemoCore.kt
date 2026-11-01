@@ -52,11 +52,11 @@ object DemoCore {
     fun mini() = FakeCore(
         terminals = listOf(
             FakeCore.terminal(
-                "t1", listOf("claude"), "/Users/jpl/src/website", NOW - 15 * MIN, space = "sp1" to "website", tab = "tb1" to "main",
+                "t1", listOf("claude"), "/Users/demo/src/website", NOW - 15 * MIN, space = "sp1" to "website", tab = "tb1" to "main",
                 status = status("working", "claude-code", title = "Checking every link"), statusMs = NOW - 3 * MIN, turn = 1,
             ),
             FakeCore.terminal(
-                "t2", listOf("codex"), "/Users/jpl/src/website", NOW - 40 * MIN, space = "sp1" to "website", tab = "tb2" to "blog",
+                "t2", listOf("codex"), "/Users/demo/src/website", NOW - 40 * MIN, space = "sp1" to "website", tab = "tb2" to "blog",
                 status = status("done", "codex", title = "Draft of the release post"), statusMs = NOW - 9 * MIN, turn = 1,
             ),
         ),

@@ -22,11 +22,11 @@ class BoardTest {
         val out = """
             Welcome to the box
             {"not":"ours"}
-            {"host":"beefy","version":"1.0.1","tasks":[],"coordinator":{"state":"working","error":"","queue":1,"readable":true,"said":"On it","sent":"hello","talk":[{"you":true,"text":"hi"},{"you":false,"text":"Hello!"},{"you":false,"text":""}]}}
+            {"host":"devbox","version":"1.0.1","tasks":[],"coordinator":{"state":"working","error":"","queue":1,"readable":true,"said":"On it","sent":"hello","talk":[{"you":true,"text":"hi"},{"you":false,"text":"Hello!"},{"you":false,"text":""}]}}
             bye
         """.trimIndent()
         val l = BoardReader.list(out)
-        assertEquals("beefy", l.host)
+        assertEquals("devbox", l.host)
         assertEquals("1.0.1", l.version)
         val c = l.coordinator!!
         assertEquals("working", c.state)
@@ -47,7 +47,7 @@ class BoardTest {
 
     @Test
     fun dispatchAnswers() {
-        assertEquals("sent to beefy", BoardReader.done("motd\n{\"ok\":true,\"msg\":\"sent to beefy\"}\n"))
+        assertEquals("sent to devbox", BoardReader.done("motd\n{\"ok\":true,\"msg\":\"sent to devbox\"}\n"))
         val e = assertFailsWith<java.io.IOException> { BoardReader.done("{\"ok\":false,\"msg\":\"herdr is not running\"}") }
         assertEquals("herdr is not running", e.message)
     }

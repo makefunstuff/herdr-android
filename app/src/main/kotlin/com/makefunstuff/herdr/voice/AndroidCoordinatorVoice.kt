@@ -11,6 +11,7 @@ import android.os.SystemClock
 import android.util.Log
 import androidx.core.content.ContextCompat
 import com.makefunstuff.herdr.core.board.WorkBoard
+import com.makefunstuff.herdr.core.ssh.PortForward
 import com.makefunstuff.herdr.core.shepherdr.SpaceChat
 import com.makefunstuff.herdr.core.shepherdr.SpaceChatItem
 import com.makefunstuff.herdr.core.voice.EdgeVoice
@@ -32,6 +33,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import java.io.IOException
 import java.util.UUID
 import kotlin.math.sqrt
@@ -129,6 +131,7 @@ class AndroidCoordinatorVoice(
         run?.cancel()
         run = null
         runScope = null
+        closeTunnel()
         board = null
         _state.update { it.copy(on = false, phase = Phase.Ready, level = 0f, line = "", problem = null) }
     }
@@ -200,9 +203,25 @@ class AndroidCoordinatorVoice(
 
     override suspend fun test(): String {
         if (_state.value.on) return "Turn the chat's voice off to test"
+        return try { testVoice() } finally { if (!_state.value.on) closeTunnel() }
+    }
+
+    private suspend fun testVoice(): String {
         val s = settings.state.value
-        val engine = if (s.usable) engineFor(s) else null
+        // A plain-http server: first the machine it answers through, else why none does (the phone's voice says so).
+        val missed = if (s.usable && EdgeVoice.throughMachine(s.server) != null) {
+            try { reach(s); null } catch (e: CancellationException) { throw e } catch (e: Exception) { e }
+        } else null
+        val engine = if (s.usable && missed == null) engineFor(s) else null
         hushed = false
+        if (missed != null) {
+            awaySince = SystemClock.elapsedRealtime()
+            val t0 = SystemClock.elapsedRealtime()
+            var first = 0L
+            take()
+            try { phone.say("The server can't be reached. This is the phone's voice.", s.speed) { first = SystemClock.elapsedRealtime() - t0 } } finally { release() }
+            return "${missed.message ?: "The server can't be reached"}. Phone voice: first sound in $first ms"
+        }
         if (engine != null) {
             try {
                 val t0 = SystemClock.elapsedRealtime()
@@ -357,11 +376,77 @@ class AndroidCoordinatorVoice(
         val s = settings.state.value
         if (!s.usable) { _state.update { it.copy(engine = VoiceState.Engine.Phone) }; return null }
         if (awaySince != 0L && SystemClock.elapsedRealtime() - awaySince < RETRY_MS) return null
-        return engineFor(s)
+        return engineFor(s) ?: null.also { away(IOException("No machine is connected to reach the voice server through")) }
     }
 
-    /** The voice server's engine: the one place it is made, so the homelab's voice service drops in here. */
-    private fun engineFor(s: VoiceSettingsStore.Settings): VoiceEngine? = runCatching { EdgeVoice(s.server, s.key) }.getOrNull()
+    /**
+     * The voice server's engine: the one place it is made, so another voice service drops in here.
+     * A plain-http server is asked through a machine's SSH connection ([tunnelTo]).
+     */
+    private fun engineFor(s: VoiceSettingsStore.Settings, machineId: String? = machines().firstOrNull()): VoiceEngine? = runCatching {
+        val (host, port) = EdgeVoice.throughMachine(s.server) ?: return@runCatching EdgeVoice(s.server, s.key)
+        EdgeVoice("http://127.0.0.1:${tunnelTo(machineId ?: return@runCatching null, host, port).localPort}", s.key)
+    }.getOrNull()
+
+    /** The machine a plain-http voice server last answered through: the chat's machine may not reach it. */
+    @Volatile private var via: String? = null
+
+    /**
+     * The machines to reach a plain-http voice server through, best first: [via], the chat's (kept
+     * connected while voice is on), the connected ones. Never one it would have to connect for this.
+     */
+    private fun machines(): List<String> {
+        val chat = _state.value.machineId.takeIf { it.isNotEmpty() && _state.value.on }
+        val online = hosts.hosts.value.filter { it.online }.map { it.machine.id }
+        return (listOfNotNull(via?.takeIf { it == chat || it in online }, chat) + online).distinct().filter { hosts.session(it) != null }
+    }
+
+    /**
+     * Whether the server answers (the round trip in ms); a plain-http one through each of [machines] in
+     * turn until one does, which is kept in [via].
+     */
+    private suspend fun reach(s: VoiceSettingsStore.Settings): Long {
+        if (EdgeVoice.throughMachine(s.server) == null) return (engineFor(s) ?: throw IOException("Write the server as http://address:port")).ping()
+        var failed: Exception = IOException("No machine is connected to reach the voice server through")
+        for (id in machines()) {
+            try {
+                return (engineFor(s, id) ?: continue).ping().also { via = id }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (e.message?.contains("refused the key") == true) throw e
+                val label = hosts.session(id)?.machine?.label ?: id
+                // Through the tunnel a refused or unreachable server is only a closed socket: say where it was asked.
+                failed = IOException(if (hosts.session(id)?.state?.value?.online == false) "$label isn't connected" else "Can't reach the voice server from $label", e)
+            }
+        }
+        throw failed
+    }
+
+    private var tunnel: Pair<Triple<String, String, Int>, PortForward>? = null
+
+    /**
+     * A port of the phone's loopback forwarded to [host]:[port] as [machineId] sees it. Each connection
+     * takes that machine's SSH connection of the moment, so it lives on through reconnects; another
+     * machine or server makes a new one. Closed when voice stops.
+     */
+    @Synchronized
+    private fun tunnelTo(machineId: String, host: String, port: Int): PortForward {
+        val key = Triple(machineId, host, port)
+        tunnel?.let { (k, f) -> if (k == key) return f else f.close() }
+        return PortForward(host, port, preferred = 0) { h, p ->
+            val session = hosts.session(machineId) ?: throw IOException("This machine isn't in the app any more")
+            // Only the chat's machine is waited for (voice keeps it connected); another isn't connected for this.
+            if (machineId != _state.value.machineId && !session.state.value.online) throw IOException("${session.machine.label} isn't connected")
+            runBlocking { session.awaitConnection(2_500) }.openTcp(h, p)
+        }.also { tunnel = key to it }
+    }
+
+    @Synchronized
+    private fun closeTunnel() {
+        tunnel?.second?.close()
+        tunnel = null
+    }
 
     private fun away(e: Exception) {
         Log.w(AudioOut.TAG, "voice server away: ${e.message}")
@@ -376,7 +461,7 @@ class AndroidCoordinatorVoice(
             val s = settings.state.value
             if (s.usable && (awaySince == 0L || SystemClock.elapsedRealtime() - awaySince >= RETRY_MS)) {
                 try {
-                    (engineFor(s) ?: throw IOException("Write the server as http://address:port")).ping()
+                    reach(s)
                     awaySince = 0
                     _state.update { it.copy(engine = VoiceState.Engine.Server, problem = it.problem?.takeUnless { p -> p.startsWith("The voice server refused") }) }
                 } catch (e: CancellationException) {
@@ -514,9 +599,9 @@ class AndroidCoordinatorVoice(
 
     /** The server answers again (asked at most every [RETRY_MS]): the phone's ears give way to it. */
     private suspend fun serverBack(): Boolean {
-        val engine = useServer() ?: return false
+        useServer() ?: return false
         return try {
-            engine.ping()
+            reach(settings.state.value)
             awaySince = 0
             _state.update { it.copy(engine = VoiceState.Engine.Server) }
             true

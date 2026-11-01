@@ -167,19 +167,19 @@ object Demo {
      * The code `herdr-push pair` shows on studio, a machine not added yet: its Tailscale name and
      * address and its address at home, two host keys, and a one-time code (fixed bytes, as everything here).
      */
-    val PAIR_LINK = "herdr://pair?v=1&n=studio&u=demo&a=studio.tail5c2e.ts.net,100.84.3.12,192.168.1.20&p=22" +
+    val PAIR_LINK = "herdr://pair?v=1&n=studio&u=demo&a=studio.tail1234.ts.net,100.84.3.12,192.168.0.20&p=22" +
         "&k=q7LwHn2xVb8rTz4cKe6yMa1sJd9fPu3gWo5iXl0hNcE,mR4tYb7uWq2zXe5cVn8aKs1dLf6gHj3pOi9kUy0wTrA" +
         "&c=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8&x=1792222540"
 
     /** Where studio answers in the pairing scenes: its Tailscale name, with its Ed25519 key. */
-    fun pairReachable() = mapOf("studio.tail5c2e.ts.net" to "SHA256:q7LwHn2xVb8rTz4cKe6yMa1sJd9fPu3gWo5iXl0hNcE")
+    fun pairReachable() = mapOf("studio.tail1234.ts.net" to "SHA256:q7LwHn2xVb8rTz4cKe6yMa1sJd9fPu3gWo5iXl0hNcE")
 
     /** The saved machines, in the order the app lists them. */
     fun machines(): List<Machine> = listOf(
         machine(DEVBOX, "devbox", port = 2201),
         machine(GPU, "gpu-box", via = DEVBOX),
         machine(CI, "ci-runner", via = DEVBOX),
-        machine(MINI, "mac-mini", host = "192.168.1.40", user = "jpl"),
+        machine(MINI, "mac-mini", host = "mac-mini.local"),
     )
 
     private fun machine(id: String, label: String, host: String = label, port: Int = 22, user: String = "demo", via: String? = null) =

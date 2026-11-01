@@ -7,7 +7,7 @@
 ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
  Do you want to proceed?
  ❯ 1. Yes
-   2. Yes, and always allow access to /tmp/claude-1000/-home-jpl--herdr-worktrees-herdr-android-work-2-replace-agent-ter
+   2. Yes, and always allow access to /tmp/claude-1000/-home-dev--herdr-worktrees-herdr-android-work-2-replace-agent-ter
       minals-with-n/518745e3-9052-4b3c-81ca-5ddd766812d8/scratchpad/proj from this project
    3. No
 

@@ -52,8 +52,13 @@ fun VoiceCard() {
         )
         HerdrField(
             s.server, store::setServer, Modifier.fillMaxWidth(), label = "Voice server", singleLine = true,
-            isError = EdgeVoice.normalize(s.server) == null,
-            supportingText = if (EdgeVoice.normalize(s.server) == null) ({ Text("Write it as http://address:port") }) else null,
+            isError = s.server.isNotBlank() && EdgeVoice.normalize(s.server) == null,
+            supportingText = {
+                Text(
+                    if (s.server.isNotBlank() && EdgeVoice.normalize(s.server) == null) "Write it as http://address:port"
+                    else "An http:// server is reached through a machine's SSH connection, as the machine sees it",
+                )
+            },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
         )
         HerdrField(

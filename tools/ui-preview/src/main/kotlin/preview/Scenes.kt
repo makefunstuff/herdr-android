@@ -833,7 +833,7 @@ fun scenes(): List<Scene> = listOf(
     // Text size: the chats' and the terminal's, each its own.
     Scene("settings-text", route = Routes.SETTINGS, heightDp = 1300, setup = { textSizes = com.makefunstuff.herdr.data.TextSizeStore.Sizes(chat = 1.3f, terminal = 14f) }),
     Scene("settings-voice", route = Routes.SETTINGS, heightDp = 1700, setup = {
-        voiceSettings = com.makefunstuff.herdr.data.VoiceSettingsStore.Settings(key = "sk-demo-key", speed = 1.2f)
+        voiceSettings = com.makefunstuff.herdr.data.VoiceSettingsStore.Settings(server = "http://devbox:18101", key = "sk-demo-key", speed = 1.2f)
     }, actions = { tapText("Test") }),
     Scene("settings-new-key", route = Routes.SETTINGS, actions = { tapText("New key") }),
     Scene("key-setup", key = IdentityStore.State.Missing),

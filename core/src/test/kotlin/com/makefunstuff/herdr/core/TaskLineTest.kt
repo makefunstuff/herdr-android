@@ -71,8 +71,8 @@ class TaskLineTest {
             TaskLine.clean("Merged: https://github.com/makefunstuff/herdr-android/pull/14. Kept: ~/.herdr/worktrees/herdr-android/work-15-better-markdown-and-ui-ux-for (uncommitted changes)"),
         )
         assertEquals(
-            "Merged to main on git.jurip.xyz as 96ea0eb (squash, pushed directly).",
-            TaskLine.clean("Merged to main on git.jurip.xyz as 96ea0eb (squash, pushed directly). Kept: ~/.herdr/worktrees/homelab/work-4-strata-with-full-expert-quants (unmerged work on work/4-strata-with-full-expert-quants)"),
+            "Merged to main on git.example.dev as 96ea0eb (squash, pushed directly).",
+            TaskLine.clean("Merged to main on git.example.dev as 96ea0eb (squash, pushed directly). Kept: ~/.herdr/worktrees/demo/work-4-faster-search (unmerged work on work/4-strata-with-full-expert-quants)"),
         )
         assertEquals(
             "Per-game POLISH.md and a README table; Strata left running.",
@@ -82,7 +82,7 @@ class TaskLineTest {
 
     @Test
     fun pathsShrinkToTheirName() {
-        assertEquals("Edited Main.kt and its test", TaskLine.clean("Edited /home/jpl/src/app/Main.kt and its test"))
+        assertEquals("Edited Main.kt and its test", TaskLine.clean("Edited /home/dev/src/app/Main.kt and its test"))
         assertEquals("Wrote report.md", TaskLine.clean("Wrote ~/.herdr-projects/reports/x/5/report.md"))
         // A route is not a path on the machine, and a link's target stays whole.
         assertEquals("Moved from /api/v1/users to /api/v2/users", TaskLine.clean("Moved from /api/v1/users to /api/v2/users"))
