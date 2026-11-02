@@ -111,7 +111,16 @@ class LiveChatParseTest {
                 val text = runCatching { socket.receive() }.getOrNull() ?: break
                 val type = Regex(""""type":"([^"]+)"""").find(text)?.groupValues?.get(1) ?: "?"
                 synchronized(types) { types.merge(type, 1, Int::plus) }
-                runCatching { com.makefunstuff.herdr.core.shepherdr.V2Events.parse(text) }.onFailure { e ->
+                // Strictly, as before the lenient reading: a shape Shepherdr changed shows here, not hidden by it.
+                runCatching {
+                    val o = com.makefunstuff.herdr.core.shepherdr.ShepherdrJson.parseToJsonElement(text) as kotlinx.serialization.json.JsonObject
+                    val json = com.makefunstuff.herdr.core.shepherdr.ShepherdrJson
+                    when (type) {
+                        "chat" -> json.decodeFromJsonElement(com.makefunstuff.herdr.core.shepherdr.V2Chat.serializer(), o.getValue("chat"))
+                        "snapshot" -> json.decodeFromJsonElement(com.makefunstuff.herdr.core.shepherdr.V2Snapshot.serializer(), o.getValue("snapshot"))
+                        else -> Unit
+                    }
+                }.onFailure { e ->
                     synchronized(failures) { failures += "$type: ${e::class.simpleName}: ${e.message?.take(300)}" }
                     java.io.File(System.getProperty("java.io.tmpdir"), "herdr-probe-failed-${failures.size}.json").writeText(text)
                 }

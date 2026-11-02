@@ -107,9 +107,9 @@ import com.makefunstuff.herdr.ui.design.NewestButton
 import com.makefunstuff.herdr.ui.design.rememberStickToBottom
 import com.makefunstuff.herdr.ui.design.PrimaryButton
 import com.makefunstuff.herdr.ui.design.QuietButton
+import com.makefunstuff.herdr.ui.theme.Mono
 import com.makefunstuff.herdr.ui.design.hairline
 import com.makefunstuff.herdr.ui.design.HerdrShapes
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.foundation.background
 import com.makefunstuff.herdr.ui.design.QuietCard
 import com.makefunstuff.herdr.ui.design.RowDivider
@@ -586,7 +586,7 @@ private fun VoiceMark(clearing: Boolean, enabled: Boolean, modifier: Modifier, o
             Icon(HerdrIcons.Mic, null, tint = c.muted, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(Space.m))
             Text(
-                "Sent to by voice: closing, deleting or merging here waits for your yes on a safeguard card.",
+                "Sent to by voice: closing, merging and other changes here wait for your yes on a safeguard card.",
                 style = MaterialTheme.typography.bodySmall, color = c.text, modifier = Modifier.weight(1f).padding(vertical = Space.xs),
             )
             QuietButton(onClick = onClear, enabled = enabled && !clearing, color = c.accent) {
@@ -759,8 +759,10 @@ private fun QuestionCard(card: WorkCard, answer: String?, busy: Boolean, onAnswe
                     style = MaterialTheme.typography.bodyMedium, color = c.muted, modifier = Modifier.padding(top = Space.xs),
                 )
                 q.screen?.takeIf { it.isNotBlank() }?.let { command ->
+                    // Its command, and what goes on its stdin: up to 8000 characters, so only the start here.
                     Text(
-                        command, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace, color = c.text,
+                        if (command.length > 600) command.take(600).trimEnd() + "…" else command,
+                        style = MaterialTheme.typography.bodySmall, fontFamily = Mono, color = c.text,
                         modifier = Modifier.padding(top = Space.s).fillMaxWidth().background(c.panel, HerdrShapes.Field).padding(Space.s),
                     )
                 }

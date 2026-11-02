@@ -12,6 +12,8 @@ import com.makefunstuff.herdr.core.shepherdr.V2Events
 import com.makefunstuff.herdr.core.shepherdr.Wire
 import com.makefunstuff.herdr.core.ssh.Duplex
 import com.makefunstuff.herdr.core.voice.SpeechText
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.jupiter.api.Assumptions.assumeTrue
@@ -120,6 +122,13 @@ class ShepherdrRelayTest {
         link.send("""{"type":"ping"}""")
         assertEquals("{\"type\":\"ping\"}\n", p.written.toString(Charsets.UTF_8))
         assertNull(link.receive())
+        closes(p)
+    }
+
+    /** Closing goes off the caller's thread: it is closed soon after. */
+    private fun closes(p: FakeProcess) {
+        val until = System.currentTimeMillis() + 5_000
+        while (!p.closed && System.currentTimeMillis() < until) Thread.sleep(10)
         assertTrue(p.closed)
     }
 
@@ -127,7 +136,13 @@ class ShepherdrRelayTest {
     fun noRelayWhereNothingRunsIt() = runBlocking {
         val p = FakeProcess("")
         assertFailsWith<LiveRelay.NoRelay> { LiveRelay.open(p) }
-        assertTrue(p.closed)
+        closes(p)
+        // Cancelled while it waits for the hello: closed, and the wait ends at once.
+        val waiting = FakeProcess(BlockingInput())
+        val job = launch { LiveRelay.open(waiting) }
+        kotlinx.coroutines.delay(100)
+        withTimeout(2_000) { job.cancelAndJoin() }
+        closes(waiting)
         // A relay that ends before Shepherdr sent anything: Shepherdr isn't there.
         val gone = LiveRelay.open(FakeProcess("${LiveRelay.HELLO}\n"))
         assertFailsWith<IOException> { gone.receive() }
@@ -189,18 +204,28 @@ class ShepherdrRelayTest {
     private fun processDuplex(p: Process): Duplex = object : Duplex {
         override val input: InputStream = p.inputStream
         override val output: OutputStream = p.outputStream
+        // As the phone going: its stdin ends, nothing kills it.
         override fun close() {
             runCatching { p.outputStream.close() }
-            p.destroy()
         }
     }
 
-    private class FakeProcess(out: String) : Duplex {
+    private class FakeProcess(override val input: InputStream) : Duplex {
+        constructor(out: String) : this(out.byteInputStream())
         val written = ByteArrayOutputStream()
-        var closed = false
-        override val input: InputStream = out.byteInputStream()
+        @Volatile var closed = false
         override val output: OutputStream = written
-        override fun close() { closed = true }
+        override fun close() {
+            closed = true
+            (input as? BlockingInput)?.close()
+        }
+    }
+
+    /** An output that never comes, until closed. */
+    private class BlockingInput : InputStream() {
+        private val gate = java.util.concurrent.CountDownLatch(1)
+        override fun read(): Int { gate.await(); return -1 }
+        override fun close() = gate.countDown()
     }
 }
 

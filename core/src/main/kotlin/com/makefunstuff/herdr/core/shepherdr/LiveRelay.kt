@@ -2,13 +2,13 @@ package com.makefunstuff.herdr.core.shepherdr
 
 import com.makefunstuff.herdr.core.ssh.Duplex
 import com.makefunstuff.herdr.core.ssh.HerdrCommands.quote
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.BufferedReader
 import java.io.IOException
 import java.io.InputStreamReader
+import kotlin.concurrent.thread
 
 /** A live link's text messages both ways: Shepherdr's own WebSocket ([WebSocketLink]), or [LiveRelay]'s. */
 interface LiveSocket : java.io.Closeable {
@@ -56,7 +56,7 @@ class RelayLink internal constructor(private val process: Duplex, private val re
     override fun close() {
         if (closed) return
         closed = true
-        runCatching { process.close() }
+        LiveRelay.closeAside(process)
     }
 }
 
@@ -68,26 +68,42 @@ object LiveRelay {
      * Opens a relay on [process] (started from [command]): its first line is [HELLO] within [timeoutMs], else
      * nothing on the machine can run it (no `bun`, a `node` without WebSocket) and this throws [NoRelay].
      */
-    suspend fun open(process: Duplex, timeoutMs: Long = 15_000): RelayLink = coroutineScope {
+    suspend fun open(process: Duplex, timeoutMs: Long = 15_000): RelayLink {
         val reader = BufferedReader(InputStreamReader(process.input, Charsets.UTF_8), 64 * 1024)
-        // A login shell may print a greeting first: anything before the hello is skipped.
-        val hello = async(Dispatchers.IO) {
-            runCatching {
-                var lines = 0
-                while (lines++ < 200) {
-                    val line = reader.readLine() ?: return@runCatching false
-                    if (line.trim() == HELLO) return@runCatching true
-                }
-                false
-            }.getOrDefault(false)
+        // A login shell may print a greeting first: anything before the hello is skipped. Read on a thread of its own,
+        // which closing the process ends: a wait cancelled or timed out never waits on it.
+        val hello = CompletableDeferred<Boolean>()
+        thread(isDaemon = true, name = "shepherdr-relay-hello") {
+            hello.complete(
+                runCatching {
+                    var lines = 0
+                    while (lines++ < 200) {
+                        val line = reader.readLine() ?: return@runCatching false
+                        if (line.trim() == HELLO) return@runCatching true
+                    }
+                    false
+                }.getOrDefault(false),
+            )
         }
-        val ok = withTimeoutOrNull(timeoutMs) { hello.await() }
+        val ok = try {
+            withTimeoutOrNull(timeoutMs) { hello.await() }
+        } catch (e: CancellationException) {
+            closeAside(process)
+            throw e
+        }
         if (ok != true) {
-            runCatching { process.close() }
-            hello.await()
+            closeAside(process)
             throw NoRelay()
         }
-        RelayLink(process, reader)
+        return RelayLink(process, reader)
+    }
+
+    /**
+     * Closes an SSH command off the caller's thread: closing its channel writes to the network, which Android refuses
+     * on the main thread (and a stalled link would hold it). Unclosed, the relay and its SSH session would stay.
+     */
+    internal fun closeAside(process: Duplex) {
+        thread(isDaemon = true, name = "shepherdr-relay-close") { runCatching { process.close() } }
     }
 
     /** Nothing on the machine runs the relay: the app takes Shepherdr's own live link instead. */
@@ -118,8 +134,8 @@ object LiveRelay {
             "if(closing&&!busy&&!pending.size)process.exit(0)};" +
             "out.write('$HELLO\\n');" +
             "const ws=new WebSocket($u);" +
-            "ws.onmessage=e=>{const s=String(e.data);let m;try{m=JSON.parse(s)}catch{return}" +
-            "const t=m&&m.type;if(t==='snapshot'&&!$snapshots)return;" +
+            "ws.onmessage=e=>{const s=String(e.data);if(!$snapshots&&s.startsWith('{\"type\":\"snapshot\"'))return;" +
+            "let m;try{m=JSON.parse(s)}catch{return}const t=m&&m.type;if(t==='snapshot'&&!$snapshots)return;" +
             "const k=t==='chat'&&m.chat?'chat:'+m.chat.key:t==='terminal'?'terminal:'+m.chat:(t==='snapshot'||t==='build'||t==='update')?t:'once:'+(n++);" +
             "pending.delete(k);pending.set(k,s);pump()};" +
             "ws.onopen=()=>{for(const l of early.splice(0))ws.send(l)};" +

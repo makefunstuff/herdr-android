@@ -91,8 +91,7 @@ class ForwardTransport(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                // The SSH server runs no commands for it: the same on this connection from now on.
-                relays = false
+                // No command channel this time (the server's session limit, a dropped link): Shepherdr's own link, this once.
             }
         }
         return webSocket("/api/ws")
