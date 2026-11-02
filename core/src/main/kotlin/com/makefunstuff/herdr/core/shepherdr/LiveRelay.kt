@@ -94,7 +94,7 @@ object LiveRelay {
         if (ok != true) {
             closeAside(process)
             // No hello in time is a slow start this once (a login shell, a slow link), not a machine without a relay.
-            throw if (ok == null) IOException("The relay on the machine didn't start in time") else NoRelay()
+            throw if (ok == null) Slow() else NoRelay()
         }
         return RelayLink(process, reader)
     }
@@ -106,6 +106,9 @@ object LiveRelay {
     internal fun closeAside(process: Duplex) {
         thread(isDaemon = true, name = "shepherdr-relay-close") { runCatching { process.close() } }
     }
+
+    /** The relay didn't say hello in time: a slow start, this once. */
+    class Slow : IOException("The relay on the machine didn't start in time")
 
     /** Nothing on the machine runs the relay: the app takes Shepherdr's own live link instead. */
     class NoRelay : IOException("Nothing on the machine can relay Shepherdr's live link")

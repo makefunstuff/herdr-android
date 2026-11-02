@@ -50,6 +50,7 @@ class ForwardTransport(
 ) : ShepherdrTransport {
     /** False once the machine couldn't run the relay: it won't later on this connection. */
     @Volatile private var relays = relay != null
+    @Volatile private var late = 0
 
     override val canStream: Boolean get() = true
 
@@ -88,6 +89,9 @@ class ForwardTransport(
                 return LiveRelay.open(start(LiveRelay.command(snapshots)))
             } catch (e: LiveRelay.NoRelay) {
                 relays = false
+            } catch (e: LiveRelay.Slow) {
+                // Late once can be a slow link; late again, a login shell that hangs: not waited for any more.
+                if (++late >= 2) relays = false
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {

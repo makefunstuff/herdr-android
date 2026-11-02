@@ -229,8 +229,8 @@ class ShepherdrClient(private val transport: ShepherdrTransport) {
         return liveChat(key, timeoutMs)
     }
 
-    // Through the relay where there is one too: on Shepherdr's own link the chat comes only after its whole snapshot.
-    private suspend fun liveChat(key: String, timeoutMs: Long): V2Chat = live(snapshots = false).use { link ->
+    // One read on Shepherdr's own link: a relay would be an SSH session for each, and screens read several at once.
+    private suspend fun liveChat(key: String, timeoutMs: Long): V2Chat = V2Live(transport.webSocket("/api/ws"), snapshots = false).use { link ->
         link.watch(listOf(key))
         withTimeoutOrNull(timeoutMs) {
             var chat: V2Chat? = null
