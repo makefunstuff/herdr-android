@@ -111,6 +111,7 @@ import com.makefunstuff.herdr.ui.theme.Mono
 import com.makefunstuff.herdr.ui.design.hairline
 import com.makefunstuff.herdr.ui.design.HerdrShapes
 import androidx.compose.foundation.background
+import androidx.compose.foundation.verticalScroll
 import com.makefunstuff.herdr.ui.design.QuietCard
 import com.makefunstuff.herdr.ui.design.RowDivider
 import com.makefunstuff.herdr.ui.design.SecondaryButton
@@ -759,11 +760,12 @@ private fun QuestionCard(card: WorkCard, answer: String?, busy: Boolean, onAnswe
                     style = MaterialTheme.typography.bodyMedium, color = c.muted, modifier = Modifier.padding(top = Space.xs),
                 )
                 q.screen?.takeIf { it.isNotBlank() }?.let { command ->
-                    // Its command, and what goes on its stdin: up to 8000 characters, so only the start here.
+                    // Its command, and what goes on its stdin (up to 8000 characters): all of it, in a box that scrolls.
                     Text(
-                        if (command.length > 600) command.take(600).trimEnd() + "…" else command,
+                        command,
                         style = MaterialTheme.typography.bodySmall, fontFamily = Mono, color = c.text,
-                        modifier = Modifier.padding(top = Space.s).fillMaxWidth().background(c.panel, HerdrShapes.Field).padding(Space.s),
+                        modifier = Modifier.padding(top = Space.s).fillMaxWidth().heightIn(max = 240.dp).background(c.panel, HerdrShapes.Field)
+                            .verticalScroll(rememberScrollState()).padding(Space.s),
                     )
                 }
             }

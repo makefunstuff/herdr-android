@@ -197,7 +197,13 @@ class V2WorkBoard(private val connect: suspend () -> ShepherdrClient, private va
                 }
                 // A chat's screen needs no snapshots: they never cross the phone's connection when the relay runs.
                 val link = client.live(snapshots = chats.isEmpty())
-                if (chats.isNotEmpty()) link.watch(chats)
+                try {
+                    if (chats.isNotEmpty()) link.watch(chats)
+                } catch (e: Throwable) {
+                    // Only events() closes it from here on: cancelled (or failed) before, it would stay open.
+                    link.close()
+                    throw e
+                }
                 link.events().collect { e ->
                     pick(e)?.let {
                         worked = true
