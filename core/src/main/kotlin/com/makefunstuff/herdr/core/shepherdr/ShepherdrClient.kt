@@ -229,8 +229,8 @@ class ShepherdrClient(private val transport: ShepherdrTransport) {
         return liveChat(key, timeoutMs)
     }
 
-    // One read: Shepherdr's own link, as a relay's command and start would cost more than the one snapshot it carries.
-    private suspend fun liveChat(key: String, timeoutMs: Long): V2Chat = V2Live(transport.webSocket("/api/ws"), snapshots = false).use { link ->
+    // Through the relay where there is one too: on Shepherdr's own link the chat comes only after its whole snapshot.
+    private suspend fun liveChat(key: String, timeoutMs: Long): V2Chat = live(snapshots = false).use { link ->
         link.watch(listOf(key))
         withTimeoutOrNull(timeoutMs) {
             var chat: V2Chat? = null

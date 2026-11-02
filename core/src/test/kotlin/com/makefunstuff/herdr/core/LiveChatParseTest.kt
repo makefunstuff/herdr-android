@@ -122,7 +122,6 @@ class LiveChatParseTest {
                     }
                 }.onFailure { e ->
                     synchronized(failures) { failures += "$type: ${e::class.simpleName}: ${e.message?.take(300)}" }
-                    java.io.File(System.getProperty("java.io.tmpdir"), "herdr-probe-failed-${failures.size}.json").writeText(text)
                 }
             }
         }.apply { isDaemon = true; start() }

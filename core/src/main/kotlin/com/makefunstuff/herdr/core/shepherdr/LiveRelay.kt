@@ -93,7 +93,8 @@ object LiveRelay {
         }
         if (ok != true) {
             closeAside(process)
-            throw NoRelay()
+            // No hello in time is a slow start this once (a login shell, a slow link), not a machine without a relay.
+            throw if (ok == null) IOException("The relay on the machine didn't start in time") else NoRelay()
         }
         return RelayLink(process, reader)
     }

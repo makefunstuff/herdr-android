@@ -542,6 +542,8 @@ fun scenes(): List<Scene> = listOf(
     // Shepherdr 2.1: a chat the voice computer sent to, its banner over the message box and a safeguard card to tap;
     // a message the app can't read yet, a quiet line among replies that still show.
     Scene("coordinator-v2-voice-mark", route = Routes.coordinator(DEVBOX), setup = { voiceMarked() }),
+    // Allow once tapped: a yes to its command waits for Send, never one stray tap.
+    Scene("coordinator-v2-safeguard-send", route = Routes.coordinator(DEVBOX), setup = { voiceMarked() }, actions = { tapExact("Allow once") }),
     Scene("coordinator-v2-unknown", route = Routes.coordinator(DEVBOX), setup = { unknownMessage() }),
     Scene("coordinator-v2-working", route = Routes.coordinator(DEVBOX, DemoV2.API), setup = {
         shepherdr()

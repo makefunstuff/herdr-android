@@ -143,6 +143,11 @@ class ShepherdrRelayTest {
         kotlinx.coroutines.delay(100)
         withTimeout(2_000) { job.cancelAndJoin() }
         closes(waiting)
+        // No hello in time: a slow start, tried again next time, not "no relay here".
+        val slow = FakeProcess(BlockingInput())
+        val e = assertFailsWith<IOException> { LiveRelay.open(slow, timeoutMs = 200) }
+        assertTrue(e !is LiveRelay.NoRelay)
+        closes(slow)
         // A relay that ends before Shepherdr sent anything: Shepherdr isn't there.
         val gone = LiveRelay.open(FakeProcess("${LiveRelay.HELLO}\n"))
         assertFailsWith<IOException> { gone.receive() }

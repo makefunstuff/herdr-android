@@ -738,6 +738,8 @@ private fun QuestionCard(card: WorkCard, answer: String?, busy: Boolean, onAnswe
     var writing by remember(q.id) { mutableStateOf<Int?>(if (q.kind == "Reply") -2 else null) }
     var words by remember(q.id) { mutableStateOf("") }
     var picks by remember(q.id) { mutableStateOf<Set<Int>>(emptySet()) }
+    /** A safeguard card's choice picked, waiting for Send: a yes to its command is never one stray tap. */
+    var confirming by remember(q.id) { mutableStateOf<Int?>(null) }
     QuietCard(edge = if (open) c.lineStrong else c.line) {
         Column(Modifier.padding(start = Space.l, end = Space.l, top = Space.m, bottom = if (open) Space.xs else Space.m)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -808,12 +810,23 @@ private fun QuestionCard(card: WorkCard, answer: String?, busy: Boolean, onAnswe
             }
             return@QuietCard
         }
+        confirming?.let { i ->
+            Column(Modifier.padding(horizontal = Space.l, vertical = Space.s), verticalArrangement = Arrangement.spacedBy(Space.s)) {
+                Text("Send “${q.choices.getOrNull(i)?.label.orEmpty()}”?", style = MaterialTheme.typography.bodyLarge, color = c.strong)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(Space.s)) {
+                    PrimaryButton("Send") { onAnswer(CardAnswer(card, i)) }
+                    SecondaryButton("Back") { confirming = null }
+                }
+            }
+            return@QuietCard
+        }
         q.choices.forEachIndexed { i, choice ->
             RowDivider(0.dp)
             val picked = i in picks
             ChoiceRow(choice.label, choice.description, if (q.multi) picked else null) {
                 when {
                     q.multi -> picks = if (picked) picks - i else picks + i
+                    q.safeguard -> confirming = i
                     q.noteRequiredFor == i -> writing = i
                     else -> onAnswer(CardAnswer(card, i))
                 }
