@@ -26,14 +26,15 @@ object BoardDetection {
     }
 
     /**
-     * Reaches Shepherdr on [conn]'s machine: through an SSH port forward to its 127.0.0.1:[PORT], or,
+     * Reaches Shepherdr on [conn]'s machine: through an SSH port forward to its 127.0.0.1:[PORT] (its live link
+     * relayed by a command there, [LiveRelay]), or,
      * where the SSH server refuses to forward, `curl` there. The transport that answered with its
      * version, which the caller keeps (one per machine) and closes with the connection; null where
      * no Shepherdr 2 answers.
      */
     suspend fun open(conn: MachineConnection): Pair<ShepherdrTransport, V2Version>? {
         // Any free port on the phone: the forward is only ever reached by the app itself.
-        val forward = runCatching { ForwardTransport.over(PortForward("127.0.0.1", PORT, preferred = 0) { h, p -> conn.openTcp(h, p) }) }.getOrNull()
+        val forward = runCatching { ForwardTransport.over(PortForward("127.0.0.1", PORT, preferred = 0) { h, p -> conn.openTcp(h, p) }, relay = { conn.start(it) }) }.getOrNull()
         if (forward != null) {
             val version = try {
                 probe(forward)

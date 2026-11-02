@@ -208,6 +208,12 @@ interface WorkBoard {
         throw IOException("This board takes no files")
 
     /**
+     * Clears [space]'s coordinator chat's voice mark ([com.makefunstuff.herdr.core.shepherdr.V2Chat.voiceMark]): its
+     * commands no longer wait for a safeguard card, and those still open close. Shepherdr 2.1 only.
+     */
+    suspend fun clearVoiceMark(space: String): Unit = throw IOException("This board keeps no voice marks")
+
+    /**
      * [task]'s own chat, its agent's ([WorkTask.chat], v2), now and on every change: in a [CoordinatorThread]'s
      * shape, its [CoordinatorThread.space] the task's space. v1 has none.
      */

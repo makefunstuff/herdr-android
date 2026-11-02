@@ -10,10 +10,13 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
@@ -92,6 +95,12 @@ object V2Actions {
         put("type", "close")
         put("chat", task)
         if (force) put("force", true)
+    }
+
+    /** Clears coordinator chat [chat]'s voice mark ([V2Chat.voiceMark]) and closes its safeguard cards (Shepherdr 2.1). */
+    fun voiceClear(chat: String): JsonObject = buildJsonObject {
+        put("type", "voice-clear")
+        put("chat", chat)
     }
 
     /** The body of `POST /api/cli`: the `shepherdr` command's words. */
@@ -205,8 +214,11 @@ class ShepherdrClient(private val transport: ShepherdrTransport) {
         return ShepherdrJson.decodeFromJsonElement(V2CliResult.serializer(), ok(r))
     }
 
-    /** Opens the live link: a snapshot comes at once, then each change. */
-    suspend fun live(): V2Live = V2Live(transport.webSocket("/api/ws"))
+    /**
+     * Opens the live link: a snapshot comes at once, then each change. Without [snapshots] (a chat's screen) the
+     * link may leave them out, and those that come are not read ([V2Event.Other]).
+     */
+    suspend fun live(snapshots: Boolean = true): V2Live = V2Live(transport.live(snapshots), snapshots)
 
     /** One chat as it is now: through the live link, the only way chats come (or the transport's own way without one). */
     suspend fun chat(key: String, timeoutMs: Long = 15_000): V2Chat {
@@ -217,7 +229,7 @@ class ShepherdrClient(private val transport: ShepherdrTransport) {
         return liveChat(key, timeoutMs)
     }
 
-    private suspend fun liveChat(key: String, timeoutMs: Long): V2Chat = live().use { link ->
+    private suspend fun liveChat(key: String, timeoutMs: Long): V2Chat = live(snapshots = false).use { link ->
         link.watch(listOf(key))
         withTimeoutOrNull(timeoutMs) {
             var chat: V2Chat? = null
@@ -242,7 +254,7 @@ class ShepherdrClient(private val transport: ShepherdrTransport) {
 }
 
 /** The live link (`/api/ws`): snapshots and the watched chats, as they change. */
-class V2Live internal constructor(private val socket: WebSocketLink) : Closeable {
+class V2Live internal constructor(private val socket: LiveSocket, private val snapshots: Boolean = true) : Closeable {
     /** The chats to be sent ([V2Event.Chat]) now and on every change; a newly named one comes at once. */
     suspend fun watch(chats: List<String>) = withContext(Dispatchers.IO) { socket.send(V2Actions.watch(chats).toString()) }
 
@@ -259,7 +271,7 @@ class V2Live internal constructor(private val socket: WebSocketLink) : Closeable
             socket.close()
             throw e
         }
-        text?.let(V2Events::parse)
+        text?.let { V2Events.parse(it, snapshots) }
     }
 
     /** Every event until the link closes; collecting stops when it does, and cancelling closes it. */
@@ -274,17 +286,74 @@ class V2Live internal constructor(private val socket: WebSocketLink) : Closeable
     override fun close() = socket.close()
 }
 
+/**
+ * The live link's events, read as leniently as Shepherdr's newer shapes need: an event never fails as a whole for one
+ * part the app can't read. A chat message that doesn't read keeps its words where it has them, else shows as one quiet
+ * line ([V2Message.unreadable]); a snapshot's space, task or artifact that doesn't read is left out; an event of a type
+ * the app doesn't know, or not JSON at all, is [V2Event.Other].
+ */
 object V2Events {
-    fun parse(text: String): V2Event {
-        val o = ShepherdrJson.parseToJsonElement(text).jsonObject
-        return when (val type = (o["type"] as? JsonPrimitive)?.content.orEmpty()) {
-            "snapshot" -> V2Event.Snapshot(ShepherdrJson.decodeFromJsonElement(V2Snapshot.serializer(), o["snapshot"]!!))
-            "chat" -> V2Event.Chat(ShepherdrJson.decodeFromJsonElement(V2Chat.serializer(), o["chat"]!!))
+    fun parse(text: String, snapshots: Boolean = true): V2Event {
+        // A chat's screen has no use for a snapshot, most of a megabyte: not even read.
+        if (!snapshots && text.startsWith(SNAPSHOT)) return V2Event.Other("snapshot", JsonNull)
+        val o = runCatching { ShepherdrJson.parseToJsonElement(text) as? JsonObject }.getOrNull() ?: return V2Event.Other("", JsonNull)
+        val type = (o["type"] as? JsonPrimitive)?.contentOrNull.orEmpty()
+        return when {
+            type == "snapshot" && o["snapshot"] is JsonObject -> V2Event.Snapshot(snapshot(o["snapshot"] as JsonObject))
+            type == "chat" && o["chat"] is JsonObject -> chat(o["chat"] as JsonObject)?.let { V2Event.Chat(it) } ?: V2Event.Other(type, o)
             else -> V2Event.Other(type, o)
         }
+    }
+
+    /** A chat, each message read on its own where the whole doesn't read; null without even its key. */
+    fun chat(o: JsonObject): V2Chat? {
+        runCatching { return ShepherdrJson.decodeFromJsonElement(V2Chat.serializer(), o) }
+        val key = (o["key"] as? JsonPrimitive)?.contentOrNull ?: return null
+        val rest = runCatching { ShepherdrJson.decodeFromJsonElement(V2Chat.serializer(), JsonObject(o - "messages")) }.getOrElse { V2Chat(key) }
+        val messages = (o["messages"] as? JsonArray).orEmpty().mapIndexedNotNull { i, m -> message(m, "$key#$i") }
+        return rest.copy(messages = messages)
+    }
+
+    /** A message, or its id, who sent it, when, and its words where only those read; null for one that isn't an object. */
+    fun message(e: JsonElement, fallbackId: String): V2Message? {
+        runCatching { return ShepherdrJson.decodeFromJsonElement(V2Message.serializer(), e) }
+        val o = e as? JsonObject ?: return null
+        fun str(k: String) = (o[k] as? JsonPrimitive)?.takeIf { it.isString }?.content
+        val text = str("text")?.takeIf { it.isNotBlank() }
+        return V2Message(
+            id = str("id") ?: fallbackId,
+            who = str("who") ?: "agent",
+            text = text,
+            at = (o["at"] as? JsonPrimitive)?.doubleOrNull,
+            cid = str("cid"),
+            unreadable = text == null,
+        )
+    }
+
+    /** A snapshot, its lists read item by item where the whole doesn't read. */
+    fun snapshot(o: JsonObject): V2Snapshot {
+        runCatching { return ShepherdrJson.decodeFromJsonElement(V2Snapshot.serializer(), o) }
+        val lists = listOf("places", "machines", "tasks", "artifacts", "asks", "last", "read")
+        val base = runCatching { ShepherdrJson.decodeFromJsonElement(V2Snapshot.serializer(), JsonObject(o - lists.toSet())) }.getOrElse { V2Snapshot() }
+        fun <T> each(k: String, s: kotlinx.serialization.KSerializer<T>): List<T>? =
+            (o[k] as? JsonArray)?.mapNotNull { runCatching { ShepherdrJson.decodeFromJsonElement(s, it) }.getOrNull() }
+        fun <T> map(k: String, f: (JsonPrimitive) -> T?): Map<String, T> =
+            (o[k] as? JsonObject).orEmpty().mapNotNull { (key, v) -> (v as? JsonPrimitive)?.let(f)?.let { key to it } }.toMap()
+        return base.copy(
+            places = each("places", V2Place.serializer()).orEmpty(),
+            machines = each("machines", V2Machine.serializer()).orEmpty(),
+            tasks = each("tasks", V2Task.serializer()).orEmpty(),
+            artifacts = each("artifacts", V2Artifact.serializer()),
+            asks = map("asks") { it.contentOrNull },
+            last = map("last") { it.doubleOrNull },
+            read = map("read") { it.doubleOrNull },
+        )
     }
 
     /** The events in a captured list of them (a JSON array), for tests and the previews. */
     fun parseAll(json: String): List<V2Event> =
         (ShepherdrJson.parseToJsonElement(json) as JsonArray).map { parse(it.toString()) }
+
+    /** How Shepherdr's snapshot events start (`JSON.stringify` keeps its `type` first). */
+    private const val SNAPSHOT = """{"type":"snapshot""""
 }

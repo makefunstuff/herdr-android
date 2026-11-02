@@ -14,6 +14,7 @@ import com.makefunstuff.herdr.ui.code.CheckoutTab
 import com.makefunstuff.herdr.ui.code.CodeSpot
 import com.makefunstuff.herdr.ui.code.DiffSource
 import com.makefunstuff.herdr.ui.share.Ask
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -88,6 +89,39 @@ private fun SceneData.longWebsiteChat() {
 }
 
 private const val WEBSITE_CHAT = "p:devbox:website"
+
+/**
+ * Shepherdr 2.1's voice mark on the home coordinator's chat: the voice computer sent to it, and the command it then
+ * tried waits on a safeguard card.
+ */
+private fun SceneData.voiceMarked() {
+    shepherdr()
+    val v2 = host(DEVBOX).shepherdr!!
+    val c = v2.chats.getValue(DemoV2.HOME)
+    val more = Json.parseToJsonElement(
+        """[
+          {"id":"h4","who":"you","at":4,"text":"Close AND-12, it's done. (by voice)"},
+          {"id":"h5","who":"agent","at":5,"text":"AND-12 waits on your yes to close: this chat was sent to by voice."},
+          {"id":"sg1","who":"agent","at":6,"question":{"id":"sg1","title":"Voice-touched chat: run “task close AND-12”?","kind":"Safeguard",
+            "choices":[{"label":"Allow once"},{"label":"Deny"}],"to":"${DemoV2.HOME}","noNote":true,"screen":"shepherdr task close AND-12"}}
+        ]""",
+    ).jsonArray
+    v2.chats = v2.chats + (DemoV2.HOME to JsonObject(c + mapOf("voiceMark" to JsonPrimitive(Demo.NOW), "messages" to JsonArray(c.getValue("messages").jsonArray + more))))
+}
+
+/** A message of a kind newer than the app among the replies, and one whose parts don't read: the rest still shows. */
+private fun SceneData.unknownMessage() {
+    shepherdr()
+    val v2 = host(DEVBOX).shepherdr!!
+    val c = v2.chats.getValue(DemoV2.HOME)
+    val more = Json.parseToJsonElement(
+        """[
+          {"id":"h4","who":"agent","at":4,"poll":{"question":"Which night for the NAS check?","options":["Tue","Thu"]}},
+          {"id":"h5","who":"agent","at":5,"text":"Done: the NAS check now runs on Thursdays.","reactions":"👍"}
+        ]""",
+    ).jsonArray
+    v2.chats = v2.chats + (DemoV2.HOME to JsonObject(c + ("messages" to JsonArray(c.getValue("messages").jsonArray + more))))
+}
 
 /** A new message in a space's coordinator chat on Shepherdr 2. */
 private fun FakeMachine.v2Says(chat: String, id: String, text: String) {
@@ -505,6 +539,10 @@ fun scenes(): List<Scene> = listOf(
     Scene("coordinator-v2-chips", route = Routes.coordinator(DEVBOX, DemoV2.APP), setup = { host(DEVBOX).shepherdr = FakeShepherdr() }),
     Scene("coordinator-v2-agent", route = Routes.coordinator(DEVBOX, DemoV2.APP), setup = { host(DEVBOX).shepherdr = FakeShepherdr() }, actions = { tapText("claude") }),
     Scene("coordinator-v2-home", route = Routes.coordinator(DEVBOX), setup = { shepherdr() }),
+    // Shepherdr 2.1: a chat the voice computer sent to, its banner over the message box and a safeguard card to tap;
+    // a message the app can't read yet, a quiet line among replies that still show.
+    Scene("coordinator-v2-voice-mark", route = Routes.coordinator(DEVBOX), setup = { voiceMarked() }),
+    Scene("coordinator-v2-unknown", route = Routes.coordinator(DEVBOX), setup = { unknownMessage() }),
     Scene("coordinator-v2-working", route = Routes.coordinator(DEVBOX, DemoV2.API), setup = {
         shepherdr()
         drafts[com.makefunstuff.herdr.data.DraftStore.coordinator(DEVBOX, DemoV2.API)] = "Also check the /jobs/export endpoint"

@@ -107,6 +107,10 @@ import com.makefunstuff.herdr.ui.design.NewestButton
 import com.makefunstuff.herdr.ui.design.rememberStickToBottom
 import com.makefunstuff.herdr.ui.design.PrimaryButton
 import com.makefunstuff.herdr.ui.design.QuietButton
+import com.makefunstuff.herdr.ui.design.hairline
+import com.makefunstuff.herdr.ui.design.HerdrShapes
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.foundation.background
 import com.makefunstuff.herdr.ui.design.QuietCard
 import com.makefunstuff.herdr.ui.design.RowDivider
 import com.makefunstuff.herdr.ui.design.SecondaryButton
@@ -209,6 +213,7 @@ internal fun SpaceCoordinator(nav: NavController, machineId: String, session: Ho
     /** The question cards an answer is on its way to, by question id. */
     var answering by remember(space?.id) { mutableStateOf<Set<String>>(emptySet()) }
     var chatProblem by remember(space?.id) { mutableStateOf<String?>(null) }
+    var clearingMark by remember(space?.id) { mutableStateOf(false) }
     LaunchedEffect(board, space?.id) {
         val b = board ?: return@LaunchedEffect
         val id = space?.id ?: return@LaunchedEffect
@@ -270,6 +275,16 @@ internal fun SpaceCoordinator(nav: NavController, machineId: String, session: Ho
         }
     }
 
+    fun clearVoiceMark() {
+        val b = board ?: return
+        val id = space?.id ?: return
+        clearingMark = true
+        scope.launch {
+            runCatching { b.clearVoiceMark(id) }.onFailure { context.toast(it.message ?: "Couldn't clear the voice mark") }
+            clearingMark = false
+        }
+    }
+
     val waits = t?.cards.orEmpty()
     // Under the newest message: only when it says something, else it would be the newest item, and a reader just over it "up the chat".
     val foot = t?.working == true || (chatProblem ?: problem) != null || shared.waitNote != null
@@ -316,6 +331,10 @@ internal fun SpaceCoordinator(nav: NavController, machineId: String, session: Ho
                 textScale = sizes.chat,
                 composer = {
                     Column {
+                        // Shepherdr 2.1: the voice computer sent to this chat. Pinned over the message box until cleared.
+                        if (t?.v2?.voiceMark != null && !typing) {
+                            VoiceMark(clearingMark, state.online && board != null, Modifier.padding(horizontal = Space.screen).padding(bottom = Space.xs), ::clearVoiceMark)
+                        }
                         if (waits.isNotEmpty() && draft.isEmpty()) {
                             WaitsForYou(waits, Modifier.padding(horizontal = Space.screen).padding(bottom = Space.xs)) { card ->
                                 val at = items.indexOfFirst { it.holds(card) }
@@ -547,6 +566,33 @@ internal fun ChatItem(
             modifier = Modifier.fillMaxWidth().padding(horizontal = Space.xs), textAlign = androidx.compose.ui.text.style.TextAlign.End,
         )
         is SpaceChatItem.Steps -> StepsLine(item)
+        is SpaceChatItem.Unreadable -> Text(
+            "Something this app can't show yet. Open the terminal or Shepherdr to see it.",
+            style = MaterialTheme.typography.labelMedium, color = c.muted,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = Space.xs),
+        )
+    }
+}
+
+/**
+ * Shepherdr 2.1's voice mark: the voice computer sent to this coordinator chat, so its commands that close, delete,
+ * remove, archive or merge each wait for your yes on a safeguard card, until you clear the mark here.
+ */
+@Composable
+private fun VoiceMark(clearing: Boolean, enabled: Boolean, modifier: Modifier, onClear: () -> Unit) {
+    val c = Herdr.colors
+    Surface(color = c.card, shape = HerdrShapes.Field, modifier = modifier.fillMaxWidth().hairline(HerdrShapes.Field, c.line)) {
+        Row(Modifier.padding(start = Space.m, top = Space.xs, bottom = Space.xs), verticalAlignment = Alignment.CenterVertically) {
+            Icon(HerdrIcons.Mic, null, tint = c.muted, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(Space.m))
+            Text(
+                "Sent to by voice: closing, deleting or merging here waits for your yes on a safeguard card.",
+                style = MaterialTheme.typography.bodySmall, color = c.text, modifier = Modifier.weight(1f).padding(vertical = Space.xs),
+            )
+            QuietButton(onClick = onClear, enabled = enabled && !clearing, color = c.accent) {
+                Text(if (clearing) "Clearing…" else "Clear voice mark")
+            }
+        }
     }
 }
 
@@ -697,6 +743,7 @@ private fun QuestionCard(card: WorkCard, answer: String?, busy: Boolean, onAnswe
                 Text(
                     q.asks ?: when {
                         q.kind == "Plan" -> "Plan"
+                        q.safeguard -> "Safeguard"
                         card.task.isNotEmpty() -> "${card.task} asks"
                         else -> "Question"
                     },
@@ -706,6 +753,18 @@ private fun QuestionCard(card: WorkCard, answer: String?, busy: Boolean, onAnswe
             }
             Spacer(Modifier.size(Space.xs))
             MarkdownText(q.title, style = MaterialTheme.typography.titleMedium, color = c.strong)
+            if (q.safeguard) {
+                if (open) Text(
+                    "This chat was sent to by voice. Allow once runs only this command, once.",
+                    style = MaterialTheme.typography.bodyMedium, color = c.muted, modifier = Modifier.padding(top = Space.xs),
+                )
+                q.screen?.takeIf { it.isNotBlank() }?.let { command ->
+                    Text(
+                        command, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace, color = c.text,
+                        modifier = Modifier.padding(top = Space.s).fillMaxWidth().background(c.panel, HerdrShapes.Field).padding(Space.s),
+                    )
+                }
+            }
             q.steps?.takeIf { it.isNotEmpty() }?.let { steps ->
                 Column(Modifier.padding(top = Space.s), verticalArrangement = Arrangement.spacedBy(Space.xs)) {
                     steps.forEachIndexed { i, s ->

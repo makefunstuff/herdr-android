@@ -120,6 +120,10 @@ class V2WorkBoard(private val connect: suspend () -> ShepherdrClient, private va
 
     override suspend fun file(space: String, path: String): ByteArray = connect().file(chatOf(space), path)
 
+    override suspend fun clearVoiceMark(space: String) {
+        connect().act(V2Actions.voiceClear(chatOf(space)))
+    }
+
     /** Its agent's chat from the live link, as [coordinatorThreads] follows a space's. */
     override fun taskThreads(task: WorkTask, everyMs: Long): Flow<CoordinatorThread> {
         val key = agentChat(task)
@@ -191,7 +195,8 @@ class V2WorkBoard(private val connect: suspend () -> ShepherdrClient, private va
                     delay(everyMs)
                     continue
                 }
-                val link = client.live()
+                // A chat's screen needs no snapshots: they never cross the phone's connection when the relay runs.
+                val link = client.live(snapshots = chats.isEmpty())
                 if (chats.isNotEmpty()) link.watch(chats)
                 link.events().collect { e ->
                     pick(e)?.let {
@@ -202,7 +207,7 @@ class V2WorkBoard(private val connect: suspend () -> ShepherdrClient, private va
                 }
             } catch (e: CancellationException) {
                 throw e
-            } catch (e: IOException) {
+            } catch (e: Exception) {
                 if (!worked) throw e
             }
             delay(wait)

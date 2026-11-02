@@ -2,6 +2,7 @@ package com.makefunstuff.herdr.core.shepherdr
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.Transient
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -169,7 +170,7 @@ data class V2Choice(val label: String, val description: String? = null)
 data class V2Question(
     val id: String,
     val title: String = "",
-    /** `Form`, `Question` or `Plan`. */
+    /** `Form`, `Question`, `Plan` or (2.1) `Safeguard`; any other reads as a plain question. */
     val kind: String = "Question",
     val steps: List<String>? = null,
     val screen: String? = null,
@@ -195,6 +196,14 @@ data class V2Question(
 ) {
     /** Still waiting for an answer. */
     val open: Boolean get() = sent == null && said == null && via == null && closed == null
+
+    /** A voice-marked chat's command waiting for the human's yes, which only the human's own client gives. */
+    val safeguard: Boolean get() = kind == SAFEGUARD
+
+    companion object {
+        /** [kind] of a safeguard card: its command ([screen]) runs once on Allow once. */
+        const val SAFEGUARD = "Safeguard"
+    }
 }
 
 /** What a needs-you card in a space's chat asks, from its task's chat (`CardAsk`). */
@@ -308,8 +317,15 @@ data class V2Message(
     /** A turn's tool steps, kept raw: the app shows them as one line at most. */
     val activity: JsonObject? = null,
     val at: Double? = null,
+    /** Not Shepherdr's: a message in a shape this app can't read ([V2Events]), shown as one quiet line. */
+    @Transient val unreadable: Boolean = false,
 ) {
     val you: Boolean get() = who == "you"
+
+    /** Nothing in it the app knows how to show: a kind of message newer than the app, or one it couldn't read. */
+    val unknown: Boolean
+        get() = unreadable || text.isNullOrBlank() && question == null && card == null && artifact == null &&
+            file == null && answered.isNullOrBlank() && activity == null
 }
 
 @Serializable
@@ -323,6 +339,12 @@ data class V2Chat(
     val failed: List<V2Failed>? = null,
     val finished: Boolean = false,
     val cli: String = "",
+    /**
+     * Shepherdr 2.1: when the voice computer sent to this coordinator chat (ms). While it is marked, the coordinator's
+     * commands that close, delete, remove, archive or merge each wait for a safeguard card ([V2Question.SAFEGUARD]),
+     * until the human clears the mark ([V2Actions.voiceClear]).
+     */
+    val voiceMark: Double? = null,
 ) {
     /** The question cards still waiting, oldest first. */
     val openQuestions: List<V2Question> get() = messages.mapNotNull { m -> m.question?.takeIf { it.open } }
