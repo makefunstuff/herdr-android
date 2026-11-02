@@ -72,6 +72,9 @@ sealed interface SpaceChatItem {
      */
     data class Artifact(override val id: String, val artifact: String, val version: Int, val intro: String = "", val later: Boolean = false) : SpaceChatItem
 
+    /** A message in a shape this app can't read yet (a newer Shepherdr's): one quiet line in its place. */
+    data class Unreadable(override val id: String) : SpaceChatItem
+
     /** A thin "New session" line before the message after it. */
     data class NewSession(override val id: String) : SpaceChatItem
 
@@ -116,6 +119,10 @@ object SpaceChat {
         chat.messages.forEachIndexed { i, m -> m.artifact?.let { lastPost[it.id] = i } }
         for ((i, m) in chat.messages.withIndex()) {
             if (m.newSession) out += SpaceChatItem.NewSession("${m.id}#new")
+            if (m.unknown) {
+                out += SpaceChatItem.Unreadable(m.id)
+                continue
+            }
             val text = ShepherdrText.clean(m.text.orEmpty())
             val card = m.card
             val q = m.question

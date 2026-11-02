@@ -31,18 +31,27 @@ interface ShepherdrTransport : Closeable {
     /** Opens the live link at [path]; fails where [canStream] is false. */
     suspend fun webSocket(path: String): WebSocketLink
 
+    /** The live link (`/api/ws`) as best it can be had; [snapshots] false: one that needn't carry them (a chat's). */
+    suspend fun live(snapshots: Boolean): LiveSocket = webSocket("/api/ws")
+
     /** Where there is no live link ([canStream] false): chat [key] as a `chat` event's JSON, read some other way. */
     suspend fun readChat(key: String, timeoutMs: Long): String = throw IOException("No way to read a chat here")
 }
 
 /**
  * Through an SSH port forward (`ssh -L`) to the machine's 127.0.0.1:7787: each request is a fresh
- * loopback socket to the forward's port, the live link one more. Closing it closes the forward.
+ * loopback socket to the forward's port. The live link is [LiveRelay]'s, started with [relay] (an SSH command
+ * on the machine), and where nothing there can run it a socket to the forward too. Closing it closes the forward.
  */
 class ForwardTransport(
     private val connect: (timeoutMs: Int) -> Duplex,
     private val onClose: () -> Unit = {},
+    private val relay: (suspend (command: String) -> Duplex)? = null,
 ) : ShepherdrTransport {
+    /** False once the machine couldn't run the relay: it won't later on this connection. */
+    @Volatile private var relays = relay != null
+    @Volatile private var late = 0
+
     override val canStream: Boolean get() = true
 
     override suspend fun http(method: String, path: String, body: String?, timeoutMs: Int): HttpReply = coroutineScope {
@@ -73,11 +82,31 @@ class ForwardTransport(
         Wire.webSocket(connect(0), path)
     }
 
+    override suspend fun live(snapshots: Boolean): LiveSocket {
+        val start = relay
+        if (start != null && relays) {
+            try {
+                return LiveRelay.open(start(LiveRelay.command(snapshots)))
+            } catch (e: LiveRelay.NoRelay) {
+                relays = false
+            } catch (e: LiveRelay.Slow) {
+                // Late once can be a slow link; late again, a login shell that hangs: not waited for any more.
+                if (++late >= 2) relays = false
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // No command channel this time (the server's session limit, a dropped link): Shepherdr's own link, this once.
+            }
+        }
+        return webSocket("/api/ws")
+    }
+
     override fun close() = onClose()
 
     companion object {
         /** Over [forward], which this transport then owns. */
-        fun over(forward: PortForward): ForwardTransport = ForwardTransport({ timeoutMs -> socket(forward.localPort, timeoutMs) }, forward::close)
+        fun over(forward: PortForward, relay: (suspend (String) -> Duplex)? = null): ForwardTransport =
+            ForwardTransport({ timeoutMs -> socket(forward.localPort, timeoutMs) }, forward::close, relay)
 
         /** A loopback socket to [port]; [timeoutMs] bounds every read (0: none, for the live link). */
         fun socket(port: Int, timeoutMs: Int): Duplex {

@@ -366,7 +366,7 @@ fun WorkWaitingCard(
     val q = card?.question
     // A tap answers it only where the task screen would send that pick as it is.
     // A plan, or choices that explain themselves, are read on the task screen first.
-    val taps = q != null && !q.multi && card.replyTo.isEmpty() && q.choices.size in 1..3 && q.kind != "Plan" && q.steps.isNullOrEmpty()
+    val taps = q != null && !q.multi && card.replyTo.isEmpty() && q.choices.size in 1..3 && q.kind != "Plan" && !q.safeguard && q.steps.isNullOrEmpty()
     fun tap(i: Int) = if (q?.noteRequiredFor == i) onOpen() else onChoose(card!!, i)
     val actions = if (busy != null) emptyList() else when {
         work.status == WorkStatus.Ready -> listOf(CustomAccessibilityAction("Merge") { onMerge(); true })

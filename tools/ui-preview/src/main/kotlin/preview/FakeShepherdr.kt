@@ -107,6 +107,15 @@ class FakeShepherdr(
                 val sent = (if (words.isNotEmpty() || files.isEmpty()) listOf(JsonObject(m)) else emptyList()) + files
                 JsonObject(c + mapOf("messages" to JsonArray(messages(c) + sent), "working" to JsonPrimitive(true)))
             }
+            // The mark goes, and its safeguard cards close unanswered.
+            "voice-clear" -> change(chat) { c ->
+                val closed = messages(c).map { m ->
+                    val q = m.jsonObject["question"]?.jsonObject
+                    if (q == null || q["kind"]?.jsonPrimitive?.content != "Safeguard" || q.containsKey("sent")) m
+                    else JsonObject(m.jsonObject + ("question" to JsonObject(q + mapOf("sent" to JsonPrimitive(-1), "closed" to JsonPrimitive("Voice mark cleared"), "said" to JsonPrimitive("Voice mark cleared")))))
+                }
+                JsonObject(c - "voiceMark" + ("messages" to JsonArray(closed)))
+            }
             // The card shows the choice sent, here and on its copy in a space's chat.
             "answer" -> {
                 val q = a.getValue("question").jsonPrimitive.content

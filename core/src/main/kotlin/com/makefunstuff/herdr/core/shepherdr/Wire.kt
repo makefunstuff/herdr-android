@@ -165,11 +165,11 @@ class WebSocketLink internal constructor(
     private val output: OutputStream,
     private val stream: Closeable,
     private val random: SecureRandom = SecureRandom(),
-) : Closeable {
+) : LiveSocket {
     @Volatile var closed = false
         private set
 
-    fun receive(): String? {
+    override fun receive(): String? {
         val message = ByteArrayOutputStream()
         var kind = 0
         while (true) {
@@ -205,7 +205,7 @@ class WebSocketLink internal constructor(
         }
     }
 
-    fun send(text: String) = frame(0x1, text.toByteArray(Charsets.UTF_8))
+    override fun send(text: String) = frame(0x1, text.toByteArray(Charsets.UTF_8))
 
     @Synchronized
     private fun frame(opcode: Int, payload: ByteArray) {
