@@ -157,12 +157,12 @@ object Recipes {
         return (listOf(b.title ?: b.submit ?: "Form") + lines).joinToString("\n")
     }
 
-    /** A bar chart's bars: each one's series, label, value and height as 0–1 of the tallest. */
-    data class Bar(val series: Int, val label: String, val value: Double, val h: Double)
+    /** A bar chart's bars: each one's series, its place along the chart ([i]), label, value and height as 0–1 of the tallest. */
+    data class Bar(val series: Int, val i: Int, val label: String, val value: Double, val h: Double)
 
     fun bars(c: RecipeBlock.Chart): List<Bar> {
         val max = maxOf(1e-9, c.series.flatMap { it.values }.maxOfOrNull { maxOf(0.0, it) } ?: 0.0)
-        return c.series.flatMapIndexed { si, s -> s.values.mapIndexed { i, v -> Bar(si, c.labels.getOrNull(i).orEmpty(), v, maxOf(0.0, v) / max) } }
+        return c.series.flatMapIndexed { si, s -> s.values.mapIndexed { i, v -> Bar(si, i, c.labels.getOrNull(i).orEmpty(), v, maxOf(0.0, v) / max) } }
     }
 
     /** A pie's slices: each one's label, value and share of the whole. */

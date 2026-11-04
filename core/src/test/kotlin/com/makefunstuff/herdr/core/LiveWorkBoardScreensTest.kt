@@ -20,7 +20,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * What the Board and task screens read from a real Shepherdr 2, over SSH as the app reaches it: the
+ * What the Board and task screens read from a real Shepherdr 3, over SSH as the app reaches it: the
  * board from the live link, each task's details and the cards it waits on, and the rows the brief reads.
  * Read only: nothing is merged, closed, added or answered. Runs only with HERDR_LIVE_KEY and
  * HERDR_LIVE_SHEPHERDR (the machine, `user@host[:port]`) set.

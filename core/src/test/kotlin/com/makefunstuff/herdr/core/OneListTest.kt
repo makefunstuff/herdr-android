@@ -44,7 +44,7 @@ class OneListTest {
 
     @Test
     fun aShepherdr2TasksAgentIsFoundByItsWorkspace() {
-        // Shepherdr 2 opens a task's workspace as "<id> <title>": the task's agent, and its card shows once.
+        // Shepherdr 3 opens a task's workspace as "<id> <title>": the task's agent, and its card shows once.
         assertTrue(LiveItems.belongs("", "AND-21 Show when each machine last answered", "AND-21", "AND-21"))
         assertFalse(LiveItems.belongs("", "AND-210 Something else", "AND-21", "AND-21"))
         // A v1 task without a short key never matches its id as a workspace.

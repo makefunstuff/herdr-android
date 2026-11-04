@@ -142,7 +142,7 @@ object Routes {
     const val AGENT = "agent/{mid}/{pane}"
     const val TERMINAL = "terminal/{mid}/{pane}"
     const val LAYOUT = "layout/{mid}/{pane}"
-    /** A machine's Coordinator; on Shepherdr 2, [space]'s (its id), else its home space's. */
+    /** A machine's Coordinator; on Shepherdr 3, [space]'s (its id), else its home space's. */
     const val COORDINATOR = "coordinator/{mid}?space={space}"
     /** One machine's board; with [task] open, and with `alone` closing the task goes back instead of to the board. */
     const val BOARD = "board/{mid}?task={task}&alone={alone}"
@@ -239,7 +239,7 @@ private fun AppNav(nav: NavHostController) {
     val hosts by container.hosts.hosts.collectAsStateWithLifecycle()
     val triage by container.triage.state.collectAsStateWithLifecycle()
     val homeBoards = rememberBoards()
-    // Both tabs' badge: everything on the Needs you list, Shepherdr 2's tasks too.
+    // Both tabs' badge: everything on the Needs you list, Shepherdr 3's tasks too.
     val waiting = rememberNeedsYou(homeBoards)
     val needsYou = waiting.size
     val keyState by container.identity.state.collectAsStateWithLifecycle()

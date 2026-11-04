@@ -250,6 +250,21 @@ object SpaceChat {
     }
 }
 
+/** What a chat shows instead of its conversation, in Shepherdr's own words (`core/chat-view.js`'s). */
+object ChatNotice {
+    const val EMPTY_TITLE = "What should the Assistant do?"
+    const val EMPTY_BODY = "It plans the work, starts a task for each part and keeps you posted."
+
+    /** [chat]'s notice ([V2Chat.notice]) as a title and the words under it; null where it has none. */
+    fun of(chat: V2Chat): Pair<String, String?>? = when (chat.notice) {
+        null, "" -> null
+        "opening" -> "Opening the conversation…" to null
+        "unsupported" -> "No chat for this agent" to "Chat reads Claude Code's and Codex's own session logs. This agent works in its terminal only."
+        "none" -> "Can't find this conversation" to "Chat reads the agent's own session log, and Herdr can't tell which one this agent writes. Rather than show the wrong one, it shows none."
+        else -> (if (chat.key.endsWith("/worker")) "This task's agent has ended" else "This agent has ended") to null
+    }
+}
+
 /** Shepherdr's own lines in agents' words, and the chat-line tags an agent writes, taken out of what people read. */
 object ShepherdrText {
     private val hidden = Regex("""<shepherdr(?:\s+[\w-]+="[^"]*")*\s*>[\s\S]*?</shepherdr>\s*""")

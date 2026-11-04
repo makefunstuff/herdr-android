@@ -515,6 +515,18 @@ class ShepherdrTest {
     }
 
     @Test
+    fun aCallsAudioIs16BitLittleEndian() {
+        val pcm = com.makefunstuff.herdr.core.voice.CallState.pcm(floatArrayOf(0f, 1f, -1f, 0.5f))
+        assertContentEquals(byteArrayOf(0, 0, 0xFF.toByte(), 0x7F, 0x01, 0x80.toByte(), 0xFF.toByte(), 0x3F), pcm)
+        val back = com.makefunstuff.herdr.core.voice.CallState.floats(pcm)
+        assertEquals(listOf(0f, 32767f / 32768, -32767f / 32768, 16383f / 32768), back.toList())
+        val c = com.makefunstuff.herdr.core.voice.CallState(on = true, machineId = "m", space = "sp1")
+        assertTrue(c.isFor("m", "sp1", null))
+        assertFalse(c.isFor("m", "sp1", "DEMO-1"))
+        assertEquals("Calling…", c.words)
+    }
+
+    @Test
     fun dictationIsWrittenDownOnTheMachine() = runBlocking {
         FakeShepherdr().use { fake ->
             fake.on("POST /api/dictate") { body -> if (body == "AUDIO") 200 to """{"text":"merge the dark mode task"}""" else 400 to """{"error":"That recording couldn't be read."}""" }
