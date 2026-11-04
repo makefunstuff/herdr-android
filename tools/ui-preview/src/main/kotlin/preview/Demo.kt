@@ -364,9 +364,8 @@ object Demo {
     private const val EVAL_SESSION = "0199a3c4-1d2e-7f30-8a4b-5c6d7e8f9a0b"
 
     /**
-     * devbox's session. [appKind]: the agent at work in herdr-android (pi, for `chat-pi-thinking`). [home]: as herdr-projects runs its agents, each named for its task (`sw-<repo>-<n>`),
-     * so the Agents screen ties them to the board's tasks; and one more, at work on AND-6 in the
-     * workspace the board opened for it.
+     * devbox's session. [appKind]: the agent at work in herdr-android (pi, for `chat-pi-thinking`). [home]: its agents
+     * named for their work, and one more, at work on AND-6 in a workspace named after it.
      */
     fun devbox(appStatus: String = "working", home: Boolean = false, apiStatus: String = "blocked", reviewer: Boolean = false, appKind: String = "claude"): JsonObject = snapshot(
         *listOfNotNull(
@@ -432,7 +431,7 @@ object Demo {
 
     class Agent(
         val kind: String, val status: String, val session: String, val title: String,
-        /** herdr's agent name: the kind, unless herdr-projects named it for its task. */
+        /** herdr's agent name: the kind, unless it was given one. */
         val name: String? = null,
         val seq: Long = 1,
         /** The finish herdr last saw ([com.makefunstuff.herdr.core.api.AgentInfo.completionSeq]). */
