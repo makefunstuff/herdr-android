@@ -41,7 +41,7 @@ class LiveWorkBoardScreensTest {
             try {
                 session.start()
                 val s = withTimeout(60_000) { session.state.first { it.online && it.boardChecked } }
-                assertTrue(s.onShepherdr2 && s.hasWorkBoard, "the Board screen takes the v2 way there")
+                assertTrue(s.onShepherdr && s.hasWorkBoard, "the Board screen takes the v2 way there")
                 val board = session.awaitWorkBoard()
                 // The Board screen follows the live link: its first snapshot comes at once.
                 val o = withTimeout(30_000) { board.overviews().take(1).toList().single() }

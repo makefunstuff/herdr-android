@@ -11,9 +11,9 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.doubleOrNull
 
 /**
- * A space's coordinator chat on Shepherdr 2 as the Coordinator screen draws it, oldest first: your
- * words and its replies, Shepherdr's update cards about tasks, question cards, files, artifacts.
- * Shepherdr's own tagged lines are no one's words, so they never show as text.
+ * A space's Assistant chat (or a task's) on Shepherdr 3 as the chat screens draw it, oldest first: your words and its
+ * replies, Shepherdr's news lines about tasks, question cards, files, artifacts, and quiet lines (a launch brief, an
+ * ask that closed). Shepherdr's own tagged lines are no one's words, so they never show as text.
  */
 sealed interface SpaceChatItem {
     /** The message's id: unique in the chat, so a list can key on it. */
@@ -33,7 +33,10 @@ sealed interface SpaceChatItem {
         val failed: String? = null,
     ) : SpaceChatItem
 
-    /** Shepherdr's card about a task ("HA-1 is ready to merge"), with the questions of its that wait here. */
+    /**
+     * Shepherdr's news line about a task ("HERD-4 is ready · Dark mode works"), with the questions of its that wait
+     * here; [accept]: the newest ready line of a task still Ready, which carries Accept; [live]: it still needs you.
+     */
     data class Update(
         override val id: String,
         val task: String,
@@ -47,6 +50,8 @@ sealed interface SpaceChatItem {
         val asks: List<WorkCard> = emptyList(),
         /** Its task's question, answered: where, in words. */
         val answered: String? = null,
+        val accept: Boolean = false,
+        val live: Boolean = false,
     ) : SpaceChatItem
 
     /** A question card, with the words that came with it ([intro]); [answer] once answered. */
@@ -124,6 +129,18 @@ object SpaceChat {
                 continue
             }
             val text = ShepherdrText.clean(m.text.orEmpty())
+            // Quiet lines: what the person didn't type (a launch brief, another agent's message), a publish on its
+            // way, an ask that closed, a secret asked for, pictures the chat can't show.
+            val quiet = quiet(m)
+            if (quiet != null) {
+                out += SpaceChatItem.Note(m.id, quiet)
+                continue
+            }
+            val n = m.news
+            if (n != null) {
+                out += SpaceChatItem.Update(m.id, n.ref.ifEmpty { n.task }, newsStatus(n.mark), listOf(n.what, n.text).filter { it.isNotBlank() }.joinToString(" · "), accept = n.accept, live = n.live)
+                continue
+            }
             val card = m.card
             val q = m.question
             val post = m.artifact
@@ -157,6 +174,25 @@ object SpaceChat {
             out += SpaceChatItem.Voice("voice:${n.id}", true, n.remote, n.millis, n)
         }
         return out
+    }
+
+    /** A quiet line's words, for a message that is one; null for any other. */
+    fun quiet(m: V2Message): String? = when {
+        m.brief != null -> m.brief.label.ifBlank { "Message" }
+        m.publishing -> "Publishing an artifact…"
+        !m.ended.isNullOrBlank() -> m.ended
+        m.secret != null -> "Wants the secret ${m.secret.name}" + (m.secret.saved?.let { " · kept $it" }.orEmpty())
+        (m.images ?: 0) > 0 && m.text.isNullOrBlank() && m.file == null -> if (m.images == 1) "1 image" else "${m.images} images"
+        else -> null
+    }
+
+    /** A news line's mark as the task's status then. */
+    fun newsStatus(mark: String): WorkStatus? = when (mark) {
+        "started" -> WorkStatus.Work
+        "needs" -> WorkStatus.Need
+        "ready" -> WorkStatus.Ready
+        "done" -> WorkStatus.Done
+        else -> null
     }
 
     /** The outgoing lines the chat doesn't show yet: one that came back (its [OutgoingLine.cid]) is dropped. */

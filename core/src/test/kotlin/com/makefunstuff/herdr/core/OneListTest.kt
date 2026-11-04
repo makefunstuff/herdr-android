@@ -56,8 +56,8 @@ class OneListTest {
     }
 
     @Test
-    fun aShepherdr21TasksAgentIsFoundByItsTerminalsLabel() {
-        // Shepherdr 2.1 on herdr-core: a hashed terminal name in "Other terminals", its task in its labels.
+    fun aShepherdrTasksAgentIsFoundByItsTerminalsLabel() {
+        // Shepherdr on herdr-core: a terminal name that says little, its task from its labels.
         val blocked = HomeAgent(
             "devbox", "devbox",
             AgentInfo(name = "shep-1a2b3c4d5e6f7a8b", agent = "claude", agentStatusRaw = "blocked", workspaceId = "w1", tabId = "t", paneId = "w1:p1", shepherdrTask = "AND-21"),
@@ -81,7 +81,8 @@ class OneListTest {
 
     @Test
     fun everyBoardSaysEachStateInOneWord() {
-        assertEquals("ready", WorkStatus.Ready.label)
+        assertEquals("Ready", WorkStatus.Ready.label)
+        assertEquals("ready", WorkStatus.Ready.word)
         assertEquals("ready", BoardStatus.Approval.word)
         assertNull(BoardStatus.Approval.detail)
         assertNull(BoardStatus.Asks.detail)
