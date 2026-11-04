@@ -1,21 +1,17 @@
 package com.makefunstuff.herdr.push
 
 import com.makefunstuff.herdr.core.api.AgentInfo
-import com.makefunstuff.herdr.core.board.BoardTask
 import com.makefunstuff.herdr.core.push.Alert
 import com.makefunstuff.herdr.core.push.AlertChange
 import com.makefunstuff.herdr.core.push.PushEvent
 import com.makefunstuff.herdr.core.push.Watch
 import com.makefunstuff.herdr.core.push.WatchFired
 import com.makefunstuff.herdr.core.push.Watches
-import com.makefunstuff.herdr.data.BoardLists
 import com.makefunstuff.herdr.data.HostManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 /**
@@ -33,24 +29,15 @@ class WatchWork(
     /** Watches that fired, as their notifications: the open app shows them as its in-app alert too. */
     val fired: SharedFlow<Alert> = _fired.asSharedFlow()
 
-    fun start(scope: CoroutineScope, hosts: HostManager, boards: BoardLists) {
-        // While the app runs it reads its machines itself: their agents, and the boards it has read.
+    fun start(scope: CoroutineScope, hosts: HostManager) {
+        // While the app runs it reads its machines itself: their agents.
         scope.launch {
             hosts.hosts.collect { states ->
                 if (store.state.value.watches.isEmpty()) return@collect
                 for (s in states) {
                     // Both classic herdr's agents and herdr-core's, or a watched one would seem gone.
                     val snap = s.view?.takeIf { s.agentsKnown } ?: continue
-                    if (s.online) look(s.machine.id, s.machine.label, snap.agents, null)
-                }
-            }
-        }
-        scope.launch {
-            boards.lists.map { lists -> lists.mapValues { it.value.tasks } }.distinctUntilChanged().collect { lists ->
-                if (store.state.value.watches.isEmpty()) return@collect
-                for ((id, tasks) in lists) {
-                    val label = hosts.hosts.value.firstOrNull { it.machine.id == id }?.machine?.label ?: continue
-                    look(id, label, null, tasks)
+                    if (s.online) look(s.machine.id, s.machine.label, snap.agents)
                 }
             }
         }
@@ -67,9 +54,9 @@ class WatchWork(
     fun events(machineId: String, label: String, events: List<PushEvent>) =
         fire(Watches.events(store.state.value.watches, machineId, label, events))
 
-    /** A look at [machineId]: its agents (null: not looked at) and its board's tasks (null: not read). */
-    fun look(machineId: String, label: String, agents: List<AgentInfo>?, tasks: List<BoardTask>?) =
-        fire(Watches.look(store.state.value.watches, machineId, label, agents, tasks))
+    /** A look at [machineId]: its agents. */
+    fun look(machineId: String, label: String, agents: List<AgentInfo>) =
+        fire(Watches.look(store.state.value.watches, machineId, label, agents))
 
     private fun fire(fired: List<WatchFired>) {
         if (fired.isEmpty()) return

@@ -182,7 +182,7 @@ private class Start(val route: String, val machineId: String? = null)
 
 private fun boardOf(host: HostState?): AskTargets.Board = when {
     host == null || !host.online -> AskTargets.Board.Unknown
-    host.hasBoard -> AskTargets.Board.Here
+    host.onShepherdr -> AskTargets.Board.Here
     host.boardChecked -> AskTargets.Board.None
     else -> AskTargets.Board.Unknown
 }

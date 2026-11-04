@@ -3,8 +3,6 @@ package com.makefunstuff.herdr.ui.agents
 import com.makefunstuff.herdr.core.hc.HcMapping
 import com.makefunstuff.herdr.ui.manage.ExplainSheet
 import androidx.compose.ui.semantics.CustomAccessibilityAction
-import com.makefunstuff.herdr.core.board.BoardTask
-import com.makefunstuff.herdr.ui.design.approves
 import androidx.compose.ui.platform.LocalView
 import com.makefunstuff.herdr.ui.design.confirmTap
 import com.makefunstuff.herdr.core.chat.OptionRole
@@ -53,8 +51,6 @@ import androidx.navigation.NavController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import com.makefunstuff.herdr.LocalPanes
 import com.makefunstuff.herdr.Routes
-import com.makefunstuff.herdr.core.board.Approvals
-import com.makefunstuff.herdr.core.board.BoardAction
 import com.makefunstuff.herdr.core.board.CardAnswer
 import com.makefunstuff.herdr.core.board.WorkCard
 import com.makefunstuff.herdr.core.board.WorkStatus
@@ -104,19 +100,18 @@ private const val FOLDED = 4
 /** A card as it stood when it was answered here: it stays hidden until this changes. */
 private fun sig(w: Waiting): String = when (w) {
     is Waiting.Question -> "${w.agent.agent.stateChangeSeq}"
-    is Waiting.Task -> w.task.let { t -> listOf(t.state, t.stage, t.kind, t.msg, t.reviewRound, t.reviewPassed, t.approvalBlocked, w.work?.line).joinToString("|") }
+    is Waiting.Task -> "${w.task.status}|${w.task.line}"
     is Waiting.Coordinator -> "asks"
 }
 
-/** What is being said back from a card: an answer to an agent's question, or words for a task's agent. */
+/** What is being said back from a card: an answer to an agent's question. */
 private sealed interface Reply {
     val item: Waiting
     data class ToAgent(override val item: Waiting.Question) : Reply
-    data class ToTask(override val item: Waiting.Task) : Reply
 }
 
-/** What the board or the machine said no with; [review] when it refused a plain approve, whose review card can approve anyway. */
-private data class Refusal(val words: String, val review: Waiting.Task? = null)
+/** What the board or the machine said no with. */
+private data class Refusal(val words: String)
 
 /**
  * The home screen: everything that waits for you, across machines, first, each card with its
@@ -158,7 +153,7 @@ fun AgentsScreen(
     val entry by nav.currentBackStackEntryAsState()
     val inMiddle = if (panes.wide) entry?.let(::opened) else null
     // The agent whose long-press sheet is open, with the task it works on.
-    var menuAgent by remember { mutableStateOf<Pair<HomeAgent, BoardTask?>?>(null) }
+    var menuAgent by remember { mutableStateOf<Pair<HomeAgent, WorkTask?>?>(null) }
     var snoozing by remember { mutableStateOf<HomeAgent?>(null) }
     // "Why this state?" asked from TalkBack's actions on a card.
     var why by remember { mutableStateOf<HomeAgent?>(null) }
@@ -192,7 +187,7 @@ fun AgentsScreen(
         handled.keys.filter { shown(it) && now[it] != handled[it] }.forEach { handled.remove(it) }
     }
     val showMachine = hosts.size > 1 && filter == null
-    val anyBoard = hosts.any { it.hasBoard }
+    val anyBoard = hosts.any { it.onShepherdr }
 
     val guard = com.makefunstuff.herdr.ui.common.LocalGuard.current
     val view = LocalView.current
@@ -237,8 +232,6 @@ fun AgentsScreen(
                         session.refresh()
                         "Sent: $text"
                     }
-                    is Reply.ToTask -> r.item.work?.let { session.awaitWorkBoard().tell(it, text).ifEmpty { "Sent: $text" } }
-                        ?: session.awaitBoard().act(BoardAction.Tell, r.item.task.id, text).ifEmpty { "Sent: $text" }
                 }
             }
                 .onSuccess { handled[w.key] = sig(w); context.toast(it) }
@@ -248,37 +241,9 @@ fun AgentsScreen(
         }
     }
 
-    fun carryOut(w: Waiting.Task, action: BoardAction, label: String) {
-        if (w.key in busy) return
-        busy[w.key] = "$label · ${w.task.name}"
-        if (action.approves) view.confirmTap()
-        scope.launch {
-            runCatching { (container.hosts.session(w.machineId) ?: error("This machine isn't in the app any more")).awaitBoard().act(action, w.task.id) }
-                .onSuccess {
-                    handled[w.key] = sig(w)
-                    container.inbox.dismiss(Alerts.taskTag(w.machineId, w.task.id))
-                    context.toast(it.ifEmpty { "Done" })
-                }
-                // A failed check (a review, the local check, GitHub's) stops a plain approve: its review card says what failed and offers Approve anyway.
-                .onFailure { refusal = Refusal(it.message ?: "The board refused", w.takeIf { action == BoardAction.Approve }) }
-            busy.remove(w.key)
-            readNow.trySend(Unit)
-        }
-    }
-
-    fun act(w: Waiting.Task, action: BoardAction, label: String) {
-        if (w.key in busy) return
-        if (action == BoardAction.Tell) { reply = Reply.ToTask(w); return }
-        // A merge can't be taken back: the fingerprint first, when that is on.
-        if (action == BoardAction.Approve || action == BoardAction.ApproveAnyway) {
-            return guard.run(Guarded.Merge, "Approve and merge ${w.task.name}?", w.task.title) { carryOut(w, action, label) }
-        }
-        carryOut(w, action, label)
-    }
-
     /**
      * A Shepherdr 3 task's [what] through Shepherdr: its merge (the fingerprint first, when that is on) or an
-     * answer to its card. The card hides once it is done, as a v1 task's does.
+     * answer to its card. The card hides once it is done.
      */
     fun work(w: Waiting.Task, what: String, run: suspend (com.makefunstuff.herdr.core.board.WorkBoard) -> String) {
         if (w.key in busy) return
@@ -287,7 +252,6 @@ fun AgentsScreen(
             runCatching { run((container.hosts.session(w.machineId) ?: error("This machine isn't in the app any more")).awaitWorkBoard()) }
                 .onSuccess {
                     handled[w.key] = sig(w)
-                    container.inbox.dismiss(Alerts.taskTag(w.machineId, w.task.id))
                     context.toast(it.ifEmpty { "Done" })
                 }
                 .onFailure { refusal = Refusal(it.message ?: "Shepherdr refused") }
@@ -306,10 +270,8 @@ fun AgentsScreen(
     fun choose(w: Waiting.Task, card: WorkCard, i: Int) =
         work(w, "Answering: ${card.question.choices.getOrNull(i)?.label.orEmpty()}") { it.answer(CardAnswer(card, i)).ifEmpty { "Answered" } }
 
-    /** Finished work opens on its review card (what changed, the review, the checks); any other task on its board, a Shepherdr 3 one as its chat. */
-    fun openTask(w: Waiting.Task) {
-        if (w.work == null && Approvals.waits(w.task)) panes.open(nav, Routes.review(w.machineId, w.task.id)) else panes.openBoard(nav, w.machineId, w.task.id)
-    }
+    /** A task opens on its board, as its chat. */
+    fun openTask(w: Waiting.Task) = panes.openBoard(nav, w.machineId, w.task.id)
 
     fun openAgent(a: HomeAgent) = panes.openAgent(nav, a.machineId, a.agent, hosts.any { it.machine.id == a.machineId && it.onShepherdr })
 
@@ -317,7 +279,7 @@ fun AgentsScreen(
      * What an agent's long-press sheet offers besides its triage, as TalkBack's actions on its card
      * or row: its terminal, why it is in this state, and the sheet itself for the rest.
      */
-    fun sheetActions(a: HomeAgent, task: BoardTask?) = listOfNotNull(
+    fun sheetActions(a: HomeAgent, task: WorkTask?) = listOfNotNull(
         CustomAccessibilityAction("Open terminal") { panes.open(nav, Routes.terminal(a.machineId, a.agent.paneId)); true },
         // Classic herdr explains its agents' states; herdr-core doesn't.
         CustomAccessibilityAction("Why this state?") { why = a; true }.takeIf { HcMapping.address(a.agent.paneId) == null },
@@ -427,8 +389,8 @@ fun AgentsScreen(
                                 sheet.dropLast(1) + triageActions.muteAction(AgentRow(w.agent, w.task, muted = w.agent.key in triage.muted)) + sheet.last()
                             },
                         )
-                        is Waiting.Task -> if (w.work != null) {
-                            val t = w.work!!
+                        is Waiting.Task -> {
+                            val t = w.task
                             // The question it waits on, read from Shepherdr again whenever the task changes.
                             val card by produceState<WorkCard?>(null, w.key, t.line, t.status) {
                                 value = if (t.status != WorkStatus.Need) null else runCatching {
@@ -444,15 +406,6 @@ fun AgentsScreen(
                                 onOpen = { openTask(w) },
                                 onMerge = { merge(w, t) },
                                 onChoose = { c, i -> choose(w, c, i) },
-                            )
-                        } else {
-                            val a = Home.answer(w.task)
-                            TaskCard(
-                                w, showMachine,
-                                selected = inMiddle == "review/${w.machineId}/${w.task.id}",
-                                busy = busy[w.key], answer = a,
-                                onOpen = { openTask(w) },
-                                onAnswer = { a?.let { (action, label) -> act(w, action, label) } },
                             )
                         }
                         is Waiting.Coordinator -> CoordinatorCard(w, showMachine) { panes.open(nav, Routes.coordinator(w.machineId, w.space.id)) }
@@ -506,7 +459,6 @@ fun AgentsScreen(
         BoardPanel(
             when (r) {
                 is Reply.ToAgent -> "Answer ${r.item.task?.name ?: r.item.agent.agent.displayName}"
-                is Reply.ToTask -> "Tell ${r.item.task.name}'s agent"
             },
             onDismiss = dismiss,
             buttons = {
@@ -524,17 +476,10 @@ fun AgentsScreen(
         BoardPanel(
             "That didn't go through", onDismiss = { refusal = null }, accent = Herdr.colors.red,
             buttons = {
-                if (r.review == null) PrimaryButton("OK") { refusal = null }
-                else {
-                    PanelCancel { refusal = null }
-                    PrimaryButton("Open its review card") { refusal = null; openTask(r.review) }
-                }
+                PrimaryButton("OK") { refusal = null }
             },
         ) {
             MarkdownText(r.words)
-            if (r.review != null) {
-                Text("Its review card says what failed, and can approve it anyway.", style = MaterialTheme.typography.bodyMedium, color = Herdr.colors.muted)
-            }
         }
     }
     acceptFor?.let { (w, t) ->
@@ -545,7 +490,6 @@ fun AgentsScreen(
             board, t, onDismiss = { acceptFor = null },
             onProof = { id -> nav.navigate(com.makefunstuff.herdr.Routes.artifact(w.machineId, id, null)) },
             onAccepted = {
-                container.inbox.dismiss(Alerts.taskTag(w.machineId, w.task.id))
                 context.toast(it)
                 readNow.trySend(Unit)
             },
@@ -573,9 +517,9 @@ private class Lines(
     val onSwiped: (String?) -> Unit,
     val snoozed: (AgentRow) -> String?,
     val onOpen: (HomeAgent) -> Unit,
-    val onMenu: (HomeAgent, BoardTask?) -> Unit,
+    val onMenu: (HomeAgent, WorkTask?) -> Unit,
     /** The rest of an agent's long-press sheet, as TalkBack's actions on its row. */
-    val more: (HomeAgent, BoardTask?) -> List<CustomAccessibilityAction>,
+    val more: (HomeAgent, WorkTask?) -> List<CustomAccessibilityAction>,
 )
 
 /** A section of one-line agents under its [heading]; a long resting one folds after [FOLDED] rows. [onSeen]: Mark all seen. */
@@ -651,7 +595,6 @@ private fun opened(entry: NavBackStackEntry): String? {
     val args = entry.arguments
     return when (entry.destination.route) {
         Routes.AGENT, Routes.TERMINAL -> "${args?.getString("mid")}/${Uri.decode(args?.getString("pane").orEmpty())}"
-        Routes.REVIEW -> "review/${args?.getString("mid")?.let(Uri::decode)}/${args?.getString("task")?.let(Uri::decode)}"
         else -> null
     }
 }

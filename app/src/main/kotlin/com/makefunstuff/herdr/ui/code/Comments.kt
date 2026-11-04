@@ -77,20 +77,9 @@ sealed interface NoteTarget {
     data class Agent(val paneId: String, override val label: String, val blocked: Boolean) : NoteTarget {
         override val key: String get() = "agent:$paneId"
     }
-
-    /** The board task it was opened from: `tell` hands it to that task's agent. */
-    data class Task(val id: String, val name: String) : NoteTarget {
-        override val key: String get() = "task:$id"
-        override val label: String get() = "$name's agent"
-    }
-
-    data object Coordinator : NoteTarget {
-        override val key = "coordinator"
-        override val label = "Coordinator"
-    }
 }
 
-/** Who can get comments on [top]: the agents at work in it (the one it was opened from first), its task's agent, the Coordinator. */
+/** Who can get comments on [top]: the agents at work in it (the one it was opened from first). */
 fun noteTargets(host: HostState, top: String, spot: CodeSpot): List<NoteTarget> {
     val agents = host.agentsIn(top, spot.pane)
     val names = agents.groupingBy { it.shownName }.eachCount()
@@ -100,8 +89,6 @@ fun noteTargets(host: HostState, top: String, spot: CodeSpot): List<NoteTarget> 
             val place = ws.firstOrNull { it.workspaceId == a.workspaceId }?.label?.ifBlank { null }
             add(NoteTarget.Agent(a.paneId, if ((names[a.shownName] ?: 0) > 1 && place != null) "${a.shownName} · $place" else a.shownName, a.blocked))
         }
-        if (spot.task != null && top == spot.dir) add(NoteTarget.Task(spot.task, spot.taskName ?: spot.task))
-        if (host.hasBoard) add(NoteTarget.Coordinator)
     }
 }
 
@@ -109,8 +96,6 @@ fun noteTargets(host: HostState, top: String, spot: CodeSpot): List<NoteTarget> 
 suspend fun deliver(session: HostSession, target: NoteTarget, text: String) {
     when (target) {
         is NoteTarget.Agent -> AgentInput.send(session.awaitAgent(target.paneId), target.paneId, text, named = true, blocked = target.blocked)
-        is NoteTarget.Task -> session.awaitBoard().run(listOf("tell", target.id, text))
-        NoteTarget.Coordinator -> session.awaitBoard().send(text)
     }
     session.refresh()
 }
@@ -126,7 +111,7 @@ fun CommentSheet(spot: CodeSpot, host: HostState, draft: NoteDraft, onDismiss: (
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val session = container.hosts.session(spot.machine) ?: return
-    val targets = remember(host.snapshot, host.hasBoard) { noteTargets(host, spot.dir, spot) }
+    val targets = remember(host.snapshot) { noteTargets(host, spot.dir, spot) }
     var target by remember(targets) { mutableStateOf(targets.firstOrNull()) }
     var text by remember { mutableStateOf("") }
     var sending by remember { mutableStateOf(false) }

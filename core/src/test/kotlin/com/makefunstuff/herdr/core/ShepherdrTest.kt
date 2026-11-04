@@ -1,9 +1,7 @@
 package com.makefunstuff.herdr.core
 
 import com.makefunstuff.herdr.core.board.BoardApi
-import com.makefunstuff.herdr.core.board.BoardStatus
 import com.makefunstuff.herdr.core.board.CardAnswer
-import com.makefunstuff.herdr.core.board.V1Cards
 import com.makefunstuff.herdr.core.board.WorkCard
 import com.makefunstuff.herdr.core.board.WorkStatus
 import com.makefunstuff.herdr.core.board.WorkTask
@@ -86,12 +84,11 @@ class ShepherdrTest {
         assertEquals("3.1.2", v.version)
         assertEquals(3, v.major)
         assertEquals(1, v.minor)
-        assertEquals(BoardApi.V2("3.1.2"), BoardDetection.decide(v, "/home/u/.herdr-projects/data/bin/herdr-projects"))
-        // 2.x isn't spoken any more: a machine still on it reads as herdr-projects' (or none).
-        assertEquals(BoardApi.V1("/x/herdr-projects"), BoardDetection.decide(V2Version(version = "2.1.0"), "/x/herdr-projects"))
-        assertEquals(BoardApi.None, BoardDetection.decide(V2Version(version = "2.1.0"), null))
-        assertEquals(BoardApi.None, BoardDetection.decide(V2Version(version = "nonsense"), null))
-        assertEquals(BoardApi.V1("/x/herdr-projects"), BoardDetection.decide(null, "/x/herdr-projects"))
+        assertEquals(BoardApi.V2("3.1.2"), BoardDetection.decide(v))
+        // 2.x isn't spoken any more: a machine still on it has no board.
+        assertEquals(BoardApi.None, BoardDetection.decide(V2Version(version = "2.1.0")))
+        assertEquals(BoardApi.None, BoardDetection.decide(V2Version(version = "nonsense")))
+        assertEquals(BoardApi.None, BoardDetection.decide(null))
     }
 
     @Test
@@ -454,8 +451,8 @@ class ShepherdrTest {
             assertEquals("That chat isn't here any more.", assertFailsWith<IOException> { client.send("gone", "hello") }.message)
             board.close(o.tasks.first { it.id == "DEMO-7" })
             assertEquals("""{"type":"close","chat":"DEMO-7/worker"}""", fake.bodies("POST /api/action").last())
-            board.answer(CardAnswer(WorkCard("DEMO-5/worker", V1Cards.plan(ready, emptyList())), 0))
-            assertEquals("""{"type":"answer","chat":"DEMO-5/worker","question":"v1:plan","choice":0}""", fake.bodies("POST /api/action").last())
+            board.answer(CardAnswer(WorkCard("DEMO-5/worker", com.makefunstuff.herdr.core.shepherdr.V2Question(id = "q1", title = "Plan for DEMO-5")), 0))
+            assertEquals("""{"type":"answer","chat":"DEMO-5/worker","question":"q1","choice":0}""", fake.bodies("POST /api/action").last())
             val reply = V2Board.cards(o.needs)[1]
             board.answer(CardAnswer(reply, -1, other = "Yes, two"))
             assertEquals(
@@ -719,37 +716,11 @@ class ShepherdrTest {
         assertEquals("s3pPLMBiTxaQ9kYGzzhZRbK+xOo=", Wire.acceptFor("dGhlIHNhbXBsZSBub25jZQ=="))
     }
 
-    // ---- v1 in the same shapes -------------------------------------------------------------------
-
-    @Test
-    fun v1StatusesInShepherdrsWords() {
-        assertEquals(WorkStatus.Ready, WorkTasks.status(BoardStatus.Approval))
-        for (s in listOf(BoardStatus.ReviewFailed, BoardStatus.PlanReady, BoardStatus.PickOne, BoardStatus.Asks, BoardStatus.AsksOk, BoardStatus.NeedsLogin, BoardStatus.Stopped, BoardStatus.Error)) {
-            assertEquals(WorkStatus.Need, WorkTasks.status(s), s.name)
-        }
-        assertEquals(WorkStatus.Work, WorkTasks.status(BoardStatus.Reviewing))
-        assertEquals(WorkStatus.Queued, WorkTasks.status(BoardStatus.Queued))
-        assertEquals(WorkStatus.Todo, WorkTasks.status(BoardStatus.Todo))
-        assertEquals(WorkStatus.Done, WorkTasks.status(BoardStatus.Archived))
-        // Every v1 status that needs you still does.
-        for (s in BoardStatus.entries) if (s.needsYou) assertTrue(WorkTasks.status(s).needsYou, s.name)
-    }
-
     @Test
     fun pinnedFirstWithinEachStatus() {
         fun t(id: String, s: WorkStatus, pinned: Boolean = false) = WorkTask(id, id, id, "", s, pinned = pinned)
         val out = WorkTasks.ordered(listOf(t("a", WorkStatus.Done), t("b", WorkStatus.Work), t("c", WorkStatus.Work, true), t("d", WorkStatus.Need), t("e", WorkStatus.Merging)))
         assertEquals(listOf("d", "e", "c", "b", "a"), out.map { it.id })
-    }
-
-    @Test
-    fun v1PickCardsCarryTheAttemptsLetter() {
-        val t = WorkTask("repo/3", "AND-3", "x", "", WorkStatus.Need)
-        val q = V1Cards.pick(t, listOf(com.makefunstuff.herdr.core.board.Attempt("A", "claude", "", "+3 -1", "", ""), com.makefunstuff.herdr.core.board.Attempt("B", "codex", "", "", "", "")))
-        assertEquals(listOf("A · claude", "B · codex"), q.choices.map { it.label })
-        assertEquals("B", V1Cards.letter(q, 1))
-        assertFailsWith<IOException> { V1Cards.letter(q, 5) }
-        assertEquals("Plan", V1Cards.plan(t, listOf("one")).kind)
     }
 
     private data class HttpReplyOf(val status: Int, val body: String)

@@ -62,7 +62,6 @@ import com.makefunstuff.herdr.ui.board.BoardScreen
 import com.makefunstuff.herdr.ui.board.BoardsScreen
 import com.makefunstuff.herdr.ui.board.rememberBoards
 import com.makefunstuff.herdr.ui.board.rememberNeedsYou
-import com.makefunstuff.herdr.ui.board.ReviewScreen
 import com.makefunstuff.herdr.ui.brief.BriefScreen
 import com.makefunstuff.herdr.ui.brief.BriefSettingsScreen
 import com.makefunstuff.herdr.ui.code.CheckoutScreen
@@ -142,12 +141,10 @@ object Routes {
     const val AGENT = "agent/{mid}/{pane}"
     const val TERMINAL = "terminal/{mid}/{pane}"
     const val LAYOUT = "layout/{mid}/{pane}"
-    /** A machine's Coordinator; on Shepherdr 3, [space]'s (its id), else its home space's. */
+    /** A machine's Assistant: [space]'s (its id), else its home space's. */
     const val COORDINATOR = "coordinator/{mid}?space={space}"
     /** One machine's board; with [task] open, and with `alone` closing the task goes back instead of to the board. */
     const val BOARD = "board/{mid}?task={task}&alone={alone}"
-    /** Finished work across every board, one card a task; opened at a machine's (and a task's) card when given. */
-    const val REVIEW = "review?mid={mid}&task={task}"
     const val ADMIN = "admin/{mid}?tab={tab}"
     const val WORKTREES = "worktrees/{mid}?ws={ws}"
     const val HEALTH = "health/{mid}"
@@ -169,14 +166,12 @@ object Routes {
     const val SEARCH = "search?mid={mid}&q={q}"
     /** Start work from a sentence: what, then how and where; on [mid] and with [text] when given. */
     const val START = "start?mid={mid}&text={text}"
-    /** What an agent did, as a timeline: a board task's (its key as [name]), or one agent's (its pane). */
-    const val ACTIVITY = "activity/{mid}?task={task}&name={name}&pane={pane}"
+    /** What an agent did, as a timeline: its own session (its pane). */
+    const val ACTIVITY = "activity/{mid}?pane={pane}"
     /** A machine's quick-command runs, with one open ([quickRuns]'s run, from its notification). */
     const val QUICK = "quick/{mid}?run={run}"
     /** A workspace's dev servers, one open in the in-app browser through SSH ([port] first when given). */
     const val PREVIEW = "preview/{mid}?ws={ws}&port={port}"
-    /** The board's automations as routines: one machine's ([mid]), or every connected board's. */
-    const val ROUTINES = "routines?mid={mid}"
     /** A Shepherdr space's artifacts ([space], its id; every one on the machine without). */
     const val ARTIFACTS = "artifacts/{mid}?space={space}"
     /** One artifact full screen, at its latest or at version [v]. */
@@ -193,8 +188,6 @@ object Routes {
     fun artifact(mid: String, id: String, v: Int? = null) = "artifact/$mid/${Uri.encode(id)}" + (v?.let { "?v=$it" } ?: "")
     fun board(mid: String, task: String? = null, alone: Boolean = false) =
         if (task == null) "board/$mid" else "board/$mid?task=${Uri.encode(task)}" + if (alone) "&alone=1" else ""
-    fun review(mid: String? = null, task: String? = null) =
-        "review" + listOfNotNull(mid?.let { "mid=" + Uri.encode(it) }, task?.let { "task=" + Uri.encode(it) }).joinToString("&").let { if (it.isEmpty()) "" else "?$it" }
     fun admin(mid: String, tab: Int = 0) = "admin/$mid?tab=$tab"
     fun health(mid: String) = "health/$mid"
     fun usage(mid: String) = "usage/$mid"
@@ -208,16 +201,13 @@ object Routes {
         "code/${spot.machine}/diff?${spot.query()}&src=${Uri.encode(src)}&file=${Uri.encode(file)}"
     fun codeCommit(spot: CodeSpot, sha: String) = "code/${spot.machine}/commit?${spot.query()}&sha=$sha"
     fun codeNotes(spot: CodeSpot) = "code/${spot.machine}/notes?${spot.query()}"
-    fun activity(mid: String, task: String? = null, name: String? = null, pane: String? = null) =
-        "activity/$mid" + listOfNotNull(task?.let { "task=" + Uri.encode(it) }, name?.let { "name=" + Uri.encode(it) }, pane?.let { "pane=" + Uri.encode(it) })
-            .joinToString("&").let { if (it.isEmpty()) "" else "?$it" }
+    fun activity(mid: String, pane: String) = "activity/$mid?pane=" + Uri.encode(pane)
     fun preview(mid: String, workspaceId: String, port: Int? = null) =
         "preview/$mid?ws=${Uri.encode(workspaceId)}" + (port?.let { "&port=$it" } ?: "")
     fun search(mid: String? = null, q: String? = null) =
         "search" + listOfNotNull(mid?.let { "mid=" + Uri.encode(it) }, q?.let { "q=" + Uri.encode(it) }).joinToString("&").let { if (it.isEmpty()) "" else "?$it" }
     fun start(mid: String? = null, text: String? = null) =
         "start" + listOfNotNull(mid?.let { "mid=" + Uri.encode(it) }, text?.let { "text=" + Uri.encode(it) }).joinToString("&").let { if (it.isEmpty()) "" else "?$it" }
-    fun routines(mid: String? = null) = if (mid == null) "routines" else "routines?mid=${Uri.encode(mid)}"
     fun quickRuns(mid: String, run: String? = null) = if (run == null) "quick/$mid" else "quick/$mid?run=${Uri.encode(run)}"
     fun worktrees(mid: String, workspaceId: String? = null) =
         if (workspaceId == null) "worktrees/$mid" else "worktrees/$mid?ws=${Uri.encode(workspaceId)}"
@@ -270,7 +260,7 @@ private fun AppNav(nav: NavHostController) {
         },
     ) {
         val wide = maxWidth >= WIDE
-        val boards = hosts.filter { it.hasWorkBoard }.map { it.machine.id }
+        val boards = hosts.filter { it.onShepherdr }.map { it.machine.id }
         // A board already open in the middle (it was open when the window grew) isn't shown twice.
         val board = if (wide && route != Routes.BOARD) chosenBoard.machine?.takeIf { it in boards } ?: boards.firstOrNull() else null
         val panes = remember(wide, board, chosenBoard) { Panes(wide, board, chosenBoard) }
@@ -368,9 +358,6 @@ internal fun NavGraphBuilder.screens(nav: NavHostController, agents: @Composable
     composable(Routes.BOARD) {
         BoardScreen(nav, it.arguments?.getString("mid").orEmpty(), it.arguments?.getString("task")?.let(Uri::decode), alone = it.arguments?.getString("alone") == "1")
     }
-    composable(Routes.REVIEW) {
-        ReviewScreen(nav, it.arguments?.getString("mid")?.let(Uri::decode)?.ifEmpty { null }, it.arguments?.getString("task")?.let(Uri::decode)?.ifEmpty { null })
-    }
     composable(Routes.ASK) { AskScreen(nav, it.arguments?.getString("to").orEmpty()) }
     composable(Routes.CODE) { CodeMachinesScreen(nav) }
     composable(Routes.CODE_REPOS) { CodeReposScreen(nav, it.arguments?.getString("mid").orEmpty()) }
@@ -391,12 +378,7 @@ internal fun NavGraphBuilder.screens(nav: NavHostController, agents: @Composable
         com.makefunstuff.herdr.ui.quick.QuickRunsScreen(nav, it.arguments?.getString("mid").orEmpty(), it.arguments?.getString("run")?.let(Uri::decode)?.ifEmpty { null })
     }
     composable(Routes.ACTIVITY) {
-        ActivityScreen(
-            nav, it.arguments?.getString("mid").orEmpty(),
-            taskId = it.arguments?.getString("task")?.let(Uri::decode)?.ifEmpty { null },
-            taskName = it.arguments?.getString("name")?.let(Uri::decode)?.ifEmpty { null },
-            paneId = it.arguments?.getString("pane")?.let(Uri::decode)?.ifEmpty { null },
-        )
+        ActivityScreen(nav, it.arguments?.getString("mid").orEmpty(), it.arguments?.getString("pane")?.let(Uri::decode).orEmpty())
     }
     composable(Routes.COORDINATOR) {
         CoordinatorScreen(nav, it.arguments?.getString("mid").orEmpty(), it.arguments?.getString("space")?.let(Uri::decode)?.ifEmpty { null })
@@ -415,9 +397,6 @@ internal fun NavGraphBuilder.screens(nav: NavHostController, agents: @Composable
             nav, it.arguments?.getString("mid").orEmpty(), it.arguments?.getString("ws")?.let(Uri::decode).orEmpty(),
             startPort = it.arguments?.getString("port")?.toIntOrNull(),
         )
-    }
-    composable(Routes.ROUTINES) {
-        com.makefunstuff.herdr.ui.routines.RoutinesScreen(nav, it.arguments?.getString("mid")?.let(Uri::decode)?.ifEmpty { null })
     }
     composable(Routes.SEARCH) {
         com.makefunstuff.herdr.ui.search.SearchScreen(

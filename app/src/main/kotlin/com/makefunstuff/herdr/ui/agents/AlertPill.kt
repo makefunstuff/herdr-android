@@ -43,12 +43,10 @@ import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
 import com.makefunstuff.herdr.Panes
 import com.makefunstuff.herdr.Routes
-import com.makefunstuff.herdr.core.board.Approvals
 import com.makefunstuff.herdr.core.home.Waiting
 import com.makefunstuff.herdr.core.home.WaitingNews
 import com.makefunstuff.herdr.core.host.HostState
 import com.makefunstuff.herdr.core.push.Alert
-import com.makefunstuff.herdr.core.push.LiveItems
 import com.makefunstuff.herdr.ui.common.LocalContainer
 import com.makefunstuff.herdr.ui.design.AgentMark
 import com.makefunstuff.herdr.ui.design.HerdrIcons
@@ -166,30 +164,26 @@ private fun words(w: Waiting): String = when (w) {
         val who = w.task?.name ?: w.agent.workspace.ifEmpty { w.agent.agent.displayName }
         "$who · needs you: " + (asked?.question ?: w.agent.agent.subtitle ?: "waiting for your answer")
     }
-    is Waiting.Task -> "${w.task.name} · ${w.work?.status?.label ?: w.task.status.word}: ${w.task.title}"
+    is Waiting.Task -> "${w.task.name} · ${w.task.status.word}: ${w.task.title}"
     is Waiting.Coordinator -> "${w.space.name}'s coordinator · needs you"
 }
 
-/** Opens what [p] is about: the agent's chat, or the task (finished work at its review card). */
+/** Opens what [p] is about: the agent's chat, or the task. */
 private fun open(nav: NavHostController, panes: Panes, p: PillItem, hosts: List<HostState>) {
     when (p) {
         is PillItem.Needs -> when (val w = p.waiting) {
             is Waiting.Question -> panes.openAgent(nav, w.machineId, w.agent.agent, hosts.any { it.machine.id == w.machineId && it.onShepherdr })
-            is Waiting.Task -> if (w.work == null && Approvals.waits(w.task)) panes.open(nav, Routes.review(w.machineId, w.task.id)) else panes.openBoard(nav, w.machineId, w.task.id)
+            is Waiting.Task -> panes.openBoard(nav, w.machineId, w.task.id)
             is Waiting.Coordinator -> panes.open(nav, Routes.coordinator(w.machineId, w.space.id))
         }
         is PillItem.Fired -> {
             val a = p.alert
-            when {
-                a.paneId.isNotEmpty() -> panes.openPane(nav, hosts.firstOrNull { it.machine.id == a.machineId }, a.machineId, a.paneId)
-                a.taskId.isNotEmpty() && a.review -> panes.open(nav, Routes.review(a.machineId, a.taskId))
-                a.taskId.isNotEmpty() -> panes.openBoard(nav, a.machineId, a.taskId)
-            }
+            if (a.paneId.isNotEmpty()) panes.openPane(nav, hosts.firstOrNull { it.machine.id == a.machineId }, a.machineId, a.paneId)
         }
     }
 }
 
-/** What the screen in front shows: an agent's chat or terminal, the Coordinator, a task on its board or its review card. */
+/** What the screen in front shows: an agent's chat or terminal, the Coordinator, a task on its board. */
 private data class Front(val machine: String, val pane: String? = null, val task: String? = null, val coordinator: Boolean = false)
 
 private fun front(route: String?, args: (String) -> String?): Front? {
@@ -198,7 +192,7 @@ private fun front(route: String?, args: (String) -> String?): Front? {
     return when (route) {
         Routes.AGENT, Routes.TERMINAL -> Front(mid, pane = arg("pane"))
         Routes.COORDINATOR -> Front(mid, coordinator = true)
-        Routes.BOARD, Routes.REVIEW -> Front(mid, task = arg("task"))
+        Routes.BOARD -> Front(mid, task = arg("task"))
         else -> null
     }
 }
@@ -213,14 +207,12 @@ private fun Waiting.isOpen(route: String?, args: (String) -> String?): Boolean {
         is Waiting.Task -> agent
         is Waiting.Coordinator -> null
     }
-    return (f.pane != null && agent?.agent?.paneId == f.pane) ||
-        (f.task != null && task?.id == f.task) ||
-        (f.coordinator && agent != null && LiveItems.isCoordinator(agent.agent.name.orEmpty()))
+    return (f.pane != null && agent?.agent?.paneId == f.pane) || (f.task != null && task?.id == f.task)
 }
 
 private fun PillItem.isOpen(route: String?, args: (String) -> String?): Boolean = when (this) {
     is PillItem.Needs -> waiting.isOpen(route, args)
     is PillItem.Fired -> front(route, args)?.let { f ->
-        f.machine == alert.machineId && ((f.pane != null && f.pane == alert.paneId) || (f.task != null && f.task == alert.taskId))
+        f.machine == alert.machineId && f.pane != null && f.pane == alert.paneId
     } == true
 }

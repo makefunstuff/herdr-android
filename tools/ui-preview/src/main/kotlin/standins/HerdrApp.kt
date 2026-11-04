@@ -64,7 +64,7 @@ class AppContainer(app: Context) {
     val watchWork = com.makefunstuff.herdr.push.WatchWork(push, inbox, quietWork)
     val alertWork = AlertWork(hosts, machines, push, inbox, liveWork, quietWork, tally, quick, watchWork, usage)
     /** Every board's list as last read, and which finished agents the phone has shown: the Agents screen's and the Board tab's. */
-    val boards = com.makefunstuff.herdr.data.BoardLists(hosts, onRead = { id, tasks -> tally.tasks(id, tasks) })
+    val boards = com.makefunstuff.herdr.data.BoardLists(hosts, onRead = { id, tasks -> tally.tasks(id, tasks); briefWork.looked(id, tasks, null) })
     val seen = com.makefunstuff.herdr.data.SeenStore(java.io.File(app.filesDir, "seen.json"))
     /** When each agent's chat was last on screen, for its "While you were away" card. */
     val looked = com.makefunstuff.herdr.data.LookedStore(java.io.File(app.filesDir, "looked.json"))
@@ -99,7 +99,7 @@ class AppContainer(app: Context) {
         // What quiet hours mean now, before the first frame.
         quietWork.check()
         briefWork.start()
-        watchWork.start(scope, hosts, boards)
+        watchWork.start(scope, hosts)
         usage.start(scope, hosts, machines)
     }
 

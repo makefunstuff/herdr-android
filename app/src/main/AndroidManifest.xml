@@ -189,7 +189,6 @@
             </intent-filter>
         </receiver>
         <!-- A Live Update's Stop for a task, which asks first, and Keep going. -->
-        <receiver android:name=".push.LiveReceiver" android:exported="false" />
         <!-- Pushes from the machines through a push app (UnifiedPush). Only its token is taken, and only
              pushes sealed with a machine's own key are shown. -->
         <receiver android:name=".push.PushReceiver" android:exported="true">

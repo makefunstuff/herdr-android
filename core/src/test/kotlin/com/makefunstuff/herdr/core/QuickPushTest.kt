@@ -46,7 +46,7 @@ class QuickPushTest {
             val runs = File(dir, "state/herdr-android/quick")
             val env = mapOf("HOME" to dir.path, "HERDR_PUSH_HOME" to File(dir, "push").path, "HERDR_PUSH_HEALTH_EVERY" to "0", "XDG_STATE_HOME" to File(dir, "state").path)
             assertEquals("", sh(dir, env, HerdrPush.installCommand(), HerdrPush.script).trim())
-            sh(dir, env, HerdrPush.command("subscribe"), HerdrPush.subscription("phone1:m1", "Pixel", "http://127.0.0.1:9/up", PushSeal.newKey(), "default", "/nowhere/herdr", null))
+            sh(dir, env, HerdrPush.command("subscribe"), HerdrPush.subscription("phone1:m1", "Pixel", "http://127.0.0.1:9/up", PushSeal.newKey(), "default", "/nowhere/herdr"))
             fun run(id: String, kind: String, state: String, ended: Long, answer: String = "", error: String = "") {
                 val d = File(runs, id).apply { mkdirs() }
                 File(d, "meta.json").writeText("""{"name":"Find TODOs","kind":"$kind","cwd":"/home/demo/app"}""" + "\n")

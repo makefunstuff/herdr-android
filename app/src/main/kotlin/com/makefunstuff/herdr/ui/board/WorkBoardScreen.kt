@@ -66,10 +66,8 @@ import com.makefunstuff.herdr.core.board.WorkOverview
 import com.makefunstuff.herdr.core.board.WorkSpace
 import com.makefunstuff.herdr.core.board.WorkStatus
 import com.makefunstuff.herdr.core.board.WorkTask
-import com.makefunstuff.herdr.core.board.WorkTasks
 import com.makefunstuff.herdr.core.guard.Guarded
 import com.makefunstuff.herdr.core.host.HostSession
-import com.makefunstuff.herdr.core.push.Alerts
 import com.makefunstuff.herdr.ui.common.EmptyState
 import com.makefunstuff.herdr.ui.common.LocalContainer
 import com.makefunstuff.herdr.ui.common.LocalGuard
@@ -105,7 +103,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-/** The board's colour for this status, in the current theme: the same as v1's nearest status. */
+/** The board's colour for this status, in the current theme. */
 @Composable
 @ReadOnlyComposable
 fun WorkStatus.color(): Color = Herdr.colors.tone(tone)
@@ -114,6 +112,26 @@ fun WorkStatus.color(): Color = Herdr.colors.tone(tone)
 private sealed interface WorkPending {
     data class Close(val task: WorkTask) : WorkPending
     data object Add : WorkPending
+}
+
+/**
+ * The work board on one machine: Shepherdr 3's ([WorkBoardScreen]). With [pane] it is the right pane of a wide
+ * window ([com.makefunstuff.herdr.Panes]): no way back, and the task asked for in [pane] opens once. With [alone],
+ * [openTask] was opened from elsewhere (the Board tab): closing it goes back there.
+ */
+@Composable
+fun BoardScreen(nav: NavController, machineId: String, openTask: String? = null, pane: BoardChoice? = null, alone: Boolean = false) {
+    val session = LocalContainer.current.hosts.session(machineId)
+    if (session == null) {
+        EmptyState("Machine not found", "It may have been removed.")
+        return
+    }
+    val state by session.state.collectAsStateWithLifecycle()
+    when {
+        state.onShepherdr -> WorkBoardScreen(nav, session, machineId, openTask, pane, alone)
+        state.online && !state.boardChecked -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { LoadingState("Looking for Shepherdr") }
+        else -> EmptyState("No work board", "Shepherdr 3 isn't running on ${state.machine.label}. Its tasks show here once it is.", icon = HerdrIcons.SquareKanban)
+    }
 }
 
 /**
@@ -146,7 +164,6 @@ internal fun WorkBoardScreen(
     if (pane != null) LaunchedEffect(pane.machine, pane.task) {
         if (pane.machine == machineId) pane.task?.let { openId = it; pane.task = null }
     }
-    LaunchedEffect(openId) { openId?.let { container.inbox.dismiss(Alerts.taskTag(machineId, it)) } }
     var pending by remember { mutableStateOf<WorkPending?>(null) }
     var busy by remember { mutableStateOf<String?>(null) }
     var refusal by remember { mutableStateOf<String?>(null) }
@@ -159,7 +176,7 @@ internal fun WorkBoardScreen(
         problem = null
         loaded = true
         container.boards.put(machineId, o)
-        container.tally.tasks(machineId, o.tasks.map(WorkTasks::row))
+        container.tally.tasks(machineId, o.tasks)
     }
 
     // Followed while the screen is in front: the live link's snapshots, and a read now after an action.
@@ -200,7 +217,7 @@ internal fun WorkBoardScreen(
 
     /** The Ready task whose Accept card is up. */
     var acceptFor by remember { mutableStateOf<WorkTask?>(null) }
-    // Shepherdr's Accept: its card first, which says what you approve; the fingerprint then, as for v1's Approve and merge.
+    // Shepherdr's Accept: its card first, which says what you approve; the fingerprint then.
     fun merge(t: WorkTask) {
         acceptFor = t
     }
@@ -377,7 +394,7 @@ internal const val ADD_THROUGH_COORDINATOR =
 
 /**
  * [AddWorkTaskPanel] for [session]'s board from elsewhere (the Board tab): its spaces as last read, or read
- * now when they weren't yet, so a task never goes to a herdr-projects 1.x left on disk.
+ * now when they weren't yet.
  */
 @Composable
 internal fun AddWorkTask(session: HostSession, read: WorkOverview?, onDismiss: () -> Unit, onSend: (WorkSpace, String, String) -> Unit) {

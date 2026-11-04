@@ -10,6 +10,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import java.io.File
 import java.util.Base64
 import java.util.UUID
@@ -102,8 +106,16 @@ class PushStore(private val file: File) {
     fun keys(): Map<String, ByteArray> = state.value.machines.mapNotNull { (id, m) -> m.keyBytes?.let { id to it } }.toMap()
 
     private fun load(): PushState {
-        val loaded = runCatching { if (file.exists()) json.decodeFromString(PushState.serializer(), file.readText()) else null }.getOrNull()
-            ?: PushState()
+        val loaded = runCatching { if (file.exists()) json.decodeFromJsonElement(PushState.serializer(), known(json.parseToJsonElement(file.readText()))) else null }
+            .getOrNull() ?: PushState()
         return if (loaded.phoneId.isEmpty()) loaded.copy(phoneId = UUID.randomUUID().toString()) else loaded
+    }
+
+    /** [saved] without the watches of a kind this app no longer has (a herdr-projects task's), so the rest still loads. */
+    private fun known(saved: JsonElement): JsonElement {
+        val o = saved as? JsonObject ?: return saved
+        val watches = o["watches"] as? JsonArray ?: return saved
+        val kinds = Watch.What.entries.map { it.name }.toSet()
+        return JsonObject(o + ("watches" to JsonArray(watches.filter { ((it as? JsonObject)?.get("what") as? JsonPrimitive)?.content in kinds })))
     }
 }

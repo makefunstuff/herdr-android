@@ -1,7 +1,6 @@
 package com.makefunstuff.herdr.ui.agents
 
 import com.makefunstuff.herdr.core.hc.HcMapping
-import com.makefunstuff.herdr.core.board.TaskLine
 import com.makefunstuff.herdr.core.chat.OptionRole
 
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -42,8 +41,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.makefunstuff.herdr.core.api.AgentStatus
-import com.makefunstuff.herdr.core.board.BoardAction
-import com.makefunstuff.herdr.core.board.BoardTask
 import com.makefunstuff.herdr.core.board.WorkCard
 import com.makefunstuff.herdr.core.chat.Markdown
 import com.makefunstuff.herdr.core.board.WorkStatus
@@ -120,12 +117,11 @@ private fun MetaLine(key: String?, parts: List<String>, modifier: Modifier = Mod
 }
 
 /**
- * Where an agent works, for a meta line: the agent, its workspace (its task's repository when it works
- * on one: the board names the workspace after the task, which the line already shows), and its
- * machine when there are several.
+ * Where an agent works, for a meta line: the agent, its workspace (its task's list when it works on one:
+ * the workspace is named after the task, which the line already shows), and its machine when there are several.
  */
-private fun where(a: HomeAgent, task: BoardTask?, showMachine: Boolean) =
-    listOfNotNull(a.agent.displayName, task?.repo ?: a.workspace.ifEmpty { a.location }, a.machineLabel.takeIf { showMachine })
+private fun where(a: HomeAgent, task: WorkTask?, showMachine: Boolean) =
+    listOfNotNull(a.agent.displayName, task?.listName?.ifEmpty { null } ?: a.workspace.ifEmpty { a.location }, a.machineLabel.takeIf { showMachine })
 
 /**
  * A card of the Needs you list: hairline card, chosen on a wide window when it is open beside the
@@ -264,66 +260,6 @@ fun QuestionCard(
     }
 }
 
-/**
- * A board task waiting for you as a card: its key, status and what the board says of it, its agent's
- * mark when one runs; the answer it most likely needs ([answer]: approve and merge, fix, …) and Open
- * (the review card for finished work, else the task).
- */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-fun TaskCard(
-    w: Waiting.Task,
-    showMachine: Boolean,
-    selected: Boolean,
-    busy: String?,
-    answer: Pair<BoardAction, String>?,
-    onOpen: () -> Unit,
-    onAnswer: () -> Unit,
-) {
-    val c = Herdr.colors
-    val t = w.task
-    val says = remember(t.msg) { TaskLine.line(t.msg) }
-    val actions = listOfNotNull(answer?.takeIf { busy == null }?.let { CustomAccessibilityAction(it.second) { onAnswer(); true } })
-    WaitingCard(selected, onOpen, null, "Open task", actions) {
-        CardHead(
-            mark = {
-                w.agent?.agent?.let { AgentMark(it.agent ?: it.displayName) }
-                    ?: Box(Modifier.size(22.dp), contentAlignment = Alignment.Center) { Icon(HerdrIcons.SquareKanban, null, tint = c.text, modifier = Modifier.size(20.dp)) }
-            },
-            title = t.title,
-            key = t.name,
-            meta = listOfNotNull(
-                says.takeIf { it.isNotEmpty() },
-                t.prNumber.takeIf { it.isNotEmpty() }?.let { "PR #$it" },
-                (w.agent?.agent?.displayName ?: t.agent).takeIf { it.isNotEmpty() && says.isEmpty() },
-                w.machineLabel.takeIf { showMachine },
-            ),
-            badge = { StatusBadge(t.status.word, t.status.color()) },
-        )
-        if (busy != null) {
-            Box(Modifier.padding(start = 22.dp, top = Space.s)) { BusyLine(busy) }
-            return@WaitingCard
-        }
-        FlowRow(
-            Modifier.padding(start = 34.dp, top = Space.m),
-            horizontalArrangement = Arrangement.spacedBy(Space.s),
-            verticalArrangement = Arrangement.spacedBy(Space.s),
-        ) {
-            if (answer != null) {
-                val icon = when (answer.first) {
-                    BoardAction.Approve, BoardAction.ApprovePlan -> HerdrIcons.Check
-                    BoardAction.Tell -> HerdrIcons.Reply
-                    else -> HerdrIcons.RotateCcw
-                }
-                // Approve is the one filled: a fix or a reply is a step on the way, the merge is the yes.
-                val primary = answer.first == BoardAction.Approve || answer.first == BoardAction.ApprovePlan
-                AnswerButton(answer.second, icon, primary = primary, enabled = true, onClick = onAnswer)
-            }
-            AnswerButton("Open", null, primary = answer == null, enabled = true, onClick = onOpen)
-        }
-    }
-}
-
 /** A Shepherdr 3 space whose coordinator asks you something, as a card: Open goes to its chat, where the question is. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -436,7 +372,7 @@ fun AgentLine(
 ) {
     val c = Herdr.colors
     val a = row.agent.agent
-    val t: BoardTask? = row.task
+    val t: WorkTask? = row.task
     val status = a.agentStatus
     val working = status == AgentStatus.Working
     val quiet = status == AgentStatus.Done && !row.new || status == AgentStatus.Idle || status == AgentStatus.Unknown || snoozed != null

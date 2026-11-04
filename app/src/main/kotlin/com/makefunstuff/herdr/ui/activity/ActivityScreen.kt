@@ -105,12 +105,10 @@ import java.util.Locale
 /**
  * What an agent did, as a timeline: its turns (what started each, how long it took) with every
  * step in them (messages, commands with their exit status and time, files read and edited, tests,
- * web lookups, tool calls, the plan), and the board's events between them (started, each review's
- * verdict, hand-overs, merged). Live while the agent works. For a board task ([taskId]) every
- * session its agents had; for an agent ([paneId]) its task's, when it works on one, else its own.
+ * web lookups, tool calls, the plan). Live while the agent works. The agent [paneId]'s own session.
  */
 @Composable
-fun ActivityScreen(nav: NavController, machineId: String, taskId: String?, taskName: String?, paneId: String?) {
+fun ActivityScreen(nav: NavController, machineId: String, paneId: String) {
     val container = LocalContainer.current
     val session = container.hosts.session(machineId)
     if (session == null) {
@@ -119,15 +117,13 @@ fun ActivityScreen(nav: NavController, machineId: String, taskId: String?, taskN
     }
     val scope = rememberCoroutineScope()
     val host by session.state.collectAsStateWithLifecycle()
-    val feed = remember(session, taskId, paneId) {
-        ActivityFeed(session, if (taskId != null) ActivityFeed.Target.Task(taskId) else ActivityFeed.Target.Agent(paneId.orEmpty()), scope)
-    }
+    val feed = remember(session, paneId) { ActivityFeed(session, ActivityFeed.Target.Agent(paneId), scope) }
     DisposableEffect(feed) {
         feed.start()
         onDispose { feed.close() }
     }
     val state by feed.state.collectAsStateWithLifecycle()
-    val agent = paneId?.let { p -> host.view?.agents?.firstOrNull { it.paneId == p } }
+    val agent = host.view?.agents?.firstOrNull { it.paneId == paneId }
     val zone = remember { container.briefWork.zone() }
     val view by container.code.view.collectAsStateWithLifecycle()
 
@@ -173,12 +169,7 @@ fun ActivityScreen(nav: NavController, machineId: String, taskId: String?, taskN
         if (atWork && atEnd && rows.isNotEmpty()) list.animateScrollToItem(rows.lastIndex)
     }
 
-    val title = when {
-        taskName != null -> taskName
-        state.taskId != null && agent != null -> agent.name?.takeIf { it.isNotBlank() } ?: agent.displayName
-        agent != null -> agent.name?.takeIf { it.isNotBlank() } ?: agent.displayName
-        else -> taskId ?: "Agent"
-    }
+    val title = agent?.let { it.name?.takeIf { n -> n.isNotBlank() } ?: it.displayName } ?: "Agent"
     BackHandler(enabled = diffOf != null) { diffOf = null }
     diffOf?.let { step ->
         DiffView(step, view) { diffOf = null }

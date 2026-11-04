@@ -1,7 +1,7 @@
 package com.makefunstuff.herdr.ui.manage
 
 import com.makefunstuff.herdr.core.hc.HcMapping
-import com.makefunstuff.herdr.core.board.BoardTask
+import com.makefunstuff.herdr.core.board.WorkTask
 import androidx.compose.material3.RadioButtonDefaults
 import com.makefunstuff.herdr.ui.design.SheetTitle
 import com.makefunstuff.herdr.ui.design.MenuSection
@@ -555,7 +555,7 @@ fun AgentActionsSheet(
     /** The Agents list's triage of it: mark seen, pin, snooze, mute. */
     triage: (@Composable () -> Unit)? = null,
     /** The board task it works on, which names it in the title. */
-    task: BoardTask? = null,
+    task: WorkTask? = null,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -618,15 +618,13 @@ fun AgentActionsSheet(
 /**
  * An agent's sheet named as the Agents list names it: the title is its task's (or what herdr says
  * it does, or its name), the line under it the task's key, the agent (its own name, then its kind
- * when it has one of its own, not the board's) and its state: "Speed up /jobs" over "AND-12 · claude · blocked".
+ * when it has one of its own) and its state: "Speed up /jobs" over "AND-12 · claude · blocked".
  */
-fun agentTitle(agent: AgentInfo?, paneLabel: String, task: BoardTask?): Pair<String, String> {
+fun agentTitle(agent: AgentInfo?, paneLabel: String, task: WorkTask?): Pair<String, String> {
     if (agent == null) return paneLabel to "No agent in this pane"
     val kind = agent.agent?.takeIf { it.isNotBlank() }
-    // Its own name, unless that is its kind or the one the board gave it after the task (sw-api-server-3).
-    val named = agent.name?.takeIf { n ->
-        n.isNotBlank() && n != kind && (task == null || !com.makefunstuff.herdr.core.push.LiveItems.belongs(n, "", task.id, task.name))
-    }
+    // Its own name, unless that is its kind or its task's id.
+    val named = agent.name?.takeIf { n -> n.isNotBlank() && n != kind && n != task?.id }
     val who = when {
         named != null && kind != null -> "$named ($kind)"
         else -> named ?: agent.displayName

@@ -74,6 +74,7 @@ import com.makefunstuff.herdr.ui.artifacts.ArtifactPost
 import com.makefunstuff.herdr.ui.artifacts.ChatArtifacts
 import com.makefunstuff.herdr.ui.artifacts.LocalChatArtifacts
 import com.makefunstuff.herdr.ui.board.AgentChip
+import com.makefunstuff.herdr.ui.common.EmptyState
 import com.makefunstuff.herdr.ui.common.LocalContainer
 import com.makefunstuff.herdr.ui.common.MarkdownText
 import com.makefunstuff.herdr.ui.common.StatusDot
@@ -130,6 +131,17 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.UUID
+
+/** A space's Assistant on one machine: [space], else the home space ([SpaceCoordinator]). */
+@Composable
+fun CoordinatorScreen(nav: NavController, machineId: String, space: String? = null) {
+    val session = LocalContainer.current.hosts.session(machineId)
+    if (session == null) {
+        EmptyState("Machine not found", "It may have been removed.")
+        return
+    }
+    SpaceCoordinator(nav, machineId, session, space)
+}
 
 /**
  * A space's coordinator on Shepherdr 3, as a chat: the spaces to pick from under the bar (the one you
