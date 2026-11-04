@@ -5,7 +5,7 @@ import com.makefunstuff.herdr.core.api.AgentStatus
 import com.makefunstuff.herdr.core.board.WorkOverview
 import com.makefunstuff.herdr.core.board.WorkSpace
 import com.makefunstuff.herdr.core.board.WorkTask
-import com.makefunstuff.herdr.core.board.WorkTasks
+import com.makefunstuff.herdr.core.board.WorkStatus
 import com.makefunstuff.herdr.core.host.HostState
 
 /** An agent as the home list sees it: the machine it runs on, where in herdr, and its workspace's name. */
@@ -134,7 +134,8 @@ data class Home(
             val questions = agents.filter { it.agent.agentStatus == AgentStatus.Blocked }
             val asked = questions.mapNotNull { taskOf[it.key]?.let { t -> it.machineId to t.id } }.toSet()
             val waiting = boards.flatMap { b ->
-                WorkTasks.ordered(b.tasks.filter { it.status.needsYou && (b.machineId to it.id) !in asked })
+                // Ready to accept first, then what asks: as the board lists them otherwise.
+                b.tasks.filter { it.status.needsYou && (b.machineId to it.id) !in asked }.sortedBy { if (it.status == WorkStatus.Ready) 0 else 1 }
                     .map { t ->
                         val agent = agents.firstOrNull { it.machineId == b.machineId && taskOf[it.key]?.id == t.id }
                         Waiting.Task(b.machineId, b.machineLabel, t, agent)

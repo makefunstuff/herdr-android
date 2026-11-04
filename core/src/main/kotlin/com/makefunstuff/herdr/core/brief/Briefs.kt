@@ -5,7 +5,6 @@ import com.makefunstuff.herdr.core.api.AgentStatus
 import com.makefunstuff.herdr.core.api.SessionSnapshot
 import com.makefunstuff.herdr.core.board.WorkStatus
 import com.makefunstuff.herdr.core.board.WorkTask
-import com.makefunstuff.herdr.core.board.WorkTasks
 import com.makefunstuff.herdr.core.push.Tally
 
 /** What the brief got from one machine. */
@@ -144,7 +143,7 @@ object Briefs {
         }
 
         val asking = snapshot?.agents.orEmpty().filter { it.agentStatus == AgentStatus.Blocked && !owned(it, workspaceOf(it)) }
-        val waiting = WorkTasks.ordered(tasks.filter { it.status.needsYou }).map { item(BriefItem.Kind.Waiting, it) } +
+        val waiting = tasks.filter { it.status.needsYou }.map { item(BriefItem.Kind.Waiting, it) } +
             asking.map { a -> agentItem(BriefItem.Kind.Waiting, a, "asks you", m.questions[a.paneId].orEmpty(), agentHappened(a)) }
 
         // Done since the app last showed them: never shown, nothing is news yet.
