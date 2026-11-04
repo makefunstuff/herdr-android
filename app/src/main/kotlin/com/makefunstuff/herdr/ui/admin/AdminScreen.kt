@@ -1,5 +1,7 @@
 package com.makefunstuff.herdr.ui.admin
 
+import androidx.compose.ui.graphics.RectangleShape
+
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -25,7 +27,6 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Checkbox
@@ -410,7 +411,7 @@ private fun IntegrationRow(i: IntegrationInfo, model: AdminModel, onRemove: () -
                 !i.installed && i.available -> QuietButton(onClick = { model.install(i) }) { Text("Install") }
                 i.installed -> Box {
                     Box(
-                        Modifier.size(48.dp).clip(CircleShape).clickable(role = Role.Button) { menu = true }.semantics { contentDescription = "More" },
+                        Modifier.size(48.dp).clip(RectangleShape).clickable(role = Role.Button) { menu = true }.semantics { contentDescription = "More" },
                         contentAlignment = Alignment.Center,
                     ) { Icon(HerdrIcons.Ellipsis, null, tint = Herdr.colors.muted) }
                     HerdrMenu(expanded = menu, onDismissRequest = { menu = false }, title = i.label.ifBlank { i.target }) {

@@ -1,5 +1,7 @@
 package com.makefunstuff.herdr.ui.worktrees
 
+import androidx.compose.ui.graphics.RectangleShape
+
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -17,7 +19,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -401,7 +402,7 @@ private fun WorktreeRow(wt: GitWorktree, snap: SessionSnapshot, onClick: () -> U
         },
         trailing = {
             Box(
-                Modifier.size(48.dp).clip(CircleShape).clickable(role = Role.Button, onClick = onLongClick)
+                Modifier.size(48.dp).clip(RectangleShape).clickable(role = Role.Button, onClick = onLongClick)
                     .semantics { contentDescription = "Actions for ${wt.title}" },
                 contentAlignment = Alignment.Center,
             ) { Icon(HerdrIcons.Ellipsis, null, tint = c.muted) }

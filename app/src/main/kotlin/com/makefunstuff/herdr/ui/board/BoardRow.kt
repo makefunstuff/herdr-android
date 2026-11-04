@@ -1,5 +1,7 @@
 package com.makefunstuff.herdr.ui.board
 
+import androidx.compose.ui.graphics.RectangleShape
+
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
@@ -13,7 +15,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -124,7 +125,7 @@ internal fun BoardRow(
         append(line)
     }
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 56.dp).clip(RoundedCornerShape(8.dp))
+        Modifier.fillMaxWidth().heightIn(min = 56.dp).clip(RectangleShape)
             .combinedClickable(onClickLabel = onClickLabel, onClick = onOpen, onLongClickLabel = onLongClick?.let { "show more actions" }, onLongClick = onLongClick)
             .semantics(mergeDescendants = true) {
                 contentDescription = description
@@ -182,7 +183,7 @@ internal fun WorkTaskRow(t: WorkTask, onOpen: () -> Unit, space: String = "", sh
 internal fun CoordinatorAsksRow(s: WorkSpace, onOpen: () -> Unit) {
     val c = Herdr.colors
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 56.dp).clip(RoundedCornerShape(8.dp))
+        Modifier.fillMaxWidth().heightIn(min = 56.dp).clip(RectangleShape)
             .combinedClickable(onClickLabel = "Open the Assistant chat", onClick = onOpen).padding(vertical = Space.s),
         verticalAlignment = Alignment.CenterVertically,
     ) {

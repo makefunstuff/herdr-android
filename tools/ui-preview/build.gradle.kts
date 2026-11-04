@@ -79,7 +79,7 @@ sourceSets.main {
     kotlin.srcDir("../../core/src/main/kotlin")
     kotlin.srcDir("../../app/src/main/kotlin")
     kotlin.exclude(androidOnly)
-    // The app's fonts, so the screens are drawn in Pretendard and JetBrains Mono as on the phone.
+    // The app's fonts, so the screens are drawn in Geist and Geist Mono as on the phone.
     resources.srcDir("../../app/src/main/res/font")
 }
 

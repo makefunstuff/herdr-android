@@ -1,5 +1,7 @@
 package com.makefunstuff.herdr.ui.common
 
+import androidx.compose.ui.graphics.RectangleShape
+
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -11,7 +13,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -36,7 +37,7 @@ val LocalContainer = staticCompositionLocalOf<AppContainer> { error("no containe
 
 @Composable
 fun StatusDot(color: Color, modifier: Modifier = Modifier, size: Int = 8) {
-    Box(modifier.size(size.dp).background(color, CircleShape))
+    Box(modifier.size(size.dp).background(color, RectangleShape))
 }
 
 /**

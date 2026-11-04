@@ -126,7 +126,7 @@ private fun Pill(p: PillItem, onOpen: () -> Unit) {
         is PillItem.Fired -> listOf(p.alert.title, p.alert.text).filter { it.isNotBlank() }.joinToString(" · ")
     }
     Surface(
-        color = Color.Black, contentColor = ink, shape = HerdrShapes.Pill, shadowElevation = 6.dp,
+        color = Color.Black, contentColor = ink, shape = HerdrShapes.Pill, 
         modifier = Modifier.widthIn(max = 560.dp).clickable(onClickLabel = "Open", onClick = onOpen)
             .semantics { liveRegion = LiveRegionMode.Polite },
     ) {

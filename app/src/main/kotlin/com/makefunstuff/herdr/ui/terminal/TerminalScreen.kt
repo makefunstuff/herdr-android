@@ -1,5 +1,7 @@
 package com.makefunstuff.herdr.ui.terminal
 
+import androidx.compose.ui.graphics.RectangleShape
+
 import com.makefunstuff.herdr.core.terminal.LiveTerminal
 import com.makefunstuff.herdr.core.hc.HcTerminalStream
 import com.makefunstuff.herdr.core.hc.HcMapping
@@ -27,8 +29,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -516,7 +516,7 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
                 AndroidView(
                     factory = { ctx ->
                         TerminalView(ctx).also { v ->
-                            androidx.core.content.res.ResourcesCompat.getFont(ctx, com.makefunstuff.herdr.R.font.jetbrains_mono_regular)?.let(v::setTypeface)
+                            androidx.core.content.res.ResourcesCompat.getFont(ctx, com.makefunstuff.herdr.R.font.geist_mono_regular)?.let(v::setTypeface)
                             v.onGridSize = { c, r -> grid = c to r }
                             v.onCellTap = { cell -> v.showKeyboard(); tapCell(cell) }
                             v.onCellLongPress = { cell -> v.startSelection(cell); selecting = true }
@@ -708,7 +708,7 @@ private fun ResizeSheet(onPick: (ResizeDirection) -> Unit) {
 @Composable
 private fun PadKey(icon: androidx.compose.ui.graphics.vector.ImageVector, description: String, onClick: () -> Unit) {
     Box(
-        Modifier.size(56.dp).clip(CircleShape).background(Herdr.colors.field).clickable(role = Role.Button, onClick = onClick)
+        Modifier.size(56.dp).clip(RectangleShape).background(Herdr.colors.field).clickable(role = Role.Button, onClick = onClick)
             .semantics { contentDescription = description },
         contentAlignment = Alignment.Center,
     ) { Icon(icon, null, tint = Herdr.colors.text, modifier = Modifier.size(28.dp)) }

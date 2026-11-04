@@ -1,5 +1,7 @@
 package com.makefunstuff.herdr.ui.agents
 
+import androidx.compose.ui.graphics.RectangleShape
+
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -20,8 +22,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
@@ -37,7 +37,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
@@ -100,12 +99,12 @@ fun PromptCard(
     modifier: Modifier = Modifier,
 ) {
     val c = Herdr.colors
-    val shape = RoundedCornerShape(Radius.xl)
+    val shape = RectangleShape
     Surface(
         color = c.card,
         border = BorderStroke(1.dp, c.lineStrong),
         shape = shape,
-        modifier = modifier.fillMaxWidth().shadow(6.dp, shape, ambientColor = c.shadow, spotColor = c.shadow).animateContentSize(),
+        modifier = modifier.fillMaxWidth().animateContentSize(),
     ) {
         Column(Modifier.padding(Space.l), verticalArrangement = Arrangement.spacedBy(Space.s)) {
             val tag = remember(prompt) { prompt?.let { PromptTag.of(it) } }
@@ -147,12 +146,12 @@ fun PromptCard(
 @Composable
 fun PromptBar(question: String, telling: Boolean, onOpen: () -> Unit, onCancelTell: () -> Unit, modifier: Modifier = Modifier) {
     val c = Herdr.colors
-    val shape = RoundedCornerShape(Radius.xl)
+    val shape = RectangleShape
     Surface(
         color = c.card,
         border = BorderStroke(1.dp, c.lineStrong),
         shape = shape,
-        modifier = modifier.fillMaxWidth().shadow(6.dp, shape, ambientColor = c.shadow, spotColor = c.shadow),
+        modifier = modifier.fillMaxWidth(),
     ) {
         Row(
             Modifier.fillMaxWidth().heightIn(min = 52.dp).clickable(onClick = onOpen).padding(start = Space.l, end = Space.xs),
@@ -170,7 +169,7 @@ fun PromptBar(question: String, telling: Boolean, onOpen: () -> Unit, onCancelTe
             }
             if (telling) {
                 Box(
-                    Modifier.size(48.dp).clip(CircleShape).clickable(role = Role.Button, onClick = onCancelTell)
+                    Modifier.size(48.dp).clip(RectangleShape).clickable(role = Role.Button, onClick = onCancelTell)
                         .semantics { contentDescription = "Keep the question" },
                     contentAlignment = Alignment.Center,
                 ) { Icon(HerdrIcons.X, null, tint = c.muted, modifier = Modifier.size(18.dp)) }
@@ -204,8 +203,8 @@ private fun Details(lines: List<String>) {
             shown.joinToString("\n"),
             style = CodeStyle.copy(fontSize = 12.sp, lineHeight = 18.sp),
             color = c.text,
-            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(Radius.m)).background(c.ground)
-                .border(1.dp, c.line, RoundedCornerShape(Radius.m)).padding(horizontal = Space.m, vertical = Space.s),
+            modifier = Modifier.fillMaxWidth().clip(RectangleShape).background(c.ground)
+                .border(1.dp, c.line, RectangleShape).padding(horizontal = Space.m, vertical = Space.s),
         )
     }
     if (details.size > 3 && !all) {
@@ -273,7 +272,7 @@ private fun Options(p: BlockedPrompt, answering: Boolean, onPress: (PromptPress)
             val box = p.multiSelect && option.checked != null
             val on = i in ticked
             val pointed = i == p.selected
-            val row = Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(Radius.m))
+            val row = Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RectangleShape)
                 .background(if (pointed && !p.multiSelect) c.hover else Color.Transparent)
             Row(
                 (if (box) row.toggleable(on, enabled = !answering, role = Role.Checkbox) { ticked = if (it) ticked + i else ticked - i }
@@ -283,16 +282,16 @@ private fun Options(p: BlockedPrompt, answering: Boolean, onPress: (PromptPress)
             ) {
                 if (box) {
                     Box(
-                        Modifier.size(22.dp).clip(RoundedCornerShape(Radius.s))
+                        Modifier.size(22.dp).clip(RectangleShape)
                             .background(if (on) c.primary else Color.Transparent)
-                            .border(1.dp, if (on) c.primary else c.lineStrong, RoundedCornerShape(Radius.s)),
+                            .border(1.dp, if (on) c.primary else c.lineStrong, RectangleShape),
                         contentAlignment = Alignment.Center,
                     ) { if (on) Icon(HerdrIcons.Check, null, tint = c.onPrimary, modifier = Modifier.size(14.dp)) }
                 } else {
                     // The menu's number as a keycap (`.prompt-card-option`).
                     Box(
-                        Modifier.defaultMinSize(minWidth = 22.dp, minHeight = 22.dp).clip(RoundedCornerShape(Radius.s))
-                            .border(1.dp, c.lineStrong, RoundedCornerShape(Radius.s)).padding(horizontal = 5.dp),
+                        Modifier.defaultMinSize(minWidth = 22.dp, minHeight = 22.dp).clip(RectangleShape)
+                            .border(1.dp, c.lineStrong, RectangleShape).padding(horizontal = 5.dp),
                         contentAlignment = Alignment.Center,
                     ) { Text(option.number?.toString() ?: "${i + 1}", style = CodeStyle.copy(fontSize = 11.sp, lineHeight = 14.sp), color = c.muted) }
                 }
@@ -342,14 +341,14 @@ private fun Steps(steps: List<PromptStep>) {
     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(Space.xs)) {
         steps.forEachIndexed { i, s ->
             Row(
-                Modifier.clip(RoundedCornerShape(50)).background(if (s.current) c.hover else Color.Transparent)
-                    .border(1.dp, if (s.current) c.lineStrong else c.line, RoundedCornerShape(50))
+                Modifier.clip(RectangleShape).background(if (s.current) c.hover else Color.Transparent)
+                    .border(1.dp, if (s.current) c.lineStrong else c.line, RectangleShape)
                     .padding(start = 4.dp, end = 10.dp, top = 4.dp, bottom = 4.dp)
                     .semantics { stateDescription = when { s.answered -> "answered"; s.current -> "asked now"; else -> "" } },
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(
-                    Modifier.size(20.dp).clip(CircleShape).background(if (s.answered) c.tint(c.done) else c.card),
+                    Modifier.size(20.dp).clip(RectangleShape).background(if (s.answered) c.tint(c.done) else c.card),
                     contentAlignment = Alignment.Center,
                 ) {
                     when {

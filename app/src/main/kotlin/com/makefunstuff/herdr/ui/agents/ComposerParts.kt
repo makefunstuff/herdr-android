@@ -1,5 +1,7 @@
 package com.makefunstuff.herdr.ui.agents
 
+import androidx.compose.ui.graphics.RectangleShape
+
 import androidx.compose.foundation.Canvas
 import com.makefunstuff.herdr.core.chat.VoiceNotes
 import com.makefunstuff.herdr.core.chat.VoiceRecorder
@@ -20,8 +22,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -31,7 +31,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.StrokeCap
@@ -81,12 +80,12 @@ fun HeldList(
 ) {
     val c = Herdr.colors
     val ready = Held.ready(status)
-    val shape = RoundedCornerShape(Radius.xl)
+    val shape = RectangleShape
     Surface(
         color = c.card,
         border = androidx.compose.foundation.BorderStroke(1.dp, if (ready) c.accent else c.line),
         shape = shape,
-        modifier = Modifier.fillMaxWidth().shadow(6.dp, shape, ambientColor = c.shadow, spotColor = c.shadow)
+        modifier = Modifier.fillMaxWidth()
             .semantics { contentDescription = "Held messages (${held.size})" },
     ) {
         Column {
@@ -128,7 +127,7 @@ fun HeldList(
                                 Text("Send now", color = if (!canSend) c.off else if (ready) c.accent else c.text)
                             }
                             Box(
-                                Modifier.size(48.dp).clip(CircleShape).clickable(role = Role.Button, onClick = { onDiscard(m) })
+                                Modifier.size(48.dp).clip(RectangleShape).clickable(role = Role.Button, onClick = { onDiscard(m) })
                                     .semantics { contentDescription = "Discard" },
                                 contentAlignment = Alignment.Center,
                             ) { Icon(HerdrIcons.X, null, tint = c.muted, modifier = Modifier.size(18.dp)) }
@@ -166,7 +165,7 @@ fun QuickReplyRow(replies: List<String>, onReply: (String) -> Unit, onEdit: (() 
             }
         }
         if (onEdit != null) Box(
-            Modifier.size(48.dp).clip(CircleShape).clickable(role = Role.Button, onClick = onEdit)
+            Modifier.size(48.dp).clip(RectangleShape).clickable(role = Role.Button, onClick = onEdit)
                 .semantics { contentDescription = "Edit quick replies" },
             contentAlignment = Alignment.Center,
         ) { Icon(HerdrIcons.Pencil, null, tint = c.muted, modifier = Modifier.size(16.dp)) }
@@ -184,12 +183,12 @@ data class CompletionRow(val insert: String, val label: String, val detail: Stri
 @Composable
 fun CompletionMenu(title: String, rows: List<CompletionRow>, note: String?, onPick: (CompletionRow) -> Unit) {
     val c = Herdr.colors
-    val shape = RoundedCornerShape(Radius.xl)
+    val shape = RectangleShape
     Surface(
         color = c.card,
         border = androidx.compose.foundation.BorderStroke(1.dp, c.line),
         shape = shape,
-        modifier = Modifier.fillMaxWidth().shadow(6.dp, shape, ambientColor = c.shadow, spotColor = c.shadow),
+        modifier = Modifier.fillMaxWidth(),
     ) {
         Column(Modifier.padding(vertical = Space.xs)) {
             Text(
@@ -254,7 +253,7 @@ fun fileRows(files: List<String>): List<CompletionRow> = files.map { path ->
 @Composable
 fun ModelPillButton(pill: ModelPill, onClick: () -> Unit) {
     val c = Herdr.colors
-    val shape = RoundedCornerShape(50)
+    val shape = RectangleShape
     val percent = pill.percent
     val words = pill.title + (percent?.let { " · $it%" } ?: "")
     Box(
