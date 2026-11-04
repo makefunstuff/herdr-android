@@ -119,7 +119,7 @@ private fun TalkButton(state: VoiceState, talk: (Boolean) -> Unit) {
         Modifier.size(48.dp).clip(RectangleShape)
             .background(if (busy) c.hover else c.primary)
             .semantics {
-                contentDescription = if (listening) "Send what you said" else "Talk to the coordinator"
+                contentDescription = if (listening) "Send what you said" else "Talk to the Assistant"
                 stateDescription = state.words
                 onClick { onTalk(!listening); true }
             }

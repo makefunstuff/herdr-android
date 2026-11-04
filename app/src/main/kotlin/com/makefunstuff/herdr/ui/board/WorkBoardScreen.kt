@@ -235,7 +235,7 @@ internal fun WorkBoardScreen(
             containerColor = Herdr.colors.ground,
             topBar = {
                 HerdrTopBar(
-                    "Board",
+                    "Tasks",
                     subtitle = "${state.machine.label} · ${if (o == null) "Shepherdr" else "${needsYou.size + asking.size} need you"}",
                     onBack = { nav.popBackStack() },
                 ) {

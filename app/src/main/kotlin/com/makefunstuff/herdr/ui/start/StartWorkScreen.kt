@@ -239,9 +239,9 @@ fun StartWorkScreen(nav: NavController, machineId: String? = null, text: String 
                 PrimaryButton(
                     when {
                         busy && v2 -> "Sending…"
-                        v2 -> "Send to the coordinator"
+                        v2 -> "Send to the Assistant"
                         busy -> "Starting…"
-                        board -> "Send to the coordinator"
+                        board -> "Send to the Assistant"
                         else -> "Start ${agent ?: "the agent"}"
                     },
                     modifier = Modifier.fillMaxWidth(), enabled = ready, onClick = ::go,

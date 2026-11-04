@@ -251,7 +251,7 @@ fun scenes(): List<Scene> = listOf(
     // Its chat not read yet (or not readable): the composer is whole and writable all the same; and attaching a file.
     Scene("task-shepherdr3-unread", route = Routes.board(DEVBOX, "AND-19"), setup = { shepherdr3(); host(DEVBOX).shepherdr?.chatRefused = "Couldn't read the chat" }),
     Scene("task-shepherdr3-attach", route = Routes.board(DEVBOX, "AND-19"), setup = { shepherdr3() }, actions = { tapLabel("Attach files") }),
-    Scene("machine-new", route = Routes.machine(DEVBOX), actions = { tapText("New") }),
+    Scene("machine-new", route = Routes.machine(DEVBOX), actions = { tapText("NEW") }),
     // Add machine: scanning the code herdr-push pair shows (the phone's own scanner is a system screen; the stand-in
     // reads studio's code), studio found on Tailscale, studio answering nowhere, and typing the address instead.
     Scene("add-machine", route = Routes.edit()),
@@ -562,7 +562,7 @@ fun scenes(): List<Scene> = listOf(
     // chip, Shepherdr's own second line and the minutes left), a task as its agent's chat with its cards answered in
     // it, Accept's card, and adding a task, which goes to a space's Assistant.
     Scene("board-v2", route = Routes.board(DEVBOX), setup = { v2() }),
-    Scene("board-v2-tall", route = Routes.board(DEVBOX), heightDp = 1700, setup = { v2() }, actions = { tapText("Done · 2") }),
+    Scene("board-v2-tall", route = Routes.board(DEVBOX), heightDp = 1700, setup = { v2() }, actions = { tapText("DONE · 2") }),
     Scene("task-v2-asks", route = Routes.board(DEVBOX, "AND-21"), setup = { v2() }),
     Scene("task-v2-answered", route = Routes.board(DEVBOX, "AND-21"), setup = { v2() }, actions = { tapText("Seen 2 min ago") }),
     Scene("task-v2-multi", route = Routes.board(DEVBOX, "AND-24"), setup = { v2() }, actions = { tapText("Key bar"); tapText("Alert rules") }),
@@ -586,7 +586,7 @@ fun scenes(): List<Scene> = listOf(
     Scene("task-v2-todo-menu", route = Routes.board(DEVBOX, "AND-23"), setup = { v2() }, actions = { tapLabel("More") }),
     Scene("board-v2-add", route = Routes.board(DEVBOX), setup = { v2() }, actions = { tapLabel("Add a task") }),
     // A space's heading opens that space's Assistant chat.
-    Scene("board-v2-coordinator", route = Routes.board(DEVBOX), setup = { v2() }, actions = { tapText("herdr-android · 2") }),
+    Scene("board-v2-coordinator", route = Routes.board(DEVBOX), setup = { v2() }, actions = { tapText("HERDR-ANDROID · 2") }),
 
     // A chat floating over other apps as a bubble: offered in the agent's menu and the Coordinator's bar, Android's
     // bubbles not yet allowed for the app, and the bubble's own window (an agent's chat, the Coordinator), which
@@ -703,7 +703,7 @@ fun scenes(): List<Scene> = listOf(
         setup = { selectTests(); host(DEVBOX).snapshot = Demo.devbox(reviewer = true) },
         actions = { tapLabel("More"); tapText("Select text"); tapText("Quote in chat") },
     ),
-    Scene("terminal-to-coordinator", route = Routes.terminal(DEVBOX, APP_SHELL), setup = { selectTests(); shepherdr() }, actions = { tapLabel("More"); tapText("Select text"); tapText("Send to Coordinator") }),
+    Scene("terminal-to-coordinator", route = Routes.terminal(DEVBOX, APP_SHELL), setup = { selectTests(); shepherdr() }, actions = { tapLabel("More"); tapText("Select text"); tapText("Send to the Assistant") }),
 
     // A workspace's dev servers through SSH: the website's vite, its storybook, the machine's others behind a chip;
     // at desktop size; a screenshot in the website agent's message box; a workspace with no web server.

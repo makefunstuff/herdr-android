@@ -289,7 +289,9 @@ fun TasksScreen(
             is Waiting.Coordinator -> null
         }
     }.toSet()
-    fun rows(list: List<AgentRow>) = list.filter { r -> r.task?.let { r.agent.machineId to it.id } !in asked && titleOf(r.agent, r.task) !in askedTitles }
+    fun rows(list: List<AgentRow>) = list.filter { r ->
+        if (r.task != null) (r.agent.machineId to r.task!!.id) !in asked else titleOf(r.agent, null) !in askedTitles
+    }
     val agentRows = rows(home.pinned + home.working + home.done + home.idle + home.snoozed)
     val taskWithAgent = agentRows.mapNotNull { r -> r.task?.let { r.agent.machineId to it.id } }.toSet()
     val agentTitles = agentRows.map { titleOf(it.agent, it.task) }.toSet() + askedTitles
