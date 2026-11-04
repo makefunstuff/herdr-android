@@ -72,8 +72,7 @@ import kotlinx.coroutines.launch
 
 /**
  * One run of a quick command, as it goes: its output streaming in (a prompt's answer, as Markdown),
- * how it ended, and Stop, Copy and Run again; an AI one's answer also goes to the Coordinator or
- * becomes a board task. It is read from the machine, so it can be closed and opened again, and the
+ * how it ended, and Stop, Copy and Run again; an AI one's answer also goes to the Assistant. It is read from the machine, so it can be closed and opened again, and the
  * run carries on without it.
  */
 @OptIn(ExperimentalLayoutApi::class)
@@ -94,7 +93,6 @@ fun RunSheet(nav: NavController, machineId: String, id: String, onDismiss: () ->
     var problem by remember(id) { mutableStateOf<String?>(null) }
     var again by remember(id) { mutableIntStateOf(0) }
     var busy by remember(id) { mutableStateOf(false) }
-    var task by remember(id) { mutableStateOf(false) }
     val online = host?.online == true
 
     // Read it every second while it runs; once it ended, on until the whole of its output is in.
@@ -192,29 +190,16 @@ fun RunSheet(nav: NavController, machineId: String, id: String, onDismiss: () ->
                         }, enabled = !busy) {
                             Icon(HerdrIcons.RotateCw, null, Modifier.size(16.dp)); Text("Run again", Modifier.padding(start = Space.xs))
                         }
-                        if (r.kind == QuickKind.Prompt && text.isNotBlank() && host?.hasBoard == true) {
+                        if (r.kind == QuickKind.Prompt && text.isNotBlank() && host?.onShepherdr == true) {
                             SecondaryButton(onClick = {
                                 container.drafts.add(DraftStore.coordinator(machineId), "${r.name} answered:\n\n${text.trim()}")
                                 onDismiss()
                                 nav.navigate(Routes.coordinator(machineId))
                             }) { Icon(HerdrIcons.Send, null, Modifier.size(16.dp)); Text("Send to Coordinator", Modifier.padding(start = Space.xs)) }
-                            SecondaryButton(onClick = { task = true }) {
-                                Icon(HerdrIcons.ListTodo, null, Modifier.size(16.dp)); Text("Make it a task", Modifier.padding(start = Space.xs))
-                            }
                         }
                     }
                 }
             }
-        }
-    }
-
-    val r = run
-    if (task && r != null && session != null) MakeTaskDialog(r, text, onDismiss = { task = false }) { title, repo, desc ->
-        task = false
-        scope.launch {
-            runCatching { session.awaitBoard().add(title, repo, desc) }
-                .onSuccess { context.toast(it.ifEmpty { "Added to the board" }) }
-                .onFailure { context.toast(it.message ?: "The board refused") }
         }
     }
 }
@@ -261,27 +246,6 @@ private fun Output(r: QuickRun, text: String) {
             else Text(text.trimEnd('\n'), style = CodeStyle.copy(fontSize = MaterialTheme.typography.bodySmall.fontSize), color = c.text)
         }
     }
-}
-
-/** A board task from an AI command's answer: its title, its repository, and the answer as its description. */
-@Composable
-private fun MakeTaskDialog(r: QuickRun, answer: String, onDismiss: () -> Unit, onAdd: (String, String, String) -> Unit) {
-    var title by remember { mutableStateOf(com.makefunstuff.herdr.core.quick.QuickText.line(answer).take(80).ifEmpty { r.name }) }
-    var repo by remember { mutableStateOf((r.repo.ifEmpty { r.cwd }).trimEnd('/').substringAfterLast('/')) }
-    var desc by remember { mutableStateOf("From the quick command “${r.name}”:\n\n${answer.trim()}") }
-    HerdrDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Make it a task") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(Space.m)) {
-                HerdrField(title, { title = it }, label = "Title", modifier = Modifier.fillMaxWidth())
-                HerdrField(repo, { repo = it }, label = "Repo (name or path)", singleLine = true, modifier = Modifier.fillMaxWidth())
-                HerdrField(desc, { desc = it }, label = "Description (Markdown)", minLines = 4, maxLines = 10, modifier = Modifier.fillMaxWidth())
-            }
-        },
-        dismissButton = { QuietButton(onClick = onDismiss) { Text("Cancel") } },
-        confirmButton = { PrimaryButton("Add", enabled = title.isNotBlank()) { onAdd(title.trim(), repo.trim(), desc.trim()) } },
-    )
 }
 
 /** "12 KB", "3.4 MB". */

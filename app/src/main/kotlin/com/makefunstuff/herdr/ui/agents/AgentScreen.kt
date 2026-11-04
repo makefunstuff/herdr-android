@@ -147,7 +147,7 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
     val task = remember(boards, agent, snapshot) {
         val a = agent ?: return@remember null
         val home = HomeAgent(machineId, host.machine.label, a, snapshot?.location(a.workspaceId, a.tabId).orEmpty(), snapshot?.workspace(a.workspaceId)?.label.orEmpty())
-        Home.taskOf(home, Home.own(boards)[machineId].orEmpty())
+        Home.taskOf(home, boards.firstOrNull { it.machineId == machineId }?.tasks.orEmpty())
     }
     // What the title bar says it works on: its task, else its own name (unless that is only its CLI's or a
     // launcher's hash, `shep-1a2b…`), else its workspace, else (herdr-core's catch-all "Other terminals") its

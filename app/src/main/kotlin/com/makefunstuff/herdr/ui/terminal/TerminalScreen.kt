@@ -612,7 +612,7 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
                 SelectionBar(
                     onCopy = ::copySelection,
                     onQuote = ::quoteSelection,
-                    onCoordinator = if (state.hasBoard) ::sendToCoordinator else null,
+                    onCoordinator = if (state.onShepherdr) ::sendToCoordinator else null,
                     onCancel = {
                         view?.clearSelection()
                         selecting = false

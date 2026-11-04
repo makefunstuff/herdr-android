@@ -20,7 +20,6 @@ import com.makefunstuff.herdr.bubble.FloatActivity
 import com.makefunstuff.herdr.core.push.Alert
 import com.makefunstuff.herdr.core.push.AlertAction
 import com.makefunstuff.herdr.guard.ConfirmActivity
-import com.makefunstuff.herdr.core.push.LiveItems
 import com.makefunstuff.herdr.core.push.QuietSummary
 import kotlinx.serialization.json.Json
 
@@ -36,19 +35,19 @@ class AndroidAlerts(private val context: Context, private val appLock: () -> Boo
         system.createNotificationChannels(
             listOf(
                 NotificationChannel(NEEDS_YOU, "Needs you", NotificationManager.IMPORTANCE_HIGH).apply {
-                    description = "An agent asks something, or a board task waits for you"
+                    description = "An agent asks something, or a machine runs low"
                 },
                 NotificationChannel(FINISHED, "Finished", NotificationManager.IMPORTANCE_DEFAULT).apply {
                     description = "An agent finished its work"
                 },
                 NotificationChannel(WENT_WRONG, "Went wrong", NotificationManager.IMPORTANCE_HIGH).apply {
-                    description = "A review or a check failed, or a task went wrong"
+                    description = "A quick command failed"
                 },
                 NotificationChannel(WATCHES, "Watches", NotificationManager.IMPORTANCE_HIGH).apply {
-                    description = "A watch you set fired: a task's checks passed, an agent finished"
+                    description = "A watch you set fired: an agent finished"
                 },
                 NotificationChannel(LIMITS, "Limits", NotificationManager.IMPORTANCE_DEFAULT).apply {
-                    description = "An AI provider near or at a limit, or a task handed to another agent because of one"
+                    description = "An AI provider near or at a limit"
                 },
                 NotificationChannel(WORKING, "Working", NotificationManager.IMPORTANCE_LOW).apply {
                     description = "While the app answers from a notification or looks at your machines"
@@ -71,12 +70,9 @@ class AndroidAlerts(private val context: Context, private val appLock: () -> Boo
             }
             b.addAction(action.build())
         }
-        // An agent's chat (the Coordinator's, for its agent) floats over other apps as a bubble, where a button
-        // is still free (Android shows three).
+        // An agent's chat floats over other apps as a bubble, where a button is still free (Android shows three).
         if (alert.paneId.isNotEmpty() && alert.actions.size < 3 && Build.VERSION.SDK_INT >= 30) {
-            val coordinator = LiveItems.isCoordinator(alert.agentName)
-            val chat = if (coordinator) BubbleChat.Coordinator(alert.machineId) else BubbleChat.Agent(alert.machineId, alert.paneId)
-            b.addAction(0, "Float chat", floatIntent(context, chat, if (coordinator) "Coordinator" else alert.agentName, alert.tag))
+            b.addAction(0, "Float chat", floatIntent(context, BubbleChat.Agent(alert.machineId, alert.paneId), alert.agentName, alert.tag))
         }
         post(alert.tag, b)
     }
@@ -157,14 +153,12 @@ class AndroidAlerts(private val context: Context, private val appLock: () -> Boo
         )
         .build()
 
-    /** A tap: the agent's chat, the task on the board (finished work: its review card), the machine's health, or a quick command's run. */
+    /** A tap: the agent's chat, the machine's health or usage, or a quick command's run. */
     private fun openIntent(alert: Alert): PendingIntent {
         val intent = Intent(context, MainActivity::class.java)
             .setData(Uri.parse("herdr://alert/${Uri.encode(alert.tag)}"))
             .putExtra(MainActivity.OPEN_MACHINE, alert.machineId)
             .putExtra(MainActivity.OPEN_PANE, alert.paneId)
-            .putExtra(MainActivity.OPEN_TASK, alert.taskId)
-            .putExtra(MainActivity.OPEN_REVIEW, alert.review)
             .putExtra(MainActivity.OPEN_HEALTH, alert.health)
             .putExtra(MainActivity.OPEN_USAGE, alert.usage)
             .putExtra(MainActivity.OPEN_QUICK, alert.quickRun)
@@ -174,7 +168,7 @@ class AndroidAlerts(private val context: Context, private val appLock: () -> Boo
 
     /**
      * A button: carried out by [WorkService], which may start from a notification while the app is closed.
-     * One that can't be undone (Approve and merge, Always allow) opens [ConfirmActivity] instead, which asks
+     * One that can't be undone (Always allow) opens [ConfirmActivity] instead, which asks
      * for the fingerprint first when that is on.
      */
     private fun actionIntent(alert: Alert, index: Int, a: AlertAction): PendingIntent {

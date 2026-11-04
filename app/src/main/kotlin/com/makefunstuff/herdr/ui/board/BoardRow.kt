@@ -35,9 +35,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.makefunstuff.herdr.core.board.BoardStatus
-import com.makefunstuff.herdr.core.board.BoardTask
-import com.makefunstuff.herdr.core.board.TaskLine
 import com.makefunstuff.herdr.core.board.WorkSpace
 import com.makefunstuff.herdr.core.board.WorkStatus
 import com.makefunstuff.herdr.core.board.WorkTask
@@ -176,35 +173,6 @@ internal fun WorkTaskRow(t: WorkTask, onOpen: () -> Unit, space: String = "", sh
         description = listOf(t.name, t.status.label, t.title, t.line, space).filter { it.isNotEmpty() }.joinToString(", "),
         onOpen = onOpen, onClickLabel = if (onAgent != null) "Open its chat" else "Open details",
         progress = t.progress, eta = t.eta, left = t.left, agent = t.agent, onAgent = onAgent, age = t.age, pinned = t.pinned, showWord = showWord,
-    )
-}
-
-/**
- * A herdr-projects 1.x task as a [BoardRow]: its badge's one word in the row's mark and colour, and
- * what that word leaves out ("Review failed") first on its line.
- */
-@Composable
-internal fun TaskRow(
-    t: BoardTask,
-    onOpen: () -> Unit,
-    onMenu: () -> Unit,
-    actions: List<CustomAccessibilityAction> = emptyList(),
-    /** Opens its agent's chat, while its agent's pane is on the machine. */
-    onAgent: (() -> Unit)? = null,
-    showWord: Boolean = true,
-) {
-    val status = WorkTasks.status(t.status)
-    val quiet = t.status == BoardStatus.Done || t.status == BoardStatus.Archived
-    val doing = TaskLine.line(t.msg).takeIf { !quiet }
-    val pr = if (t.pr.isEmpty()) null else "PR " + t.prNumber.let { if (it.isEmpty()) t.pr else "#$it" }
-    BoardRow(
-        name = t.name, title = t.title,
-        line = listOfNotNull(t.status.detail, doing?.ifEmpty { null }, pr, "research".takeIf { t.research }).joinToString(" · "),
-        status = status,
-        description = listOfNotNull(t.name, t.status.word, t.status.detail, t.title).joinToString(", "),
-        onOpen = onOpen, onClickLabel = "Open details",
-        progress = t.progress, eta = t.eta, agent = t.agent, onAgent = onAgent, pinned = t.pinned,
-        onLongClick = onMenu, actions = actions, showWord = showWord,
     )
 }
 

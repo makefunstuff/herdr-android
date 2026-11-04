@@ -32,9 +32,6 @@ import androidx.navigation.NavController
 import com.makefunstuff.herdr.LocalPanes
 import com.makefunstuff.herdr.Routes
 import com.makefunstuff.herdr.core.home.Waiting
-import com.makefunstuff.herdr.core.home.BoardGroup
-import com.makefunstuff.herdr.core.home.Home
-import com.makefunstuff.herdr.core.home.HomeAgent
 import com.makefunstuff.herdr.ui.common.EmptyState
 import com.makefunstuff.herdr.ui.common.LocalContainer
 import com.makefunstuff.herdr.ui.design.BarIcon
@@ -61,9 +58,9 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 
 /**
- * The Board tab: every machine's work board in one list, a group per machine (what waits for you
+ * The Board tab: every machine's Shepherdr board in one list, a group per machine (what waits for you
  * first, then what is at work and what is to do), read again while it is in front. A task opens on
- * its machine's board; a group's heading opens that whole board (done and archived tasks, search).
+ * its machine's board; a group's heading opens that whole board (done tasks too).
  */
 @Composable
 fun BoardsScreen(nav: NavController) {
@@ -72,20 +69,15 @@ fun BoardsScreen(nav: NavController) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val hosts by container.hosts.hosts.collectAsStateWithLifecycle()
-    // Each task's agent on its machine: its chat opens from the card.
-    val agents = remember(hosts) { HomeAgent.of(hosts) }
     val boards = rememberBoards()
-    // Shepherdr 3 machines: their spaces and tasks as the board sent them.
-    val works = rememberWorkBoards()
     val problems = rememberBoardProblems()
     val readNow = remember { Channel<Unit>(Channel.CONFLATED) }
     ReadBoards(readNow, everyMs = 10_000)
-    val withBoard = hosts.filter { it.hasWorkBoard }
+    val withBoard = hosts.filter { it.onShepherdr }
     var chosen by rememberSaveable { mutableStateOf<String?>(null) }
     // A machine without a board (or not checked yet since it connected) shows all.
     val machine = chosen?.takeIf { id -> withBoard.any { it.machine.id == id } }
-    val groups = remember(boards, works, machine) { BoardGroup.of(boards.filter { it.machineId !in works }, machine).associateBy { it.machineId } }
-    // In the machines' order, each with its v1 group or its Shepherdr 3 board.
+    // In the machines' order.
     val shown = boards.filter { machine == null || it.machineId == machine }
     // What of the Needs you list (both tabs' badge) this tab shows: tasks and coordinators, on the machine chosen;
     // the rest (agents that ask with no task) is named, so the count adds up to the badge.
@@ -105,8 +97,6 @@ fun BoardsScreen(nav: NavController) {
                 elsewhere.takeIf { it > 0 }?.let { if (waiting > 0) "$it more on Agents" else "$it on Agents" },
             ).joinToString(" · ")) {
                 BarIcon(HerdrIcons.Search, "Search tasks, agents and chats", { panes.open(nav, Routes.search()) })
-                BarIcon(HerdrIcons.Layers, "Review finished work", { panes.open(nav, Routes.review()) })
-                BarIcon(HerdrIcons.CalendarClock, "Routines", { panes.open(nav, Routes.routines(machine)) })
                 BarIcon(HerdrIcons.MessagesSquare, "Ask the Coordinator", { panes.open(nav, Routes.ask(Ask.COORDINATOR)) })
             }
         },
@@ -130,7 +120,7 @@ fun BoardsScreen(nav: NavController) {
             when {
                 withBoard.isEmpty() -> EmptyState(
                     if (hosts.none { it.online }) "Not connected yet" else "No work board",
-                    if (hosts.none { it.online }) "The boards show once a machine with Shepherdr or herdr-projects answers." else "None of your machines has Shepherdr or herdr-projects. Its tasks show here once one does.",
+                    if (hosts.none { it.online }) "The boards show once a machine with Shepherdr answers." else "None of your machines runs Shepherdr. Its tasks show here once one does.",
                     icon = HerdrIcons.SquareKanban,
                 )
                 boards.isEmpty() && problems.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { LoadingState("Reading the boards") }
@@ -144,43 +134,10 @@ fun BoardsScreen(nav: NavController) {
                         item(key = "problem/$label") { ErrorMessage("$label's board: $p", Modifier.padding(vertical = Space.xs), onRetry = { readNow.trySend(Unit) }) }
                     }
                     shown.forEachIndexed { i, b ->
-                        works[b.machineId]?.let { w ->
-                            workGroup(b.machineId, b.machineLabel, w, top = if (i == 0) Space.xs else Space.m,
-                                onBoard = { panes.openBoard(nav, b.machineId) },
-                                onCoordinator = { space -> panes.open(nav, Routes.coordinator(b.machineId, space)) },
-                                onTask = { t -> panes.openBoard(nav, b.machineId, t.id, alone = true) })
-                            return@forEachIndexed
-                        }
-                        val g = groups[b.machineId] ?: return@forEachIndexed
-                        item(key = "h/${g.machineId}") {
-                            SectionHeading(
-                                listOfNotNull(
-                                    g.machineLabel,
-                                    g.needsYou.size.takeIf { it > 0 }?.let { "$it need${if (it == 1) "s" else ""} you" },
-                                    g.working.size.takeIf { it > 0 }?.let { "$it working" },
-                                ).joinToString(" · "),
-                                Modifier.clickable(onClickLabel = "Open ${g.machineLabel}'s board") { panes.openBoard(nav, g.machineId) }.heightIn(min = 48.dp),
-                                top = if (i == 0) Space.xs else Space.m,
-                                trailing = { Icon(HerdrIcons.ChevronRight, null, tint = Herdr.colors.muted, modifier = Modifier.size(20.dp)) },
-                            )
-                        }
-                        if (g.tasks.isEmpty()) item(key = "empty/${g.machineId}") {
-                            Text("No open tasks", style = MaterialTheme.typography.bodyMedium, color = Herdr.colors.muted, modifier = Modifier.padding(start = Space.xs))
-                        }
-                        items(g.tasks, key = { "${g.machineId}/${it.id}" }) { t ->
-                            val live = Home.agentOf(agents.filter { it.machineId == g.machineId }, t)?.agent
-                            TaskRow(
-                                t, onOpen = { panes.openBoard(nav, g.machineId, t.id, alone = true) }, onMenu = { panes.openBoard(nav, g.machineId, t.id, alone = true) },
-                                onAgent = live?.let { a -> { panes.open(nav, Routes.agent(g.machineId, a.paneId)) } },
-                            )
-                        }
-                        if (g.done > 0) item(key = "done/${g.machineId}") {
-                            Text(
-                                "${g.done} done · on ${g.machineLabel}'s board",
-                                style = MaterialTheme.typography.labelLarge, color = Herdr.colors.accent,
-                                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable { panes.openBoard(nav, g.machineId) }.padding(horizontal = Space.xs, vertical = Space.m),
-                            )
-                        }
+                        workGroup(b.machineId, b.machineLabel, b.work, top = if (i == 0) Space.xs else Space.m,
+                            onBoard = { panes.openBoard(nav, b.machineId) },
+                            onCoordinator = { space -> panes.open(nav, Routes.coordinator(b.machineId, space)) },
+                            onTask = { t -> panes.openBoard(nav, b.machineId, t.id, alone = true) })
                     }
                 }
             }
@@ -196,19 +153,14 @@ fun BoardsScreen(nav: NavController) {
     }
     adding?.let { id ->
         container.hosts.session(id)?.let { session ->
-            val repos = boards.firstOrNull { it.machineId == id }?.tasks.orEmpty().map { it.repo }.distinct().sorted()
-            if (session.state.value.onShepherdr) AddWorkTask(session, works[id], onDismiss = { adding = null }) { space, title, brief ->
+            AddWorkTask(session, boards.firstOrNull { it.machineId == id }?.work, onDismiss = { adding = null }) { space, title, brief ->
                 adding = null
                 scope.launch {
                     runCatching { session.awaitWorkBoard().addTask(space.id, title, brief) }
                         .onSuccess { context.toast(it) }.onFailure { context.toast(it.message ?: "Shepherdr refused") }
                     readNow.trySend(Unit)
                 }
-            } else BoardDialogs(
-                pending = Pending.Add, session = session, repos = repos, onDismiss = { adding = null },
-                onWords = { _, _ -> }, onConfirm = {}, onAnyway = {},
-                onSaved = { adding = null; readNow.trySend(Unit) },
-            )
+            }
         }
     }
 }

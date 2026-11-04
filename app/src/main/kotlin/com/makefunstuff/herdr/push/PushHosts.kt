@@ -101,7 +101,6 @@ class PushHosts(
             HerdrUsage.Client({ cmd, t -> conn.run(cmd, t) }, { cmd, input, t -> conn.runWithInput(cmd, input.byteInputStream(), t) }, session.machine.label)
                 .install()
         }
-        session.checkBoard()
         val host = session.state.value
         val sub = HerdrPush.subscription(
             id = subscriber(id),
@@ -110,10 +109,8 @@ class PushHosts(
             key = store.key(id),
             session = host.machine.session,
             herdrPath = host.herdrMachine.herdrPath,
-            boardPath = host.boardPath,
             live = live,
-            watchTasks = watches.filter { it.what != com.makefunstuff.herdr.core.push.Watch.What.AgentDone }.map { it.taskId }.distinct(),
-            watchPanes = watches.filter { it.what == com.makefunstuff.herdr.core.push.Watch.What.AgentDone }.map { it.paneId }.distinct(),
+            watchPanes = watches.map { it.paneId }.distinct(),
         )
         client.run("subscribe", input = sub)
         val started = client.run("install")

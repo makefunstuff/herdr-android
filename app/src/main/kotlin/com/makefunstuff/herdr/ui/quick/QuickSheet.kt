@@ -280,7 +280,7 @@ private fun AskDialog(command: QuickCommand, onDismiss: () -> Unit, onRun: (Stri
 
 /**
  * "New command": what it should do, whether a script or an AI prompt, for this project or
- * everywhere, and who writes it (the Coordinator, the agent at work here, the task's agent).
+ * everywhere, and who writes it (the agent at work here).
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -295,11 +295,9 @@ private fun NewCommandSheet(place: QuickPlace, listing: QuickListing?, onBack: (
     var what by remember { mutableStateOf("") }
     var name by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
-    // Who writes it: the agent at work here, the task's agent, or the Coordinator.
+    // Who writes it: the agent at work here.
     val writers = buildList {
         if (place.pane != null) add("agent" to (place.agentName ?: "This agent"))
-        if (place.task != null && host?.hasBoard == true) add("task" to "${place.taskName ?: "The task"}'s agent")
-        if (host?.hasBoard == true) add("coordinator" to "Coordinator")
     }
     var writer by remember { mutableStateOf(writers.firstOrNull()?.first) }
     val folder = if (global || listing?.projectFolder.isNullOrEmpty()) listing?.globalFolder ?: "~/.config/herdr/commands" else listing!!.projectFolder
@@ -340,17 +338,11 @@ private fun NewCommandSheet(place: QuickPlace, listing: QuickListing?, onBack: (
                 busy = true
                 scope.launch {
                     runCatching {
-                        when (writer) {
-                            "agent" -> {
-                                val api = s.awaitAgent(place.pane!!)
-                                val status = api.status(place.pane)
-                                com.makefunstuff.herdr.core.chat.AgentInput.send(api, place.pane, text, named = status != null,
-                                    blocked = status == com.makefunstuff.herdr.core.api.AgentStatus.Blocked)
-                                "Sent to ${place.agentName ?: "the agent"}"
-                            }
-                            "task" -> s.awaitBoard().act(com.makefunstuff.herdr.core.board.BoardAction.Tell, place.task!!, text).ifEmpty { "Sent to ${place.taskName}'s agent" }
-                            else -> { s.awaitBoard().send(text); "Sent to the Coordinator" }
-                        }
+                        val api = s.awaitAgent(place.pane!!)
+                        val status = api.status(place.pane)
+                        com.makefunstuff.herdr.core.chat.AgentInput.send(api, place.pane, text, named = status != null,
+                            blocked = status == com.makefunstuff.herdr.core.api.AgentStatus.Blocked)
+                        "Sent to ${place.agentName ?: "the agent"}"
                     }.onSuccess { context.toast(it); onDismiss() }
                         .onFailure { context.toast(it.message ?: "Couldn't send it") }
                     busy = false

@@ -224,15 +224,12 @@ fun MachineScreen(nav: NavController, machineId: String) {
             if (!state.online) {
                 item { Notice("Offline · showing the last known state", color = Herdr.colors.notice, icon = HerdrIcons.Clock) }
             }
-            if (state.hasBoard || state.online) item(key = "places") {
+            if (state.online) item(key = "places") {
                 Column(Modifier.padding(top = Space.s)) {
                     MachinePlaces(
                         session,
-                        onBoard = { panes.openBoard(nav, machineId) },
-                        onCoordinator = { nav.navigate(Routes.coordinator(machineId)) },
                         onHealth = { nav.navigate(Routes.health(machineId)) },
                         onUsage = { nav.navigate(Routes.usage(machineId)) },
-                        onRoutines = { nav.navigate(Routes.routines(machineId)) },
                         onLogins = { nav.navigate(Routes.logins(machineId)) },
                     )
                 }
