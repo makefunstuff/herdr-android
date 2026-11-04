@@ -543,17 +543,17 @@ fun scenes(): List<Scene> = listOf(
     }),
     // Reaching the Coordinator from outside the app: a share (a log line and a screenshot) choosing its machine,
     // the tile or widget when it can't tell which, and the chat it lands in with the shared words in its box.
-    Scene("share", route = Routes.ask(Ask.SHARE), setup = { shared = Demo.shared() }),
-    Scene("ask", route = Routes.ask(Ask.COORDINATOR)),
+    Scene("share", route = Routes.ask(Ask.SHARE), setup = { shepherdr(); shared = Demo.shared() }),
+    Scene("ask", route = Routes.ask(Ask.COORDINATOR), setup = { shepherdr() }),
     Scene(
         "share-sent", route = Routes.ask(Ask.SHARE),
-        setup = { shared = Demo.shared().let { s -> s.copy(files = s.files.map { f -> f.copy(path = Demo.sharedFile().path) }) } },
+        setup = { shepherdr(); shared = Demo.shared().let { s -> s.copy(files = s.files.map { f -> f.copy(path = Demo.sharedFile().path) }) } },
         actions = { tapText("devbox"); settle() },
     ),
     // Shared to a machine that isn't connected: the words wait in the box, the screenshot to be copied once it is.
     Scene(
         "share-waiting", route = Routes.ask(Ask.SHARE),
-        setup = { shared = Demo.shared().let { s -> s.copy(files = s.files.map { f -> f.copy(path = Demo.sharedFile().path) }) } },
+        setup = { shepherdr(); shared = Demo.shared().let { s -> s.copy(files = s.files.map { f -> f.copy(path = Demo.sharedFile().path) }) } },
         actions = { tapText("mac-mini"); settle() },
     ),
     // Shepherdr 3: the board through its service (what needs you first, then each space, each task with its agent's
@@ -594,10 +594,6 @@ fun scenes(): List<Scene> = listOf(
 
     // A jump to a failure the Edits filter hides: the filter gives way and the failed step shows.
     Scene("activity-agent", route = Routes.activity(DEVBOX, pane = APP_AGENT), heightDp = 1600),
-    Scene(
-        "float-off", route = Routes.coordinator(DEVBOX), setup = { shepherdr(); bubblesAllowed = false },
-        actions = { tapLabel("Float over other apps") },
-    ),
     Scene("bubble", bubble = BubbleChat.Agent(DEVBOX, APP_AGENT), widthDp = 392, heightDp = 640),
     Scene("bubble-menu", bubble = BubbleChat.Agent(DEVBOX, APP_AGENT), widthDp = 392, heightDp = 640, actions = { tapLabel("More") }),
     Scene("bubble-coordinator", bubble = BubbleChat.Coordinator(DEVBOX), widthDp = 392, heightDp = 640, setup = { shepherdr() }),
