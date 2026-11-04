@@ -156,6 +156,9 @@ object HerdrIcons {
     val ScanSearch: ImageVector by lazy { lucide("ScanSearch", "M3 7V5a2 2 0 0 1 2-2h2", "M17 3h2a2 2 0 0 1 2 2v2", "M21 17v2a2 2 0 0 1-2 2h-2", "M7 21H5a2 2 0 0 1-2-2v-2", "M9 12a3 3 0 1 0 6 0a3 3 0 1 0 -6 0", "m16 16-1.9-1.9") }
     val Scissors: ImageVector by lazy { lucide("Scissors", "M3 6a3 3 0 1 0 6 0a3 3 0 1 0 -6 0", "M8.12 8.12 12 12", "M20 4 8.12 15.88", "M3 18a3 3 0 1 0 6 0a3 3 0 1 0 -6 0", "M14.8 14.8 20 20") }
     val Search: ImageVector get() = GlyphArt.Search
+    /** The workbench's sidebar glyph: opens the spaces drawer. */
+    val Sidebar: ImageVector get() = GlyphArt.Sidebar
+    val SquarePen: ImageVector get() = GlyphArt.SquarePen
     val Send: ImageVector by lazy { lucide("Send", "M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z", "m21.854 2.147-10.94 10.939") }
     val Server: ImageVector get() = GlyphArt.Server
     val Settings: ImageVector get() = GlyphArt.Settings

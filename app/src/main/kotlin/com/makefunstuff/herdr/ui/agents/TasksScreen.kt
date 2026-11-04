@@ -21,6 +21,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.fillMaxSize
+import com.makefunstuff.herdr.core.home.HomeBoard
+import com.makefunstuff.herdr.ui.design.HerdrChip
+import com.makefunstuff.herdr.ui.design.LoadingState
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
@@ -85,8 +91,6 @@ import com.makefunstuff.herdr.ui.design.PrimaryButton
 import com.makefunstuff.herdr.ui.design.QuietButton
 import com.makefunstuff.herdr.ui.design.SectionHeading
 import com.makefunstuff.herdr.ui.manage.AgentActionsSheet
-import com.makefunstuff.herdr.ui.manage.NoticeRow
-import com.makefunstuff.herdr.ui.manage.NoticesSheet
 import com.makefunstuff.herdr.ui.share.Ask
 import com.makefunstuff.herdr.ui.theme.Herdr
 import com.makefunstuff.herdr.ui.theme.Space
@@ -114,18 +118,18 @@ private sealed interface Reply {
 private data class Refusal(val words: String)
 
 /**
- * The home screen: everything that waits for you, across machines, first, each card with its
- * answers (Yes, No and Reply for a question; Approve and merge, Fix, Reply for a task); then the
- * agents pinned, those at work as one line each, those that finished (until seen), the rest, and
- * those snoozed. A row swipes: right marks it seen, left shows Pin, Snooze and Mute. Ask opens
- * the Coordinator. On a wide window it is the left pane ([com.makefunstuff.herdr.Panes]): what it
- * opens shows beside it, chosen here. [filterState] and [listState] come from above, so they stay
- * as the list moves between the two layouts.
+ * The Tasks tab, as Shepherdr 3.1's Tasks list: a filter row, then what waits for you across
+ * machines (each card with its answers: Yes, No and Reply for a question; the card's choices for a
+ * task), the Ready tasks with Accept, then the work by status: at work, queued, to do, done. One
+ * row per task: a task's agent is its row. Agents that work on no task are rows too, and swipe:
+ * right marks one seen, left shows Pin, Snooze and Mute. The + offers New task, the Assistant and
+ * Start an agent. On a wide window it is the left pane ([com.makefunstuff.herdr.Panes]): what it
+ * opens shows beside it, chosen here. [listState] comes from above, so it stays as the list moves
+ * between the two layouts.
  */
 @Composable
-fun AgentsScreen(
+fun TasksScreen(
     nav: NavController,
-    filterState: MutableState<String?> = rememberSaveable { mutableStateOf(null) },
     listState: LazyListState = rememberLazyListState(),
 ) {
     val container = LocalContainer.current
@@ -146,9 +150,6 @@ fun AgentsScreen(
     val boardProblems = rememberBoardProblems()
     val readNow = remember { Channel<Unit>(Channel.CONFLATED) }
     ReadBoards(readNow)
-    var chosen by filterState
-    // A machine filter for one that's gone (taken out of the app) shows all.
-    val filter = chosen?.takeIf { id -> hosts.any { it.machine.id == id } }
     // Beside a wide window's list: what is open in the middle, to show it chosen here.
     val entry by nav.currentBackStackEntryAsState()
     val inMiddle = if (panes.wide) entry?.let(::opened) else null
@@ -160,8 +161,6 @@ fun AgentsScreen(
     // The row swiped open on the left (Pin, Snooze, Mute), by agent key: one at a time.
     var swiped by remember { mutableStateOf<String?>(null) }
     val triageActions = rememberTriageActions { snoozing = it }
-    var showNotices by remember { mutableStateOf(false) }
-    var filterMenu by remember { mutableStateOf(false) }
     var reply by remember { mutableStateOf<Reply?>(null) }
     var refusal by remember { mutableStateOf<Refusal?>(null) }
     var allDone by rememberSaveable { mutableStateOf(false) }
@@ -170,24 +169,16 @@ fun AgentsScreen(
     // Cards answered here, by key, with how they stood; and the ones whose answer is on its way.
     val handled = remember { mutableStateMapOf<String, String>() }
     val busy = remember { mutableStateMapOf<String, String>() }
-    val unread = hosts.sumOf { it.unreadNotices }
-    val noticeRows = remember(hosts) {
-        hosts.flatMap { h -> h.notices.map { NoticeRow(h.machine.id, h.machine.label, it) } }.sortedByDescending { it.notice.at }
-    }
     val agents = remember(hosts) { HomeAgent.of(hosts) }
-    val home = remember(agents, boards, seen, filter, triage, now) {
-        Home.of(agents.filter { filter == null || it.machineId == filter }, boards.filter { filter == null || it.machineId == filter }, seen, triage, now)
-    }
+    val home = remember(agents, boards, seen, triage, now) { Home.of(agents, boards, seen, triage, now) }
     val needsYou = home.needsYou.filter { handled[it.key] != sig(it) }
     // A card answered here shows again once it changed and waits anew: a task that asked again, worded the same.
     LaunchedEffect(home.needsYou) {
         // Only on the machines shown: one filtered out hasn't changed.
         val now = home.needsYou.associate { it.key to sig(it) }
-        val shown = { k: String -> filter == null || "/$filter/" in "/$k/" }
-        handled.keys.filter { shown(it) && now[it] != handled[it] }.forEach { handled.remove(it) }
+        handled.keys.filter { now[it] != handled[it] }.forEach { handled.remove(it) }
     }
-    val showMachine = hosts.size > 1 && filter == null
-    val anyBoard = hosts.any { it.onShepherdr }
+    val showMachine = hosts.size > 1
 
     val guard = com.makefunstuff.herdr.ui.common.LocalGuard.current
     val view = LocalView.current
@@ -286,129 +277,79 @@ fun AgentsScreen(
         CustomAccessibilityAction("More actions") { menuAgent = a to task; true },
     )
 
+    // 3.1's Tasks list: what waits for you, then the work by status, one row per task (its agent on it).
+    val asked = needsYou.mapNotNull { w -> w.task?.let { w.machineId to it.id } }.toSet()
+    val agentRows = home.pinned + home.working + home.done + home.idle + home.snoozed
+    val taskWithAgent = agentRows.mapNotNull { r -> r.task?.let { r.agent.machineId to it.id } }.toSet()
+    fun rows(list: List<AgentRow>) = list.filter { r -> r.task?.let { r.agent.machineId to it.id } !in asked }
+    val ready = needsYou.filter { it is Waiting.Task && it.task.status == WorkStatus.Ready }
+    val waiting = needsYou - ready.toSet()
+    // Tasks no agent row carries, by status: Shepherdr's own rows.
+    fun tasks(vararg st: WorkStatus) = boards.flatMap { b ->
+        b.tasks.filter { t -> t.status in st && (b.machineId to t.id) !in asked && (b.machineId to t.id) !in taskWithAgent }.map { b to it }
+    }
+    val workingTasks = tasks(WorkStatus.Work, WorkStatus.Merging)
+    val queued = tasks(WorkStatus.Queued)
+    val todo = tasks(WorkStatus.Todo)
+    val doneTasks = tasks(WorkStatus.Done)
+    val pinnedRows = rows(home.pinned)
+    val workingRows = rows(home.working)
+    val doneRows = rows(home.done)
+    val idleRows = rows(home.idle)
+    val snoozedRows = rows(home.snoozed)
+    val counts = mapOf(
+        TaskFilter.NeedsYou to waiting.size, TaskFilter.Ready to ready.size,
+        TaskFilter.Working to workingRows.size + workingTasks.size, TaskFilter.Queued to queued.size,
+        TaskFilter.Todo to todo.size, TaskFilter.Done to doneRows.size + doneTasks.size,
+        TaskFilter.Idle to idleRows.size + snoozedRows.size,
+    )
+    var shown by rememberSaveable { mutableStateOf(TaskFilter.All) }
+    fun on(f: TaskFilter) = shown == TaskFilter.All || shown == f
+    var adding by remember { mutableStateOf(false) }
+    val connecting = hosts.count { it.status is com.makefunstuff.herdr.core.host.HostStatus.Connecting }
+
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         containerColor = Herdr.colors.ground,
         topBar = {
-            HerdrTopBar("Agents") {
-                // The tightest limit across the machines, a tap from their usage; short, so the title and the search fit beside it.
-                com.makefunstuff.herdr.ui.usage.UsageChip(nav, compact = true)
-                BarIcon(HerdrIcons.Search, "Search agents, tasks and chats", { panes.open(nav, Routes.search()) })
-                BarIcon(HerdrIcons.Newspaper, "Brief: what happened while you were away", { panes.open(nav, Routes.BRIEF) })
-                BarIcon(
-                    HerdrIcons.Bell, "Notifications",
-                    {
-                        hosts.forEach { container.hosts.session(it.machine.id)?.markNoticesRead() }
-                        showNotices = true
-                    },
-                    badge = unread,
-                )
+            HerdrTopBar("Tasks") {
+                BarIcon(HerdrIcons.Search, "Search tasks, agents and chats", { panes.open(nav, Routes.search()) })
             }
         },
         floatingActionButton = {
-            // The Coordinator: the one used last, or the machine to ask on (AskScreen decides).
-            // A long press starts work from a sentence; with no board anywhere, that is the button.
-            if (anyBoard) HerdrFab(
-                "Ask", "Ask the Coordinator", icon = HerdrIcons.MessagesSquare,
-                onLongClick = { panes.open(nav, Routes.start()) }, onLongClickLabel = "Start work",
-            ) { panes.open(nav, Routes.ask(Ask.COORDINATOR)) }
-            else if (hosts.any { it.online }) HerdrFab("Start work") { panes.open(nav, Routes.start()) }
+            // 3.1's + menu: New task, the Assistant, Start an agent.
+            if (hosts.any { it.online }) HerdrFab(null, "New task, Assistant or agent") { adding = true }
         },
     ) { padding ->
         when {
             hosts.isEmpty() -> EmptyState(
                 "No machines yet",
-                "Add a machine that runs herdr. Its agents show up here, with the ones waiting on you first.",
-                icon = HerdrIcons.Bot,
+                "Add a machine that runs herdr. Its tasks and agents show up here, the ones waiting on you first.",
+                icon = HerdrIcons.Server,
             ) { PrimaryButton("Add machine") { nav.navigate(Routes.edit()) } }
 
+            agents.isEmpty() && boards.isEmpty() && hosts.none { it.online } && connecting > 0 ->
+                Box(Modifier.padding(padding).fillMaxSize(), contentAlignment = Alignment.Center) {
+                    LoadingState("Connecting to ${hosts.size} machine${if (hosts.size == 1) "" else "s"}")
+                }
+
             agents.isEmpty() && boards.isEmpty() -> EmptyState(
-                if (hosts.any { it.online }) "No agents running" else "Not connected yet",
-                if (hosts.any { it.online }) {
-                    "Start an agent in herdr, or open a machine to start one from here."
-                } else {
-                    "Check the Machines tab for connection details."
-                },
-                icon = if (hosts.any { it.online }) HerdrIcons.Bot else HerdrIcons.Monitor,
+                if (hosts.any { it.online }) "Nothing to do" else "Couldn't connect",
+                if (hosts.any { it.online }) "No tasks or agents on any machine. Ask an Assistant to plan some, or start an agent."
+                else "None of your machines answered. Open the spaces list to see why.",
+                icon = if (hosts.any { it.online }) HerdrIcons.ClipboardList else HerdrIcons.Server,
             )
 
             else -> LazyColumn(
                 state = listState,
                 modifier = Modifier.padding(padding),
-                // Room under the last row for the Ask button.
+                // Room under the last row for the + button.
                 contentPadding = PaddingValues(bottom = 96.dp),
             ) {
-                item(key = "machines") {
-                    MachinesLine(
-                        total = hosts.size, online = hosts.count { it.online },
-                        filter = hosts.firstOrNull { it.machine.id == filter }?.machine?.label,
-                        onFilter = if (hosts.size > 1) ({ filterMenu = true }) else null,
-                    ) {
-                        HerdrMenu(expanded = filterMenu, onDismissRequest = { filterMenu = false }, title = "Show") {
-                            MenuRow("All machines", HerdrIcons.Layers, { chosen = null; filterMenu = false })
-                            hosts.forEach { h ->
-                                MenuRow(
-                                    h.machine.label + if (h.online) "" else " · offline",
-                                    if (h.machine.id == filter) HerdrIcons.Check else HerdrIcons.Monitor,
-                                    { chosen = h.machine.id; filterMenu = false },
-                                )
-                            }
-                        }
-                    }
-                }
-                boardProblems.filter { (label, _) -> filter == null || hosts.any { it.machine.id == filter && it.machine.label == label } }.forEach { (label, p) ->
+                item(key = "filters") { FilterRow(shown, counts) { shown = it } }
+                boardProblems.forEach { (label, p) ->
                     item(key = "problem/$label") {
-                        ErrorMessage("$label's board: $p", Modifier.padding(horizontal = Space.screen, vertical = Space.xs), onRetry = { readNow.trySend(Unit) })
-                    }
-                }
-                item(key = "h-needs") {
-                    SectionHeading(
-                        if (needsYou.isEmpty()) "Needs you" else "Needs you · ${needsYou.size}",
-                        Modifier.padding(horizontal = Space.screen + Space.xs), top = Space.s,
-                        color = if (needsYou.isEmpty()) Herdr.colors.muted else Herdr.colors.red,
-                    )
-                }
-                if (needsYou.isEmpty()) {
-                    item(key = "none-waiting") {
-                        Row(Modifier.padding(horizontal = Space.screen + Space.xs, vertical = Space.xs), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(HerdrIcons.CircleCheck, null, tint = Herdr.colors.done, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(Space.s))
-                            Text("Nothing waits for you", style = MaterialTheme.typography.bodyMedium, color = Herdr.colors.muted)
-                        }
-                    }
-                }
-                items(needsYou, key = { it.key }) { w ->
-                    when (w) {
-                        is Waiting.Question -> QuestionCard(
-                            w, showMachine, selected = inMiddle == w.agent.key, busy = busy[w.key],
-                            onOpen = { openAgent(w.agent) }, onMenu = { menuAgent = w.agent to w.task },
-                            onChoose = { prompt, i -> answer(w, prompt, i) },
-                            onReply = { reply = Reply.ToAgent(w) },
-                            more = sheetActions(w.agent, w.task).let { sheet ->
-                                // Muting it, before the sheet's last one (More actions).
-                                sheet.dropLast(1) + triageActions.muteAction(AgentRow(w.agent, w.task, muted = w.agent.key in triage.muted)) + sheet.last()
-                            },
-                        )
-                        is Waiting.Task -> {
-                            val t = w.task
-                            // The question it waits on, read from Shepherdr again whenever the task changes.
-                            val card by produceState<WorkCard?>(null, w.key, t.line, t.status) {
-                                value = if (t.status != WorkStatus.Need) null else runCatching {
-                                    container.hosts.session(w.machineId)?.awaitWorkBoard()?.details(t)?.cards?.firstOrNull()
-                                }.getOrNull()
-                            }
-                            WorkWaitingCard(
-                                w, t, space = boards.firstOrNull { it.machineId == w.machineId }?.work?.spaces?.firstOrNull { it.id == t.space }?.name.orEmpty(),
-                                showMachine = showMachine,
-                                // It opens on the board's pane, not in the middle: never shown chosen here.
-                                selected = false,
-                                busy = busy[w.key], card = card,
-                                onOpen = { openTask(w) },
-                                onMerge = { merge(w, t) },
-                                onChoose = { c, i -> choose(w, c, i) },
-                            )
-                        }
-                        is Waiting.Coordinator -> CoordinatorCard(w, showMachine) { panes.open(nav, Routes.coordinator(w.machineId, w.space.id)) }
+                        ErrorMessage("$label's tasks: $p", Modifier.padding(horizontal = Space.screen, vertical = Space.xs), onRetry = { readNow.trySend(Unit) })
                     }
                 }
                 val lines = Lines(
@@ -416,26 +357,108 @@ fun AgentsScreen(
                     snoozed = { r -> r.snooze?.label(now, container.triage.zone()) }, onOpen = ::openAgent, onMenu = { a, t -> menuAgent = a to t },
                     more = ::sheetActions,
                 )
-                section("Pinned", "Pinned · ${home.pinned.size}", home.pinned, showAll = true, onMore = {}, lines)
-                section("Working", "Working · ${home.working.size}", home.working, showAll = true, onMore = {}, lines)
-                // Done holds the finishes not looked at yet: Mark all seen empties it (they rest with the idle ones).
-                section(
-                    "Done", "Done · ${home.done.size} new", home.done, showAll = allDone, onMore = { allDone = !allDone }, lines,
-                    onSeen = if (home.fresh > 0) ({ container.seen.set(Home.seenAll(seen, home, agents)) }) else null,
-                )
-                section("Idle", "Idle · ${home.idle.size}", home.idle, showAll = allIdle, onMore = { allIdle = !allIdle }, lines)
-                section("Snoozed", "Snoozed · ${home.snoozed.size}", home.snoozed, showAll = allSnoozed, onMore = { allSnoozed = !allSnoozed }, lines)
-                if (!triage.used && (home.working.size + home.done.size + home.idle.size) > 0) {
+                if (shown == TaskFilter.All) section("Pinned", "Pinned · ${pinnedRows.size}", pinnedRows, showAll = true, onMore = {}, lines)
+                if (on(TaskFilter.NeedsYou)) {
+                    item(key = "h-needs") {
+                        SectionHeading(
+                            if (waiting.isEmpty()) "Needs you" else "Needs you · ${waiting.size}",
+                            Modifier.padding(horizontal = Space.screen), top = Space.s,
+                            color = if (waiting.isEmpty()) Herdr.colors.muted else Herdr.colors.red,
+                        )
+                    }
+                    if (waiting.isEmpty()) item(key = "none-waiting") {
+                        Text(
+                            "Nothing waits for you", style = MaterialTheme.typography.bodyMedium, color = Herdr.colors.muted,
+                            modifier = Modifier.padding(horizontal = Space.screen, vertical = Space.xs),
+                        )
+                    }
+                }
+                @Composable
+                fun card(w: Waiting) = when (w) {
+                    is Waiting.Question -> QuestionCard(
+                        w, showMachine, selected = inMiddle == w.agent.key, busy = busy[w.key],
+                        onOpen = { openAgent(w.agent) }, onMenu = { menuAgent = w.agent to w.task },
+                        onChoose = { prompt, i -> answer(w, prompt, i) },
+                        onReply = { reply = Reply.ToAgent(w) },
+                        more = sheetActions(w.agent, w.task).let { sheet ->
+                            // Muting it, before the sheet's last one (More actions).
+                            sheet.dropLast(1) + triageActions.muteAction(AgentRow(w.agent, w.task, muted = w.agent.key in triage.muted)) + sheet.last()
+                        },
+                    )
+                    is Waiting.Task -> {
+                        val t = w.task
+                        // The question it waits on, read from Shepherdr again whenever the task changes.
+                        val card by produceState<WorkCard?>(null, w.key, t.line, t.status) {
+                            value = if (t.status != WorkStatus.Need) null else runCatching {
+                                container.hosts.session(w.machineId)?.awaitWorkBoard()?.details(t)?.cards?.firstOrNull()
+                            }.getOrNull()
+                        }
+                        WorkWaitingCard(
+                            w, t, space = boards.firstOrNull { it.machineId == w.machineId }?.work?.spaces?.firstOrNull { it.id == t.space }?.name.orEmpty(),
+                            showMachine = showMachine,
+                            // It opens on the board's pane, not in the middle: never shown chosen here.
+                            selected = false,
+                            busy = busy[w.key], card = card,
+                            onOpen = { openTask(w) },
+                            onMerge = { merge(w, t) },
+                            onChoose = { c, i -> choose(w, c, i) },
+                        )
+                    }
+                    is Waiting.Coordinator -> CoordinatorCard(w, showMachine) { panes.open(nav, Routes.coordinator(w.machineId, w.space.id)) }
+                }
+                if (on(TaskFilter.NeedsYou)) items(waiting, key = { it.key }) { card(it) }
+                if (on(TaskFilter.Ready) && ready.isNotEmpty()) {
+                    item(key = "h-ready") { SectionHeading("Ready · ${ready.size}", Modifier.padding(horizontal = Space.screen), top = Space.l, color = Herdr.colors.done) }
+                    items(ready, key = { it.key }) { card(it) }
+                }
+                if (on(TaskFilter.Working)) {
+                    section("Working", "Working · ${workingRows.size + workingTasks.size}", workingRows, showAll = true, onMore = {}, lines, extra = workingTasks.size)
+                    taskRows("working", workingTasks, showMachine, onHeading = workingRows.isEmpty(), heading = "Working · ${workingTasks.size}") { (b, t) -> panes.openBoard(nav, b.machineId, t.id, alone = true) }
+                }
+                if (on(TaskFilter.Queued)) taskRows("queued", queued, showMachine, heading = "Queued · ${queued.size}") { (b, t) -> panes.openBoard(nav, b.machineId, t.id, alone = true) }
+                if (on(TaskFilter.Todo)) taskRows("todo", todo, showMachine, heading = "To do · ${todo.size}") { (b, t) -> panes.openBoard(nav, b.machineId, t.id, alone = true) }
+                if (on(TaskFilter.Done)) {
+                    // Done holds the finishes not looked at yet: Mark all seen empties it (they rest with the idle ones).
+                    section(
+                        "Done", "Done · ${doneRows.size + doneTasks.size}", doneRows, showAll = allDone, onMore = { allDone = !allDone }, lines,
+                        onSeen = if (home.fresh > 0) ({ container.seen.set(Home.seenAll(seen, home, agents)) }) else null,
+                        extra = doneTasks.size,
+                    )
+                    taskRows(
+                        "done", if (allDone) doneTasks else doneTasks.take(DONE_SHOWN), showMachine, onHeading = doneRows.isEmpty(),
+                        heading = "Done · ${doneTasks.size}",
+                    ) { (b, t) -> panes.openBoard(nav, b.machineId, t.id, alone = true) }
+                    if (doneTasks.size > DONE_SHOWN) item(key = "more-done-tasks") {
+                        Text(
+                            if (allDone) "Show less" else "Show ${doneTasks.size - DONE_SHOWN} more",
+                            style = MaterialTheme.typography.labelLarge, color = Herdr.colors.accent,
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable { allDone = !allDone }.padding(horizontal = Space.screen, vertical = Space.m),
+                        )
+                    }
+                }
+                if (on(TaskFilter.Idle)) {
+                    section("Idle", "Idle · ${idleRows.size}", idleRows, showAll = allIdle, onMore = { allIdle = !allIdle }, lines)
+                    section("Snoozed", "Snoozed · ${snoozedRows.size}", snoozedRows, showAll = allSnoozed, onMore = { allSnoozed = !allSnoozed }, lines)
+                }
+                if (!triage.used && (workingRows.size + doneRows.size + idleRows.size) > 0 && shown == TaskFilter.All) {
                     item(key = "triage-hint") {
                         Notice(
-                            "Swipe right: seen. Swipe left: pin, snooze until it changes or a time, mute its notifications. " +
-                                "The same are in the long-press sheet and TalkBack's actions.",
+                            "Swipe an agent right: seen. Left: pin, snooze, mute. The same are in its long-press menu.",
                             Modifier.padding(horizontal = Space.screen, vertical = Space.l),
                         )
                     }
                 }
             }
         }
+    }
+
+    if (adding) {
+        NewMenu(
+            hosts.filter { it.online }, onDismiss = { adding = false },
+            onTask = { mid -> adding = false; panes.open(nav, Routes.start(mid)) },
+            onAssistant = { mid -> adding = false; panes.open(nav, Routes.coordinator(mid)) },
+            onAgent = { mid -> adding = false; panes.open(nav, Routes.start(mid)) },
+        )
     }
 
     menuAgent?.let { (a, task) ->
@@ -496,15 +519,6 @@ fun AgentsScreen(
             confirm = { run -> guard.run(Guarded.Merge, "Accept ${t.name}?", t.title) { view.confirmTap(); run() } },
         )
     }
-    if (showNotices) {
-        NoticesSheet(
-            rows = noticeRows,
-            showMachine = hosts.size > 1,
-            onOpenAgent = { mid, pane -> showNotices = false; panes.openPane(nav, hosts.firstOrNull { it.machine.id == mid }, mid, pane) },
-            onClear = { hosts.forEach { container.hosts.session(it.machine.id)?.clearNotices() } },
-            onDismiss = { showNotices = false },
-        )
-    }
 }
 
 /** What every one-line agent on the list shares: what is open beside it, its swipes, its taps. */
@@ -531,12 +545,14 @@ private fun LazyListScope.section(
     onMore: () -> Unit,
     lines: Lines,
     onSeen: (() -> Unit)? = null,
+    /** Task rows listed after these under the same heading. */
+    extra: Int = 0,
 ) {
     if (rows.isEmpty()) return
     item(key = "h-$title") {
         SectionHeading(
             heading,
-            Modifier.padding(start = Space.screen + Space.xs, end = Space.s), top = Space.l,
+            Modifier.padding(start = Space.screen, end = Space.s), top = Space.l,
             trailing = if (onSeen != null) ({ QuietButton(onClick = onSeen, color = Herdr.colors.accent) { Text("Mark all seen") } }) else null,
         )
     }
@@ -563,30 +579,66 @@ private fun LazyListScope.section(
     }
 }
 
-/** One line for the machines: how many are online, and which one the list shows (a menu to choose). */
+/** 3.1's status filters: all, then each group with its count, the ones holding nothing left out. */
+enum class TaskFilter(val label: String) { All("All"), NeedsYou("Needs you"), Ready("Ready"), Working("Working"), Queued("Queued"), Todo("To do"), Done("Done"), Idle("Idle") }
+
+/** Done tasks shown before "Show N more", as 3.1's list cuts them. */
+private const val DONE_SHOWN = 5
+
+/** The filter row under the bar: All, then every group that holds something, with its count. */
 @Composable
-private fun MachinesLine(total: Int, online: Int, filter: String?, onFilter: (() -> Unit)?, menu: @Composable () -> Unit) {
-    val c = Herdr.colors
-    Row(
-        Modifier.fillMaxWidth().padding(start = Space.screen + Space.xs, end = Space.s).heightIn(min = 48.dp),
-        verticalAlignment = Alignment.CenterVertically,
+private fun FilterRow(shown: TaskFilter, counts: Map<TaskFilter, Int>, onPick: (TaskFilter) -> Unit) {
+    LazyRow(
+        contentPadding = PaddingValues(horizontal = Space.screen),
+        horizontalArrangement = Arrangement.spacedBy(Space.s),
     ) {
-        StatusDot(if (online > 0) c.done else c.idle)
-        Spacer(Modifier.width(Space.s))
-        Text(
-            when {
-                total == 1 -> if (online == 1) "1 machine · online" else "1 machine · offline"
-                else -> "$total machines · $online online"
-            },
-            style = MaterialTheme.typography.bodyMedium, color = c.muted, modifier = Modifier.weight(1f), maxLines = 1,
-        )
-        if (onFilter != null) Box {
-            QuietButton(onClick = onFilter) {
-                Text(filter ?: "All machines", maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(end = Space.xs))
-                Icon(HerdrIcons.ChevronDown, "Choose the machine", Modifier.size(18.dp))
-            }
-            menu()
+        val choices = TaskFilter.entries.filter { it == TaskFilter.All || it == shown || (counts[it] ?: 0) > 0 }
+        items(choices, key = { it.name }) { f ->
+            val n = counts[f] ?: 0
+            HerdrChip(if (f == TaskFilter.All) "All" else "${f.label} $n", selected = shown == f, onClick = { onPick(if (shown == f) TaskFilter.All else f) })
         }
+    }
+}
+
+/** Shepherdr tasks no agent row carries, as rows under [heading] (or under the rows above, when [onHeading] is false). */
+private fun LazyListScope.taskRows(
+    key: String,
+    list: List<Pair<HomeBoard, WorkTask>>,
+    showMachine: Boolean,
+    heading: String,
+    onHeading: Boolean = true,
+    onOpen: (Pair<HomeBoard, WorkTask>) -> Unit,
+) {
+    if (list.isEmpty()) return
+    if (onHeading) item(key = "h-tasks-$key") { SectionHeading(heading, Modifier.padding(horizontal = Space.screen), top = Space.l) }
+    items(list, key = { "t-$key/${it.first.machineId}/${it.second.id}" }) { bt ->
+        val (b, t) = bt
+        Box(Modifier.padding(horizontal = Space.screen)) {
+            com.makefunstuff.herdr.ui.board.WorkTaskRow(
+                t, onOpen = { onOpen(bt) },
+                space = listOfNotNull(b.machineLabel.takeIf { showMachine }, b.work.spaces.firstOrNull { it.id == t.space }?.name).joinToString(" · "),
+                showWord = false,
+            )
+        }
+    }
+}
+
+/** 3.1's + menu on a phone: New task, the Assistant, Start an agent; on which machine, when there are several. */
+@Composable
+private fun NewMenu(
+    online: List<com.makefunstuff.herdr.core.host.HostState>,
+    onDismiss: () -> Unit,
+    onTask: (String?) -> Unit,
+    onAssistant: (String) -> Unit,
+    onAgent: (String?) -> Unit,
+) {
+    val boards = online.filter { it.onShepherdr }
+    HerdrMenu(expanded = true, onDismissRequest = onDismiss, title = "New") {
+        if (boards.isNotEmpty()) MenuRow("New task", HerdrIcons.SquarePen, { onTask(boards.singleOrNull()?.machine?.id) })
+        boards.forEach { h ->
+            MenuRow(if (boards.size == 1) "Assistant" else "Assistant · ${h.machine.label}", HerdrIcons.MessagesSquare, { onAssistant(h.machine.id) })
+        }
+        MenuRow("Start an agent", HerdrIcons.Bot, { onAgent(online.singleOrNull()?.machine?.id) })
     }
 }
 

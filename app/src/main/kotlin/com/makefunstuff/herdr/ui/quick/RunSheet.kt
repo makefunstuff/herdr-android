@@ -195,7 +195,7 @@ fun RunSheet(nav: NavController, machineId: String, id: String, onDismiss: () ->
                                 container.drafts.add(DraftStore.coordinator(machineId), "${r.name} answered:\n\n${text.trim()}")
                                 onDismiss()
                                 nav.navigate(Routes.coordinator(machineId))
-                            }) { Icon(HerdrIcons.Send, null, Modifier.size(16.dp)); Text("Send to Coordinator", Modifier.padding(start = Space.xs)) }
+                            }) { Icon(HerdrIcons.Send, null, Modifier.size(16.dp)); Text("Send to the Assistant", Modifier.padding(start = Space.xs)) }
                         }
                     }
                 }

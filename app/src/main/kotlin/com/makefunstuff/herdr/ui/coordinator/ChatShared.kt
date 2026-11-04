@@ -116,7 +116,7 @@ internal fun ChatEmpty(icon: ImageVector, title: String, body: String) {
 }
 
 @Composable
-internal fun Working(who: String = "Coordinator", doing: String? = null) {
+internal fun Working(who: String = "Assistant", doing: String? = null) {
     val t = rememberInfiniteTransition(label = "working")
     val a by t.animateFloat(0.3f, 1f, infiniteRepeatable(tween(700), RepeatMode.Reverse), label = "dots")
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = Space.xs)) {

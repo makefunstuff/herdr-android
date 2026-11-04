@@ -1,5 +1,7 @@
 package com.makefunstuff.herdr.ui.agents
 
+import androidx.compose.ui.graphics.Color
+
 import com.makefunstuff.herdr.core.hc.HcMapping
 import com.makefunstuff.herdr.core.chat.OptionRole
 
@@ -143,7 +145,7 @@ private fun WaitingCard(
             if (actions.isNotEmpty()) customActions = actions
         },
         padded = true, onClick = onOpen, onLongClick = onMenu, onClickLabel = label,
-        color = if (selected) c.hover else c.card, edge = if (selected) c.lineStrong else c.line,
+        color = if (selected) c.selected else Color.Transparent, edge = if (selected) c.accent else c.lineStrong,
     ) { content() }
 }
 
@@ -214,7 +216,8 @@ fun QuestionCard(
             title = q.task?.title ?: a.subtitle ?: a.displayName,
             key = q.task?.name,
             meta = where(q.agent, q.task, showMachine),
-            badge = { StatusBadge("needs you", AgentStatus.Blocked.color()) },
+            // Its section says it needs you; the card doesn't say it again.
+            badge = {},
         )
         Column(Modifier.padding(start = 34.dp, top = Space.s), verticalArrangement = Arrangement.spacedBy(Space.xs)) {
             Text(
@@ -271,7 +274,7 @@ fun CoordinatorCard(w: Waiting.Coordinator, showMachine: Boolean, onOpen: () -> 
             title = "${w.space.name}'s Assistant asks you",
             key = null,
             meta = listOfNotNull("Answer it in the Assistant chat", w.machineLabel.takeIf { showMachine }),
-            badge = { StatusBadge(WorkStatus.Need.label, WorkStatus.Need.color()) },
+            badge = {},
         )
         FlowRow(Modifier.padding(start = 34.dp, top = Space.m), horizontalArrangement = Arrangement.spacedBy(Space.s)) {
             AnswerButton("Open", null, primary = true, enabled = true, onClick = onOpen)
@@ -323,7 +326,8 @@ fun WorkWaitingCard(
                 space.takeIf { it.isNotEmpty() },
                 w.machineLabel.takeIf { showMachine },
             ),
-            badge = { StatusBadge(work.status.label, work.status.color()) },
+            // Needs you or Ready: its section says which, and its button (Accept) too.
+            badge = {},
         )
         if (q != null) Text(
             Markdown.plain(q.title.ifEmpty { q.asks ?: "Waiting for your answer" }),

@@ -46,8 +46,8 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 
 /**
- * A machine's places, over its workspaces: Health and Usage as tiles in one row, each with its live
- * line. Agent logins is a row under them.
+ * A machine's places, over its spaces: Health, Usage and Agent logins as one row of tiles, each
+ * with its live line; a tile is framed in a state colour only when something there is wrong.
  */
 @Composable
 internal fun MachinePlaces(
@@ -57,19 +57,13 @@ internal fun MachinePlaces(
     onLogins: () -> Unit = {},
 ) {
     val state by session.state.collectAsStateWithLifecycle()
-    val tiles = listOfNotNull("health".takeIf { state.online }, "usage".takeIf { state.online })
-    if (tiles.isNotEmpty()) {
-        Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(Space.s)) {
-            val tile = Modifier.weight(1f).fillMaxHeight()
-            tiles.forEach { t ->
-                when (t) {
-                    "health" -> HealthTile(session, tile, onHealth)
-                    "usage" -> UsageRow(session, onUsage, tile = true, modifier = tile)
-                }
-            }
-        }
+    if (!state.online) return
+    Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(Space.s)) {
+        val tile = Modifier.weight(1f).fillMaxHeight()
+        HealthTile(session, tile, onHealth)
+        UsageRow(session, onUsage, tile = true, modifier = tile)
+        LoginsRow(session, onLogins, tile = true, modifier = tile)
     }
-    if (state.online) LoginsRow(session, onLogins, modifier = Modifier.padding(top = Space.s))
 }
 
 /**
@@ -85,7 +79,7 @@ internal fun PlaceTile(
     modifier: Modifier,
     onOpen: () -> Unit,
     openLabel: String,
-    edge: Color = Herdr.colors.line,
+    edge: Color = Herdr.colors.lineStrong,
     iconTint: Color = Herdr.colors.text,
 ) {
     val c = Herdr.colors
@@ -93,11 +87,11 @@ internal fun PlaceTile(
         modifier.semantics(mergeDescendants = true) { contentDescription = "$title: $line" },
         edge = edge, onClick = onOpen, onClickLabel = openLabel,
     ) {
-        Column(Modifier.padding(horizontal = Space.m, vertical = Space.m)) {
-            Icon(icon, null, tint = iconTint, modifier = Modifier.size(20.dp))
-            Spacer(Modifier.height(Space.s))
-            Text(title, style = MaterialTheme.typography.titleSmall, color = c.strong, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(line, style = MaterialTheme.typography.bodySmall, color = color, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Column(Modifier.padding(horizontal = Space.s, vertical = Space.s)) {
+            Icon(icon, null, tint = iconTint, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.height(Space.xs))
+            Text(title.uppercase(), style = MaterialTheme.typography.titleSmall, color = c.strong, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(line, style = MaterialTheme.typography.bodySmall, color = color, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
     }
 }

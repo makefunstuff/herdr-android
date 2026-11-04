@@ -496,6 +496,15 @@ fun BarTitle(title: String, subtitle: String? = null) {
     }
 }
 
+/** Opens the spaces drawer; given around the top-level tabs on a phone, where a bar's leading button opens it. */
+val LocalBarDrawer = compositionLocalOf<(() -> Unit)?> { null }
+
+/** A screen shown as a tab (the Chat tab's chat): its bar opens the drawer in place of its back arrow. */
+val LocalInTab = compositionLocalOf { false }
+
+/** What a tab adds after a screen's own bar actions (the Chat tab's ⋯ with the space's tabs). */
+val LocalBarMore = compositionLocalOf<(@Composable RowScope.() -> Unit)?> { null }
+
 /**
  * The bar over a screen, as the web UI's phone header: `--bg-panel` with a hairline under it. With
  * [onBack] it is a detail screen's bar (back arrow, 16sp strong title, the place under it dim);
@@ -513,16 +522,19 @@ fun HerdrTopBar(
     actions: @Composable RowScope.() -> Unit = {},
 ) {
     val c = Herdr.colors
+    val drawer = LocalBarDrawer.current?.takeIf { onBack == null || LocalInTab.current }
+    val more = LocalBarMore.current
     Row(
         modifier.fillMaxWidth().background(c.panel).drawBehind {
             drawLine(c.lineStrong, Offset(0f, size.height - 0.5f), Offset(size.width, size.height - 0.5f), 1.dp.toPx())
         }.statusBarsPadding()
             .heightIn(min = 56.dp)
-            .padding(start = if (onBack == null) Space.screen else Space.xs, end = Space.xs),
+            .padding(start = if (onBack == null && drawer == null) Space.screen else Space.xs, end = Space.xs),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (onBack != null) BarIcon(HerdrIcons.ArrowLeft, backLabel, onBack)
-        Box(Modifier.weight(1f).padding(start = if (onBack != null) Space.xs else 0.dp, end = Space.s)) {
+        if (drawer != null) BarIcon(HerdrIcons.Sidebar, "Spaces", drawer)
+        else if (onBack != null) BarIcon(HerdrIcons.ArrowLeft, backLabel, onBack)
+        Box(Modifier.weight(1f).padding(start = if (onBack != null || drawer != null) Space.xs else 0.dp, end = Space.s)) {
             when {
                 titleContent != null -> titleContent()
                 onBack == null && subtitle == null -> Text(
@@ -533,6 +545,7 @@ fun HerdrTopBar(
             }
         }
         Row(verticalAlignment = Alignment.CenterVertically, content = actions)
+        if (more != null) Row(verticalAlignment = Alignment.CenterVertically, content = more)
     }
 }
 

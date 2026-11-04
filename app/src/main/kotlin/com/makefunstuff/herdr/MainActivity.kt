@@ -58,7 +58,7 @@ class MainActivity : FragmentActivity() {
     private fun open(intent: Intent?): Boolean {
         // A launcher shortcut: the launcher learns which ones are used.
         intent?.getStringExtra(OPEN_SHORTCUT)?.let { runCatching { androidx.core.content.pm.ShortcutManagerCompat.reportShortcutUsed(this, it) } }
-        if (intent?.getBooleanExtra(OPEN_NEEDS, false) == true) { Links.open(Routes.AGENTS); return true }
+        if (intent?.getBooleanExtra(OPEN_NEEDS, false) == true) { Links.open(Routes.TASKS); return true }
         if (intent?.getBooleanExtra(OPEN_START, false) == true) { Links.open(Routes.start()); return true }
         intent?.getStringExtra(OPEN_ASK)?.takeIf { it in ASKS }?.let { Links.open(Routes.ask(it)); return true }
         if (intent?.getBooleanExtra(OPEN_BRIEF, false) == true) { Links.open(Routes.BRIEF); return true }

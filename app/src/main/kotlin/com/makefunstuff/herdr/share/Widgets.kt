@@ -54,7 +54,7 @@ object Widgets {
 
     private fun ask(context: Context, machine: String?) = RemoteViews(context.packageName, R.layout.widget_ask).apply {
         setTextViewText(R.id.widget_machine, machine ?: "Herdr")
-        setContentDescription(R.id.widget_root, listOfNotNull("Ask the Coordinator", machine?.let { "on $it" }).joinToString(" "))
+        setContentDescription(R.id.widget_root, listOfNotNull("Ask the Assistant", machine?.let { "on $it" }).joinToString(" "))
         setOnClickPendingIntent(R.id.widget_root, open(context, Ask.COORDINATOR))
     }
 

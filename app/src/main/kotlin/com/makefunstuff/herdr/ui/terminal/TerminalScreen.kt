@@ -439,7 +439,6 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
                 },
                 onBack = { nav.popBackStack() },
             ) {
-                BarIcon(HerdrIcons.Sun, "Keep screen on", { container.keyBar.setKeepScreenOn(!bar.keepScreenOn) }, selected = bar.keepScreenOn)
                 if (!finding && core == null) BarIcon(HerdrIcons.Search, "Find", { finding = true })
                 BarIcon(HerdrIcons.Ellipsis, "More", { menu = true })
                 HerdrMenu(expanded = menu, onDismissRequest = { menu = false }, title = pane?.displayName ?: paneId, subtitle = session.machine.label) {
@@ -682,7 +681,7 @@ private fun SelectionBar(onCopy: () -> Unit, onQuote: () -> Unit, onCoordinator:
         ) {
             PrimaryButton(onClick = onCopy) { Text("Copy") }
             SecondaryButton(onClick = onQuote) { Text("Quote in chat") }
-            if (onCoordinator != null) SecondaryButton(onClick = onCoordinator) { Text("Send to Coordinator") }
+            if (onCoordinator != null) SecondaryButton(onClick = onCoordinator) { Text("Send to the Assistant") }
         }
     }
 }
