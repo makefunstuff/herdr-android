@@ -1,6 +1,6 @@
 // A herdr machine without SSH: the stand-in SshConnector hands the app's real code one of these.
 // It answers herdr's socket API, the shell commands the app runs (the herdr probe, session list,
-// the work board's CLI) and the streams it opens (an agent's transcript, a terminal), from the
+// Shepherdr's service) and the streams it opens (an agent's transcript, a terminal), from the
 // scene's fixed demo data, so every scene renders the same way each time.
 package preview
 
@@ -56,11 +56,6 @@ class FakeMachine(
     var transcripts: Map<String, String> = emptyMap(),
     /** Agent sessions as the activity timeline reads them (with their times), by the path or id asked for; else [transcripts]. */
     var activity: Map<String, String> = emptyMap(),
-    /** The board's record of a task (`task.json`) and what it typed to its agents (`said-by.jsonl`), by task id. */
-    var records: Map<String, String> = emptyMap(),
-    var said: Map<String, String> = emptyMap(),
-    /** The work board's data, or null when herdr-projects isn't installed there. */
-    var board: FakeBoard? = null,
     /** Shepherdr 3's service there (reached with curl), or null where it doesn't run. */
     var shepherdr: FakeShepherdr? = null,
     /** Integration metadata per workspace (`workspace.get`'s tokens). */
@@ -153,12 +148,6 @@ class FakeMachine(
                 ok("""{"sessions":[{"name":"default","default":true,"running":true,"socket_path":"/home/demo/.config/herdr/herdr.sock"}]}""")
             // herdr-push: only its journal is asked for in the previews; without one it isn't installed.
             "herdr-push" in command && "journal" in w -> journal?.let { ok(it.toString() + "\n") } ?: CommandResult(126, "", "")
-            "command -v herdr-projects" in command -> board?.let { ok(BOARD_PATH + "\n") } ?: CommandResult(127, "", "")
-            // The board's record of a task, for its timeline (ActivityCommands.record).
-            "herdr-activity-record" in command -> Shell.words(w.last()).last().let { task ->
-                ok("@@herdr-activity task\n" + records[task].orEmpty() + "\n@@herdr-activity said\n" + said[task].orEmpty() + "\n@@herdr-activity end\n")
-            }
-            BOARD_PATH in command -> board?.run(command) ?: CommandResult(127, "", "herdr-projects: not found")
             w.containsAll(listOf("machine", "list", "--json")) -> ok("""{"machines":[]}""")
             "--version" in w -> ok("herdr $version\n")
             w.containsAll(listOf("channel", "show")) -> ok("stable\n")
@@ -306,7 +295,6 @@ class FakeMachine(
     private fun list(key: String): List<JsonObject> = (snapshot[key] as? JsonArray).orEmpty().map { it.jsonObject }
 
     companion object {
-        const val BOARD_PATH = "/home/demo/.herdr-projects/data/bin/herdr-projects"
         const val HOME = "/home/demo"
     }
 }
