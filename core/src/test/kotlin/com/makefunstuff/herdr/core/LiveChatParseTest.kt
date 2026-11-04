@@ -45,6 +45,13 @@ class LiveChatParseTest {
             }
             println("done: ${o.tasks.count { it.status == com.makefunstuff.herdr.core.board.WorkStatus.Done }}, needs you: ${o.needs.size}, artifacts: ${o.artifacts?.size}")
             assertTrue(o.spaces.isNotEmpty() && o.spaces.all { it.chat.startsWith("p:") })
+            // Each recipe artifact as the artifact screen reads it: its blocks, and how many it doesn't draw.
+            for (art in o.artifacts.orEmpty().filter { it.drawn(it.v) }) {
+                val r = board.recipe(art, art.v)
+                val kinds = r.blocks.groupingBy { it::class.simpleName }.eachCount()
+                println("artifact ${art.title} v${art.v}: ${r.blocks.size} blocks $kinds, pictures ${com.makefunstuff.herdr.core.shepherdr.Recipes.pictures(r.blocks).size}")
+                assertTrue(r.blocks.none { it is com.makefunstuff.herdr.core.shepherdr.RecipeBlock.Unknown })
+            }
         }
     }
 
