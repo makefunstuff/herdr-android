@@ -116,8 +116,8 @@ fun SlotNumber(n: Int, on: Boolean, modifier: Modifier = Modifier) {
     val c = Herdr.colors
     Box(
         modifier.sizeIn(minWidth = 26.dp, minHeight = 20.dp)
-            .background(if (on) c.accent else c.card)
-            .border(1.dp, if (on) c.accent else c.lineStrong),
+            .background(if (on) c.primary else c.card)
+            .border(1.dp, if (on) c.primary else c.lineStrong),
         contentAlignment = Alignment.Center,
     ) {
         Text(

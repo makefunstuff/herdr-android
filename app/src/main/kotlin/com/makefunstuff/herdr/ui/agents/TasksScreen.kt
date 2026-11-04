@@ -279,14 +279,27 @@ fun TasksScreen(
 
     // 3.1's Tasks list: what waits for you, then the work by status, one row per task (its agent on it).
     val asked = needsYou.mapNotNull { w -> w.task?.let { w.machineId to it.id } }.toSet()
-    val agentRows = home.pinned + home.working + home.done + home.idle + home.snoozed
+    // Where Shepherdr's label doesn't tie an agent to its task (an agent outside herdr-core), its title does: the same
+    // words on the same machine are one piece of work, shown once.
+    fun titleOf(a: HomeAgent, t: WorkTask?) = a.machineId to (t?.title ?: a.agent.subtitle ?: a.agent.displayName)
+    val askedTitles = needsYou.mapNotNull { w ->
+        when (w) {
+            is Waiting.Question -> titleOf(w.agent, w.task)
+            is Waiting.Task -> w.machineId to w.task.title
+            is Waiting.Coordinator -> null
+        }
+    }.toSet()
+    fun rows(list: List<AgentRow>) = list.filter { r -> r.task?.let { r.agent.machineId to it.id } !in asked && titleOf(r.agent, r.task) !in askedTitles }
+    val agentRows = rows(home.pinned + home.working + home.done + home.idle + home.snoozed)
     val taskWithAgent = agentRows.mapNotNull { r -> r.task?.let { r.agent.machineId to it.id } }.toSet()
-    fun rows(list: List<AgentRow>) = list.filter { r -> r.task?.let { r.agent.machineId to it.id } !in asked }
+    val agentTitles = agentRows.map { titleOf(it.agent, it.task) }.toSet() + askedTitles
     val ready = needsYou.filter { it is Waiting.Task && it.task.status == WorkStatus.Ready }
     val waiting = needsYou - ready.toSet()
     // Tasks no agent row carries, by status: Shepherdr's own rows.
     fun tasks(vararg st: WorkStatus) = boards.flatMap { b ->
-        b.tasks.filter { t -> t.status in st && (b.machineId to t.id) !in asked && (b.machineId to t.id) !in taskWithAgent }.map { b to it }
+        b.tasks.filter { t ->
+            t.status in st && (b.machineId to t.id) !in asked && (b.machineId to t.id) !in taskWithAgent && (b.machineId to t.title) !in agentTitles
+        }.map { b to it }
     }
     val workingTasks = tasks(WorkStatus.Work, WorkStatus.Merging)
     val queued = tasks(WorkStatus.Queued)

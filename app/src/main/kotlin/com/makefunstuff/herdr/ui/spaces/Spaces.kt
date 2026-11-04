@@ -360,7 +360,7 @@ fun ChatTab(nav: NavController) {
     val host = spaces.firstOrNull { it.first.machine.id == slot?.machineId }?.first
     var menu by remember { mutableStateOf(false) }
     val more: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {
-        if (slot != null) BarIcon(HerdrIcons.Ellipsis, "Tabs and new", { menu = true })
+        if (slot != null) BarIcon(HerdrIcons.Layers, "Tabs and new", { menu = true })
     }
     androidx.compose.runtime.CompositionLocalProvider(LocalInTab provides (openDrawer != null), LocalBarMore provides more) {
         when {

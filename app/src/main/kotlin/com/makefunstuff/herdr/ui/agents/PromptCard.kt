@@ -102,14 +102,15 @@ fun PromptCard(
     val shape = RectangleShape
     Surface(
         color = c.card,
-        border = BorderStroke(1.dp, c.lineStrong),
+        // Framed in the blocked red: the chat's status line over it already says it needs you.
+        border = BorderStroke(1.dp, c.red),
         shape = shape,
         modifier = modifier.fillMaxWidth().animateContentSize(),
     ) {
         Column(Modifier.padding(Space.l), verticalArrangement = Arrangement.spacedBy(Space.s)) {
             val tag = remember(prompt) { prompt?.let { PromptTag.of(it) } }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Needs you", style = MaterialTheme.typography.titleSmall, color = c.red, modifier = Modifier.weight(1f))
+            if (answering || tag != null) Row(verticalAlignment = Alignment.CenterVertically) {
+                Spacer(Modifier.weight(1f))
                 if (answering) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = c.muted)
                 else if (tag != null) {
                     Pill(

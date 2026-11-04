@@ -44,7 +44,7 @@ class HerdrColors(
     val panel: Color,
     /** `surface`: chips, secondary buttons, tracks, your chat turns, a module's header strip. */
     val card: Color,
-    /** `hover`: a pressed row, chip or key; icon tiles. */
+    /** `hover`, a step darker in dark so the blocked red keeps 4.5:1 on it: a pressed row, chip or key; icon tiles. */
     val hover: Color,
     /** `input`: text fields. */
     val input: Color,
@@ -124,8 +124,8 @@ class HerdrColors(
 
     /** Code's colours: comments dim, functions amber, inserted and deleted the done and blocked states, and six of their own. */
     fun syntax(role: Role): Color = when (role) {
-        Role.Keyword -> if (dark) Color(0xFFFF7A6B) else Color(0xFFA33A17)
-        Role.Str -> if (dark) Color(0xFFA6E08F) else Color(0xFF3F6B18)
+        Role.Keyword -> if (dark) Color(0xFFFF7A6B) else Color(0xFF953414)
+        Role.Str -> if (dark) Color(0xFFA6E08F) else Color(0xFF365E14)
         Role.Number -> if (dark) Color(0xFFCFA0F0) else Color(0xFF7A3F8A)
         Role.Type -> if (dark) Color(0xFF7FC4F0) else Color(0xFF155A72)
         Role.Variable -> if (dark) Color(0xFF8BE8DE) else Color(0xFF0E615A)
@@ -152,7 +152,7 @@ private val WORKBENCH_ANSI = ansi(
 )
 
 internal val DarkHerdr = HerdrColors(
-    ground = Color(0xFF0D0F10), panel = Color(0xFF0A0D0C), card = Color(0xFF1B1F21), hover = Color(0xFF2A3134),
+    ground = Color(0xFF0D0F10), panel = Color(0xFF0A0D0C), card = Color(0xFF1B1F21), hover = Color(0xFF252B2E),
     input = Color(0xFF090A0B), line = Color(0xFF283033), lineStrong = Color(0xFF4E5B57), frame = Color(0xFF7A5809),
     selected = Color(0xFF1E3A40),
     text = Color(0xFFDFE4E1), strong = Color(0xFFF4F6F5), muted = Color(0xFF8FA3A8), off = Color(0xFF66727A),
@@ -167,12 +167,12 @@ internal val DarkHerdr = HerdrColors(
 )
 
 internal val LightHerdr = HerdrColors(
-    ground = Color(0xFFF1EEE6), panel = Color(0xFFE8E4D9), card = Color(0xFFFBFAF6), hover = Color(0xFFDDD8CA),
+    ground = Color(0xFFF1EEE6), panel = Color(0xFFECE8DE), card = Color(0xFFFBFAF6), hover = Color(0xFFE4E0D4),
     input = Color(0xFFFFFFFF), line = Color(0xFFD5CFC0), lineStrong = Color(0xFF8E897C), frame = Color(0xFFB98A3A),
     selected = Color(0xFFD9E6E3),
     text = Color(0xFF1E2224), strong = Color(0xFF0B0D0E), muted = Color(0xFF4F5B60), off = Color(0xFF9AA2A3),
-    accent = Color(0xFF875400), primary = Color(0xFFFFB000), onPrimary = Color(0xFF0B0D0E),
-    red = Color(0xFFB3261E), working = Color(0xFF875400), done = Color(0xFF1C6E3D), idle = Color(0xFF4F5B60),
+    accent = Color(0xFF7A4C00), primary = Color(0xFFFFB000), onPrimary = Color(0xFF0B0D0E),
+    red = Color(0xFFA3211A), working = Color(0xFF7A4C00), done = Color(0xFF17623A), idle = Color(0xFF4F5B60),
     teal = Color(0xFF0E7A70), notice = Color(0xFF6E5600), dangerText = Color(0xFF8F1D1D),
     scrim = Color(0x59281F16), bubbleBorder = Color(0xFF8E897C), termSelection = Color(0xFFF0D9AE),
     circuit = listOf(Color(0xFFE6E2D6), Color(0xFFE0DBCD), Color(0xFFDBD5C5), Color(0xFFE3D6B6)),
