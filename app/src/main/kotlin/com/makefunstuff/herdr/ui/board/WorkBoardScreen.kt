@@ -115,10 +115,11 @@ private sealed interface WorkPending {
 
 /**
  * The work board on one machine: Shepherdr 3's ([WorkBoardScreen]). With [alone],
- * [openTask] was opened from elsewhere (the Tasks tab): closing it goes back there.
+ * [openTask] was opened from elsewhere (the Tasks tab): closing it goes back there. With [accept] (its Finished
+ * alert), its Accept card opens over it while it is Ready.
  */
 @Composable
-fun BoardScreen(nav: NavController, machineId: String, openTask: String? = null, alone: Boolean = false) {
+fun BoardScreen(nav: NavController, machineId: String, openTask: String? = null, alone: Boolean = false, accept: Boolean = false) {
     val session = LocalContainer.current.hosts.session(machineId)
     if (session == null) {
         EmptyState("Machine not found", "It may have been removed.")
@@ -126,7 +127,7 @@ fun BoardScreen(nav: NavController, machineId: String, openTask: String? = null,
     }
     val state by session.state.collectAsStateWithLifecycle()
     when {
-        state.onShepherdr -> WorkBoardScreen(nav, session, machineId, openTask, alone)
+        state.onShepherdr -> WorkBoardScreen(nav, session, machineId, openTask, alone, accept)
         state.online && !state.boardChecked -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { LoadingState("Looking for Shepherdr") }
         else -> EmptyState("No work board", "Shepherdr 3 isn't running on ${state.machine.label}. Its tasks show here once it is.", icon = HerdrIcons.SquareKanban)
     }
@@ -145,6 +146,7 @@ internal fun WorkBoardScreen(
     machineId: String,
     openTask: String? = null,
     alone: Boolean = false,
+    accept: Boolean = false,
 ) {
     val container = LocalContainer.current
     val panes = LocalPanes.current
@@ -214,6 +216,14 @@ internal fun WorkBoardScreen(
     // Shepherdr's Accept: its card first, which says what you approve; the fingerprint then.
     fun merge(t: WorkTask) {
         acceptFor = t
+    }
+    // From a task's Finished alert: its Accept card, once, as soon as the board says it is Ready.
+    var acceptAsked by rememberSaveable { mutableStateOf(accept) }
+    LaunchedEffect(board, acceptAsked) {
+        if (!acceptAsked) return@LaunchedEffect
+        val t = board?.tasks?.firstOrNull { it.id == openTask } ?: return@LaunchedEffect
+        if (t.status == WorkStatus.Ready) acceptFor = t
+        acceptAsked = false
     }
     fun answer(a: CardAnswer, t: WorkTask) = act("Answering", t) { it.answer(a).ifEmpty { "Answered" } }
     /** [space]'s coordinator chat; the home space's without one. */

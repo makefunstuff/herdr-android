@@ -174,6 +174,10 @@ class Inbox(
         if (heldDirty) saveHeld()
     }
 
+    /** What was shown last under each tag starting with [prefix], by its signature: what is up now, or was. */
+    @Synchronized
+    fun seen(prefix: String): Map<String, String> = seen.filterKeys { it.startsWith(prefix) }.mapValues { it.value.sig }
+
     /** Takes a notification down when its agent or task is opened in the app; it stays seen, and is no longer held. */
     @Synchronized
     fun dismiss(tag: String) {

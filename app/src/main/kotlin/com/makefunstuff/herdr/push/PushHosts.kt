@@ -35,6 +35,8 @@ class PushHosts(
 
     /** Machines looked at since they came online; cleared when one goes offline, so a reconnect looks again. */
     private val looked = HashSet<String>()
+    /** Machines whose Shepherdr 3 service was asked for task alerts since they came online, the same way. */
+    private val tasksAsked = HashSet<String>()
     private val locks = HashMap<String, Mutex>()
 
     fun start() {
@@ -44,6 +46,9 @@ class PushHosts(
                     val id = s.machine.id
                     val fresh = synchronized(looked) { if (s.online) looked.add(id) else { looked.remove(id); false } }
                     if (fresh) scope.launch { sync(id, quiet = true) }
+                    // Shepherdr 3 is found a moment after the machine connects: its task alerts once it is.
+                    val tasks = synchronized(tasksAsked) { if (s.online && s.onShepherdr) tasksAsked.add(id) else { tasksAsked.remove(id); false } }
+                    if (tasks) scope.launch { subscribeTasks(id) }
                 }
             }
         }
@@ -51,7 +56,33 @@ class PushHosts(
         scope.launch {
             store.state.map { s -> listOf(s.on, s.endpoint, s.live, s.machines.mapValues { it.value.off }) }.distinctUntilChanged().collect {
                 for (s in hosts.hosts.value) if (s.online) scope.launch { sync(s.machine.id, quiet = true) }
+                for (s in hosts.hosts.value) if (s.online && s.onShepherdr) scope.launch { subscribeTasks(s.machine.id) }
             }
+        }
+    }
+
+    /**
+     * Subscribes this phone to [machineId]'s Shepherdr 3 task alerts, as a web page does ("HERD-4 · Needs you",
+     * "HERD-4 · Finished"): its push address, and Web Push keys made for that machine. Only the machine serving
+     * Shepherdr's web app sends them, so every 3.x machine is subscribed and one alert still comes once. The
+     * service keeps no way to unsubscribe: a machine left out keeps sending, and the app drops what it sends.
+     */
+    suspend fun subscribeTasks(machineId: String) {
+        val st = store.state.value
+        val m = st.machine(machineId)
+        // The service takes https addresses only, as a browser's are.
+        val endpoint = st.endpoint?.takeIf { st.on && !m.off && it.startsWith("https://") }
+        if (endpoint == null) {
+            if (m.tasksTo != null) store.machine(machineId) { it.copy(tasksTo = null) }
+            return
+        }
+        try {
+            hosts.borrow(machineId) { session -> session.awaitShepherdr().subscribePush(endpoint, store.webKeys(machineId), phone.name) }
+            store.machine(machineId) { it.copy(tasksTo = endpoint) }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Throwable) {
+            // A service too old for push alerts, or gone meanwhile: asked again the next time it connects.
         }
     }
 
