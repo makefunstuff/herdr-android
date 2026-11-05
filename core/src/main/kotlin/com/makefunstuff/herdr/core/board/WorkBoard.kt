@@ -250,6 +250,16 @@ interface WorkBoard {
      */
     suspend fun say(space: String, text: String, cid: String? = null, reply: String? = null): String
 
+    /**
+     * Adds [emoji] to message [message] of [space]'s coordinator chat, or of [task]'s own chat when one is given; a
+     * reaction already yours is taken back (Shepherdr's toggle).
+     */
+    suspend fun react(space: String, task: WorkTask?, message: String, emoji: String): Unit =
+        throw IOException("This board takes no reactions")
+
+    /** Reads the page of [space]'s coordinator chat (or [task]'s) before what it shows; the chat then comes again, longer. */
+    suspend fun earlier(space: String, task: WorkTask?): Unit = throw IOException("This board reads no earlier pages")
+
     /** Copies a file for [space]'s coordinator to its machine: its path there, for [sayFiles]. */
     suspend fun upload(space: String, name: String, data: ByteArray, type: String): String =
         throw IOException("This board takes no files")
