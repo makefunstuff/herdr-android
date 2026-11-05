@@ -82,6 +82,12 @@ object V2Actions {
         put("emoji", emoji)
     }
 
+    /** The page of [chat]'s log before what it shows (`Search earlier`, `Loading earlier…`): the chat then comes again, longer. */
+    fun earlier(chat: String): JsonObject = buildJsonObject {
+        put("type", "earlier")
+        put("chat", chat)
+    }
+
     /** Marks task [task]'s chat's task done with nothing merged (`herdr-task done`): its chat key, `<task>/worker`. */
     fun close(chat: String): JsonObject = buildJsonObject {
         put("type", "close")
