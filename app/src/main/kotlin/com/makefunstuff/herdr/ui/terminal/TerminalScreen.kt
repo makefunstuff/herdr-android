@@ -1,5 +1,6 @@
 package com.makefunstuff.herdr.ui.terminal
 
+import com.makefunstuff.herdr.ui.change.ChangeScreenRow
 import androidx.compose.ui.graphics.RectangleShape
 
 import com.makefunstuff.herdr.core.terminal.LiveTerminal
@@ -454,6 +455,7 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
                     MenuRow("Edit key bar…", HerdrIcons.Keyboard, { menu = false; editKeys = true })
                     MenuRow(if (bar.keepScreenOn) "Let the screen sleep" else "Keep screen on", HerdrIcons.Sun, { menu = false; container.keyBar.setKeepScreenOn(!bar.keepScreenOn) })
                     MenuRow("Reconnect", HerdrIcons.RefreshCcw, { menu = false; generation++ })
+                    ChangeScreenRow { menu = false }
                 }
             }
         },

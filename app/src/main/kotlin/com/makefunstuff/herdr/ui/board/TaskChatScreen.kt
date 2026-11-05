@@ -1,5 +1,6 @@
 package com.makefunstuff.herdr.ui.board
 
+import com.makefunstuff.herdr.ui.change.ChangeScreenRow
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -446,6 +447,7 @@ internal fun TaskChatScreen(
                     if (!d?.facts.isNullOrEmpty() || !d?.branch.isNullOrEmpty()) MenuRow("Facts", HerdrIcons.Info, { sheet = TaskSheet.Facts })
                     if (onArtifacts != null) MenuRow("Artifacts", HerdrIcons.LayoutDashboard, { sheet = null; onArtifacts() })
                     if (d == null) LoadingState("Reading the task")
+                    ChangeScreenRow { sheet = null }
                     if (canClose) MenuRow("Close, nothing merged…", HerdrIcons.CircleStop, { sheet = null; onClose() }, enabled = busy == null, destructive = true)
                 }
             }

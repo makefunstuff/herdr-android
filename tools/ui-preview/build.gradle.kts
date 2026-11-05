@@ -74,6 +74,8 @@ val androidOnly = listOf(
     "com/makefunstuff/herdr/voice/PhoneSpeech.kt",
     "com/makefunstuff/herdr/voice/VoiceService.kt",
     "com/makefunstuff/herdr/voice/VoiceMic.kt",
+    "com/makefunstuff/herdr/change/AndroidThisApp.kt",
+    "com/makefunstuff/herdr/ui/change/ScreenShot.kt",
 )
 
 sourceSets.main {

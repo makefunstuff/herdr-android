@@ -66,6 +66,10 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -506,6 +510,16 @@ val LocalInTab = compositionLocalOf { false }
 val LocalBarMore = compositionLocalOf<(@Composable RowScope.() -> Unit)?> { null }
 
 /**
+ * "Change this screen", given around the app's screens (none in a bubble): a long press on a bar's title opens it,
+ * as the ⋯ menus' row does, and the bar shown last tells it its [title].
+ */
+class ScreenChange(val open: () -> Unit) {
+    var title by mutableStateOf("")
+}
+
+val LocalScreenChange = compositionLocalOf<ScreenChange?> { null }
+
+/**
  * The bar over a screen, as the web UI's phone header: `--bg-panel` with a hairline under it. With
  * [onBack] it is a detail screen's bar (back arrow, 16sp strong title, the place under it dim);
  * without, a top-level screen's (22sp display title), or with a [subtitle] a pane's (the detail
@@ -534,7 +548,15 @@ fun HerdrTopBar(
     ) {
         if (drawer != null) BarIcon(HerdrIcons.Sidebar, "Spaces", drawer)
         else if (onBack != null) BarIcon(HerdrIcons.ArrowLeft, backLabel, onBack)
-        Box(Modifier.weight(1f).padding(start = if (onBack != null || drawer != null) Space.xs else 0.dp, end = Space.s)) {
+        val change = LocalScreenChange.current
+        if (change != null) SideEffect { change.title = title }
+        Box(
+            Modifier.weight(1f).padding(start = if (onBack != null || drawer != null) Space.xs else 0.dp, end = Space.s).then(
+                if (change == null) Modifier
+                else Modifier.pointerInput(change) { detectTapGestures(onLongPress = { change.open() }) }
+                    .semantics { onLongClick("Change this screen") { change.open(); true } },
+            ),
+        ) {
             when {
                 titleContent != null -> titleContent()
                 onBack == null && subtitle == null -> Text(

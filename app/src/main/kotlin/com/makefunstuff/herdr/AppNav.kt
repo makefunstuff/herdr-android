@@ -74,6 +74,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import kotlinx.coroutines.launch
 import com.makefunstuff.herdr.ui.board.BoardScreen
+import com.makefunstuff.herdr.ui.change.ScreenChangeHost
 import com.makefunstuff.herdr.ui.board.rememberBoards
 import com.makefunstuff.herdr.ui.board.rememberNeedsYou
 import com.makefunstuff.herdr.ui.brief.BriefScreen
@@ -146,6 +147,8 @@ object Routes {
     /** What happened while you were away (the scheduled brief's notification opens it; set up in Settings). */
     const val BRIEF = "brief"
     const val BRIEF_SETTINGS = "settings/brief"
+    /** Settings › Change the app: the machine that builds it, what it has for that, and the update it built. */
+    const val CHANGE_APP = "settings/change"
     /** Settings › Autopilot on one machine: its heartbeat, schedule and events, the same in each of its spaces. */
     const val AUTOPILOT = "settings/autopilot/{mid}"
     const val MACHINE = "machine/{id}"
@@ -268,7 +271,7 @@ private fun AppNav(nav: NavHostController) {
         val lineColor = Herdr.colors.lineStrong
         val sideWidth = Panes.sidebar(maxWidth)
 
-        CompositionLocalProvider(LocalPanes provides panes, LocalSpaceChoice provides space) {
+        CompositionLocalProvider(LocalPanes provides panes, LocalSpaceChoice provides space) { ScreenChangeHost(nav) {
             val app: @Composable () -> Unit = {
                 Scaffold(
                     contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -325,7 +328,7 @@ private fun AppNav(nav: NavHostController) {
                 agentsRead = remember(hosts) { hosts.filter { it.agentsKnown }.map { it.machine.id }.toSet() },
                 boardsRead = remember(homeBoards) { homeBoards.map { it.machineId }.toSet() },
             )
-        }
+        } }
     }
 }
 
@@ -341,6 +344,7 @@ internal fun NavGraphBuilder.screens(nav: NavHostController, tasks: @Composable 
     composable(Routes.RULES) { com.makefunstuff.herdr.ui.settings.AlertRulesScreen(nav) }
     composable(Routes.BRIEF) { BriefScreen(nav) }
     composable(Routes.BRIEF_SETTINGS) { BriefSettingsScreen(nav) }
+    composable(Routes.CHANGE_APP) { com.makefunstuff.herdr.ui.settings.ChangeAppScreen(nav) }
     composable(Routes.AUTOPILOT) { com.makefunstuff.herdr.ui.settings.AutopilotScreen(nav, it.arguments?.getString("mid").orEmpty()) }
     composable(Routes.MACHINE) { MachineScreen(nav, it.arguments?.getString("id").orEmpty()) }
     composable(Routes.EDIT) { EditMachineScreen(nav, it.arguments?.getString("id")) }

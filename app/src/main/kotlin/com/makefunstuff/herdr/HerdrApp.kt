@@ -181,6 +181,11 @@ class AppContainer(app: Application) {
         scope, hosts, machines, BriefStore(java.io.File(app.filesDir, "brief.json")), AndroidBrief(app), AndroidVoice(app),
         quiet = { quietWork.check() },
     )
+    /** Changing the app from the phone: its builder, the tasks accepted here, and the update it built. */
+    val changes = com.makefunstuff.herdr.change.AppChanges(
+        scope, hosts, java.io.File(app.filesDir, "app-change.json"), java.io.File(app.cacheDir, "updates"),
+        com.makefunstuff.herdr.change.AndroidThisApp(app),
+    )
 
     init {
         // Read the key up front so the public key is ready to show. A missing key is never made
@@ -192,6 +197,7 @@ class AppContainer(app: Application) {
         tally.start(scope, hosts)
         briefWork.start()
         usage.start(scope, hosts, machines)
+        changes.start()
         // Shared files waiting for a machine taken out of the app go with it.
         scope.launch { machines.machines.collect { list -> shares.keep(list.map { it.id }.toSet()) } }
         // Old mutes and watches move onto their spaces' Notify, and pins of panes gone go, as the machines are read.

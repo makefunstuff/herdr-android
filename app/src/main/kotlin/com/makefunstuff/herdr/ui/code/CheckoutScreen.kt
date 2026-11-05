@@ -1,5 +1,6 @@
 package com.makefunstuff.herdr.ui.code
 
+import com.makefunstuff.herdr.ui.change.ChangeScreenRow
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -159,6 +160,7 @@ private fun Checkout(
                 HerdrMenu(expanded = menu, onDismissRequest = { menu = false }, title = info.name, subtitle = host.shortPath(info.top)) {
                     MenuRow("Read it again", HerdrIcons.RefreshCw, { menu = false; onRefresh() })
                     MenuRow("Copy the folder's path", HerdrIcons.Copy, { menu = false; context.copyToClipboard("Folder", info.top) })
+                    ChangeScreenRow { menu = false }
                 }
             }
         },

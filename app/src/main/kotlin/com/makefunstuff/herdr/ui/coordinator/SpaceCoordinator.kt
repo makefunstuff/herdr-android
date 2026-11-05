@@ -378,6 +378,10 @@ internal fun SpaceCoordinator(nav: NavController, machineId: String, session: Ho
                 composer = {
                     Column {
                         if (callHere && !typing) CallBar(call, Modifier.padding(horizontal = Space.screen).padding(bottom = Space.xs), calls::stop)
+                        // The herdr-android space on the machine that builds the app: where its update is, or Undo.
+                        if (!typing && space != null) com.makefunstuff.herdr.ui.change.ChangeBar(
+                            machineId, space, spaces, overview?.tasks.orEmpty(), Modifier.padding(horizontal = Space.screen).padding(bottom = Space.xs),
+                        )
                         if (waits.isNotEmpty() && draft.isEmpty()) {
                             WaitsForYou(waits, Modifier.padding(horizontal = Space.screen).padding(bottom = Space.xs)) { card ->
                                 val at = items.indexOfFirst { it.holds(card) }
@@ -499,7 +503,7 @@ internal fun SpaceCoordinator(nav: NavController, machineId: String, session: Ho
         com.makefunstuff.herdr.ui.board.AcceptSheet(
             board, task, onDismiss = { accepting = null },
             onProof = { proof -> nav.navigate(Routes.artifact(machineId, proof, null)) },
-            onAccepted = { context.toast(it) },
+            onAccepted = { context.toast(it); container.changes.accepted(machineId, task) },
         )
     }
 }
@@ -621,7 +625,10 @@ internal fun ChatItem(
             QuestionCard(item.card, item.answer, item.card.question.id in answering, onAnswer)
         }
         is SpaceChatItem.Voice -> VoiceMessage(item.path, item.millis, item.you, item.note)
-        is SpaceChatItem.File -> Row(
+        // A picture shared there (a task's before and after shots) shows as itself, read from the machine as yours are.
+        is SpaceChatItem.File -> if (Images.isImage(item.name) && item.path.startsWith("/")) Row(
+            Modifier.fillMaxWidth(), horizontalArrangement = if (item.you) Arrangement.End else Arrangement.Start,
+        ) { MessageImages(listOf(item.path)) } else Row(
             Modifier.fillMaxWidth(), horizontalArrangement = if (item.you) Arrangement.End else Arrangement.Start,
             verticalAlignment = Alignment.CenterVertically,
         ) {

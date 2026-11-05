@@ -134,6 +134,8 @@ class SceneData {
     var call: com.makefunstuff.herdr.core.voice.CallState = com.makefunstuff.herdr.core.voice.CallState()
     /** Its settings (VoiceSettingsStore), as saved before the app opens. */
     var voiceSettings: com.makefunstuff.herdr.data.VoiceSettingsStore.Settings? = null
+    /** Changing the app (AppChanges): the builder, the tasks accepted from the phone and the update, as saved before the app opens. */
+    var appChange: com.makefunstuff.herdr.change.AppChanges.Saved? = null
     fun host(id: String): FakeMachine = hosts.getValue(id)
 }
 
@@ -225,6 +227,7 @@ fun render(scene: Scene, dark: Boolean, file: File) {
     data.composer?.let { context.filesDir.resolve("composer.json").writeText(Json.encodeToString(com.makefunstuff.herdr.data.ComposerStore.State.serializer(), it)) }
     data.keyBar?.let { context.filesDir.resolve("key-bar.json").writeText(Json.encodeToString(com.makefunstuff.herdr.data.KeyBarStore.Saved.serializer(), it)) }
     data.voiceSettings?.let { context.filesDir.resolve("voice-settings.json").writeText(Json.encodeToString(com.makefunstuff.herdr.data.VoiceSettingsStore.Settings.serializer(), it)) }
+    data.appChange?.let { context.filesDir.resolve("app-change.json").writeText(Json.encodeToString(com.makefunstuff.herdr.change.AppChanges.Saved.serializer(), it)) }
     data.textSizes?.let { context.filesDir.resolve("text-sizes.json").writeText(Json.encodeToString(com.makefunstuff.herdr.data.TextSizeStore.Sizes.serializer(), it)) }
     data.guard?.let { context.filesDir.resolve("guard.json").writeText(Json.encodeToString(com.makefunstuff.herdr.data.GuardState.serializer(), it)) }
     if (data.held.isNotEmpty()) context.filesDir.resolve("held.json").writeText(Json.encodeToString(ListSerializer(Alert.serializer()), data.held))

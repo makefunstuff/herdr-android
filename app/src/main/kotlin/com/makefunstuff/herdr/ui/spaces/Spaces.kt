@@ -445,6 +445,7 @@ private fun SpaceMenu(nav: NavController, slot: SpaceSlot, host: HostState, tabM
         MenuRow("Start an agent", HerdrIcons.Bot, { go(Routes.start(slot.machineId)) }, enabled = host.online)
         MenuSection("Machine")
         MenuRow(host.machine.label, HerdrIcons.Server, { go(Routes.machine(slot.machineId)) })
+        com.makefunstuff.herdr.ui.change.ChangeScreenRow(onDismiss)
     }
 }
 

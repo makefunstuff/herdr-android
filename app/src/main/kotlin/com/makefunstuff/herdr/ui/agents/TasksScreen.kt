@@ -542,6 +542,7 @@ fun TasksScreen(
             onAccepted = {
                 context.toast(it)
                 readNow.trySend(Unit)
+                container.changes.accepted(w.machineId, t)
             },
             confirm = { run -> guard.run(Guarded.Merge, "Accept ${t.name}?", t.title) { view.confirmTap(); run() } },
         )
