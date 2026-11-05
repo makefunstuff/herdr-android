@@ -29,6 +29,7 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -44,14 +45,21 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import com.makefunstuff.herdr.Routes
 import com.makefunstuff.herdr.core.api.AgentInfo
 import com.makefunstuff.herdr.core.api.AgentStatus
 import com.makefunstuff.herdr.core.api.PaneInfo
 import com.makefunstuff.herdr.core.api.WorkspaceInfo
+import com.makefunstuff.herdr.core.board.TabMenus
 import com.makefunstuff.herdr.core.board.WorkOverview
 import com.makefunstuff.herdr.core.board.WorkSpace
 import com.makefunstuff.herdr.core.board.WorkTab
+import com.makefunstuff.herdr.core.hc.HcMapping
 import com.makefunstuff.herdr.core.host.HostState
 import com.makefunstuff.herdr.core.push.Notify
 import com.makefunstuff.herdr.core.usage.UsageRules
@@ -76,6 +84,7 @@ import com.makefunstuff.herdr.ui.design.LocalInTab
 import com.makefunstuff.herdr.ui.design.MenuRow
 import com.makefunstuff.herdr.ui.design.MenuSection
 import com.makefunstuff.herdr.ui.design.SlotNumber
+import com.makefunstuff.herdr.ui.design.Toasts
 import com.makefunstuff.herdr.ui.design.chipFor
 import com.makefunstuff.herdr.ui.theme.Herdr
 import com.makefunstuff.herdr.ui.theme.Space
@@ -377,6 +386,7 @@ fun ChatTab(nav: NavController) {
     val host = spaces.firstOrNull { it.first.machine.id == slot?.machineId }?.first
     var menu by remember { mutableStateOf(false) }
     val tabMenu = rememberTabMenu()
+    val terminals = rememberNewTerminal(nav)
     val more: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {
         if (slot != null) BarIcon(HerdrIcons.Layers, "Tabs and new", { menu = true })
     }
@@ -411,23 +421,83 @@ fun ChatTab(nav: NavController) {
             }
         }
     }
-    if (menu && slot != null && host != null) SpaceMenu(nav, slot, host, tabMenu) { menu = false }
+    if (menu && slot != null && host != null) SpaceMenu(nav, slot, host, tabMenu, terminals) { menu = false }
     TabMenuDialogs(tabMenu)
 }
 
 /** The tab the Chat tab shows, as Shepherdr's tab bar knows it: a Shepherdr space's chat is its Assistant's tab. */
 fun SpaceSlot.shownTab(host: HostState): WorkTab? = board?.takeIf { host.onShepherdr }?.tabs?.firstOrNull { it.assistant }
 
+/** The terminal the Chat tab's chat reads: the shown space's Assistant's, else its agent's. */
+fun SpaceSlot.shownTerminal(host: HostState): String? =
+    board?.takeIf { host.onShepherdr }?.let { TabMenus.assistantTerminal(host.view, it.id) } ?: lead?.paneId
+
 /**
- * The shown space's ⋯ on a phone (3.1's header menu): the shown tab's menu, its tabs (each agent's chat, each
- * terminal), then New task, the Assistant and Start an agent, and its machine.
+ * The + menu's Terminal: a shell as a new tab of a space, then its terminal. Shepherdr opens it in the space's folder
+ * (`tab-new`); on classic herdr it is a new tab of the space's workspace. herdr-core alone opens no terminal for the phone.
+ */
+@Stable
+class NewTerminal internal constructor(
+    private val container: com.makefunstuff.herdr.AppContainer,
+    private val scope: kotlinx.coroutines.CoroutineScope,
+    private val nav: NavController,
+) {
+    var opening by mutableStateOf(false)
+        private set
+
+    /** The space's workspace classic herdr has, where a new tab can open; null on herdr-core alone. */
+    private fun SpaceSlot.classic(): WorkspaceInfo? = workspaces.firstOrNull { !it.workspaceId.startsWith(HcMapping.PREFIX) }
+
+    fun can(slot: SpaceSlot, host: HostState): Boolean = (slot.board != null && host.onShepherdr) || slot.classic() != null
+
+    fun open(slot: SpaceSlot, host: HostState) {
+        if (opening) return
+        opening = true
+        scope.launch {
+            runCatching {
+                val session = container.hosts.session(slot.machineId) ?: error("This machine isn't in the app any more")
+                val board = slot.board?.takeIf { host.onShepherdr }
+                if (board != null) {
+                    val before = session.state.value.view
+                    session.awaitWorkBoard().newTerminal(board.id)
+                    session.refresh()
+                    // It shows once the machine lists it; Shepherdr names its space as the board does.
+                    withTimeoutOrNull(10_000) {
+                        session.state.map { s -> TabMenus.newShell(before, s.view, slot.name) ?: TabMenus.newShell(before, s.view, board.name) }.filterNotNull().first()
+                    }
+                } else {
+                    val ws = slot.classic() ?: error("herdr-core opens no terminal from the phone")
+                    session.awaitApi(10_000).openShell(ws.workspaceId, "shell", slot.panes.firstOrNull()?.cwd).also { session.refresh() }
+                }
+            }.onSuccess { pane ->
+                if (pane != null) nav.navigate(Routes.terminal(slot.machineId, pane)) else Toasts.show("A terminal opened in ${slot.name}")
+            }.onFailure { Toasts.show(it.message ?: "The terminal didn't open") }
+            opening = false
+        }
+    }
+}
+
+@Composable
+fun rememberNewTerminal(nav: NavController): NewTerminal {
+    val container = LocalContainer.current
+    val scope = rememberCoroutineScope()
+    return remember(container, scope, nav) { NewTerminal(container, scope, nav) }
+}
+
+/**
+ * The shown space's ⋯ on a phone (3.1's header menu): the shown tab's menu and its terminal (Show), its tabs (each
+ * agent's chat, each terminal), then a new Terminal, New task, the Assistant and Start an agent, and its machine.
  */
 @Composable
-private fun SpaceMenu(nav: NavController, slot: SpaceSlot, host: HostState, tabMenu: TabMenuState, onDismiss: () -> Unit) {
+private fun SpaceMenu(nav: NavController, slot: SpaceSlot, host: HostState, tabMenu: TabMenuState, terminals: NewTerminal, onDismiss: () -> Unit) {
     fun go(route: String) { onDismiss(); nav.navigate(route) }
     HerdrMenu(expanded = true, onDismissRequest = onDismiss, title = slot.name, subtitle = host.machine.label) {
         val board = slot.board
         slot.shownTab(host)?.let { tab -> if (board != null) TabMenuRows(tabMenu, slot.machineId, board, tab, onPicked = onDismiss) }
+        slot.shownTerminal(host)?.let { pane ->
+            MenuSection("Show")
+            MenuRow("Terminal", HerdrIcons.SquareTerminal, { go(Routes.terminal(slot.machineId, pane)) })
+        }
         if (slot.panes.isNotEmpty()) {
             MenuSection("Tabs")
             slot.panes.forEach { p ->
@@ -440,6 +510,9 @@ private fun SpaceMenu(nav: NavController, slot: SpaceSlot, host: HostState, tabM
             }
         }
         MenuSection("New")
+        if (terminals.can(slot, host)) {
+            MenuRow("Terminal", HerdrIcons.SquareTerminal, { onDismiss(); terminals.open(slot, host) }, enabled = host.online && !terminals.opening)
+        }
         if (host.onShepherdr) MenuRow("New task", HerdrIcons.SquarePen, { go(Routes.start(slot.machineId)) })
         if (host.onShepherdr && slot.board != null) MenuRow("Assistant", HerdrIcons.MessagesSquare, { go(Routes.coordinator(slot.machineId, slot.board.id)) })
         MenuRow("Start an agent", HerdrIcons.Bot, { go(Routes.start(slot.machineId)) }, enabled = host.online)
