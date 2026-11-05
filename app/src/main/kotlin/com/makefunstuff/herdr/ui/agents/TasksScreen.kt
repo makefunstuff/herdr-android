@@ -106,6 +106,7 @@ private fun sig(w: Waiting): String = when (w) {
     is Waiting.Question -> "${w.agent.agent.stateChangeSeq}"
     is Waiting.Task -> "${w.task.status}|${w.task.line}"
     is Waiting.Coordinator -> "asks"
+    is Waiting.Secret -> "secret"
 }
 
 /** What is being said back from a card: an answer to an agent's question. */
@@ -251,6 +252,9 @@ fun TasksScreen(
         }
     }
 
+    /** The secret ask whose masked box is up. */
+    var giving by remember { mutableStateOf<Waiting.Secret?>(null) }
+
     /** A Ready task whose Accept card is up, and its machine. */
     var acceptFor by remember { mutableStateOf<Pair<Waiting.Task, WorkTask>?>(null) }
     // Shepherdr's Accept: its card first, which says what you approve.
@@ -286,7 +290,7 @@ fun TasksScreen(
         when (w) {
             is Waiting.Question -> titleOf(w.agent, w.task)
             is Waiting.Task -> w.machineId to w.task.title
-            is Waiting.Coordinator -> null
+            is Waiting.Coordinator, is Waiting.Secret -> null
         }
     }.toSet()
     fun rows(list: List<AgentRow>) = list.filter { r ->
@@ -420,6 +424,13 @@ fun TasksScreen(
                         )
                     }
                     is Waiting.Coordinator -> CoordinatorCard(w, showMachine) { panes.open(nav, Routes.coordinator(w.machineId, w.space.id)) }
+                    is Waiting.Secret -> SecretCard(
+                        w, showMachine, onGive = { giving = w },
+                        onOpen = {
+                            val t = w.task
+                            if (t != null) panes.openBoard(nav, w.machineId, t.id) else panes.open(nav, Routes.coordinator(w.machineId, w.space?.id))
+                        },
+                    )
                 }
                 if (on(TaskFilter.NeedsYou)) items(waiting, key = { it.key }) { card(it) }
                 if (on(TaskFilter.Ready) && ready.isNotEmpty()) {
@@ -519,6 +530,21 @@ fun TasksScreen(
         ) {
             MarkdownText(r.words)
         }
+    }
+    giving?.let { w ->
+        SecretSheet(
+            w, onDismiss = { giving = null },
+            onKept = { said ->
+                giving = null
+                handled[w.key] = sig(w)
+                context.toast(said)
+                readNow.trySend(Unit)
+            },
+            keep = { level, value ->
+                (container.hosts.session(w.machineId) ?: error("This machine isn't in the app any more")).awaitWorkBoard()
+                    .keepSecret(w.need.chat, w.ask, level, value)
+            },
+        )
     }
     acceptFor?.let { (w, t) ->
         val board by androidx.compose.runtime.produceState<com.makefunstuff.herdr.core.board.WorkBoard?>(null, w.machineId) {

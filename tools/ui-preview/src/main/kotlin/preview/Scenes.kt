@@ -143,6 +143,13 @@ private fun SceneData.v2() {
     host(DEVBOX).shepherdr = DemoV2.board()
 }
 
+/** Shepherdr 3 on devbox, its home Assistant also asking for a secret ([DemoV2.SECRET_NEED]). */
+private fun SceneData.secretAsk() {
+    val v2 = DemoV2.board()
+    v2.snapshot = JsonObject(v2.snapshot + ("needs" to JsonArray(v2.snapshot.getValue("needs").jsonArray + Json.parseToJsonElement(DemoV2.SECRET_NEED))))
+    host(DEVBOX).shepherdr = v2
+}
+
 /** Where a 540×1200 screenshot is drawn in the editor's [w]×[h] canvas: as large as fits, in the middle. */
 private fun screenshotIn(w: Float, h: Float): androidx.compose.ui.geometry.Rect {
     val scale = minOf(w / 540f, h / 1200f)
@@ -173,6 +180,12 @@ fun scenes(): List<Scene> = listOf(
     }, actions = { tapText("Always allow") }),
     Scene("agents-filter", heightDp = 1500, setup = { home() }, actions = { tapText("Working 3") }),
     Scene("tasks-new", setup = { home(); shepherdr() }, actions = { tapLabel("New task, Assistant or agent") }),
+    // An agent asking for a secret by name: its own item under Needs you, then the masked box (empty, then dots: a
+    // made-up value, never a real one), and the list once it is kept.
+    Scene("tasks-secret", heightDp = 1700, setup = { home(); secretAsk() }),
+    Scene("secret-sheet", setup = { home(); secretAsk() }, actions = { settle(); tapExact("Give it") }),
+    Scene("secret-sheet-typed", setup = { home(); secretAsk() }, actions = { settle(); tapExact("Give it"); type("demo-not-a-real-token") }),
+    Scene("secret-kept", heightDp = 1700, setup = { home(); secretAsk() }, actions = { settle(); tapExact("Give it"); type("demo-not-a-real-token"); tapExact("Save") }),
     Scene("agents-seen", heightDp = 1500, setup = { home() }, actions = { tapText("Mark all seen") }),
     // Triage: the eval pinned on top (and muted), AND-6 snoozed for three hours, the profile still new in Done.
     Scene("agents-triage", heightDp = 1500, setup = { home(); triage = Demo.triage() }),

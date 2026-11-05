@@ -6,6 +6,7 @@ import com.makefunstuff.herdr.core.shepherdr.V2Chat
 import com.makefunstuff.herdr.core.shepherdr.V2Evidence
 import com.makefunstuff.herdr.core.shepherdr.V2Need
 import com.makefunstuff.herdr.core.shepherdr.V2Question
+import com.makefunstuff.herdr.core.shepherdr.V2SecretAsk
 import com.makefunstuff.herdr.core.shepherdr.VoiceCall
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -206,6 +207,13 @@ interface WorkBoard {
     suspend fun addTask(space: String, title: String, brief: String): String
 
     suspend fun answer(answer: CardAnswer): String
+
+    /**
+     * Keeps [value] for [ask], an agent's secret ask in [chat], at [level]: into the machine's vault, the agent told
+     * its name only. Where it is kept, in words ("Kept for This space").
+     */
+    suspend fun keepSecret(chat: String, ask: V2SecretAsk, level: String, value: String): String =
+        throw IOException("This board can't keep secrets")
 
     /** [space]'s coordinator chat as it is now. */
     suspend fun coordinator(space: String): CoordinatorThread

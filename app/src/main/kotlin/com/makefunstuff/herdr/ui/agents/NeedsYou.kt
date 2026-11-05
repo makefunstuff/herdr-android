@@ -283,6 +283,35 @@ fun CoordinatorCard(w: Waiting.Coordinator, showMachine: Boolean, onOpen: () -> 
 }
 
 /**
+ * An agent that asks for a secret by name, as 3.1's Needs you row says it ("Wants the secret GITHUB_TOKEN"): who
+ * asks (its task, else its space's Assistant) and why. Give it opens the masked box ([SecretSheet]); Open its chat.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun SecretCard(w: Waiting.Secret, showMachine: Boolean, onGive: () -> Unit, onOpen: () -> Unit) {
+    val c = Herdr.colors
+    WaitingCard(false, onOpen, null, "Open chat", listOf(CustomAccessibilityAction("Give it") { onGive(); true })) {
+        CardHead(
+            mark = { Box(Modifier.size(22.dp), contentAlignment = Alignment.Center) { Icon(HerdrIcons.KeyRound, null, tint = c.text, modifier = Modifier.size(20.dp)) } },
+            title = w.task?.title ?: "${w.space?.name ?: "A space"}'s Assistant",
+            key = w.task?.name,
+            meta = listOfNotNull("Wants the secret ${w.ask.name}", w.machineLabel.takeIf { showMachine }),
+            badge = {},
+        )
+        w.ask.why?.takeIf { it.isNotBlank() }?.let {
+            Text(
+                it, style = MaterialTheme.typography.bodyMedium, color = c.text, maxLines = 3, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(start = 34.dp, top = Space.s),
+            )
+        }
+        FlowRow(Modifier.padding(start = 34.dp, top = Space.m), horizontalArrangement = Arrangement.spacedBy(Space.s)) {
+            AnswerButton("Give it", HerdrIcons.KeyRound, primary = true, enabled = true, onClick = onGive)
+            AnswerButton("Open", null, primary = false, enabled = true, onClick = onOpen)
+        }
+    }
+}
+
+/**
  * A Shepherdr 3 task waiting for you as a card, as its task screen has it: the question its agent asks
  * ([card], once read) with a button per answer, or Merge when it is ready; and Open, its chat. A
  * question that needs more than a tap (several picks, a note, words of your own) is answered there.

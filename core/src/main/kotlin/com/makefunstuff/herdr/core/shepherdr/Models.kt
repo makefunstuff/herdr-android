@@ -267,9 +267,23 @@ data class V2Brief(val label: String = "", val bare: Boolean = false)
 @Serializable
 data class V2Mention(val task: String, val ref: String = "", val title: String = "")
 
-/** An agent asking for a secret (`SecretAsk`): kept in the vault on the machine, never typed into the chat. */
+/**
+ * An agent asking for a secret (`SecretAsk`): kept in the vault on the machine, never typed into the chat. [levels]:
+ * where it can be kept, narrowest first (this space, the agent's machine, Everywhere), as the web's card offers them.
+ */
 @Serializable
-data class V2SecretAsk(val id: String = "", val name: String = "", val why: String? = null, val by: V2By? = null, val saved: String? = null)
+data class V2SecretAsk(
+    val id: String = "",
+    val name: String = "",
+    val why: String? = null,
+    val by: V2By? = null,
+    val saved: String? = null,
+    val levels: List<V2SecretLevel> = emptyList(),
+)
+
+/** Where a secret is kept (`p:<machine>:<space>`, `m:<machine>`, `all`), and its words ("This space"). */
+@Serializable
+data class V2SecretLevel(val id: String, val label: String = "")
 
 /** What a needs-you card in a space's chat asks, from its task's chat (`CardAsk`). */
 @Serializable

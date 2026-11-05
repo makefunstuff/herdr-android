@@ -100,6 +100,19 @@ object V2Actions {
         put("task", task)
     }
 
+    /**
+     * Keeps [value] as secret [name] at [level] ([V2SecretLevel.id]), for the agent in [chat] that asked ([ask]: its
+     * card's id), as the web's masked card sends it: the service puts it in the vault with `herdr-secret set` (on its
+     * stdin) and tells the agent its name only. Never logged or kept: this object lives as long as the request.
+     */
+    fun secret(chat: String, ask: String, name: String, level: String, value: String): JsonObject = buildJsonObject {
+        put("type", "secret")
+        put("level", level)
+        put("name", name)
+        put("value", value)
+        put("card", buildJsonObject { put("chat", chat); put("id", ask) })
+    }
+
     /** Stops the agent in [chat]: the task goes back to To do, its work stays. */
     fun stop(chat: String): JsonObject = buildJsonObject {
         put("type", "stop")

@@ -136,7 +136,7 @@ private fun Pill(p: PillItem, onOpen: () -> Unit) {
                     val agent = when (val w = p.waiting) {
                         is Waiting.Question -> w.agent
                         is Waiting.Task -> w.agent
-                        is Waiting.Coordinator -> null
+                        is Waiting.Coordinator, is Waiting.Secret -> null
                     }
                     if (agent != null) AgentMark(agent.agent.agent, size = 26.dp)
                     else Icon(HerdrIcons.SquareKanban, null, tint = Color(0xFFF0A830), modifier = Modifier.padding(4.dp).size(18.dp))
@@ -166,6 +166,7 @@ private fun words(w: Waiting): String = when (w) {
     }
     is Waiting.Task -> "${w.task.name} · ${w.task.status.word}: ${w.task.title}"
     is Waiting.Coordinator -> "${w.space.name}'s coordinator · needs you"
+    is Waiting.Secret -> "${w.task?.name ?: "${w.space?.name ?: "A space"}'s Assistant"} · wants the secret ${w.ask.name}"
 }
 
 /** Opens what [p] is about: the agent's chat, or the task. */
@@ -175,6 +176,7 @@ private fun open(nav: NavHostController, panes: Panes, p: PillItem, hosts: List<
             is Waiting.Question -> panes.openAgent(nav, w.machineId, w.agent.agent, hosts.any { it.machine.id == w.machineId && it.onShepherdr })
             is Waiting.Task -> panes.openBoard(nav, w.machineId, w.task.id)
             is Waiting.Coordinator -> panes.open(nav, Routes.coordinator(w.machineId, w.space.id))
+            is Waiting.Secret -> w.task?.let { panes.openBoard(nav, w.machineId, it.id) } ?: panes.open(nav, Routes.coordinator(w.machineId, w.space?.id))
         }
         is PillItem.Fired -> {
             val a = p.alert
@@ -205,7 +207,7 @@ private fun Waiting.isOpen(route: String?, args: (String) -> String?): Boolean {
     val agent = when (this) {
         is Waiting.Question -> agent
         is Waiting.Task -> agent
-        is Waiting.Coordinator -> null
+        is Waiting.Coordinator, is Waiting.Secret -> null
     }
     return (f.pane != null && agent?.agent?.paneId == f.pane) || (f.task != null && task?.id == f.task)
 }
