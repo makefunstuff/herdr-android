@@ -110,11 +110,15 @@ object DemoCore {
 fun SceneData.shepherdr3() {
     host(Demo.DEVBOX).shepherdr = DemoV2.board()
     host(Demo.DEVBOX).core = DemoCore.shepherdr()
+    // AND-19's worker: its Claude Code's transcript, found from its process (FakeCore.terminal's pid).
+    host(Demo.DEVBOX).transcripts += "4304" to Demo.resource("claude-api.jsonl")
 }
 
 /** devbox runs the desktop app's herdr-core next to classic herdr; mac-mini runs only the desktop app. */
 fun SceneData.desktopApp() {
     host(Demo.DEVBOX).core = DemoCore.devbox()
+    // The docs tab's Codex has its transcript; the review tab's Claude hasn't written one the app finds, so its chat is its screen.
+    host(Demo.DEVBOX).transcripts += "4303" to Demo.resource("codex-readme.jsonl")
     host(Demo.MINI).apply {
         refuse = null
         classic = false
