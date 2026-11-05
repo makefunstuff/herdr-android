@@ -194,7 +194,7 @@ class AppChangeTest {
             """
             case "$1" in
               names) echo '[{"name":"HERDR_KEYSTORE_FILE"},{"name":"HERDR_KEYSTORE_PASSWORD"},{"name":"HERDR_KEY_ALIAS"}]' ;;
-              run) shift 2; HERDR_KEYSTORE_FILE=/keys/release.jks HERDR_KEYSTORE_PASSWORD=pw HERDR_KEY_ALIAS=herdr exec "$@" ;;
+              run) shift 3; HERDR_KEYSTORE_FILE=/keys/release.jks HERDR_KEYSTORE_PASSWORD=pw HERDR_KEY_ALIAS=herdr exec "$@" ;;
             esac
             """.trimIndent(),
         )
