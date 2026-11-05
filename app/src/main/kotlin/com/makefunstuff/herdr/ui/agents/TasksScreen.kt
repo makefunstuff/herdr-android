@@ -421,6 +421,10 @@ fun TasksScreen(
                     },
                     onGive = { if (w is Waiting.Secret) giving = w },
                     onMerge = { if (w is Waiting.Task) merge(w, w.task) },
+                    onChoose = { prompt, i -> if (w is Waiting.Question) answer(w, prompt, i) },
+                    onReply = { if (w is Waiting.Question) reply = Reply.ToAgent(w) },
+                    onMenu = (w as? Waiting.Question)?.let { { menuAgent = it.agent to it.task } },
+                    more = (w as? Waiting.Question)?.let { sheetActions(it.agent, it.task) }.orEmpty(),
                 )
                 if (on(TaskFilter.NeedsYou)) items(waiting, key = { it.key }) { card(it) }
                 if (on(TaskFilter.Ready) && ready.isNotEmpty()) {
