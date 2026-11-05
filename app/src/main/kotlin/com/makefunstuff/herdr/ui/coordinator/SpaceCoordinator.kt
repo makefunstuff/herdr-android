@@ -55,6 +55,7 @@ import androidx.navigation.NavController
 import com.makefunstuff.herdr.LocalPanes
 import com.makefunstuff.herdr.core.board.CardAnswer
 import com.makefunstuff.herdr.core.board.CoordinatorThread
+import com.makefunstuff.herdr.core.board.TabMenus
 import com.makefunstuff.herdr.core.board.WorkBoard
 import com.makefunstuff.herdr.core.board.WorkCard
 import com.makefunstuff.herdr.core.board.WorkOverview
@@ -334,6 +335,10 @@ internal fun SpaceCoordinator(nav: NavController, machineId: String, session: Ho
                 actions = {
                     pilot.shown?.let { p -> AutopilotBarSwitch(p.on, enabled = state.online && board != null, onFlip = pilot.flip) }
                     if (t != null && !find.open) BarIcon(HerdrIcons.Search, ChatFind.PLACEHOLDER, { find.open = true })
+                    // Its Assistant's terminal; in the Chat tab the bar's space menu holds it (Show › Terminal).
+                    if (com.makefunstuff.herdr.ui.design.LocalBarMore.current == null) space?.let { TabMenus.assistantTerminal(state.view, it.id) }?.let { pane ->
+                        BarIcon(HerdrIcons.SquareTerminal, "Terminal", { nav.navigate(Routes.terminal(machineId, pane)) })
+                    }
                     // The space's artifacts, where Shepherdr keeps them.
                     if (overview?.artifacts != null && space != null) {
                         BarIcon(HerdrIcons.LayoutDashboard, "Artifacts", { nav.navigate(Routes.artifacts(machineId, space.id)) })

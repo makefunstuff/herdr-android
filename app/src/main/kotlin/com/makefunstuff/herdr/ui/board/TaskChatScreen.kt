@@ -44,8 +44,10 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.makefunstuff.herdr.Routes
 import com.makefunstuff.herdr.core.board.CardAnswer
 import com.makefunstuff.herdr.core.board.CoordinatorThread
+import com.makefunstuff.herdr.core.board.TabMenus
 import com.makefunstuff.herdr.core.board.WorkStatus
 import com.makefunstuff.herdr.core.board.WorkTask
 import com.makefunstuff.herdr.core.board.WorkTaskDetails
@@ -441,6 +443,10 @@ internal fun TaskChatScreen(
         when (sheet) {
             TaskSheet.Menu -> BoardPanel("${t.name} · ${t.title}", onDismiss = { sheet = null }) {
                 Column {
+                    // Its agent's terminal, the screen the chat reads.
+                    TabMenus.taskTerminal(state.view, t)?.let { pane ->
+                        MenuRow("Terminal", HerdrIcons.SquareTerminal, { sheet = null; nav.navigate(Routes.terminal(machineId, pane)) })
+                    }
                     if (!d?.summary.isNullOrEmpty()) MenuRow("What it did", HerdrIcons.FileText, { sheet = TaskSheet.Said })
                     if (!d?.brief.isNullOrEmpty()) MenuRow("Brief", HerdrIcons.FileText, { sheet = TaskSheet.Brief })
                     if (!d?.plan.isNullOrEmpty()) MenuRow("Plan", HerdrIcons.ListChecks, { sheet = TaskSheet.Plan })
