@@ -244,6 +244,8 @@ fun scenes(): List<Scene> = listOf(
     // Every agent's chat keeps its whole composer (text, attach, mic, Send): a herdr-core agent at work, Shepherdr 3's
     // task worker and Assistant opened as agents, and the task's own chat.
     Scene("chat-core-working", route = Routes.agent(DEVBOX, DemoCore.CODEX), setup = { desktopApp() }),
+    // A herdr-core agent whose transcript isn't found: its chat is its screen, with the question's card.
+    Scene("chat-core-screen", route = Routes.agent(DEVBOX, DemoCore.CLAUDE), setup = { desktopApp() }),
     Scene("chat-shepherdr3-agent", route = Routes.agent(DEVBOX, "hc:t4"), setup = { shepherdr3() }),
     Scene("chat-shepherdr3-asks", route = Routes.agent(DEVBOX, "hc:t2"), setup = { shepherdr3() }),
     Scene("chat-shepherdr3-coordinator", route = Routes.agent(DEVBOX, "hc:t1"), setup = { shepherdr3() }),
