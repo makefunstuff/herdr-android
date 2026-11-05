@@ -131,10 +131,53 @@ data class V2Place(
     val unreachableSince: String? = null,
     val connecting: Boolean = false,
     val herdrDown: String? = null,
+    /** Its Autopilot as its Assistant's header shows it: only this machine's own spaces have one. */
+    val pilot: V2Pilot? = null,
 ) {
     /** Kept for the screens' sake: 3.x has no home spaces. */
     val home: Boolean get() = false
 }
+
+/**
+ * A space's Autopilot (`Place.pilot`, the service's `headerPilot`): switched [on] in its Assistant's header, then its
+ * next scheduled wake ([nextRun], ms), a wake [pending] until its Assistant is idle or [inflight], the [events] that
+ * wake it, and [blank] while the one heartbeat is still herdr-task's starter.
+ */
+@Serializable
+data class V2Pilot(
+    val on: Boolean = false,
+    @SerialName("next_run") val nextRun: Double? = null,
+    val pending: Boolean = false,
+    val inflight: Boolean = false,
+    val events: List<String> = emptyList(),
+    val blank: Boolean = false,
+)
+
+/** One row of a Settings page (`SettingRow`): only what the app reads of it. */
+@Serializable
+data class V2SettingRow(
+    val label: String = "",
+    val key: String = "",
+    val value: String = "",
+    val hint: String? = null,
+    val warn: String? = null,
+    /** The file a whole-file row holds (Autopilot's heartbeat), as `~/…`. */
+    val file: String? = null,
+    /** A row of several picks (Autopilot's events): each value and its label. */
+    val multi: List<V2SettingPick>? = null,
+)
+
+@Serializable
+data class V2SettingPick(val value: String = "", val label: String = "")
+
+/** A Settings page (`SettingSection`): [level] is `all` for Everywhere's, else a space's id. */
+@Serializable
+data class V2SettingSection(
+    val name: String = "",
+    val level: String? = null,
+    val about: String? = null,
+    val rows: List<V2SettingRow> = emptyList(),
+)
 
 /** A machine (`Machine`), as a heading over its spaces. */
 @Serializable
@@ -561,6 +604,10 @@ data class V2Snapshot(
     val read: Map<String, Double> = emptyMap(),
     /** Every artifact; none on a Shepherdr that keeps none, where the app shows no artifacts. */
     val artifacts: List<V2Artifact>? = null,
+    /** Settings' pages, as the web's Settings lists them. */
+    val settings: List<V2SettingSection> = emptyList(),
+    /** The add-ons switched off (Settings › Window): `autopilot` takes away its page and every space's switch. */
+    val off: List<String> = emptyList(),
 ) {
     fun place(id: String): V2Place? = places.firstOrNull { it.id == id }
     fun task(id: String): V2Task? = tasks.firstOrNull { it.id == id }

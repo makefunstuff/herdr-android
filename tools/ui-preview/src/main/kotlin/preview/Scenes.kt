@@ -15,6 +15,9 @@ import com.makefunstuff.herdr.ui.code.CheckoutTab
 import com.makefunstuff.herdr.ui.code.CodeSpot
 import com.makefunstuff.herdr.ui.code.DiffSource
 import com.makefunstuff.herdr.ui.share.Ask
+import androidx.compose.ui.test.onLast
+import androidx.compose.ui.test.performImeAction
+import androidx.compose.ui.test.performTextInput
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -516,6 +519,12 @@ fun scenes(): List<Scene> = listOf(
     Scene("coordinator-v2-chips", route = Routes.coordinator(DEVBOX, DemoV2.APP), setup = { host(DEVBOX).shepherdr = FakeShepherdr() }),
     Scene("coordinator-v2-agent", route = Routes.coordinator(DEVBOX, DemoV2.APP), setup = { host(DEVBOX).shepherdr = FakeShepherdr() }, actions = { tapText("claude") }),
     Scene("coordinator-v2-home", route = Routes.coordinator(DEVBOX), setup = { shepherdr() }),
+    // Autopilot, as 3.1's Assistant header: the switch in the bar; on, what it waits for under it, and "Write a
+    // heartbeat" while the heartbeat is still herdr-task's starter; switched on from here.
+    Scene("coordinator-v2-autopilot", route = Routes.coordinator(DEVBOX, DemoV2.APP), setup = {
+        shepherdr(); DemoV2.autopilotOn(host(DEVBOX).shepherdr!!, DemoV2.APP, blank = true)
+    }),
+    Scene("coordinator-v2-autopilot-on", route = Routes.coordinator(DEVBOX, DemoV2.APP), setup = { shepherdr() }, actions = { settle(); tapLabel("Autopilot"); settle() }),
     // A message the app can't read yet: a quiet line among replies that still show. Its log not found on the machine:
     // Shepherdr's notice, over what it still has.
     Scene("coordinator-v2-unknown", route = Routes.coordinator(DEVBOX), setup = { unknownMessage() }),
@@ -746,6 +755,17 @@ fun scenes(): List<Scene> = listOf(
 
     // Settings (at the foot of the spaces drawer) and the SSH key's dialogs.
     Scene("settings", actions = { tapLabel("Spaces"); tapText("SETTINGS") }),
+    // Settings › Autopilot on devbox (Settings lists a row for each machine on Shepherdr 3): its heartbeat, schedule and
+    // events; a schedule of its own words; one herdr-task can't read, refused in its words.
+    Scene("settings-autopilot", route = Routes.SETTINGS, heightDp = 1900, setup = { shepherdr() }),
+    Scene("autopilot", route = Routes.autopilot(DEVBOX), heightDp = 1200, setup = { shepherdr() }),
+    Scene("autopilot-refused", route = Routes.autopilot(DEVBOX), heightDp = 1200, setup = { shepherdr() }, actions = {
+        settle(); tapExact(com.makefunstuff.herdr.core.shepherdr.Autopilot.CUSTOM)
+        val box = onAllNodes(androidx.compose.ui.test.hasSetTextAction(), useUnmergedTree = true)
+        box.onLast().performTextInput("every fortnight")
+        box.onLast().performImeAction()
+        settle()
+    }),
     // Text size: the chats' and the terminal's, each its own.
     Scene("settings-text", route = Routes.SETTINGS, heightDp = 1300, setup = { textSizes = com.makefunstuff.herdr.data.TextSizeStore.Sizes(chat = 1.3f, terminal = 14f) }),
     Scene("settings-voice", route = Routes.SETTINGS, heightDp = 1700, setup = {

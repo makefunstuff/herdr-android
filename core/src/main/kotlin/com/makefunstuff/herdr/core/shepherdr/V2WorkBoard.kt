@@ -132,6 +132,13 @@ class V2WorkBoard(private val connect: suspend () -> ShepherdrClient, private va
 
     override suspend fun dictate(audio: ByteArray, type: String): String = connect().dictate(audio, type)
 
+    override suspend fun autopilot(space: String, on: Boolean) {
+        connect().act(V2Actions.autopilot(space, on))
+    }
+
+    override suspend fun autopilotSetting(key: String, value: String) {
+        connect().act(V2Actions.autopilotSetting(key, value))
+    }
     override suspend fun canDictate(): Boolean = connect().canDictate()
 
     /** Its agent's chat from the live link, as [coordinatorThreads] follows a space's. */
@@ -287,10 +294,11 @@ object V2Board {
                 level = p.level,
                 store = p.store?.key.orEmpty(),
                 emoji = p.emoji,
+                pilot = Autopilot.pilotOf(s, p),
                 tabs = tabs(s, p),
             )
         }
-        return WorkOverview(spaces, tasks, s.artifacts, s.needs)
+        return WorkOverview(spaces, tasks, s.artifacts, s.needs, Autopilot.settingsOf(s))
     }
 
     /** [p]'s tabs as 3.1's bar has them (`barTabs`): its Assistant's first, then the others. */
