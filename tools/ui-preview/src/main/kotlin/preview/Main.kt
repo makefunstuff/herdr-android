@@ -71,6 +71,8 @@ class Scene(
     val key: IdentityStore.State = IdentityStore.State.Ready(Demo.PUBLIC_KEY),
     /** Changes the demo machines before the app starts. */
     val setup: SceneData.() -> Unit = {},
+    /** The space the Chat tab shows first (its key), as a tap in the drawer would pick it. */
+    val space: String? = null,
     /** Taps and types on the running app. */
     val actions: ComposeUiTest.(SceneContext) -> Unit = {},
     /** Shows this chat as its floating bubble's window does (BubbleRoot) instead of the whole app. */
@@ -276,7 +278,7 @@ fun render(scene: Scene, dark: Boolean, file: File) {
                     nav = rememberNavController()
                     Box(Modifier.size(size.value)) {
                         val chat = scene.bubble
-                        if (chat != null) BubbleRoot(container, chat, dark = dark, nav = nav) else HerdrRoot(container, dark = dark, nav = nav)
+                        if (chat != null) BubbleRoot(container, chat, dark = dark, nav = nav) else HerdrRoot(container, dark = dark, nav = nav, space = scene.space)
                         TalkBackOverlay(dark)
                     }
                 }

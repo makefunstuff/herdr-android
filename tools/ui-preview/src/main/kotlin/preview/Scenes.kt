@@ -177,6 +177,17 @@ private fun SceneData.v2() {
     host(DEVBOX).shepherdr = DemoV2.board()
 }
 
+/** The person's own work shape (Real): one machine, eleven spaces, thirteen tasks, an Assistant chat with long turns. */
+private fun SceneData.real() {
+    machines = machines.filter { it.id == DEVBOX }
+    host(DEVBOX).snapshot = obj(
+        "version" to "0.9.0", "protocol" to 4,
+        "workspaces" to emptyList<Any>(), "tabs" to emptyList<Any>(), "panes" to emptyList<Any>(),
+        "layouts" to emptyList<Any>(), "agents" to emptyList<Any>(),
+    )
+    host(DEVBOX).shepherdr = Real.board()
+}
+
 /** Shepherdr 3 on devbox, its home Assistant also asking for a secret ([DemoV2.SECRET_NEED]). */
 private fun SceneData.secretAsk() {
     val v2 = DemoV2.board()
@@ -884,4 +895,15 @@ fun scenes(): List<Scene> = listOf(
         "settings-no-push-app", route = Routes.SETTINGS, heightDp = 1320,
         setup = { push = Demo.push().copy(endpoint = null, distributor = null); pushApps = emptyList(); notificationsAllowed = false },
     ),
+
+    // The person's own work, not the tidy demo: eleven spaces, thirteen tasks, long titles and a chat that runs on.
+    // The drawer with all of it, the Assistant's chat on the phone, the Tasks list, a ready task and one at work,
+    // the Android space's artifacts, and Settings.
+    Scene("real-spaces", route = Routes.CHAT, setup = { real() }, actions = { settle(); tapLabel("Spaces") }),
+    Scene("real-chat", route = Routes.CHAT, setup = { real() }, space = "${DEVBOX}/herdr-android"),
+    Scene("real-tasks", route = Routes.TASKS, setup = { real() }),
+    Scene("real-task-ready", route = Routes.board(DEVBOX, "HMWL-1"), setup = { real() }),
+    Scene("real-task-work", route = Routes.board(DEVBOX, "HERD-31"), setup = { real() }),
+    Scene("real-artifacts", route = Routes.ARTIFACTS_TAB, setup = { real() }, space = "${DEVBOX}/herdr-android"),
+    Scene("real-settings", route = Routes.SETTINGS, setup = { real() }),
 )

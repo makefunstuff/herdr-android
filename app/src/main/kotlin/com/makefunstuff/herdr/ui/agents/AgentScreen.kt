@@ -158,8 +158,14 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
     // under it its CLI, space › tab (the space alone for an Assistant), machine when there are several, folder.
     val workspaceLabel = agent?.let { snapshot?.workspace(it.workspaceId)?.label?.ifBlank { null } }
     val machines by container.hosts.hosts.collectAsStateWithLifecycle()
-    val heading = agent?.let { ChatHeader.agentTitle(it, task?.let { t -> ChatHeader.task(t.name, t.title) }, workspaceLabel?.takeIf { w -> !w.startsWith("Other terminals") }) } ?: name
+    // A space's own agent is titled by its space, as 3.1's phone header does; a task's by its key and
+    // title, anything else by what it calls itself. The CLI, machine and folder go under it.
+    val spaceHeading = workspaceLabel?.takeIf { !it.startsWith("Other terminals") && task == null && agent?.shepherdrSpace == null }
+    val heading = spaceHeading
+        ?: agent?.let { ChatHeader.agentTitle(it, task?.let { t -> ChatHeader.task(t.name, t.title) }, workspaceLabel?.takeIf { w -> !w.startsWith("Other terminals") }) }
+        ?: name
     val place = when {
+        spaceHeading != null -> null
         agent?.shepherdrSpace != null -> workspaceLabel
         else -> snapshot?.let { s -> pane?.let { s.location(it.workspaceId, it.tabId) } }
     }

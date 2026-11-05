@@ -7,6 +7,7 @@ import com.makefunstuff.herdr.core.chat.OptionRole
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -469,4 +470,94 @@ fun AgentLine(
             Icon(HerdrIcons.Pin, null, tint = c.muted, modifier = Modifier.size(16.dp))
         }
     }
+}
+
+/**
+ * A thing waiting for you as one row, the way 3.1's Needs you list has it: who asks, what it is, the
+ * question in a line under it, and only its one action beside it (Accept a ready task, give a secret);
+ * anything else opens where it is answered. The full answer card is in the task's own chat, so a phone
+ * shows a screenful of what waits instead of one card at a time.
+ */
+@Composable
+fun WaitingRow(
+    w: Waiting,
+    showMachine: Boolean,
+    busy: String?,
+    space: String = "",
+    onOpen: () -> Unit,
+    onGive: () -> Unit,
+    onMerge: () -> Unit,
+) {
+    val c = Herdr.colors
+    val mark: @Composable () -> Unit = when (w) {
+        is Waiting.Question -> ({ AgentMark(w.agent.agent.agent ?: w.agent.agent.displayName) })
+        is Waiting.Task -> ({
+            if (w.task.agent.isNotEmpty()) AgentMark(V2Board.agentKind(w.task.agent))
+            else Box(Modifier.size(22.dp), contentAlignment = Alignment.Center) { Icon(HerdrIcons.SquareKanban, null, tint = c.text, modifier = Modifier.size(20.dp)) }
+        })
+        is Waiting.Secret -> ({ Box(Modifier.size(22.dp), contentAlignment = Alignment.Center) { Icon(HerdrIcons.KeyRound, null, tint = c.text, modifier = Modifier.size(20.dp)) } })
+        is Waiting.Coordinator -> ({ Box(Modifier.size(22.dp), contentAlignment = Alignment.Center) { Icon(HerdrIcons.MessagesSquare, null, tint = c.text, modifier = Modifier.size(20.dp)) } })
+    }
+    val title: String
+    val key: String?
+    val meta: List<String>
+    val question: String?
+    when (w) {
+        is Waiting.Question -> {
+            title = w.task?.title ?: w.agent.agent.subtitle ?: w.agent.agent.displayName
+            key = w.task?.name
+            meta = where(w.agent, w.task, showMachine)
+            question = rememberAsked(w.agent)?.question ?: "Waiting for your answer"
+        }
+        is Waiting.Task -> {
+            title = w.task.title
+            key = w.task.name
+            // What it says of itself belongs on one line, not twice: as the question while it asks, else as the meta.
+            val need = w.task.status == WorkStatus.Need
+            meta = listOfNotNull(
+                w.task.line.takeIf { !need && it.isNotEmpty() }, prNumberOf(w.task.pr)?.let { "PR #$it" },
+                space.takeIf { it.isNotEmpty() }, w.machineLabel.takeIf { showMachine },
+            )
+            question = w.task.line.takeIf { need && it.isNotEmpty() }
+        }
+        is Waiting.Secret -> {
+            title = w.task?.title ?: "${w.space?.name ?: "A space"}'s Assistant"
+            key = w.task?.name
+            meta = listOfNotNull("Wants the secret ${w.ask.name}", w.machineLabel.takeIf { showMachine })
+            question = w.ask.why?.takeIf { it.isNotBlank() }
+        }
+        is Waiting.Coordinator -> {
+            title = "${w.space.name}'s Assistant asks you"
+            key = null
+            meta = listOfNotNull("Answer it in the chat", w.machineLabel.takeIf { showMachine })
+            question = "Its question is waiting in the Assistant chat."
+        }
+    }
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = 72.dp)
+            .clickable(onClickLabel = "Open", onClick = onOpen)
+            .padding(start = Space.screen, end = Space.screen, top = Space.s, bottom = Space.s)
+            .semantics(mergeDescendants = true) { contentDescription = listOfNotNull(title, key, question).joinToString(", ") },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        mark()
+        Spacer(Modifier.width(Space.m))
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.titleMedium, color = c.strong, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            MetaLine(key, meta)
+            if (busy != null) Text(busy, style = MaterialTheme.typography.bodySmall, color = c.accent, maxLines = 1)
+            else question?.let {
+                Text(it, style = MaterialTheme.typography.bodyMedium, color = c.muted, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = Space.xxs))
+            }
+        }
+        Spacer(Modifier.width(Space.s))
+        when {
+            busy != null -> Unit
+            w is Waiting.Task && w.task.status == WorkStatus.Ready -> AnswerButton("Accept", HerdrIcons.Check, primary = true, enabled = true, onClick = onMerge)
+            w is Waiting.Secret -> AnswerButton("Give it", HerdrIcons.KeyRound, primary = true, enabled = true, onClick = onGive)
+            w is Waiting.Task && w.task.status == WorkStatus.Need && w.agent != null -> Text("Answer", style = MaterialTheme.typography.labelMedium, color = c.accent)
+            else -> Icon(HerdrIcons.ChevronRight, null, tint = c.muted, modifier = Modifier.size(18.dp))
+        }
+    }
+    Box(Modifier.fillMaxWidth().padding(start = Space.screen + 34.dp).height(1.dp).background(c.line))
 }
