@@ -4,6 +4,8 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -37,6 +39,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.makefunstuff.herdr.ui.theme.Herdr
@@ -90,5 +93,35 @@ fun RowScope.NavItem(label: String, icon: ImageVector, selected: Boolean, badge:
             label.caps(), style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
             color = if (selected) c.accent else c.muted,
         )
+    }
+}
+
+/**
+ * The views of one thing (a task's Chat, Files, Changes and Pull request), as the desktop's tab strip under a
+ * header: on `panel` over a 1dp rule, each name in mono capitals, the shown one amber with an amber bar along its
+ * bottom edge. It scrolls sideways when they don't fit.
+ */
+@Composable
+fun ViewTabs(labels: List<String>, selected: Int, onSelect: (Int) -> Unit, modifier: Modifier = Modifier) {
+    val c = Herdr.colors
+    Row(
+        modifier.fillMaxWidth().background(c.panel)
+            .drawBehind { drawLine(c.lineStrong, Offset(0f, size.height - 0.5f), Offset(size.width, size.height - 0.5f), 1.dp.toPx()) }
+            .horizontalScroll(rememberScrollState()).padding(horizontal = Space.s),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        labels.forEachIndexed { i, label ->
+            val on = i == selected
+            Box(
+                Modifier.heightIn(min = 44.dp)
+                    .drawBehind { if (on) drawRect(c.accent, Offset(0f, size.height - 2.dp.toPx()), androidx.compose.ui.geometry.Size(size.width, 2.dp.toPx())) }
+                    .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, role = Role.Tab, onClick = { onSelect(i) })
+                    .semantics { this.selected = on }
+                    .padding(horizontal = Space.m),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(label.caps(), style = MaterialTheme.typography.labelLarge, maxLines = 1, color = if (on) c.accent else c.muted)
+            }
+        }
     }
 }

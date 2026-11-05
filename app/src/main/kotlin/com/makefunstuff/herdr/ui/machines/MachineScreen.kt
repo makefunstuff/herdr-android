@@ -168,7 +168,6 @@ fun MachineScreen(nav: NavController, machineId: String) {
                 if (state.classic) BarIcon(HerdrIcons.Zap, "Quick commands", { quick = QuickPlace(machineId, label = state.machine.label) })
                 BarIcon(HerdrIcons.Ellipsis, "More", { menu = true })
                 HerdrMenu(expanded = menu, onDismissRequest = { menu = false }, title = state.machine.label) {
-                    MenuRow("Code", HerdrIcons.Code, { menu = false; nav.navigate(Routes.codeRepos(machineId)) })
                     MenuRow("Quick command runs", HerdrIcons.History, { menu = false; nav.navigate(Routes.quickRuns(machineId)) })
                     MenuRow("Worktrees", HerdrIcons.FolderGit2, { menu = false; nav.navigate(Routes.worktrees(machineId)) })
                     MenuRow("Edit machine", HerdrIcons.Pencil, { menu = false; nav.navigate(Routes.edit(machineId)) })

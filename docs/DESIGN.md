@@ -181,6 +181,7 @@ drawer's last bus. Never under rows of text; text over an empty state sits on th
 | `PrimaryButton` / `SecondaryButton` / `QuietButton` / `DangerButton` | Square, 48dp, mono labels: amber with ink / framed on the ground / bare / the danger tint framed in red. |
 | `HerdrChip` | A framed cell; chosen: amber frame, amber text on amber's tint. |
 | `SegmentedPills` | One framed track; the chosen segment amber with ink. |
+| `ViewTabs` | The views of one thing (a task's Chat, Files, Changes, Pull request) under its bar: on `panel` over a `lineStrong` rule, names in mono capitals, the shown one amber with a 2dp amber bar along its bottom edge; scrolls sideways when they don't fit. |
 | `HerdrField` | Label in mono capitals, the box on `input` framed in `lineStrong`, amber while focused. |
 | `HerdrSwitch`, `SwitchRow` | Square: a framed track with a square knob; on, amber with an ink knob. |
 | `StatusBadge`, `StatusLabel`, `Led` | See States. |
