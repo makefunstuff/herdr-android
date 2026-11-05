@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import com.makefunstuff.herdr.ui.theme.Sans
 import com.makefunstuff.herdr.core.chat.Completions
+import com.makefunstuff.herdr.core.chat.Dictation
 import com.makefunstuff.herdr.core.chat.VoiceRecorder
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -60,6 +61,8 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.text.selection.TextSelectionColors
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.remember
 import com.makefunstuff.herdr.ui.theme.CodeStyle
 import com.makefunstuff.herdr.ui.theme.Radius
@@ -152,6 +155,7 @@ fun ChatComposer(
     focusRequester: FocusRequester? = null,
     completion: (@Composable (query: Completions.Query, accept: (String) -> Unit) -> Unit)? = null,
     voice: VoiceRecorder? = null,
+    dictation: Dictation? = null,
 ) {
     val c = Herdr.colors
     val view = LocalView.current
@@ -161,14 +165,18 @@ fun ChatComposer(
     val focusRequester = focusRequester ?: ownFocus
     val keyboard = LocalSoftwareKeyboardController.current
     val voiceState = voice?.let { it.state.collectAsState().value } ?: VoiceRecorder.State.Idle
-    val hearing = voiceState.hearing
+    val dictState = dictation?.let { it.state.collectAsState().value } ?: Dictation.State.Idle
+    // Talk to type: the box gives way to what you say until Done puts it in.
+    val dictating = dictState is Dictation.State.Listening || dictState is Dictation.State.Writing
+    val hearing = voiceState.hearing || dictating
     val canSend = enabled && !sending && !holdSend && !hearing && (draft.isNotBlank() || attached)
     val showStop = stop != null && draft.isBlank() && !attached && !sending && !hearing
     val card = RectangleShape
     val fade = Space.xxl
 
     fun send() {
-        // While it records, Send sends the recording, as letting go of the mic does.
+        // While it records, Send sends the recording, as letting go of the mic does; while you talk to type, it is Done.
+        if (dictating) { view.confirmTap(); dictation?.done(); return }
         if (hearing) { view.confirmTap(); voice?.stop(); return }
         if (!canSend) return
         // A light confirmation under the thumb, as a keyboard's own send key gives.
@@ -187,11 +195,35 @@ fun ChatComposer(
         TextFieldValue(draft, TextRange(cursor.coerceIn(0, draft.length)))
     }
     SideEffect { if (value != field) field = value }
+    // A tap on the mic talks to type: the words go where the cursor was (in place of a selection), then the
+    // cursor stands after them in the box, to edit and send.
+    val latestValue by rememberUpdatedState(value)
+    val latestDraft by rememberUpdatedState(onDraft)
+    DisposableEffect(voice, dictation) {
+        if (voice != null && dictation != null) voice.tap = {
+            val at = latestValue.selection
+            keyboard?.hide()
+            dictation.start { said ->
+                val now = latestValue.text
+                val (text, cursor) = Dictation.insert(now, at.min, at.max, said)
+                field = TextFieldValue(text, TextRange(cursor))
+                latestDraft(text)
+                runCatching { focusRequester.requestFocus() }
+            }
+        }
+        onDispose { if (voice != null && voice.tap != null) voice.tap = null }
+    }
     // What went wrong while it recorded is said for a while, then goes by itself.
     LaunchedEffect(voiceState) {
         if (voiceState is VoiceRecorder.State.Failed) {
             delay(FAILED_SHOWN_MS)
             voice?.dismiss()
+        }
+    }
+    LaunchedEffect(dictState) {
+        if (dictState is Dictation.State.Failed) {
+            delay(FAILED_SHOWN_MS)
+            dictation?.dismiss()
         }
     }
 
@@ -233,6 +265,9 @@ fun ChatComposer(
             if (voice != null && (voiceState is VoiceRecorder.State.NoMic || voiceState is VoiceRecorder.State.Failed || voiceState == VoiceRecorder.State.Asking)) {
                 Box(Modifier.padding(bottom = Space.s)) { MicNotice(voice, voiceState) }
             }
+            if (dictation != null && dictState is Dictation.State.Failed) {
+                Box(Modifier.padding(bottom = Space.s)) { DictationNotice(dictState.message, dictation::dismiss) }
+            }
             Column(
                 Modifier.fillMaxWidth()
                     
@@ -245,7 +280,8 @@ fun ChatComposer(
                     },
             ) {
                 attachments?.invoke()
-                if (hearing) RecordingLevels(voiceState)
+                if (dictating) DictationLevels(dictState)
+                else if (hearing) RecordingLevels(voiceState)
                 if (!hearing) CompositionLocalProvider(LocalTextSelectionColors provides TextSelectionColors(c.accent, c.accent.copy(alpha = 0.32f))) {
                     BasicTextField(
                         value = value,
@@ -289,7 +325,8 @@ fun ChatComposer(
                     Modifier.fillMaxWidth().padding(start = Space.xs, end = Space.xxs, bottom = Space.xxs),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    if (voice != null && hearing) RecordingInfo(voice, voiceState)
+                    if (dictation != null && dictating) DictationInfo(dictation, dictState)
+                    else if (voice != null && hearing) RecordingInfo(voice, voiceState)
                     else {
                         leading?.invoke(this)
                         Spacer(Modifier.weight(1f))
@@ -307,8 +344,10 @@ fun ChatComposer(
                     // While it hears, the row is the recording's (its time and what letting go does).
                     if (!hearing) trailing?.invoke(this)
                     // Always in this place, so a finger holding it through every state keeps it.
-                    if (voice != null) ComposerMic(voice, voiceState, enabled = enabled)
+                    if (voice != null && !dictating) ComposerMic(voice, voiceState, enabled = enabled, talks = dictation != null)
                     when {
+                        dictState is Dictation.State.Writing -> ComposerAction(ComposerActionKind.Writing, "Writing it down…", enabled = false, onClick = {})
+                        dictating -> ComposerAction(ComposerActionKind.Done, "Done: put it in the box", enabled = true, onClick = ::send)
                         showStop -> ComposerAction(ComposerActionKind.Stop, "Stop", enabled = enabled, onClick = { stop?.invoke() })
                         hearing -> ComposerAction(ComposerActionKind.Send, "Send voice message", enabled = true, onClick = ::send)
                         sending -> ComposerAction(ComposerActionKind.Sending, "Sending…", enabled = false, onClick = {})
@@ -326,7 +365,7 @@ private const val FAILED_SHOWN_MS = 8_000L
 /** The message's type: `--fs-input` (16sp, the web UI's touch size) on `--lh-base`. */
 private val ComposerTextStyle = TextStyle(fontFamily = Sans, fontSize = 16.sp, lineHeight = 24.sp)
 
-private enum class ComposerActionKind { Send, Stop, Sending }
+private enum class ComposerActionKind { Send, Stop, Sending, Done, Writing }
 
 /**
  * The composer's one round button (`.composer-action`): a compact 32dp circle in a 48dp target, the
@@ -335,7 +374,8 @@ private enum class ComposerActionKind { Send, Stop, Sending }
 @Composable
 private fun ComposerAction(kind: ComposerActionKind, description: String, enabled: Boolean, onClick: () -> Unit) {
     val c = Herdr.colors
-    val fill = if (kind == ComposerActionKind.Stop) c.strong else c.primary
+    val strong = kind == ComposerActionKind.Stop || kind == ComposerActionKind.Done || kind == ComposerActionKind.Writing
+    val fill = if (strong) c.strong else c.primary
     Box(
         Modifier.size(48.dp).clip(RectangleShape).clickable(enabled = enabled, role = Role.Button, onClick = onClick)
             .semantics { contentDescription = description },
@@ -351,6 +391,10 @@ private fun ComposerAction(kind: ComposerActionKind, description: String, enable
             when (kind) {
                 ComposerActionKind.Send -> Icon(HerdrIcons.ArrowUp, null, tint = c.onPrimary, modifier = Modifier.size(16.dp))
                 ComposerActionKind.Stop -> Box(Modifier.size(10.dp).background(c.ground, RectangleShape))
+                ComposerActionKind.Done -> Icon(HerdrIcons.Check, null, tint = c.ground, modifier = Modifier.size(16.dp))
+                ComposerActionKind.Writing -> CircularProgressIndicator(
+                    Modifier.size(14.dp), color = c.ground, strokeWidth = 2.dp, trackColor = c.ground.copy(alpha = 0.25f),
+                )
                 ComposerActionKind.Sending -> CircularProgressIndicator(
                     Modifier.size(14.dp), color = c.onPrimary, strokeWidth = 2.dp, trackColor = c.onPrimary.copy(alpha = 0.25f),
                 )

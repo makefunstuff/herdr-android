@@ -379,6 +379,13 @@ class HostSession(
         }
     }
 
+    /** The machine's work board, or null where it runs none (Shepherdr 3 isn't there); throws when it can't be reached. */
+    suspend fun workBoardOrNull(timeoutMs: Long = 20_000): WorkBoard? {
+        awaitConnection(timeoutMs)
+        if (!state.value.boardChecked) checkBoard()
+        return if (state.value.boardApi == BoardApi.None) null else awaitWorkBoard(timeoutMs)
+    }
+
     /** Keeps the transport that still answers, else finds one; null where Shepherdr 3 doesn't answer. */
     private suspend fun findShepherdr(conn: MachineConnection): V2Version? = shepherdrLock.withLock {
         shepherdr?.let { t ->

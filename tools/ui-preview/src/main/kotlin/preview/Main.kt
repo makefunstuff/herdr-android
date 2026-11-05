@@ -215,6 +215,8 @@ fun render(scene: Scene, dark: Boolean, file: File) {
     PreviewScanner.code = data.scanned
     PreviewTerminal.selection = data.selection
     PreviewMic.set(data.mic)
+    // What a machine said it can write down is kept process-wide: each scene asks afresh.
+    com.makefunstuff.herdr.core.chat.DictationCheck.forget()
     PreviewCoordinatorVoice.next = data.voice
     PreviewVoiceCalls.next = data.call
     PreviewScanner.hostKeys = data.reachable
@@ -367,6 +369,15 @@ fun ComposeUiTest.hold(label: String, vararg points: Pair<Float, Float>) {
         advanceEventTime(1_000)
         moveBy(androidx.compose.ui.geometry.Offset.Zero)
     }
+    settle()
+}
+
+/** A voice message hands-free: TalkBack's "Record a voice message" on the composer's mic (a tap on it talks to type). */
+fun ComposeUiTest.recordVoice() {
+    val mic = node(hasContentDescription("Talk to type")).fetchSemanticsNode()
+    val action = mic.config.getOrElseNullable(androidx.compose.ui.semantics.SemanticsActions.CustomActions) { null }.orEmpty()
+        .firstOrNull { it.label == "Record a voice message" } ?: error("No “Record a voice message” on the mic")
+    runOnUiThread { action.action() }
     settle()
 }
 
