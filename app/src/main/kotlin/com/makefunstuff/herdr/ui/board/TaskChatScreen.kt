@@ -31,7 +31,6 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import com.makefunstuff.herdr.LocalPanes
-import com.makefunstuff.herdr.Routes
 import com.makefunstuff.herdr.core.api.AgentStatus
 import com.makefunstuff.herdr.core.chat.ChatHeader
 import com.makefunstuff.herdr.core.chat.ChatOwner
