@@ -61,7 +61,7 @@ class AndroidAlerts(private val context: Context, private val appLock: () -> Boo
             .setContentText(note ?: alert.text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(listOfNotNull(note, alert.detail.ifEmpty { alert.text }).joinToString("\n\n")))
         alert.actions.take(3).forEachIndexed { i, a ->
-            val action = NotificationCompat.Action.Builder(0, a.label, actionIntent(alert, i, a))
+            val action = NotificationCompat.Action.Builder(0, a.label, actionIntent(context, alert, i))
             if (a.reply) {
                 action.addRemoteInput(RemoteInput.Builder(WorkService.REPLY).setLabel(a.hint.ifEmpty { a.label }).build())
                     .setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_REPLY)
@@ -113,7 +113,7 @@ class AndroidAlerts(private val context: Context, private val appLock: () -> Boo
             .setSmallIcon(R.drawable.ic_notification)
             .setColor(0xFFF0A830.toInt())
             .setContentTitle(alert.title)
-            .setContentIntent(openIntent(alert))
+            .setContentIntent(openIntent(context, alert))
             .setAutoCancel(true)
             .setSilent(quiet)
             .setCategory(if (alert.kind == Alert.Kind.NeedsYou) NotificationCompat.CATEGORY_MESSAGE else NotificationCompat.CATEGORY_STATUS)
@@ -150,47 +150,51 @@ class AndroidAlerts(private val context: Context, private val appLock: () -> Boo
         )
         .build()
 
-    /** A tap: the agent's chat, a task (its Accept card when it is ready), Needs you, or the machine's health or usage. */
-    private fun openIntent(alert: Alert): PendingIntent {
-        val intent = Intent(context, MainActivity::class.java)
-            .setData(Uri.parse("herdr://alert/${Uri.encode(alert.tag)}"))
-            .putExtra(MainActivity.OPEN_MACHINE, alert.machineId)
-            .putExtra(MainActivity.OPEN_PANE, alert.paneId)
-            .putExtra(MainActivity.OPEN_TASK, alert.task)
-            .putExtra(MainActivity.OPEN_ACCEPT, alert.accept)
-            .putExtra(MainActivity.OPEN_NEEDS, alert.chat.isNotEmpty())
-            .putExtra(MainActivity.OPEN_HEALTH, alert.health)
-            .putExtra(MainActivity.OPEN_USAGE, alert.usage)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-        return PendingIntent.getActivity(context, alert.tag.hashCode(), intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-    }
-
-    /**
-     * A button: carried out by [WorkService], which may start from a notification while the app is closed.
-     * One that can't be undone (Always allow) opens [ConfirmActivity] instead, which asks
-     * for the fingerprint first when that is on.
-     */
-    private fun actionIntent(alert: Alert, index: Int, a: AlertAction): PendingIntent {
-        val reply = a.reply
-        if (a.guard.isNotEmpty() && !reply) {
-            return PendingIntent.getActivity(
-                context, alert.tag.hashCode() * 31 + index,
-                ConfirmActivity.intent(context, json.encodeToString(Alert.serializer(), alert), index)
-                    .setData(Uri.parse("herdr://alert/${Uri.encode(alert.tag)}/$index")),
-                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-            )
-        }
-        val intent = Intent(context, WorkService::class.java)
-            .setAction(WorkService.ACT)
-            .setData(Uri.parse("herdr://alert/${Uri.encode(alert.tag)}/$index"))
-            .putExtra(WorkService.ALERT, json.encodeToString(Alert.serializer(), alert))
-            .putExtra(WorkService.INDEX, index)
-        // A reply's intent must be mutable for Android to add the words to it.
-        val flags = PendingIntent.FLAG_UPDATE_CURRENT or if (reply) PendingIntent.FLAG_MUTABLE else PendingIntent.FLAG_IMMUTABLE
-        return PendingIntent.getForegroundService(context, alert.tag.hashCode() * 31 + index, intent, flags)
-    }
-
     companion object {
+        /**
+         * A tap (on the notification, or its row in the Needs you widget): the agent's chat, a task (its Accept card
+         * when it is ready), Needs you, or the machine's health or usage.
+         */
+        fun openIntent(context: Context, alert: Alert): PendingIntent {
+            val intent = Intent(context, MainActivity::class.java)
+                .setData(Uri.parse("herdr://alert/${Uri.encode(alert.tag)}"))
+                .putExtra(MainActivity.OPEN_MACHINE, alert.machineId)
+                .putExtra(MainActivity.OPEN_PANE, alert.paneId)
+                .putExtra(MainActivity.OPEN_TASK, alert.task)
+                .putExtra(MainActivity.OPEN_ACCEPT, alert.accept)
+                .putExtra(MainActivity.OPEN_NEEDS, alert.chat.isNotEmpty())
+                .putExtra(MainActivity.OPEN_HEALTH, alert.health)
+                .putExtra(MainActivity.OPEN_USAGE, alert.usage)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            return PendingIntent.getActivity(context, alert.tag.hashCode(), intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        }
+
+        /**
+         * Button [index] of [alert] (on the notification, or its row in the Needs you widget): carried out by
+         * [WorkService], which may start from either while the app is closed. One that can't be undone (Always allow,
+         * Accept) opens [ConfirmActivity] instead, which asks for the fingerprint first when that is on.
+         */
+        fun actionIntent(context: Context, alert: Alert, index: Int): PendingIntent {
+            val a = alert.actions[index]
+            val reply = a.reply
+            if (a.guard.isNotEmpty() && !reply) {
+                return PendingIntent.getActivity(
+                    context, alert.tag.hashCode() * 31 + index,
+                    ConfirmActivity.intent(context, json.encodeToString(Alert.serializer(), alert), index)
+                        .setData(Uri.parse("herdr://alert/${Uri.encode(alert.tag)}/$index")),
+                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+                )
+            }
+            val intent = Intent(context, WorkService::class.java)
+                .setAction(WorkService.ACT)
+                .setData(Uri.parse("herdr://alert/${Uri.encode(alert.tag)}/$index"))
+                .putExtra(WorkService.ALERT, json.encodeToString(Alert.serializer(), alert))
+                .putExtra(WorkService.INDEX, index)
+            // A reply's intent must be mutable for Android to add the words to it.
+            val flags = PendingIntent.FLAG_UPDATE_CURRENT or if (reply) PendingIntent.FLAG_MUTABLE else PendingIntent.FLAG_IMMUTABLE
+            return PendingIntent.getForegroundService(context, alert.tag.hashCode() * 31 + index, intent, flags)
+        }
+
         /** Float on an agent's notification (this one, or its Live Update [tag]): opens [chat] as a bubble, named [name]. */
         fun floatIntent(context: Context, chat: BubbleChat, name: String, tag: String): PendingIntent =
             PendingIntent.getActivity(
