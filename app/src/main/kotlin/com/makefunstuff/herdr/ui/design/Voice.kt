@@ -1,5 +1,7 @@
 package com.makefunstuff.herdr.ui.design
 
+import androidx.compose.ui.graphics.RectangleShape
+
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
@@ -25,8 +27,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -42,7 +42,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -83,7 +82,7 @@ fun ComposerMic(recorder: VoiceRecorder, state: VoiceRecorder.State, enabled: Bo
         else -> "Record a voice message"
     }
     Box(
-        Modifier.size(48.dp).clip(CircleShape)
+        Modifier.size(48.dp).clip(RectangleShape)
             .pointerInput(recorder, enabled) {
                 if (!enabled) return@pointerInput
                 val cancelAt = CANCEL_SLIDE.toPx()
@@ -119,10 +118,10 @@ fun ComposerMic(recorder: VoiceRecorder, state: VoiceRecorder.State, enabled: Bo
     ) {
         if (rec != null) {
             // How loud you are: a soft ring round the circle.
-            Box(Modifier.size(halo).background(c.red.copy(alpha = 0.22f), CircleShape))
-            Box(Modifier.size(32.dp).background(c.red, CircleShape), contentAlignment = Alignment.Center) {
+            Box(Modifier.size(halo).background(c.red.copy(alpha = 0.22f), RectangleShape))
+            Box(Modifier.size(32.dp).background(c.red, RectangleShape), contentAlignment = Alignment.Center) {
                 if (rec.held) Icon(HerdrIcons.Mic, null, tint = c.ground, modifier = Modifier.size(16.dp))
-                else Box(Modifier.size(10.dp).background(c.ground, RoundedCornerShape(2.dp)))
+                else Box(Modifier.size(10.dp).background(c.ground, RectangleShape))
             }
         } else {
             Icon(HerdrIcons.Mic, null, tint = if (enabled) c.muted else c.off, modifier = Modifier.size(20.dp))
@@ -154,7 +153,7 @@ fun RecordingLevels(state: VoiceRecorder.State) {
         Text("Recording a voice message", style = MaterialTheme.typography.bodyLarge, color = c.text, maxLines = 1)
         Row(Modifier.fillMaxWidth().height(24.dp), horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically) {
             levels.forEach { l ->
-                Box(Modifier.weight(1f).height(4.dp + 20.dp * l).background(c.red.copy(alpha = 0.35f + 0.65f * l), RoundedCornerShape(2.dp)))
+                Box(Modifier.weight(1f).height(4.dp + 20.dp * l).background(c.red.copy(alpha = 0.35f + 0.65f * l), RectangleShape))
             }
         }
     }
@@ -184,7 +183,7 @@ fun RowScope.RecordingInfo(recorder: VoiceRecorder, state: VoiceRecorder.State) 
     else Spacer(Modifier.width(Space.l))
     val pulse = rememberInfiniteTransition(label = "recording")
     val alpha by pulse.animateFloat(0.35f, 1f, infiniteRepeatable(tween(600), RepeatMode.Reverse), label = "dot")
-    Box(Modifier.size(8.dp).alpha(if (rec != null) alpha else 0.5f).background(c.red, CircleShape))
+    Box(Modifier.size(8.dp).alpha(if (rec != null) alpha else 0.5f).background(c.red, RectangleShape))
     Spacer(Modifier.width(Space.s))
     Text(VoiceRecorder.elapsed(now - started), style = CodeStyle, color = c.strong, maxLines = 1)
     val hint = when {
@@ -252,7 +251,7 @@ fun VoiceBubble(
             Column(Modifier.padding(start = Space.s, end = Space.l, top = Space.s, bottom = Space.s)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
-                        Modifier.size(40.dp).clip(CircleShape).background(c.accent.copy(alpha = 0.16f))
+                        Modifier.size(40.dp).clip(RectangleShape).background(c.accent.copy(alpha = 0.16f))
                             .clickable(onClickLabel = if (playing) "Pause" else "Play", role = Role.Button, onClick = onPlay)
                             .semantics { contentDescription = if (playing) "Pause voice message" else "Play voice message" },
                         contentAlignment = Alignment.Center,
@@ -270,7 +269,7 @@ fun VoiceBubble(
                         repeat(bars) { i ->
                             val h = 0.3f + 0.7f * (((i * 37 + millis / 1000 * 11) % 17) / 16f)
                             val on = (i + 0.5f) / bars <= done
-                            Box(Modifier.weight(1f).height(24.dp * h).background(if (on) c.accent else c.faint.copy(alpha = 0.5f), RoundedCornerShape(1.dp)))
+                            Box(Modifier.weight(1f).height(24.dp * h).background(if (on) c.accent else c.faint.copy(alpha = 0.5f), RectangleShape))
                         }
                     }
                     Spacer(Modifier.width(Space.m))
@@ -313,14 +312,14 @@ private const val BUBBLE_BARS = 28
 @Composable
 fun MicNotice(recorder: VoiceRecorder, state: VoiceRecorder.State) {
     val c = Herdr.colors
-    val shape = RoundedCornerShape(Radius.xl)
+    val shape = RectangleShape
     val noMic = state as? VoiceRecorder.State.NoMic
     val asking = state == VoiceRecorder.State.Asking
     Surface(
         color = c.card,
         border = BorderStroke(1.dp, c.line),
         shape = shape,
-        modifier = Modifier.fillMaxWidth().shadow(6.dp, shape, ambientColor = c.shadow, spotColor = c.shadow),
+        modifier = Modifier.fillMaxWidth(),
     ) {
         Column(Modifier.padding(start = Space.l, end = Space.s, top = Space.m, bottom = if (asking) Space.m else 0.dp)) {
             Row(Modifier.padding(end = Space.s).semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite }) {

@@ -211,7 +211,7 @@ internal fun TaskChatScreen(
     val tray = rememberImageTray(DraftStore.task(machineId, t.id), machineId, session, state.online)
     val attach = rememberAttacher(session, onAttached = { path -> draft = Attachments.withMention(draft, path) }, onImage = tray::add)
     var attachMenu by remember { mutableStateOf(false) }
-    val kind = V2Board.agentKind(t.agent).ifEmpty { "its agent" }
+    val kind = V2Board.agentKind(t.agent).ifEmpty { "the agent" }
 
     /** The screen is still open: a send that fails after it closed puts its words back in the saved draft instead. */
     var open by remember { mutableStateOf(true) }
@@ -313,7 +313,7 @@ internal fun TaskChatScreen(
                             ChatComposer(
                                 draft = draft,
                                 onDraft = { draft = it },
-                                placeholder = if (t.status == WorkStatus.Ready) "Tell $kind what to change…" else "Tell $kind…",
+                                placeholder = "Message $kind",
                                 onSend = ::sendDraft,
                                 // Not waiting for its chat to be read: what you write goes to the agent all the same.
                                 enabled = state.online,
@@ -436,7 +436,8 @@ private fun TaskStrip(t: WorkTask, d: WorkTaskDetails?, busy: String?, onMerge: 
             Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(start = Space.screen, end = Space.screen, top = Space.xs, bottom = Space.xs),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            StatusBadge(t.status.label, t.status.color())
+            // At work, the chat's own working line says so: the status shows here only when it says something else.
+            if (t.status != WorkStatus.Work) StatusBadge(t.status.label, t.status.color())
             prNumberOf(t.pr)?.let { n ->
                 Spacer(Modifier.width(Space.s))
                 Row(

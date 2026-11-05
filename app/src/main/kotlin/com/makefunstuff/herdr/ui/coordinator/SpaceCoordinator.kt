@@ -343,7 +343,8 @@ internal fun SpaceCoordinator(nav: NavController, machineId: String, session: Ho
         },
     ) { padding ->
         Column(Modifier.padding(top = padding.calculateTopPadding()).fillMaxSize().imePadding().navigationBarsPadding()) {
-            if (!typing && spaces.size > 1) SpacePicker(spaces, space?.id) { picked = it }
+            // In the Chat tab the drawer picks the space.
+            if (!typing && spaces.size > 1 && !com.makefunstuff.herdr.ui.design.LocalInTab.current) SpacePicker(spaces, space?.id) { picked = it }
             val sizes by container.textSizes.state.collectAsStateWithLifecycle()
             ChatSurface(
                 Modifier.weight(1f).fillMaxWidth(),
@@ -373,7 +374,7 @@ internal fun SpaceCoordinator(nav: NavController, machineId: String, session: Ho
                         ChatComposer(
                             draft = draft,
                             onDraft = { draft = it },
-                            placeholder = space?.let { "Tell ${it.name}'s Assistant…" } ?: "Tell the Assistant…",
+                            placeholder = "Message the Assistant",
                             onSend = ::sendDraft,
                             enabled = state.online && board != null && space != null,
                             status = when {

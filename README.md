@@ -1,6 +1,6 @@
 # <img src="docs/screenshots/icon.webp" alt="" width="48" align="center"> Herdr for Android
 
-A native Android client for [herdr](https://herdr.dev) hosts: see your agents across machines, answer the blocked ones, and open any pane as a live terminal. Kotlin and Jetpack Compose. It wears the [herdr web UI](https://github.com/devswha/herdr-web-ui)'s look ("a warm terminal": amber on lamp-lit graphite or ledger paper, Lucide icons, the agents' own marks), carried over from its design tokens (MIT) into the app's own design system ([`docs/DESIGN.md`](docs/DESIGN.md)).
+A native Android client for [herdr](https://herdr.dev) hosts: see your agents across machines, answer the blocked ones, and open any pane as a live terminal. Kotlin and Jetpack Compose. It wears the Herdr desktop's `workbench` look (an engineering-puzzle-game console: near-black panels, amber frames, numbered space slots, chip-package icons, dot-matrix glyphs; paper and dark amber in light mode), flat and square, laid out as Shepherdr 3.1's phone web app: a drawer of spaces and a bottom bar of Chat, Tasks and Artifacts ([`docs/DESIGN.md`](docs/DESIGN.md)).
 
 <table>
   <tr>
@@ -23,7 +23,7 @@ A native Android client for [herdr](https://herdr.dev) hosts: see your agents ac
   </tr>
 </table>
 
-The screenshots come from a demo host with made-up projects (see [`docs/screenshots/demo-host`](docs/screenshots/demo-host)). The look (colours, type, icons, spacing, components) is described in [`docs/DESIGN.md`](docs/DESIGN.md); the design tokens are the herdr web UI's (MIT, by devswha), and the fonts, icons and marks are credited in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
+The screenshots come from a demo host with made-up projects (see [`docs/screenshots/demo-host`](docs/screenshots/demo-host)). The look (colours, type, icons, spacing, components) is described in [`docs/DESIGN.md`](docs/DESIGN.md); the theme and art are the Herdr desktop's workbench (Apache 2.0), and the fonts and icons are credited in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 
 ## Getting the app
 

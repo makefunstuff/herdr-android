@@ -152,9 +152,10 @@ private fun screenshotIn(w: Float, h: Float): androidx.compose.ui.geometry.Rect 
 }
 
 fun scenes(): List<Scene> = listOf(
-    // Agents: what needs you across the machines first, answerable on the card (an agent's question, a merge, a fix,
-    // a pick); the agents at work as one line with a bar, finished ones new until seen. The tall one shows all of it;
-    // then answering from the card, the machine filter, Mark seen, a calm morning, and the agent's long-press sheet.
+    // Tasks (3.1's Tasks list; the scenes keep the Agents list's names): what needs you across the machines first,
+    // answerable on the card (an agent's question, a task's pick, a Ready task's Accept); then the work by status, the
+    // agents at work as one line with a bar, finished ones new until seen. The tall one shows all of it; then answering
+    // from the card, the filter row, Mark seen, the + menu, and the agent's long-press sheet.
     Scene("agents", setup = { home() }),
     Scene("agents-all", heightDp = 1500, setup = { home() }),
     // devbox on Shepherdr 3: its tasks that ask or are ready wait on Needs you too, answered or accepted from the card.
@@ -170,7 +171,8 @@ fun scenes(): List<Scene> = listOf(
         home(); screenLock = false
         host(DEVBOX).screens += API_AGENT to " Allow the extension to run git push?\n\n→ Always allow\n  Deny\n\n ↑↓ navigate · enter select\n"
     }, actions = { tapText("Always allow") }),
-    Scene("agents-filter", setup = { home() }, actions = { tapText("All machines") }),
+    Scene("agents-filter", heightDp = 1500, setup = { home() }, actions = { tapText("Working 3") }),
+    Scene("tasks-new", setup = { home(); shepherdr() }, actions = { tapLabel("New task, Assistant or agent") }),
     Scene("agents-seen", heightDp = 1500, setup = { home() }, actions = { tapText("Mark all seen") }),
     // Triage: the eval pinned on top (and muted), AND-6 snoozed for three hours, the profile still new in Done.
     Scene("agents-triage", heightDp = 1500, setup = { home(); triage = Demo.triage() }),
@@ -201,16 +203,9 @@ fun scenes(): List<Scene> = listOf(
         ctx.container.watchWork.look(GPU, "gpu-box", emptyList())
         settle(4)
     }),
-    Scene("notifications", actions = { ctx ->
-        // An agent finishes while the app is open, which the bell then lists.
-        ctx.data.host(DEVBOX).snapshot = Demo.devbox(appStatus = "done")
-        ctx.refresh(DEVBOX)
-        settle()
-        tapLabel("Notifications")
-    }),
-
-    // Machines and one machine's workspaces.
-    Scene("machines", route = Routes.MACHINES),
+    // The spaces drawer (3.1's sidebar, as the workbench's: each machine a numbered bus with its meter, each space a
+    // numbered slot with its light), and one machine: its places in one row, its spaces under one heading.
+    Scene("machines", setup = { home() }, actions = { tapLabel("Spaces") }),
     Scene("machine", route = Routes.machine(DEVBOX)),
     // A workspace with two tabs keeps its tab chips and its layout; with one tab, its actions are in the workspace's ⋯.
     Scene("machine-tabs", route = Routes.machine(DEVBOX), setup = { host(DEVBOX).snapshot = Demo.devboxTabs() }),
@@ -223,7 +218,7 @@ fun scenes(): List<Scene> = listOf(
     // tabs and terminals; its Claude's chat is its screen; its shell opens as a live terminal.
     Scene("agents-desktop", heightDp = 1700, setup = { home(); desktopApp() }),
     Scene("agents-desktop-yes", setup = { home(); host(DEVBOX).snapshot = Demo.devbox(home = true, apiStatus = "working"); desktopApp() }, actions = { tapExact("Yes") }),
-    Scene("machines-desktop", route = Routes.MACHINES, setup = { desktopApp() }),
+    Scene("machines-desktop", setup = { desktopApp() }, actions = { tapLabel("Spaces") }),
     Scene("machine-desktop", route = Routes.machine(DEVBOX), heightDp = 1300, setup = { desktopApp() }),
     Scene("machine-desktop-only", route = Routes.machine(Demo.MINI), setup = { desktopApp() }),
     Scene("chat-desktop", route = Routes.agent(DEVBOX, DemoCore.CLAUDE), setup = { desktopApp() }),
@@ -233,7 +228,14 @@ fun scenes(): List<Scene> = listOf(
     Scene("agents-shepherdr3", heightDp = 1700, setup = { home(); shepherdr3() }),
     Scene("agents-shepherdr3-open", heightDp = 1700, setup = { home(); shepherdr3() }, actions = { tapText("AND-19 · claude") }),
     Scene("machine-shepherdr3", route = Routes.machine(DEVBOX), heightDp = 1300, setup = { shepherdr3() }),
-    Scene("machines-shepherdr3", route = Routes.MACHINES, setup = { shepherdr3() }),
+    Scene("machines-shepherdr3", setup = { shepherdr3() }, actions = { tapLabel("Spaces") }),
+    // The Chat tab: the shown space's Assistant (Shepherdr), or its agent (classic herdr); its ⋯ with the space's tabs
+    // and the + menu's rows; and the Artifacts tab, the shown space's.
+    Scene("chat-tab", route = Routes.CHAT, setup = { shepherdr3() }),
+    Scene("chat-tab-agent", route = Routes.CHAT, setup = { home() }),
+    Scene("chat-tab-menu", route = Routes.CHAT, setup = { home() }, actions = { tapLabel("Tabs and new") }),
+    Scene("artifacts-tab", route = Routes.ARTIFACTS_TAB, setup = { shepherdr() }),
+    Scene("artifacts-tab-none", route = Routes.ARTIFACTS_TAB, setup = { home() }),
     // A task's chat takes voice messages too (kept by Shepherdr's service, then the chat as its file), as the Assistant's.
     Scene("task-v2-voice-sent", route = Routes.board(DEVBOX, "AND-19"), setup = { shepherdr3() }, actions = {
         tapLabel("Record a voice message")
@@ -249,7 +251,7 @@ fun scenes(): List<Scene> = listOf(
     // Its chat not read yet (or not readable): the composer is whole and writable all the same; and attaching a file.
     Scene("task-shepherdr3-unread", route = Routes.board(DEVBOX, "AND-19"), setup = { shepherdr3(); host(DEVBOX).shepherdr?.chatRefused = "Couldn't read the chat" }),
     Scene("task-shepherdr3-attach", route = Routes.board(DEVBOX, "AND-19"), setup = { shepherdr3() }, actions = { tapLabel("Attach files") }),
-    Scene("machine-new", route = Routes.machine(DEVBOX), actions = { tapText("New") }),
+    Scene("machine-new", route = Routes.machine(DEVBOX), actions = { tapText("NEW") }),
     // Add machine: scanning the code herdr-push pair shows (the phone's own scanner is a system screen; the stand-in
     // reads studio's code), studio found on Tailscale, studio answering nowhere, and typing the address instead.
     Scene("add-machine", route = Routes.edit()),
@@ -560,7 +562,7 @@ fun scenes(): List<Scene> = listOf(
     // chip, Shepherdr's own second line and the minutes left), a task as its agent's chat with its cards answered in
     // it, Accept's card, and adding a task, which goes to a space's Assistant.
     Scene("board-v2", route = Routes.board(DEVBOX), setup = { v2() }),
-    Scene("board-v2-tall", route = Routes.board(DEVBOX), heightDp = 1700, setup = { v2() }, actions = { tapText("Done · 2") }),
+    Scene("board-v2-tall", route = Routes.board(DEVBOX), heightDp = 1700, setup = { v2() }, actions = { tapText("DONE · 2") }),
     Scene("task-v2-asks", route = Routes.board(DEVBOX, "AND-21"), setup = { v2() }),
     Scene("task-v2-answered", route = Routes.board(DEVBOX, "AND-21"), setup = { v2() }, actions = { tapText("Seen 2 min ago") }),
     Scene("task-v2-multi", route = Routes.board(DEVBOX, "AND-24"), setup = { v2() }, actions = { tapText("Key bar"); tapText("Alert rules") }),
@@ -583,9 +585,8 @@ fun scenes(): List<Scene> = listOf(
     Scene("task-v2-todo", route = Routes.board(DEVBOX, "AND-23"), setup = { v2() }),
     Scene("task-v2-todo-menu", route = Routes.board(DEVBOX, "AND-23"), setup = { v2() }, actions = { tapLabel("More") }),
     Scene("board-v2-add", route = Routes.board(DEVBOX), setup = { v2() }, actions = { tapLabel("Add a task") }),
-    Scene("boards-v2", route = Routes.BOARDS, setup = { home(); v2() }),
     // A space's heading opens that space's Assistant chat.
-    Scene("board-v2-coordinator", route = Routes.board(DEVBOX), setup = { v2() }, actions = { tapText("herdr-android · 2") }),
+    Scene("board-v2-coordinator", route = Routes.board(DEVBOX), setup = { v2() }, actions = { tapText("HERDR-ANDROID · 2") }),
 
     // A chat floating over other apps as a bubble: offered in the agent's menu and the Coordinator's bar, Android's
     // bubbles not yet allowed for the app, and the bubble's own window (an agent's chat, the Coordinator), which
@@ -702,7 +703,7 @@ fun scenes(): List<Scene> = listOf(
         setup = { selectTests(); host(DEVBOX).snapshot = Demo.devbox(reviewer = true) },
         actions = { tapLabel("More"); tapText("Select text"); tapText("Quote in chat") },
     ),
-    Scene("terminal-to-coordinator", route = Routes.terminal(DEVBOX, APP_SHELL), setup = { selectTests(); shepherdr() }, actions = { tapLabel("More"); tapText("Select text"); tapText("Send to Coordinator") }),
+    Scene("terminal-to-coordinator", route = Routes.terminal(DEVBOX, APP_SHELL), setup = { selectTests(); shepherdr() }, actions = { tapLabel("More"); tapText("Select text"); tapText("Send to the Assistant") }),
 
     // A workspace's dev servers through SSH: the website's vite, its storybook, the machine's others behind a chip;
     // at desktop size; a screenshot in the website agent's message box; a workspace with no web server.
@@ -711,16 +712,13 @@ fun scenes(): List<Scene> = listOf(
     Scene("preview-screenshot", route = Routes.preview(DEVBOX, "w3"), actions = { tapText("Screenshot to agent") }),
     Scene("preview-none", route = Routes.preview(DEVBOX, "w1")),
 
-    // A window 840 dp wide or more (a tablet, an open foldable, a large window): the agents list, the chat or
-    // terminal, the board, side by side. A landscape tablet before anything is opened, then with a chat open
-    // (tapped on the left, so it is chosen there); an open foldable with a terminal; the Coordinator in the
-    // middle with a task open on the right.
+    // A window 840 dp wide or more (a tablet, an open foldable, a large window): the spaces stay on the left, as 3.1's
+    // sidebar, the app beside them. A landscape tablet on Tasks, then with a chat open from it; an open foldable with
+    // a terminal; the Chat tab beside the spaces.
     Scene("wide-empty", widthDp = 1280, heightDp = 800, setup = { home() }),
     Scene("wide", widthDp = 1280, heightDp = 800, setup = { home() }, actions = { tapText("Speed up /jobs") }),
-    // The Board tab in the middle: a task tapped there opens on the right.
     Scene("wide-terminal", route = Routes.terminal(DEVBOX, APP_SHELL), widthDp = 840, heightDp = 940),
-    // Machines in the middle: the nav bar is under the list.
-    Scene("wide-machines", widthDp = 1280, heightDp = 800, setup = { home() }, actions = { tapLabel("Machines") }),
+    Scene("wide-machines", widthDp = 1280, heightDp = 800, setup = { home() }, actions = { tapLabel("Chat") }),
     // Rotating across the line keeps what is open as it was: a chat with its key row shown, turned from a phone
     // to a tablet's width and from the tablet back to the phone.
     Scene(
@@ -732,8 +730,8 @@ fun scenes(): List<Scene> = listOf(
         actions = { tapText("Speed up /jobs"); tapLabel("More"); tapText("Show keys") },
     ),
 
-    // Settings (a gear in the Machines bar) and the SSH key's dialogs.
-    Scene("settings", route = Routes.MACHINES, actions = { tapLabel("Settings") }),
+    // Settings (at the foot of the spaces drawer) and the SSH key's dialogs.
+    Scene("settings", actions = { tapLabel("Spaces"); tapText("SETTINGS") }),
     // Text size: the chats' and the terminal's, each its own.
     Scene("settings-text", route = Routes.SETTINGS, heightDp = 1300, setup = { textSizes = com.makefunstuff.herdr.data.TextSizeStore.Sizes(chat = 1.3f, terminal = 14f) }),
     Scene("settings-voice", route = Routes.SETTINGS, heightDp = 1700, setup = {

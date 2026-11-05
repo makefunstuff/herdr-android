@@ -91,7 +91,7 @@ fun AlertPill(
     LaunchedEffect(needsYou, agentsRead, boardsRead) {
         val fresh = news.update(needsYou, agentsRead, boardsRead).filter { !it.isOpen(route, args) }
         // The Agents list in front shows it already.
-        if (fresh.isNotEmpty() && route != Routes.AGENTS) item = PillItem.Needs(fresh.first(), fresh.size - 1, "n${count++}")
+        if (fresh.isNotEmpty() && route != Routes.TASKS) item = PillItem.Needs(fresh.first(), fresh.size - 1, "n${count++}")
     }
     LaunchedEffect(fired) { fired.collect { item = PillItem.Fired(it, "f${count++}") } }
     val shown = item
@@ -102,7 +102,7 @@ fun AlertPill(
         }
     }
     // Opened meanwhile (or the Agents list in front, which lists what needs you): it goes.
-    val visible = shown != null && (shown is PillItem.Fired || route != Routes.AGENTS) && !shown.isOpen(route, args)
+    val visible = shown != null && (shown is PillItem.Fired || route != Routes.TASKS) && !shown.isOpen(route, args)
     Box(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = Space.m, vertical = Space.s), contentAlignment = Alignment.TopCenter) {
         AnimatedVisibility(
             visible,
@@ -126,7 +126,7 @@ private fun Pill(p: PillItem, onOpen: () -> Unit) {
         is PillItem.Fired -> listOf(p.alert.title, p.alert.text).filter { it.isNotBlank() }.joinToString(" · ")
     }
     Surface(
-        color = Color.Black, contentColor = ink, shape = HerdrShapes.Pill, shadowElevation = 6.dp,
+        color = Color.Black, contentColor = ink, shape = HerdrShapes.Pill, 
         modifier = Modifier.widthIn(max = 560.dp).clickable(onClickLabel = "Open", onClick = onOpen)
             .semantics { liveRegion = LiveRegionMode.Polite },
     ) {

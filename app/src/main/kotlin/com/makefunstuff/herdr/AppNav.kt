@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
@@ -54,12 +55,24 @@ import androidx.navigation.compose.rememberNavController
 import com.makefunstuff.herdr.core.home.Waiting
 import com.makefunstuff.herdr.data.IdentityStore
 import com.makefunstuff.herdr.ui.activity.ActivityScreen
-import com.makefunstuff.herdr.ui.admin.AdminScreen
 import com.makefunstuff.herdr.ui.agents.AgentScreen
-import com.makefunstuff.herdr.ui.agents.AgentsScreen
 import com.makefunstuff.herdr.ui.agents.AlertPill
+import com.makefunstuff.herdr.ui.agents.TasksScreen
+import com.makefunstuff.herdr.ui.design.LocalBarDrawer
+import com.makefunstuff.herdr.ui.spaces.ArtifactsTab
+import com.makefunstuff.herdr.ui.spaces.ChatTab
+import com.makefunstuff.herdr.ui.spaces.LocalSpaceChoice
+import com.makefunstuff.herdr.ui.spaces.SpaceChoice
+import com.makefunstuff.herdr.ui.spaces.SpaceSlot
+import com.makefunstuff.herdr.ui.spaces.SpacesDrawer
+import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.rememberDrawerState
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import kotlinx.coroutines.launch
 import com.makefunstuff.herdr.ui.board.BoardScreen
-import com.makefunstuff.herdr.ui.board.BoardsScreen
 import com.makefunstuff.herdr.ui.board.rememberBoards
 import com.makefunstuff.herdr.ui.board.rememberNeedsYou
 import com.makefunstuff.herdr.ui.brief.BriefScreen
@@ -74,7 +87,6 @@ import com.makefunstuff.herdr.ui.code.DiffScreen
 import com.makefunstuff.herdr.ui.code.FileScreen
 import com.makefunstuff.herdr.ui.code.NotesScreen
 import com.makefunstuff.herdr.ui.code.SearchScreen
-import com.makefunstuff.herdr.ui.common.EmptyState
 import com.makefunstuff.herdr.ui.common.LocalContainer
 import com.makefunstuff.herdr.ui.coordinator.CoordinatorScreen
 import com.makefunstuff.herdr.ui.design.HerdrIcons
@@ -84,7 +96,6 @@ import com.makefunstuff.herdr.ui.health.HealthScreen
 import com.makefunstuff.herdr.ui.layout.LayoutScreen
 import com.makefunstuff.herdr.ui.machines.EditMachineScreen
 import com.makefunstuff.herdr.ui.machines.MachineScreen
-import com.makefunstuff.herdr.ui.machines.MachinesScreen
 import com.makefunstuff.herdr.ui.settings.KeySetupDialog
 import com.makefunstuff.herdr.ui.settings.QuietHoursScreen
 import com.makefunstuff.herdr.ui.settings.SettingsScreen
@@ -121,10 +132,12 @@ object Links {
 }
 
 object Routes {
-    const val AGENTS = "agents"
-    /** The Board tab: every machine's tasks in one list. */
-    const val BOARDS = "boards"
-    const val MACHINES = "machines"
+    /** The Tasks tab: what needs you, then every machine's tasks and agents by status (3.1's Tasks list). */
+    const val TASKS = "tasks"
+    /** The Chat tab: the space chosen in the drawer, its Assistant's or its agent's chat. */
+    const val CHAT = "chat"
+    /** The Artifacts tab: the shown space's artifacts. */
+    const val ARTIFACTS_TAB = "artifacts"
     const val SETTINGS = "settings"
     const val QUIET = "settings/quiet"
     /** Which actions ask for the fingerprint, and the app lock. */
@@ -133,7 +146,7 @@ object Routes {
     const val COMPOSER = "settings/replies"
     /** Which notifications reach the phone, holding them while you are at a machine, and the watches. */
     const val RULES = "settings/rules"
-    /** What happened while you were away; and when it comes as a notification. */
+    /** What happened while you were away (the scheduled brief's notification opens it; set up in Settings). */
     const val BRIEF = "brief"
     const val BRIEF_SETTINGS = "settings/brief"
     const val MACHINE = "machine/{id}"
@@ -145,7 +158,6 @@ object Routes {
     const val COORDINATOR = "coordinator/{mid}?space={space}"
     /** One machine's board; with [task] open, and with `alone` closing the task goes back instead of to the board. */
     const val BOARD = "board/{mid}?task={task}&alone={alone}"
-    const val ADMIN = "admin/{mid}?tab={tab}"
     const val WORKTREES = "worktrees/{mid}?ws={ws}"
     const val HEALTH = "health/{mid}"
     /** A machine's AI providers: limits, spend, balances, and what used them. */
@@ -188,7 +200,6 @@ object Routes {
     fun artifact(mid: String, id: String, v: Int? = null) = "artifact/$mid/${Uri.encode(id)}" + (v?.let { "?v=$it" } ?: "")
     fun board(mid: String, task: String? = null, alone: Boolean = false) =
         if (task == null) "board/$mid" else "board/$mid?task=${Uri.encode(task)}" + if (alone) "&alone=1" else ""
-    fun admin(mid: String, tab: Int = 0) = "admin/$mid?tab=$tab"
     fun health(mid: String) = "health/$mid"
     fun usage(mid: String) = "usage/$mid"
     fun logins(mid: String) = "logins/$mid"
@@ -225,21 +236,20 @@ private fun AppNav(nav: NavHostController) {
     val container = LocalContainer.current
     val entry by nav.currentBackStackEntryAsState()
     val route = entry?.destination?.route
-    val topLevel = route in setOf(Routes.AGENTS, Routes.BOARDS, Routes.MACHINES)
+    val topLevel = route in setOf(Routes.CHAT, Routes.TASKS, Routes.ARTIFACTS_TAB)
     val hosts by container.hosts.hosts.collectAsStateWithLifecycle()
     val triage by container.triage.state.collectAsStateWithLifecycle()
     val homeBoards = rememberBoards()
-    // Both tabs' badge: everything on the Needs you list, Shepherdr 3's tasks too.
+    // The Tasks tab's badge: everything on its Needs you list, Shepherdr 3's tasks too.
     val waiting = rememberNeedsYou(homeBoards)
     val needsYou = waiting.size
     val keyState by container.identity.state.collectAsStateWithLifecycle()
     var keySetupDismissed by rememberSaveable { mutableStateOf(false) }
-    // The agents list's machine filter and scroll, kept here: the list moves between the phone layout and the left pane.
-    val agentsFilter = rememberSaveable { mutableStateOf<String?>(null) }
-    val agentsList = rememberLazyListState()
-    val chosenBoard = rememberSaveable(saver = BoardChoice.Saver) { BoardChoice() }
-    // The right pane's board keeps its search, filters and open task while a narrower window hides it.
-    val boardStates = rememberSaveableStateHolder()
+    // The Tasks list's scroll, kept here: it stays as the window crosses the wide line.
+    val tasksList = rememberLazyListState()
+    val space = rememberSaveable(saver = SpaceChoice.Saver) { SpaceChoice() }
+    val drawer = rememberDrawerState(DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
 
     // No usable key yet: offer to restore one before a new key is made.
     if (!keySetupDismissed && (keyState == IdentityStore.State.Missing || keyState is IdentityStore.State.Unreadable)) {
@@ -260,62 +270,65 @@ private fun AppNav(nav: NavHostController) {
         },
     ) {
         val wide = maxWidth >= WIDE
-        val boards = hosts.filter { it.onShepherdr }.map { it.machine.id }
-        // A board already open in the middle (it was open when the window grew) isn't shown twice.
-        val board = if (wide && route != Routes.BOARD) chosenBoard.machine?.takeIf { it in boards } ?: boards.firstOrNull() else null
-        val panes = remember(wide, board, chosenBoard) { Panes(wide, board, chosenBoard) }
-        val (leftWidth, rightWidth) = Panes.widths(maxWidth, board != null)
+        val panes = remember(wide) { Panes(wide) }
         val current by rememberUpdatedState(panes)
         LaunchedEffect(nav) { Links.flow.collect { current.link(nav, it) } }
+        // A space picked in the drawer shows in the Chat tab.
+        fun pick(slot: SpaceSlot) {
+            space.key = slot.key
+            nav.goTop(Routes.CHAT)
+        }
+        val openDrawer: () -> Unit = { scope.launch { drawer.open() } }
+        val lineColor = Herdr.colors.lineStrong
+        val sideWidth = Panes.sidebar(maxWidth)
 
-        CompositionLocalProvider(LocalPanes provides panes) {
-            Scaffold(
-                contentWindowInsets = WindowInsets(0, 0, 0, 0),
-                containerColor = Herdr.colors.ground,
-                bottomBar = { if (topLevel && !wide) AppNavBar(nav, needsYou) },
-            ) { padding ->
-                // One Row in both layouts, with the NavHost always in the same place in it, so a rotation or a
-                // resize across the line keeps every open screen as it was (the activity isn't recreated for them).
-                Row(
-                    Modifier.fillMaxSize()
-                        .then(if (wide) Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)) else Modifier),
-                ) {
-                    if (wide) {
-                        Column(Modifier.width(leftWidth).fillMaxHeight()) {
-                            Box(Modifier.weight(1f)) { AgentsScreen(nav, agentsFilter, agentsList) }
-                            AppNavBar(nav, needsYou)
-                        }
-                        PaneEdge()
-                    }
-                    NavHost(
-                        nav,
-                        startDestination = Routes.AGENTS,
-                        modifier = Modifier.weight(1f).fillMaxHeight().padding(
-                            bottom = when {
-                                !topLevel -> 0.dp
-                                // Board and Machines in the middle: the nav bar is under the list, only the system's bar is below them.
-                                wide -> WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-                                else -> padding.calculateBottomPadding()
-                            },
-                        ),
-                        // Short and quiet: a detail slides in a little from the side, tabs cross-fade.
-                        enterTransition = { fadeIn(tween(200)) + slideInHorizontally(tween(220)) { it / 12 } },
-                        exitTransition = { fadeOut(tween(150)) },
-                        popEnterTransition = { fadeIn(tween(200)) },
-                        popExitTransition = { fadeOut(tween(150)) + slideOutHorizontally(tween(200)) { it / 12 } },
-                    ) {
-                        screens(nav) {
-                            // On a wide window the list is on the left already; the middle waits for what it opens.
-                            if (LocalPanes.current.wide) NothingOpen() else AgentsScreen(nav, agentsFilter, agentsList)
-                        }
-                    }
-                    if (board != null) {
-                        PaneEdge()
-                        Box(Modifier.width(rightWidth).fillMaxHeight()) {
-                            boardStates.SaveableStateProvider("board/$board") { BoardScreen(nav, board, pane = chosenBoard) }
+        CompositionLocalProvider(LocalPanes provides panes, LocalSpaceChoice provides space) {
+            val app: @Composable () -> Unit = {
+                Scaffold(
+                    contentWindowInsets = WindowInsets(0, 0, 0, 0),
+                    containerColor = Herdr.colors.ground,
+                    bottomBar = { if (topLevel) AppNavBar(nav, needsYou) },
+                ) { padding ->
+                    CompositionLocalProvider(LocalBarDrawer provides if (wide) null else openDrawer) {
+                        NavHost(
+                            nav,
+                            startDestination = Routes.TASKS,
+                            // Under the bottom bar the system's bar is the bar's: a screen's own navigationBarsPadding adds nothing more.
+                            modifier = Modifier.fillMaxSize().padding(bottom = if (topLevel) padding.calculateBottomPadding() else 0.dp)
+                                .then(if (topLevel) Modifier.consumeWindowInsets(WindowInsets.navigationBars) else Modifier),
+                            // Short and quiet: a detail slides in a little from the side, tabs cross-fade.
+                            enterTransition = { fadeIn(tween(200)) + slideInHorizontally(tween(220)) { it / 12 } },
+                            exitTransition = { fadeOut(tween(150)) },
+                            popEnterTransition = { fadeIn(tween(200)) },
+                            popExitTransition = { fadeOut(tween(150)) + slideOutHorizontally(tween(200)) { it / 12 } },
+                        ) {
+                            screens(nav) { TasksScreen(nav, tasksList) }
                         }
                     }
                 }
+            }
+            if (wide) {
+                // The spaces stay on the left, as 3.1's sidebar on a desktop; the app fills the rest.
+                Row(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))) {
+                    SpacesDrawer(nav, onPick = ::pick, onClose = {}, modifier = Modifier.width(sideWidth))
+                    PaneEdge()
+                    Box(Modifier.weight(1f).fillMaxHeight()) { app() }
+                }
+            } else {
+                ModalNavigationDrawer(
+                    drawerState = drawer,
+                    // Only a top-level tab opens it with a swipe; a chat's own swipes stay its own.
+                    gesturesEnabled = drawer.isOpen,
+                    scrimColor = Herdr.colors.scrim,
+                    drawerContent = {
+                        SpacesDrawer(
+                            nav, onPick = ::pick, onClose = { scope.launch { drawer.close() } },
+                            modifier = Modifier.width(300.dp).drawBehind {
+                                drawLine(lineColor, Offset(size.width - 0.5f, 0f), Offset(size.width - 0.5f, size.height), 1.dp.toPx())
+                            },
+                        )
+                    },
+                ) { app() }
             }
             // Another agent needs you while you are in a chat: one line drops from the top.
             AlertPill(
@@ -329,11 +342,11 @@ private fun AppNav(nav: NavHostController) {
     }
 }
 
-/** Every screen of the app, by its [Routes] entry; [agents] is the Agents tab, which the layout around it places. */
-internal fun NavGraphBuilder.screens(nav: NavHostController, agents: @Composable () -> Unit) {
-    composable(Routes.AGENTS) { agents() }
-    composable(Routes.BOARDS) { BoardsScreen(nav) }
-    composable(Routes.MACHINES) { MachinesScreen(nav) }
+/** Every screen of the app, by its [Routes] entry; [tasks] is the Tasks tab, whose list state the layout around it keeps. */
+internal fun NavGraphBuilder.screens(nav: NavHostController, tasks: @Composable () -> Unit) {
+    composable(Routes.TASKS) { tasks() }
+    composable(Routes.CHAT) { ChatTab(nav) }
+    composable(Routes.ARTIFACTS_TAB) { ArtifactsTab(nav) }
     composable(Routes.SETTINGS) { SettingsScreen(nav) }
     composable(Routes.QUIET) { QuietHoursScreen(nav) }
     composable(Routes.GUARD) { com.makefunstuff.herdr.ui.settings.GuardScreen(nav) }
@@ -345,9 +358,6 @@ internal fun NavGraphBuilder.screens(nav: NavHostController, agents: @Composable
     composable(Routes.EDIT) { EditMachineScreen(nav, it.arguments?.getString("id")) }
     composable(Routes.AGENT) {
         AgentScreen(nav, it.arguments?.getString("mid").orEmpty(), Uri.decode(it.arguments?.getString("pane").orEmpty()))
-    }
-    composable(Routes.ADMIN) {
-        AdminScreen(nav, it.arguments?.getString("mid").orEmpty(), it.arguments?.getString("tab")?.toIntOrNull() ?: 0)
     }
     composable(Routes.WORKTREES) {
         WorktreesScreen(nav, it.arguments?.getString("mid").orEmpty(), it.arguments?.getString("ws")?.let(Uri::decode))
@@ -421,20 +431,17 @@ private fun androidx.navigation.NavBackStackEntry.codeSpot(): CodeSpot =
     CodeSpot.of(arguments?.getString("mid").orEmpty()) { arguments?.getString(it) }
 
 /**
- * The three top-level screens: under the whole screen on a phone, under the agents list on a wide
- * window. [needsYou] counts the Needs you list, on Agents and Board alike.
+ * The bottom bar, as 3.1's phone: Chat (the shown space), Tasks (which owns the Needs you count),
+ * Artifacts. Under the app on a phone and beside the sidebar on a wide window alike.
  */
 @Composable
 private fun AppNavBar(nav: NavHostController, needsYou: Int) {
     val entry by nav.currentBackStackEntryAsState()
-    // In the middle of a wide window a chat or a machine may be open: the tab is the one it was opened from.
-    val tab = remember(entry) {
-        listOf(Routes.BOARDS, Routes.MACHINES).firstOrNull { runCatching { nav.getBackStackEntry(it) }.isSuccess } ?: Routes.AGENTS
-    }
+    val tab = entry?.destination?.route
     HerdrNavBar {
-        NavItem("Agents", HerdrIcons.House, tab == Routes.AGENTS, badge = needsYou) { nav.goTop(Routes.AGENTS) }
-        NavItem("Board", HerdrIcons.SquareKanban, tab == Routes.BOARDS, badge = needsYou) { nav.goTop(Routes.BOARDS) }
-        NavItem("Machines", HerdrIcons.List, tab == Routes.MACHINES) { nav.goTop(Routes.MACHINES) }
+        NavItem("Chat", HerdrIcons.MessagesSquare, tab == Routes.CHAT) { nav.goTop(Routes.CHAT) }
+        NavItem("Tasks", HerdrIcons.ListTodo, tab == Routes.TASKS, badge = needsYou) { nav.goTop(Routes.TASKS) }
+        NavItem("Artifacts", HerdrIcons.LayoutDashboard, tab == Routes.ARTIFACTS_TAB) { nav.goTop(Routes.ARTIFACTS_TAB) }
     }
 }
 
@@ -442,16 +449,6 @@ private fun AppNavBar(nav: NavHostController, needsYou: Int) {
 @Composable
 private fun PaneEdge() {
     Box(Modifier.width(1.dp).fillMaxHeight().background(Herdr.colors.line))
-}
-
-/** The middle of a wide window before anything is opened from the list. */
-@Composable
-private fun NothingOpen() {
-    EmptyState(
-        "No chat open",
-        "Choose an agent on the left to open its chat here. The Coordinator, terminals and machines open here too.",
-        icon = HerdrIcons.MessagesSquare,
-    )
 }
 
 private fun NavHostController.goTop(route: String) {

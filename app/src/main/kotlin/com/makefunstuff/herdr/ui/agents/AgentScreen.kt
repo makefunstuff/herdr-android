@@ -499,7 +499,7 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
                             status == AgentStatus.Blocked && amending -> "Add to your answer…"
                             status == AgentStatus.Blocked && prompt?.customIndex != null && !prompt.multiSelect -> "Type your own answer…"
                             status == AgentStatus.Blocked -> "Type an answer…"
-                            agent != null -> "Message ${agent.name?.takeIf { it.isNotBlank() } ?: agent.displayName}…"
+                            agent != null -> "Message ${agent.name?.takeIf { it.isNotBlank() } ?: agent.displayName}"
                             else -> "Type into the pane…"
                         },
                         onSend = ::send,

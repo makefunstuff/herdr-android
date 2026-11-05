@@ -725,44 +725,6 @@ private fun DetailSheet(title: String, onDismiss: () -> Unit, content: @Composab
     ManageSheet(title, null, onDismiss) { content() }
 }
 
-// Notifications
-
-@Composable
-fun NotifySheet(session: HostSession, machineLabel: String, onDismiss: () -> Unit) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var title by remember { mutableStateOf("") }
-    var body by remember { mutableStateOf("") }
-    var sound by remember { mutableStateOf("none") }
-
-    ManageSheet("Notify herdr on $machineLabel", "Pops up on the desktop running herdr", onDismiss) {
-        Column(Modifier.padding(horizontal = Space.l), verticalArrangement = Arrangement.spacedBy(Space.m)) {
-            HerdrTextField(value = title, onValueChange = { title = it }, label = "Title")
-            HerdrTextField(value = body, onValueChange = { body = it }, label = "Body", singleLine = false)
-        }
-        ManageHeading("Sound")
-        listOf("none" to "None", "done" to "Done", "request" to "Request").forEach { (value, name) ->
-            ManageRow(
-                name,
-                trailing = { RadioButton(selected = sound == value, onClick = null, colors = RadioButtonDefaults.colors(selectedColor = MaterialTheme.colorScheme.primary)) },
-                modifier = Modifier.semantics { selected = sound == value; role = Role.RadioButton },
-            ) { sound = value }
-        }
-        Spacer(Modifier.height(Space.xl))
-        PrimaryButton(
-            "Send notification",
-            onClick = {
-                manage(context, scope, session, onDismiss) {
-                    val result: NotificationResult = it.showNotification(title, body, sound)
-                    result.message
-                }
-            },
-            modifier = Modifier.fillMaxWidth().padding(horizontal = Space.l),
-            enabled = title.isNotBlank(),
-        )
-    }
-}
-
 private fun arrowFor(direction: String): ImageVector = when (direction) {
     "left" -> HerdrIcons.ChevronLeft
     "right" -> HerdrIcons.ChevronRight
