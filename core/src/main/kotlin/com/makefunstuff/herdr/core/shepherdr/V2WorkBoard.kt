@@ -8,7 +8,9 @@ import com.makefunstuff.herdr.core.board.WorkBoard
 import com.makefunstuff.herdr.core.board.WorkCard
 import com.makefunstuff.herdr.core.board.WorkOverview
 import com.makefunstuff.herdr.core.board.WorkSpace
+import com.makefunstuff.herdr.core.board.WorkAgentChoice
 import com.makefunstuff.herdr.core.board.WorkStatus
+import com.makefunstuff.herdr.core.board.WorkTab
 import com.makefunstuff.herdr.core.board.WorkTask
 import com.makefunstuff.herdr.core.board.WorkTaskDetails
 import com.makefunstuff.herdr.core.board.WorkTasks
@@ -19,7 +21,9 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
 import java.io.IOException
 
 /**
@@ -159,6 +163,48 @@ class V2WorkBoard(private val connect: suspend () -> ShepherdrClient, private va
         return (o["to"] as? JsonPrimitive)?.contentOrNull ?: a.keeper
     }
 
+    override suspend fun tabAgents(space: String): List<WorkAgentChoice> {
+        val o = connect().act(V2Actions.tabAgents(space))
+        return (o["agents"] as? JsonArray).orEmpty().mapNotNull { e ->
+            val a = e as? JsonObject ?: return@mapNotNull null
+            fun str(k: String) = (a[k] as? JsonPrimitive)?.contentOrNull
+            val kind = str("kind") ?: return@mapNotNull null
+            WorkAgentChoice(kind, str("name") ?: kind, (a["installed"] as? JsonPrimitive)?.booleanOrNull == true)
+        }
+    }
+
+    override suspend fun renameTab(space: String, tab: WorkTab, name: String) {
+        connect().act(V2Actions.tabRename(tab.id, space.takeIf { tab.id == null }, name.trim().take(80)))
+    }
+
+    override suspend fun closeTab(id: String) {
+        connect().act(V2Actions.tabClose(id))
+    }
+
+    override suspend fun restartTab(tab: WorkTab, kind: String?) {
+        connect().act(V2Actions.tabSwitch(tab.chat, kind))
+    }
+
+    override suspend fun modelMenu(chat: String): V2ModelMenu {
+        val menu = connect().act(V2Actions.modelMenu(chat))["menu"] as? JsonObject ?: throw IOException("Couldn't read what it runs on.")
+        return ShepherdrJson.decodeFromJsonElement(V2ModelMenu.serializer(), menu)
+    }
+
+    override suspend fun restartWith(chat: String, pick: V2ModelPick, level: String?) {
+        connect().act(V2Actions.restart(chat, pick, level))
+    }
+
+    override suspend fun assistantWorkers(space: String): Int =
+        (connect().act(V2Actions.assistantClose(space, "count"))["workers"] as? JsonPrimitive)?.intOrNull ?: 0
+
+    override suspend fun closeAssistant(space: String, stopWorkers: Boolean) {
+        connect().act(V2Actions.assistantClose(space, if (stopWorkers) "stop" else "keep"))
+    }
+
+    override suspend fun closeSpace(space: String) {
+        connect().act(V2Actions.spaceRemove(space))
+    }
+
     private fun agentChat(task: WorkTask) = task.chat.ifEmpty { throw IOException("${task.name} has no agent yet") }
 
     /** A space's Assistant chat key: its id where it is one already (`Place.chat`, `p:<space id>`), else made from it. */
@@ -232,9 +278,26 @@ object V2Board {
                 level = p.level,
                 store = p.store?.key.orEmpty(),
                 emoji = p.emoji,
+                tabs = tabs(s, p),
             )
         }
         return WorkOverview(spaces, tasks, s.artifacts, s.needs)
+    }
+
+    /** [p]'s tabs as 3.1's bar has them (`barTabs`): its Assistant's first, then the others. */
+    fun tabs(s: V2Snapshot, p: V2Place): List<WorkTab> {
+        val a = p.assistantTab
+        val assistant = WorkTab(
+            id = a?.id, name = a?.name ?: "Assistant", named = a?.named == true, chat = p.chat.ifEmpty { assistantChat(p.id) },
+            agent = a?.agent ?: a?.cli, state = a?.state ?: "idle", assistant = true, live = a?.live == true,
+            remote = s.host.isNotEmpty() && p.machine != s.host,
+        )
+        return listOf(assistant) + p.tabs.map { t ->
+            WorkTab(
+                id = t.id, name = t.name, named = t.named, chat = t.term, agent = t.agent ?: t.cli, state = t.state,
+                live = (t.agent ?: t.cli) != null, remote = '/' in t.term.drop(2),
+            )
+        }
     }
 
     fun task(t: V2Task) = WorkTask(
