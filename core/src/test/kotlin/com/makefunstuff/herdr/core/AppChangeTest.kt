@@ -36,13 +36,11 @@ class AppChangeTest {
             AppChange.Screen("Board", "board/{mid}?task={task}&alone={alone}"), "0.1.130", 130,
             "  Show each task's age on its row  ", "/home/demo/.cache/herdr-android/uploads/x/screen board.png",
         )
-        assertTrue(m.startsWith("Change this screen of the app: Show each task's age on its row\n"), m)
+        assertTrue(m.startsWith("@\"/home/demo/.cache/herdr-android/uploads/x/screen board.png\"\n\nChange this screen of the app: Show each task's age on its row\n"), m)
         assertTrue("- Screen: Board (route `board/{mid}?task={task}&alone={alone}`)" in m, m)
         assertTrue("- App: 0.1.130 (version code 130)" in m, m)
-        // A path with a space is quoted, as the composer's attachments are.
-        assertTrue("- Screenshot: @\"/home/demo/.cache/herdr-android/uploads/x/screen board.png\"" in m, m)
         assertTrue("herdr-task on herdr-android" in m, m)
-        assertFalse("Screenshot" in AppChange.firstMessage(AppChange.Screen("", null), "0.1.1", 1, "x", null))
+        assertTrue(AppChange.firstMessage(AppChange.Screen("", null), "0.1.1", 1, "x", null).startsWith("Change this screen"))
     }
 
     @Test

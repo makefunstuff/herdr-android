@@ -758,6 +758,19 @@ fun scenes(): List<Scene> = listOf(
     // Settings › Autopilot on devbox (Settings lists a row for each machine on Shepherdr 3): its heartbeat, schedule and
     // events; a schedule of its own words; one herdr-task can't read, refused in its words.
     Scene("settings-autopilot", route = Routes.SETTINGS, heightDp = 1900, setup = { shepherdr() }),
+    // Changing the app from the phone: the ⋯ menu's row, the sheet a long press on a title opens, the change's chat
+    // with its shots and Accept, the update ready in it, and Settings › Change the app (all there, no SDK, the update).
+    Scene("change-action", route = Routes.machine(DEVBOX), setup = { appChange() }, actions = { settle(); tapLabel("More") }),
+    Scene("change-sheet", route = Routes.board(DEVBOX), setup = { appChange() }, actions = {
+        settle(); longPressText("Tasks"); settle(); typeInto("What should change?", "Show each task's age on its row, after its status"); settle()
+    }),
+    Scene("change-chat", route = Routes.coordinator(DEVBOX, DemoV2.APP), heightDp = 1600, setup = { appChange() }),
+    Scene("change-proof", route = Routes.artifact(DEVBOX, "pf31"), setup = { appChange() }),
+    Scene("change-accept", route = Routes.coordinator(DEVBOX, DemoV2.APP), heightDp = 1600, setup = { appChange() }, actions = { settle(); tapExact("Accept") }),
+    Scene("change-update", route = Routes.coordinator(DEVBOX, DemoV2.APP), setup = { appChange(update = DemoChange.UPDATE) }),
+    Scene("settings-change", route = Routes.CHANGE_APP, heightDp = 1500, setup = { appChange() }),
+    Scene("settings-change-nosdk", route = Routes.CHANGE_APP, heightDp = 1500, setup = { appChange(FakeAppBuild.CHECK_NO_SDK) }),
+    Scene("settings-change-update", route = Routes.CHANGE_APP, heightDp = 1500, setup = { appChange(update = DemoChange.UPDATE) }),
     Scene("autopilot", route = Routes.autopilot(DEVBOX), heightDp = 1200, setup = { shepherdr() }),
     Scene("autopilot-refused", route = Routes.autopilot(DEVBOX), heightDp = 1200, setup = { shepherdr() }, actions = {
         settle(); tapExact(com.makefunstuff.herdr.core.shepherdr.Autopilot.CUSTOM)

@@ -79,6 +79,8 @@ class FakeMachine(
     var logins: FakeLogins? = null,
     /** herdr-push's journal there (`herdr-push journal`, for the brief); null where herdr-push isn't installed. */
     var journal: JsonObject? = null,
+    /** herdr-app-build there (Settings › Change the app); null answers none of its commands. */
+    var appBuild: FakeAppBuild? = null,
     /** Its repositories, for the code browser; null answers no code command. */
     var code: FakeCode? = null,
     /** Pictures on it by their path there (the files they are), for a chat that reads one back (`Images.fetchCommand`). */
@@ -106,6 +108,7 @@ class FakeMachine(
         // herdr-core's probe (HcDetection): its socket and core, or nothing where none runs.
         if ("core.lock" in command) return FakeCore.probe(core, coreSessions)
         shepherdr?.run(command, stdin)?.let { return it }
+        appBuild?.run(command)?.let { return it }
         Shell.words(command).let { w ->
             // Words in the chats (ChatSearch.command): the transcripts' lines that hold them, under each chat's mark.
             val chat = w.indexOf("herdr-chat-search")
@@ -130,6 +133,7 @@ class FakeMachine(
                 return ok("@@herdr-folder $path\n" + list.joinToString("") { "$it\n" })
             }
         }
+        appBuild?.run(command)?.let { return it }
         code?.run(command)?.let { return it }
         health.run(command)?.let { return it }
         usage?.run(command)?.let { return it }

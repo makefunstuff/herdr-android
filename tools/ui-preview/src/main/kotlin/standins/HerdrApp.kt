@@ -104,6 +104,7 @@ class AppContainer(app: Context) {
         quietWork.check()
         briefWork.start()
         usage.start(scope, hosts, machines)
+        changes.start()
     }
 
     /** Ends the scene: every machine session and the container's coroutines. */

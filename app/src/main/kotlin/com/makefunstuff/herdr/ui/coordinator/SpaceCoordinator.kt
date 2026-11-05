@@ -597,7 +597,10 @@ internal fun ChatItem(
             QuestionCard(item.card, item.answer, item.card.question.id in answering, onAnswer)
         }
         is SpaceChatItem.Voice -> VoiceMessage(item.path, item.millis, item.you, item.note)
-        is SpaceChatItem.File -> Row(
+        // A picture shared there (a task's before and after shots) shows as itself, read from the machine as yours are.
+        is SpaceChatItem.File -> if (Images.isImage(item.name) && item.path.startsWith("/")) Row(
+            Modifier.fillMaxWidth(), horizontalArrangement = if (item.you) Arrangement.End else Arrangement.Start,
+        ) { MessageImages(listOf(item.path)) } else Row(
             Modifier.fillMaxWidth(), horizontalArrangement = if (item.you) Arrangement.End else Arrangement.Start,
             verticalAlignment = Alignment.CenterVertically,
         ) {

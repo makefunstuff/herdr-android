@@ -394,13 +394,11 @@ def cmd_build(a):
         key = find_key()
         dest = os.path.join(BASE, f"herdr-android-{number}.apk")
         built = False
-        if key != "none":
-            sdk = find_sdk(checkout)
-            if not sdk:
-                raise Fail("No Android SDK here: set ANDROID_HOME, or sdk.dir in the checkout's local.properties")
-            java_home, _ = find_java()
-            if not java_home:
-                raise Fail("No JDK 17 or newer here")
+        sdk = find_sdk(checkout)
+        java_home, _ = find_java()
+        if key != "none" and not (sdk and java_home):
+            say("The key is here but " + ("the Android SDK" if not sdk else "a JDK 17 or newer") + " isn't: CI's release instead")
+        if key != "none" and sdk and java_home:
             write_state(state="building", source="host")
             say(f"Building 0.1.{number} with the release key")
             try:
@@ -411,7 +409,7 @@ def cmd_build(a):
                 say(f"herdr-secret gave no key ({e}): CI's release instead")
         if not built:
             write_state(state="downloading", source="release")
-            say(f"No release key here: waiting for CI's release v0.1.{number}")
+            say(f"Waiting for CI's release v0.1.{number}")
             download_release(slug, number, dest)
         for old in os.listdir(BASE):
             if old.startswith("herdr-android-") and old.endswith(".apk") and os.path.join(BASE, old) != dest:

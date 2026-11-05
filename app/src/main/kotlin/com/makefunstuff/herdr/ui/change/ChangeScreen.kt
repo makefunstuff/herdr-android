@@ -136,7 +136,7 @@ private fun ChangeSheet(nav: NavHostController, screen: AppChange.Screen, shot: 
                 }
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Space.xs)) {
                     Text(
-                        "The Assistant makes it a task there: the change is made, tested and shown as before and after shots in its chat, for you to accept. Then the app updates from that machine.",
+                        "Its Assistant makes it a task there, with before and after shots for you to accept; then the app updates from that machine.",
                         style = MaterialTheme.typography.bodyMedium, color = c.muted,
                     )
                     screen.route?.let { Text(it, style = CodeStyle.copy(fontSize = 11.sp), color = c.faint, maxLines = 2, overflow = TextOverflow.Ellipsis) }

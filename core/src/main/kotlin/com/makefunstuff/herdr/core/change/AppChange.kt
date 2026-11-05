@@ -37,15 +37,17 @@ object AppChange {
 
     /** The first message: what to change, about which screen, in which build, with its [shot] (its path on the machine). */
     fun firstMessage(screen: Screen, versionName: String, versionCode: Long, words: String, shot: String?): String = buildString {
+        // The screen as it is, named first as the composer names its pictures: the chat shows it as one.
+        if (shot != null) append(Attachments.mention(shot)).append("\n\n")
         append("Change this screen of the app: ").append(words.trim()).append("\n\n")
         append("- Screen: ").append(screen.title.ifBlank { "untitled" })
         screen.route?.takeIf { it.isNotBlank() }?.let { append(" (route `").append(it).append("`)") }
         append('\n')
         append("- App: ").append(versionName).append(" (version code ").append(versionCode).append(")\n")
-        if (shot != null) append("- Screenshot: ").append(Attachments.mention(shot)).append('\n')
         append('\n')
         append("Make it a herdr-task on $REPO here: worktree, tests, and ui-preview shots of the screens it touches, before and after. ")
         append("Once I accept it and it is merged, the phone asks you to build its update.")
+
     }
 
     /**

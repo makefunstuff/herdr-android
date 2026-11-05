@@ -301,6 +301,26 @@ Everything a long press opens is also offered to TalkBack as actions on the card
 
 On a window 840 dp wide or wider (a tablet, an open foldable, a large window or desktop windowing), the app shows three panes side by side, like Puggie: the agents list (with Agents, Board and Machines under it), then what you opened from it (an agent's chat, a terminal, an Assistant, the Board tab, a machine, Settings), then a machine's work board. What is open in the middle is marked in the list, and opening another agent replaces it instead of piling up; Back closes it, and then a task open on the board. A board opened from a notification, the widget, the Board tab or a machine's Board card shows on the right, with its task open (a board still open in the middle, from before the window grew, moves there). A narrower window keeps the phone layout. Rotating or resizing across the line keeps what is open as it was: the chat, its draft and scroll, the board's search, filters and open task (kept while a narrow window hides the board, and back when it is wide again).
 
+## Changing the app from the phone
+
+The app changes itself the way Herdr desktop's mods change Herdr, with all the work done on a machine of yours: nothing that edits or builds code runs on the phone, and the app runs no plugins or scripts.
+
+1. **Change this screen**: a long press on any screen's title, or **Change this screen** in its ⋯ menu, takes the app's own picture of the screen and asks what should change. **Send** copies the picture to the machine that builds the app and opens its **herdr-android** space's Assistant, with a first message naming the screen (its title and route), the app's version and your words.
+2. **The machine does the work**: the Assistant makes it a task there (worktree, tests, ui-preview shots before and after), and its chat shows the task's news, its shots and its **Accept** card, as any task's.
+3. **Update ready**: once a change accepted from the phone is merged, the app asks the Assistant to build the update (`herdr-app-build build`, below), copies the APK over its own SSH link, checks that it is this app, signed with the same key and newer, and offers **Update ready** (in that chat and in Settings › Change the app). **Install** hands it to Android's installer, which always asks you first. The app keeps its machines and SSH key.
+4. **Undo**: the same chat's **Undo** asks the Assistant to revert the last change's merge as a new task. Android never installs an older build, so an undo ships as a new, higher one, the same way.
+
+**Settings › Change the app** picks the machine that builds it (until one is picked, the one a change was last sent to) and looks there over SSH: it says what it has and what's missing.
+
+The machine needs:
+
+- **A herdr-android checkout** with `origin` on GitHub: the herdr-android space's folder on Shepherdr, else `~/herdr-android`, `~/src/herdr-android` or `~/Work/herdr-android`.
+- **The Android SDK** (`ANDROID_HOME`, or `sdk.dir` in the checkout's `local.properties`) and **a JDK 17 or newer** (`JAVA_HOME`, or `java` on the PATH), as a login shell there sets them; and python3 and git.
+- **Shepherdr 3** with a space named **herdr-android** (or working in that checkout): its Assistant takes the changes.
+- **The release key, as secrets** (optional): Android installs an update only when it is signed with the same key as the app. Keep `HERDR_KEYSTORE_FILE` (the keystore's path on that machine), `HERDR_KEYSTORE_PASSWORD` and `HERDR_KEY_ALIAS` in herdr-secret (Settings › Secrets in Herdr, or `herdr-secret set NAME`); the Assistant builds with `herdr-secret run …`, so the values reach only Gradle and never a log, a chat or git. Without them, each update is the release CI publishes for that merge, downloaded there and offered the same way.
+
+The version code of every update is GitHub Actions' run number for the merge, the same one CI gives it, so a build there and CI's release of the same merge are the same version and the next one is always higher. The app copies its helper [`herdr-app-build`](host/herdr-app-build/README.md) to `~/.local/share/herdr-android/` there (unless **Allow host scripts** is off for that machine). It asks for `REQUEST_INSTALL_PACKAGES`, and Android asks you once to let it install updates.
+
 ## Screen previews
 
 UI changes are checked, and shown in review, with screen previews instead of an emulator: the app's real Compose screens rendered on the desktop JVM against a fake herdr machine with fixed demo data, in dark and light.
@@ -331,6 +351,7 @@ Shepherdr 2.x isn't supported any more. The code is `core/…/shepherdr/`; its t
 - `tools/ui-preview/`: the screen previews. `./gradlew -p tools/ui-preview render`.
 - `host/herdr-push/`: the watcher that runs on a machine and pushes to the phone (Python 3; core carries it as a resource, and its tests run it).
 - `host/herdr-usage/`: the AI providers' usage reader, run on a machine for its usage page and herdr-push's warnings (Python 3; core carries it, and its tests run it).
+- `host/herdr-app-build/`: the app's builder on the machine that builds the phone's updates (Python 3; core carries it, and its tests run it against a fake checkout, Gradle and herdr-secret).
 - `host/herdr-logins/`: the agent CLIs' logins on a machine, and signing them in or out there with their own commands (Python 3; core carries it, and its tests run it against fake CLIs).
 
 ## Contributing
