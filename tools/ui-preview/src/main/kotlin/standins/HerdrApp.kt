@@ -91,6 +91,12 @@ class AppContainer(app: Context) {
         zone = { java.time.ZoneOffset.UTC }, clock = { Demo.NOW },
     )
 
+    /** Changing the app: its builder and update as the scene sets them (`appChange`), and an installer that stands still. */
+    val changes = com.makefunstuff.herdr.change.AppChanges(
+        scope, hosts, java.io.File(app.filesDir, "app-change.json"), java.io.File(app.filesDir, "updates"), preview.PreviewThisApp,
+        clock = { Demo.NOW },
+    )
+
     init {
         // The app is in front for the whole scene.
         hosts.setForeground(true)

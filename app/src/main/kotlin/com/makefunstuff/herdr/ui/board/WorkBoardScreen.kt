@@ -345,7 +345,7 @@ internal fun WorkBoardScreen(
             AcceptSheet(
                 board, o?.tasks?.firstOrNull { it.id == t.id } ?: t, onDismiss = { acceptFor = null },
                 onProof = { id -> nav.navigate(Routes.artifact(machineId, id, null)) },
-                onAccepted = { context.toast(it); readNow.trySend(Unit) },
+                onAccepted = { context.toast(it); readNow.trySend(Unit); container.changes.accepted(machineId, t) },
                 confirm = { run -> guard.run(Guarded.Merge, "Accept ${t.name}?", t.title) { view.confirmTap(); run() } },
             )
         }

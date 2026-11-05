@@ -1,5 +1,6 @@
 package com.makefunstuff.herdr.ui.machines
 
+import com.makefunstuff.herdr.ui.change.ChangeScreenRow
 import androidx.compose.ui.graphics.RectangleShape
 
 import androidx.compose.foundation.Canvas
@@ -128,6 +129,7 @@ fun MachineScreen(nav: NavController, machineId: String) {
                 BarIcon(HerdrIcons.Ellipsis, "More", { menu = true })
                 HerdrMenu(expanded = menu, onDismissRequest = { menu = false }, title = state.machine.label) {
                     MenuRow("Edit machine", HerdrIcons.Pencil, { menu = false; nav.navigate(Routes.edit(machineId)) })
+                    ChangeScreenRow { menu = false }
                 }
             }
         },

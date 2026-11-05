@@ -1,5 +1,6 @@
 package com.makefunstuff.herdr.ui.manage
 
+import com.makefunstuff.herdr.ui.design.LocalScreenChange
 import com.makefunstuff.herdr.core.hc.HcMapping
 import com.makefunstuff.herdr.core.board.WorkTask
 import androidx.compose.material3.RadioButtonDefaults
@@ -548,6 +549,8 @@ fun AgentActionsSheet(
     task: WorkTask? = null,
     /** Its tab's menu (Shepherdr 3's: Rename, Switch agent, Restart, Model, Close), first. */
     tabRows: (@Composable () -> Unit)? = null,
+    /** It is a chat's ⋯ menu: "Change this screen" is in it. */
+    screenMenu: Boolean = false,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -577,6 +580,8 @@ fun AgentActionsSheet(
         if (onCode != null) ManageRow("Browse the code", detail = "Its files and changes, to read and comment on", icon = HerdrIcons.Code, chevron = true) { onCode() }
         if (onFloat != null) ManageRow("Float over other apps", icon = HerdrIcons.PictureInPicture2) { onFloat() }
         if (onOpenApp != null) ManageRow("Open in the app", icon = HerdrIcons.Maximize2) { onOpenApp() }
+        // The chat's own ⋯ (not a row's long press): the screen behind it can be changed.
+        if (screenMenu) LocalScreenChange.current?.let { change -> ManageRow("Change this screen", icon = HerdrIcons.WandSparkles) { onDismiss(); change.open() } }
         if (onToggleKeys != null) {
             ManageRow(if (showKeys) "Hide keys" else "Show keys", icon = HerdrIcons.Keyboard) { onToggleKeys() }
         }
