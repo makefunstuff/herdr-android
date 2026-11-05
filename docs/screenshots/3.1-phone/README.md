@@ -7,5 +7,5 @@ accepted, started or changed while taking them; they show the person's own data.
 
 They are reference material for the app's UI work (HERD-31), not app screenshots:
 `drawer` (the spaces drawer), `assistant-chat` (a space's Assistant), `tasks` (the
-tasks list with its filters), `task` and `task-accept` (a task's tabs, and the Accept
-card), `task-chat` (a task's chat), `artifacts`, `settings`.
+tasks list with its filters), `task-light` and `task-accept-dark` (a task's tabs, and
+the Accept card), `task-chat-dark` (a task's chat), `artifacts`, `settings`.
