@@ -77,14 +77,23 @@ sealed interface NoteTarget {
     data class Agent(val paneId: String, override val label: String, val blocked: Boolean) : NoteTarget {
         override val key: String get() = "agent:$paneId"
     }
+
+    /** The Shepherdr task the checkout was opened from (its worktree): the message goes into its chat, to its agent. */
+    data class Task(val board: HostSession, val id: String, override val label: String) : NoteTarget {
+        override val key: String get() = "task:$id"
+    }
 }
 
-/** Who can get comments on [top]: the agents at work in it (the one it was opened from first). */
-fun noteTargets(host: HostState, top: String, spot: CodeSpot): List<NoteTarget> {
+/**
+ * Who can get comments on [top]: the task it was opened from, when [board] (its machine's session) runs Shepherdr,
+ * then the agents at work in it (the one it was opened from first).
+ */
+fun noteTargets(host: HostState, top: String, spot: CodeSpot, board: HostSession? = null): List<NoteTarget> {
     val agents = host.agentsIn(top, spot.pane)
     val names = agents.groupingBy { it.shownName }.eachCount()
     val ws = host.snapshot?.workspaces.orEmpty()
     return buildList {
+        if (spot.task != null && board != null && board.state.value.onShepherdr) add(NoteTarget.Task(board, spot.task, spot.taskName ?: spot.task))
         agents.forEach { a ->
             val place = ws.firstOrNull { it.workspaceId == a.workspaceId }?.label?.ifBlank { null }
             add(NoteTarget.Agent(a.paneId, if ((names[a.shownName] ?: 0) > 1 && place != null) "${a.shownName} · $place" else a.shownName, a.blocked))
@@ -96,6 +105,12 @@ fun noteTargets(host: HostState, top: String, spot: CodeSpot): List<NoteTarget> 
 suspend fun deliver(session: HostSession, target: NoteTarget, text: String) {
     when (target) {
         is NoteTarget.Agent -> AgentInput.send(session.awaitAgent(target.paneId), target.paneId, text, named = true, blocked = target.blocked)
+        is NoteTarget.Task -> {
+            val b = target.board.awaitWorkBoard()
+            val t = b.overview().tasks.firstOrNull { it.id == target.id } ?: throw java.io.IOException("${target.label} isn't on the board any more")
+            b.tell(t, text)
+            return
+        }
     }
     session.refresh()
 }
@@ -111,7 +126,8 @@ fun CommentSheet(spot: CodeSpot, host: HostState, draft: NoteDraft, onDismiss: (
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val session = container.hosts.session(spot.machine) ?: return
-    val targets = remember(host.snapshot) { noteTargets(host, spot.dir, spot) }
+    val board = container.hosts.session(spot.board ?: spot.machine)
+    val targets = remember(host.snapshot) { noteTargets(host, spot.dir, spot, board) }
     var target by remember(targets) { mutableStateOf(targets.firstOrNull()) }
     var text by remember { mutableStateOf("") }
     var sending by remember { mutableStateOf(false) }
@@ -224,7 +240,7 @@ fun NotesScreen(nav: NavController, spot: CodeSpot) {
                     NoteCard(n, onEdit = { editing = n }, onDrop = { container.code.remove(listOf(n.id)) })
                 }
                 item(key = "send:$root") {
-                    val targets = noteTargets(host, root, spot)
+                    val targets = noteTargets(host, root, spot, container.hosts.session(spot.board ?: spot.machine))
                     val target = targets.firstOrNull { it.key == chosen.value[root] } ?: targets.firstOrNull()
                     Column(Modifier.padding(top = Space.xs), verticalArrangement = Arrangement.spacedBy(Space.s)) {
                         if (targets.isEmpty()) {

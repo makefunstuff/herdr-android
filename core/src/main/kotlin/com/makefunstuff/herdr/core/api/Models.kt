@@ -186,7 +186,9 @@ data class AgentInfo(
 
 /**
  * Where an agent keeps its conversation, as its herdr integration reports it: a transcript file
- * path, or a session id that the agent's own storage layout turns into one.
+ * path, or a session id that the agent's own storage layout turns into one. herdr-core reports none,
+ * so for its agents the app sets kind `pid`: the agent's process, which the transcript is found from
+ * on the machine ([com.makefunstuff.herdr.core.chat.TranscriptFollower.FIND]).
  */
 @Serializable
 data class AgentSessionRef(

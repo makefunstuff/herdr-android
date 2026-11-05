@@ -15,6 +15,7 @@ import com.makefunstuff.herdr.core.shepherdr.ShepherdrClient
 import com.makefunstuff.herdr.core.shepherdr.ShepherdrJson
 import com.makefunstuff.herdr.core.shepherdr.SpaceChat
 import com.makefunstuff.herdr.core.shepherdr.SpaceChatItem
+import com.makefunstuff.herdr.core.shepherdr.TaskFolder
 import com.makefunstuff.herdr.core.shepherdr.V2Actions
 import com.makefunstuff.herdr.core.shepherdr.V2Board
 import com.makefunstuff.herdr.core.shepherdr.V2Event
@@ -31,6 +32,7 @@ import com.makefunstuff.herdr.core.shepherdr.V2WorkBoard
 import com.makefunstuff.herdr.core.shepherdr.VoiceCall
 import com.makefunstuff.herdr.core.shepherdr.WebSocketLink
 import com.makefunstuff.herdr.core.shepherdr.Wire
+import com.makefunstuff.herdr.core.shepherdr.Worktree
 import com.makefunstuff.herdr.core.ssh.CommandResult
 import com.makefunstuff.herdr.core.ssh.Duplex
 import com.makefunstuff.herdr.core.ssh.PortForward
@@ -418,6 +420,39 @@ class ShepherdrTest {
     }
 
     // ---- the client over the wire ----------------------------------------------------------------
+
+    @Test
+    fun aTasksFolderAndPullRequestAsTheWebAppReadsThem() = runBlocking {
+        FakeShepherdr().use { fake ->
+            fake.on("GET /api/worktree?task=DEMO-4&what=dir") { 200 to """{"root":"~/.herdr/worktrees/demo/task-4","entries":[{"name":"src","dir":true}]}""" }
+            fake.on("GET /api/worktree?task=vm%3AAPI-2&what=dir") { 200 to """{"root":"vm:/srv/api/.herdr/worktrees/api/task-2","entries":[]}""" }
+            fake.on("GET /api/worktree?task=DEMO-7&what=dir") { 200 to """{"error":"This task's folder can't be read. It may have been removed after the task finished."}""" }
+            fake.on("GET /api/worktree?task=DEMO-4&what=pr") {
+                200 to """{"pr":{"number":212,"title":"Quiet hours","state":"open","url":"https://github.com/o/r/pull/212","head":"task/4","base":"main","add":120,"del":8,"files":6,
+                    "checks":[{"name":"build","state":"fail","url":"https://github.com/o/r/runs/1","workflow":"Check"},{"name":"lint","state":"pending"},{"name":"test","state":"pass"},{"name":"docs","state":"pass"}]}}"""
+            }
+            fake.on("GET /api/worktree?task=DEMO-7&what=pr") { 200 to """{"why":"This task has no pull request."}""" }
+            val forward = PortForward("127.0.0.1", 7788, preferred = 0) { _, _ -> fake.channel() }
+            val board = V2WorkBoard(ShepherdrClient(ForwardTransport.over(forward, "t0k")), "3.1.2")
+            fun task(id: String) = com.makefunstuff.herdr.core.board.WorkTask(id, id.substringAfter(':'), "", "", com.makefunstuff.herdr.core.board.WorkStatus.Ready)
+
+            assertEquals(TaskFolder("~/.herdr/worktrees/demo/task-4"), board.folder(task("DEMO-4")))
+            // Another machine's task: its folder there, and which machine.
+            assertEquals(TaskFolder("/srv/api/.herdr/worktrees/api/task-2", "vm"), board.folder(task("vm:API-2")))
+            assertEquals(
+                "This task's folder can't be read. It may have been removed after the task finished.",
+                assertFailsWith<IOException> { board.folder(task("DEMO-7")) }.message,
+            )
+
+            val pr = board.pullRequest(task("DEMO-4")).pr!!
+            assertEquals(212, pr.number)
+            assertEquals("Open", Worktree.state(pr.state))
+            assertEquals("1 failed · 1 running · 2 passed", Worktree.checksLine(pr.checks))
+            assertEquals("Check", pr.checks.first().workflow)
+            assertEquals("6 files", Worktree.filesCount(pr.files!!))
+            assertEquals(Worktree.NO_PR, board.pullRequest(task("DEMO-7")).why)
+        }
+    }
 
     @Test
     fun theBoardOverASshStylePortForward() = runBlocking {

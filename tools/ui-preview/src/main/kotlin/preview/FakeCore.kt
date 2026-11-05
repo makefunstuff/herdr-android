@@ -150,14 +150,16 @@ class FakeCore(
             /** Its labels as they are, in place of the desktop app's (Shepherdr's own). */
             labels: Map<String, String>? = null,
             parent: String? = null,
+            /** Its program's process: each terminal its own, as the app finds an agent's transcript from it. */
+            pid: Int = 4300 + (address.drop(1).toIntOrNull() ?: 0),
         ): JsonObject = obj(
             "address" to address, "argv" to JsonArray(argv.map(::JsonPrimitive)), "cols" to 120, "rows" to 40,
             "created_ms" to created, "cwd" to cwd, "exit_code" to null,
-            "foreground" to obj("argv" to arr(foreground), "cwd" to cwd, "name" to foreground, "pid" to 4300),
+            "foreground" to obj("argv" to arr(foreground), "cwd" to cwd, "name" to foreground, "pid" to pid),
             "labels" to if (labels != null) JsonObject(labels.mapValues { JsonPrimitive(it.value) }) else if (space != null && tab != null) obj(
                 "herdr.space" to space.first, "herdr.tab" to tab.first, "where" to "${space.second} / ${tab.second}",
             ) else obj(),
-            "name" to name, "parent" to parent, "pid" to 4300, "reported" to (status != null), "state" to "live",
+            "name" to name, "parent" to parent, "pid" to pid, "reported" to (status != null), "state" to "live",
             "status" to status, "status_ms" to statusMs, "title" to title, "turn" to turn,
         )
     }

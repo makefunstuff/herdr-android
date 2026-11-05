@@ -447,7 +447,8 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
     stick.SentWith(voice.notes.map { it.id })
     // What happened since the chat was last on screen, until hidden or until you write.
     val away = remember(state.turns, since, back, ahead, live) {
-        AwaySummary.of(state.turns, since + ahead, back + ahead, live != null)
+        // Never looked at (0) stays 0: a machine clock ahead of the phone's must not make it a time in 1970.
+        AwaySummary.of(state.turns, if (since > 0) since + ahead else 0, back + ahead, live != null)
     }?.takeIf { !awayHidden && state.source == AgentChat.Source.Transcript }
 
     val imeUp = WindowInsets.isImeVisible

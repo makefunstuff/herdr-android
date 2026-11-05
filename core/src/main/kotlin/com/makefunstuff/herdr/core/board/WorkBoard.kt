@@ -2,11 +2,13 @@ package com.makefunstuff.herdr.core.board
 
 import com.makefunstuff.herdr.core.shepherdr.AutopilotSettings
 import com.makefunstuff.herdr.core.shepherdr.Recipe
+import com.makefunstuff.herdr.core.shepherdr.TaskFolder
 import com.makefunstuff.herdr.core.shepherdr.V2Artifact
 import com.makefunstuff.herdr.core.shepherdr.V2Chat
 import com.makefunstuff.herdr.core.shepherdr.V2Evidence
 import com.makefunstuff.herdr.core.shepherdr.V2Need
 import com.makefunstuff.herdr.core.shepherdr.V2Pilot
+import com.makefunstuff.herdr.core.shepherdr.V2PrAnswer
 import com.makefunstuff.herdr.core.shepherdr.V2Question
 import com.makefunstuff.herdr.core.shepherdr.VoiceCall
 import kotlinx.coroutines.delay
@@ -200,6 +202,12 @@ interface WorkBoard {
 
     /** What the Accept card shows of a Ready [task]: its summary, changes, checks and proof. */
     suspend fun evidence(task: WorkTask): V2Evidence = throw IOException("This board has no Accept card")
+
+    /** Where [task] works: its worktree, else its list's folder (the task view's Files and Changes read it). */
+    suspend fun folder(task: WorkTask): TaskFolder = throw IOException("This board doesn't say where a task works")
+
+    /** [task]'s pull request with its checks, as GitHub says it now (the task view's Pull request). */
+    suspend fun pullRequest(task: WorkTask): V2PrAnswer = throw IOException("This board doesn't read pull requests")
 
     /** Marks [task] done with nothing merged; refused while it holds work main lacks. */
     suspend fun close(task: WorkTask): String

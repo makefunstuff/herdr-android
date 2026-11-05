@@ -80,6 +80,7 @@ class FakeShepherdr(
             path == "/api/health" -> 200 to """{"ok":true,"version":"$version","core":true,"jobs":true,"serving":true}"""
             path == "/api/action" && method == "POST" -> act(Json.parseToJsonElement(stdin).jsonObject)
             path.startsWith("/api/artifacts/") && "/recipe" in path -> recipe(path.removePrefix("/api/artifacts/").substringBefore('/'))
+            path.startsWith("/api/worktree?") -> worktree(path.substringAfter('?'))
             else -> 404 to """{"error":"not found"}"""
         }
         return CommandResult(0, "$body\n@@shepherdr-status@@$status", "")
@@ -92,6 +93,32 @@ class FakeShepherdr(
     private fun recipe(id: String): Pair<Int, String> {
         if (id !in artifacts()) return 404 to """{"error":"No recipe here."}"""
         return 200 to (DemoArtifacts.RECIPES[id] ?: return 404 to """{"error":"No recipe here."}""")
+    }
+
+    /**
+     * `/api/worktree?task=…&what=…`, the task view's Files, Changes and Pull request: a task with a branch works in
+     * the fake machine's task worktree ([FakeCode.TASK], on its branch); one without has no folder left. Its pull
+     * request has passed its checks but one, skipped.
+     */
+    private fun worktree(query: String): Pair<Int, String> {
+        val q = query.split('&').associate { it.substringBefore('=') to java.net.URLDecoder.decode(it.substringAfter('='), "UTF-8") }
+        val t = task(q["task"].orEmpty()) ?: return 404 to """{"error":"No such task."}"""
+        return when (q["what"]) {
+            "dir" -> if (t["branch"] == null) 200 to """{"error":"This task's folder can't be read. It may have been removed after the task finished."}"""
+            else 200 to """{"root":"${FakeCode.TASK}","entries":[]}"""
+            "pr" -> {
+                val pr = t["pr"]?.jsonObject ?: return 200 to """{"why":"This task has no pull request."}"""
+                200 to """
+                    {"pr":{"number":${pr["number"]},"title":${t["name"]},"state":"open","url":${pr["url"]},"head":"work/9-last-answered","base":"main",
+                      "add":86,"del":21,"files":4,"checks":[
+                        {"name":"build","state":"pass","url":"${pr["url"]?.jsonPrimitive?.content}/checks","workflow":"Check"},
+                        {"name":"unit tests","state":"pass","url":"${pr["url"]?.jsonPrimitive?.content}/checks","workflow":"Check"},
+                        {"name":"screens","state":"pass","url":"${pr["url"]?.jsonPrimitive?.content}/checks","workflow":"Android"},
+                        {"name":"release notes","state":"skip","workflow":"Release"}]}}
+                """.trimIndent()
+            }
+            else -> 400 to """{"error":"Ask for dir, marks, files, file, diff, patch or pr."}"""
+        }
     }
 
     private fun act(a: JsonObject): Pair<Int, String> {

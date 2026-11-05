@@ -193,6 +193,21 @@ class ShepherdrClient(private val transport: ShepherdrTransport) {
     suspend fun evidence(task: String): V2Evidence =
         ShepherdrJson.decodeFromJsonElement(V2Evidence.serializer(), act(V2Actions.evidence(task)))
 
+    /** Where [task] works ([Worktree.folderOf]), as the web app's Files reads it (`GET /api/worktree?what=dir`). */
+    suspend fun taskFolder(task: String): TaskFolder {
+        val d = ShepherdrJson.decodeFromJsonElement(V2TaskDir.serializer(), worktree(task, "dir"))
+        d.error?.let { throw IOException(it) }
+        return Worktree.folderOf(task, d.root?.takeIf { it.isNotEmpty() } ?: throw IOException(Worktree.NO_FOLDER))
+    }
+
+    /** [task]'s pull request and its checks, gh asked on its machine (`GET /api/worktree?what=pr`). */
+    suspend fun taskPr(task: String): V2PrAnswer =
+        ShepherdrJson.decodeFromJsonElement(V2PrAnswer.serializer(), worktree(task, "pr"))
+
+    /** A task's worktree as the web app's Files, Changes and Pull request read it: git and gh run on the task's machine. */
+    private suspend fun worktree(task: String, what: String): JsonObject =
+        ok(transport.http("GET", "/api/worktree?" + query("task" to task, "what" to what), timeoutMs = 75_000))
+
     /**
      * Keeps a file on the service's machine for a message (`POST /api/upload`, where the Herdr window keeps pasted
      * ones): its path, to send with a message ([V2Actions.send]'s attachments). An agent on another machine gets a copy.

@@ -320,7 +320,7 @@ internal fun WorkBoardScreen(
         // A task with an agent opens as its agent's chat; one not started yet as its details.
         if (openId != null && open != null && open.chat.isNotEmpty()) {
             TaskChatScreen(
-                session, machineId, open, space = spaceName(open.space), busy = busy,
+                nav, session, machineId, open, space = spaceName(open.space), busy = busy,
                 onBack = { if (alone && openId == openTask) nav.popBackStack() else openId = null },
                 backEnabled = true,
                 onMerge = { merge(open) },

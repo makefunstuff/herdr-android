@@ -32,7 +32,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.navigation.NavController
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -60,7 +62,6 @@ import com.makefunstuff.herdr.ui.common.LocalContainer
 import com.makefunstuff.herdr.ui.common.MarkdownText
 import com.makefunstuff.herdr.ui.common.detail
 import com.makefunstuff.herdr.ui.common.label
-import com.makefunstuff.herdr.ui.common.openUrl
 import com.makefunstuff.herdr.ui.common.rememberDraft
 import com.makefunstuff.herdr.ui.common.toast
 import com.makefunstuff.herdr.ui.coordinator.ChatEmpty
@@ -113,10 +114,13 @@ private enum class TaskSheet { Menu, Said, Brief, Plan, Facts }
  * A Shepherdr 3 task as its agent's chat, as Shepherdr's own web UI has it: the task's chat live (its
  * agent's words, each turn's steps folded to a line, its question cards answered here), a strip under
  * the bar with where it stands, its pull request and the one thing it waits for (Merge), and a composer
- * to its agent. What it did, its brief, plan and facts, and Close, are in ⋯.
+ * to its agent. Under the strip, 3.1's task view tabs: Chat, then its folder's Files and Changes and its
+ * Pull request with its checks ([TaskView]), each in the chat's place. What it did, its brief, plan and
+ * facts, and Close, are in ⋯.
  */
 @Composable
 internal fun TaskChatScreen(
+    nav: NavController,
     session: HostSession,
     machineId: String,
     t: WorkTask,
@@ -138,6 +142,9 @@ internal fun TaskChatScreen(
     val scope = rememberCoroutineScope()
     val state by session.state.collectAsStateWithLifecycle()
     var sheet by remember(t.id) { mutableStateOf<TaskSheet?>(null) }
+    // Its chat, or the tab picked under its bar in its place (Files, Changes, Pull request), as 3.1's task view.
+    var picked by rememberSaveable(t.id) { mutableStateOf(TaskView.Chat) }
+    val view = picked.takeIf { it in taskViews(t) } ?: TaskView.Chat
     // The board its artifact cards read their pictures through.
     var board by remember { mutableStateOf<WorkBoard?>(null) }
     LaunchedEffect(state.online) {
@@ -146,7 +153,7 @@ internal fun TaskChatScreen(
             if (board == null) kotlinx.coroutines.delay(5_000)
         }
     }
-    BackHandler(enabled = backEnabled && sheet == null, onBack = onBack)
+    BackHandler(enabled = backEnabled && sheet == null, onBack = { if (view != TaskView.Chat) picked = TaskView.Chat else onBack() })
 
     // Its brief, plan and facts: read when it opens (again until that works), and when the board says it changed.
     var details by remember(t.id) { mutableStateOf<WorkTaskDetails?>(null) }
@@ -291,11 +298,17 @@ internal fun TaskChatScreen(
                         )
                         BarIcon(HerdrIcons.Ellipsis, "Details and more", { sheet = TaskSheet.Menu })
                     }
-                    TaskStrip(t, details, busy, onMerge, onPr = { context.openUrl(t.pr) })
+                    TaskStrip(t, details, busy, onMerge, onPr = { picked = TaskView.PullRequest })
+                    TaskViewTabs(t, view) { picked = it }
                 }
             },
         ) { padding ->
-            Column(Modifier.padding(top = padding.calculateTopPadding()).fillMaxSize().imePadding().navigationBarsPadding()) {
+            if (view != TaskView.Chat) Box(Modifier.padding(top = padding.calculateTopPadding()).fillMaxSize().navigationBarsPadding()) {
+                when (view) {
+                    TaskView.Files, TaskView.Changes -> TaskCode(nav, session, machineId, t, view)
+                    else -> TaskPullRequest(session, t)
+                }
+            } else Column(Modifier.padding(top = padding.calculateTopPadding()).fillMaxSize().imePadding().navigationBarsPadding()) {
                 val sizes by container.textSizes.state.collectAsStateWithLifecycle()
                 ChatSurface(
                     Modifier.weight(1f).fillMaxWidth(),
@@ -399,7 +412,6 @@ internal fun TaskChatScreen(
                     if (!d?.plan.isNullOrEmpty()) MenuRow("Plan", HerdrIcons.ListChecks, { sheet = TaskSheet.Plan })
                     if (!d?.facts.isNullOrEmpty() || !d?.branch.isNullOrEmpty()) MenuRow("Facts", HerdrIcons.Info, { sheet = TaskSheet.Facts })
                     if (onArtifacts != null) MenuRow("Artifacts", HerdrIcons.LayoutDashboard, { sheet = null; onArtifacts() })
-                    if (t.pr.isNotEmpty()) MenuRow("Pull request" + (prNumberOf(t.pr)?.let { " #$it" } ?: ""), HerdrIcons.GitPullRequest, { sheet = null; context.openUrl(t.pr) })
                     if (d == null) LoadingState("Reading the task")
                     if (canClose) MenuRow("Close, nothing merged…", HerdrIcons.CircleStop, { sheet = null; onClose() }, enabled = busy == null, destructive = true)
                 }

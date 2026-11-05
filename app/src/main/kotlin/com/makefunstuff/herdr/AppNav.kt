@@ -79,8 +79,6 @@ import com.makefunstuff.herdr.ui.brief.BriefScreen
 import com.makefunstuff.herdr.ui.brief.BriefSettingsScreen
 import com.makefunstuff.herdr.ui.code.CheckoutScreen
 import com.makefunstuff.herdr.ui.code.CheckoutTab
-import com.makefunstuff.herdr.ui.code.CodeMachinesScreen
-import com.makefunstuff.herdr.ui.code.CodeReposScreen
 import com.makefunstuff.herdr.ui.code.CodeSpot
 import com.makefunstuff.herdr.ui.code.CommitScreen
 import com.makefunstuff.herdr.ui.code.DiffScreen
@@ -167,9 +165,7 @@ object Routes {
     const val LOGINS = "logins/{mid}"
     /** From outside the app (the tile, the widgets, a share): see [com.makefunstuff.herdr.ui.share.Ask]. */
     const val ASK = "ask/{to}"
-    /** The code on the machines: which machine, then its repositories and checkouts; then one checkout and what is in it. */
-    const val CODE = "code"
-    const val CODE_REPOS = "code/{mid}"
+    /** One checkout on a machine and what is in it (a task's or an agent's folder): its files, changes and history. */
     const val CODE_AT = "code/{mid}/at?${CodeSpot.ARGS}&tab={tab}"
     const val CODE_FILE = "code/{mid}/file?${CodeSpot.ARGS}&path={path}&line={line}"
     const val CODE_SEARCH = "code/{mid}/search?${CodeSpot.ARGS}&q={q}"
@@ -206,7 +202,6 @@ object Routes {
     fun usage(mid: String) = "usage/$mid"
     fun autopilot(mid: String) = "settings/autopilot/$mid"
     fun logins(mid: String) = "logins/$mid"
-    fun codeRepos(mid: String) = "code/$mid"
     fun codeAt(spot: CodeSpot, tab: CheckoutTab? = null) = "code/${spot.machine}/at?${spot.query()}" + (tab?.let { "&tab=${it.name}" } ?: "")
     fun codeFile(spot: CodeSpot, path: String, line: Int? = null) =
         "code/${spot.machine}/file?${spot.query()}&path=${Uri.encode(path)}" + (line?.let { "&line=$it" } ?: "")
@@ -373,8 +368,6 @@ internal fun NavGraphBuilder.screens(nav: NavHostController, tasks: @Composable 
         BoardScreen(nav, it.arguments?.getString("mid").orEmpty(), it.arguments?.getString("task")?.let(Uri::decode), alone = it.arguments?.getString("alone") == "1")
     }
     composable(Routes.ASK) { AskScreen(nav, it.arguments?.getString("to").orEmpty()) }
-    composable(Routes.CODE) { CodeMachinesScreen(nav) }
-    composable(Routes.CODE_REPOS) { CodeReposScreen(nav, it.arguments?.getString("mid").orEmpty()) }
     composable(Routes.CODE_AT) {
         val tab = CheckoutTab.entries.firstOrNull { t -> t.name == it.arguments?.getString("tab") } ?: CheckoutTab.Files
         CheckoutScreen(nav, it.codeSpot(), tab)
