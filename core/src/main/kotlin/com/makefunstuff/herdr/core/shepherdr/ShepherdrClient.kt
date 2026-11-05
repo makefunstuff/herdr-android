@@ -149,6 +149,12 @@ object V2Actions {
         put("place", place)
     }
 
+    /** A shell as a new tab of [place], in its folder (`tab-new` with no agent): the + menu's Terminal. */
+    fun tabNew(place: String): JsonObject = buildJsonObject {
+        put("type", "tab-new")
+        put("place", place)
+    }
+
     /** Names tab [tab] (the window's tab id), or the Assistant's tab of [place] when it has no id yet; empty unnames it. */
     fun tabRename(tab: String?, place: String?, name: String): JsonObject = buildJsonObject {
         put("type", "tab-rename")

@@ -163,6 +163,26 @@ fun SceneData.shepherdr3Tabs() {
     )
 }
 
+/**
+ * [shepherdr3], where the + menu's Terminal opens a shell (`hc:t9`) as a new tab of the space, as Shepherdr's window
+ * does; AND-19's worker shows its screen in its terminal.
+ */
+fun SceneData.shepherdr3Terminals() {
+    shepherdr3()
+    val core = host(Demo.DEVBOX).core!!
+    core.screens = core.screens + ("t1" to Demo.resource("screen-claude-app.txt")) + ("t4" to Demo.resource("screen-claude-api.txt"))
+    host(Demo.DEVBOX).shepherdr!!.onNewTerminal = { place ->
+        val prompt = "\u001b[1;32mdemo@devbox\u001b[0m:\u001b[1;34m~/src/herdr-android\u001b[0m$ "
+        core.create(
+            FakeCore.terminal(
+                "t9", listOf("zsh"), "/home/demo/src/herdr-android", Demo.NOW,
+                labels = mapOf("herdr.space" to place, "herdr.tab" to "tb-shell", "where" to "herdr-android / Terminal"),
+            ),
+            screen = prompt,
+        )
+    }
+}
+
 /** devbox runs the desktop app's herdr-core next to classic herdr; mac-mini runs only the desktop app. */
 fun SceneData.desktopApp() {
     host(Demo.DEVBOX).core = DemoCore.devbox()

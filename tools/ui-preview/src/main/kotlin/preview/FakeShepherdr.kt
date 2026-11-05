@@ -31,6 +31,9 @@ class FakeShepherdr(
     /** The bodies of `POST /api/action`, as sent. */
     val actions = ArrayList<JsonObject>()
 
+    /** The + menu's Terminal (`tab-new` with no agent) on space [place]: what the window opens. */
+    var onNewTerminal: (place: String) -> Unit = {}
+
     /** A `curl` to its API or the `bun` that reads the snapshot or a chat; null for any other command. */
     fun run(command: String, stdin: String): CommandResult? {
         val w = Shell.words(command)
@@ -189,6 +192,7 @@ class FakeShepherdr(
             }
             // The tab menu: Switch agent's list, the model menu, the Assistant's workers before it closes.
             "tab-agents" -> return 200 to DemoV2.TAB_AGENTS
+            "tab-new" -> if (a["kind"] == null) onNewTerminal(a.getValue("place").jsonPrimitive.content)
             "model-menu" -> return 200 to """{"ok":true,"menu":${DemoV2.MODEL_MENU}}"""
             "assistant-close" -> if (a["mode"]?.jsonPrimitive?.content == "count") return 200 to """{"ok":true,"workers":4}"""
             // Accepted: it merges.

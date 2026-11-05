@@ -27,6 +27,7 @@ import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performScrollToIndex
@@ -327,6 +328,9 @@ fun ComposeUiTest.tapText(text: String) { tap(node(hasText(text, substring = tru
 
 /** Taps the first element showing exactly [text] (a button, where a longer line also starts with its words). */
 fun ComposeUiTest.tapExact(text: String) { tap(node(hasText(text, substring = false))) }
+
+/** Taps the last element showing exactly [text] (a menu's lower row of the same words). */
+fun ComposeUiTest.tapLastExact(text: String) { tap(onAllNodes(hasText(text, substring = false), useUnmergedTree = true).onLast()) }
 
 /** Taps the first element whose content description (an icon button's label) is [label]. */
 fun ComposeUiTest.tapLabel(label: String) { tap(node(hasContentDescription(label))) }

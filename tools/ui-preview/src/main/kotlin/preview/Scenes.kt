@@ -133,6 +133,12 @@ private fun FakeMachine.v2Says(chat: String, id: String, text: String) {
 }
 
 /** Lets a chat read the machine again (the Coordinators read every few seconds). */
+/** [waitForRead] where what it waits for then opens a screen: the clock moves on the UI thread, where navigation must happen. */
+private fun androidx.compose.ui.test.ComposeUiTest.waitThenOpen(seconds: Int = 4) {
+    repeat(seconds * 4) { runOnUiThread { mainClock.advanceTimeBy(200) }; Thread.sleep(250) }
+    settle()
+}
+
 private fun androidx.compose.ui.test.ComposeUiTest.waitForRead(seconds: Int = 9) = repeat(seconds * 2) { Thread.sleep(500); settle(1) }
 
 /** The shell's test run selected, and what herdr reads for it. */
@@ -298,6 +304,14 @@ fun scenes(): List<Scene> = listOf(
     Scene("tab-model", route = Routes.agent(DEVBOX, "hc:t8"), setup = { shepherdr3Tabs() }, actions = { tapLabel("More"); tapExact("Model…") }),
     Scene("tab-model-change", route = Routes.agent(DEVBOX, "hc:t8"), setup = { shepherdr3Tabs() }, actions = { tapLabel("More"); tapExact("Model…"); tapExact("Sonnet 5.5") }),
     Scene("tab-close", route = Routes.agent(DEVBOX, "hc:t8"), setup = { shepherdr3Tabs() }, actions = { tapLabel("More"); tapExact("Close tab") }),
+    // Every herdr-core terminal opens: a task's from its chat's ⋯, the Assistant's from its bar (outside the Chat tab) or
+    // the space menu's Show, a new shell from the space menu's New.
+    Scene("task-terminal-menu", route = Routes.board(DEVBOX, "AND-19"), setup = { shepherdr3Terminals() }, actions = { tapLabel("Details and more") }),
+    Scene("task-terminal", route = Routes.board(DEVBOX, "AND-19"), setup = { shepherdr3Terminals() }, actions = { tapLabel("Details and more"); tapExact("Terminal") }),
+    Scene("assistant-terminal", route = Routes.coordinator(DEVBOX, DemoV2.APP), setup = { shepherdr3Terminals() }),
+    Scene("chat-tab-terminal-menu", route = Routes.CHAT, heightDp = 1900, setup = { shepherdr3Terminals() }, actions = { tapLabel("Tabs and new") }),
+    Scene("assistant-terminal-open", route = Routes.CHAT, setup = { shepherdr3Terminals() }, actions = { tapLabel("Tabs and new"); tapExact("Terminal") }),
+    Scene("new-terminal", route = Routes.CHAT, heightDp = 1900, setup = { shepherdr3Terminals() }, actions = { tapLabel("Tabs and new"); tapLastExact("Terminal"); waitThenOpen() }),
     Scene("task-shepherdr3", route = Routes.board(DEVBOX, "AND-19"), setup = { shepherdr3() }),
     // Its chat not read yet (or not readable): the composer is whole and writable all the same; and attaching a file.
     Scene("task-shepherdr3-unread", route = Routes.board(DEVBOX, "AND-19"), setup = { shepherdr3(); host(DEVBOX).shepherdr?.chatRefused = "Couldn't read the chat" }),

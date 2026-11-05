@@ -332,6 +332,9 @@ interface WorkBoard {
     /** The agents a tab of [space] can switch to ([TabMenus.switchChoices]). */
     suspend fun tabAgents(space: String): List<WorkAgentChoice> = throw IOException(NO_TABS)
 
+    /** Opens a shell as a new tab of [space], in its folder: the + menu's Terminal. */
+    suspend fun newTerminal(space: String): Unit = throw IOException(NO_TABS)
+
     /** Names [tab] of [space] [name]; an empty name unnames it. */
     suspend fun renameTab(space: String, tab: WorkTab, name: String): Unit = throw IOException(NO_TABS)
 

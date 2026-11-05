@@ -196,6 +196,10 @@ class V2WorkBoard(private val connect: suspend () -> ShepherdrClient, private va
         }
     }
 
+    override suspend fun newTerminal(space: String) {
+        connect().act(V2Actions.tabNew(space))
+    }
+
     override suspend fun renameTab(space: String, tab: WorkTab, name: String) {
         connect().act(V2Actions.tabRename(tab.id, space.takeIf { tab.id == null }, name.trim().take(80)))
     }
