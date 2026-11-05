@@ -63,6 +63,10 @@ class V2WorkBoard(private val connect: suspend () -> ShepherdrClient, private va
 
     override suspend fun evidence(task: WorkTask): V2Evidence = connect().evidence(task.id)
 
+    override suspend fun folder(task: WorkTask): TaskFolder = connect().taskFolder(task.id)
+
+    override suspend fun pullRequest(task: WorkTask): V2PrAnswer = connect().taskPr(task.id)
+
     /** Done with nothing merged (`herdr-task done`), by its chat key as the task's row menu sends it. */
     override suspend fun close(task: WorkTask): String {
         val o = connect().actRaw(V2Actions.close(task.chat.ifEmpty { V2Board.workerChat(task.id) }))

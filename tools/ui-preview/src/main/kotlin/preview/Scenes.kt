@@ -584,6 +584,16 @@ fun scenes(): List<Scene> = listOf(
     Scene("task-v2-steps", route = Routes.board(DEVBOX, "AND-21"), setup = { v2() }, actions = { tapText("Worked for") }),
     Scene("task-v2-reply", route = Routes.board(DEVBOX, "AND-20"), setup = { v2() }, actions = { type("Make the limit 20 for the enterprise plan"); tapLabel("Send") }),
     // One not started yet has no chat: its details, with Close in ⋯ and nothing under the thumb.
+    // 3.1's task view tabs: the task's worktree's Files and Changes (a file opens full screen, where chosen lines go to
+    // the task's agent), its pull request with its checks, and a task whose folder is gone.
+    Scene("task-v2-files", route = Routes.board(DEVBOX, "AND-20"), setup = { v2() }, actions = { tapText("FILES") }),
+    Scene("task-v2-changes", route = Routes.board(DEVBOX, "AND-20"), setup = { v2() }, actions = { tapText("CHANGES") }),
+    Scene("task-v2-pr", route = Routes.board(DEVBOX, "AND-20"), setup = { v2() }, actions = { tapText("PULL REQUEST") }),
+    Scene(
+        "task-v2-comment", route = Routes.codeFile(CodeSpot(DEVBOX, FakeCode.TASK, task = "AND-20", taskName = "AND-20"), CARD, line = 33), setup = { v2() },
+        actions = { tapLabel("line 37"); tapLabel("line 38"); tapText("Comment"); type("Say when it was last answered, not when it was read.") },
+    ),
+    Scene("task-v2-no-folder", route = Routes.board(DEVBOX, "AND-18"), setup = { v2() }, actions = { tapText("FILES") }),
     Scene("task-v2-todo", route = Routes.board(DEVBOX, "AND-23"), setup = { v2() }),
     Scene("task-v2-todo-menu", route = Routes.board(DEVBOX, "AND-23"), setup = { v2() }, actions = { tapLabel("More") }),
     Scene("board-v2-add", route = Routes.board(DEVBOX), setup = { v2() }, actions = { tapLabel("Add a task") }),
@@ -624,12 +634,10 @@ fun scenes(): List<Scene> = listOf(
     Scene("brief-settings", route = Routes.BRIEF_SETTINGS, heightDp = 1100, setup = { brief = Demo.brief() }),
     Scene("brief-add-time", route = Routes.BRIEF_SETTINGS, setup = { brief = Demo.brief() }, actions = { tapText("Add a time") }),
 
-    // The code on the machines: which machine, a machine's repositories and checkouts (the agents at work in each);
-    // task AND-9's worktree: its files, Go to file, a file, two lines chosen and a comment on them, the view's
-    // settings, wrapped at a larger size, a Markdown file as it reads; its changes against main and one file's diff;
-    // its history and a commit; a search across it; the comments kept to send together.
-    Scene("code-machines", route = Routes.CODE),
-    Scene("code-repos", route = Routes.codeRepos(DEVBOX)),
+    // The code in a checkout, reached from a task's view or an agent's or a workspace's menu: task AND-9's worktree:
+    // its files, Go to file, a file, two lines chosen and a comment on them, the view's settings, wrapped at a larger
+    // size, a Markdown file as it reads; its changes against main and one file's diff; its history and a commit; a
+    // search across it; the comments kept to send together.
     Scene("code-files", route = Routes.codeAt(TASK_CODE)),
     Scene("code-goto", route = Routes.codeAt(TASK_CODE), actions = { type("mcard") }),
     Scene("code-file", route = Routes.codeFile(TASK_CODE, CARD)),
