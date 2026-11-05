@@ -97,7 +97,6 @@ import com.makefunstuff.herdr.ui.design.StatusBadge
 import com.makefunstuff.herdr.ui.theme.CodeStyle
 import com.makefunstuff.herdr.ui.theme.Herdr
 import com.makefunstuff.herdr.ui.theme.Space
-import com.makefunstuff.herdr.ui.worktrees.shortPath
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -550,3 +549,6 @@ private fun Busy(words: String) {
         Text(words, style = MaterialTheme.typography.bodySmall, color = c.muted, modifier = Modifier.padding(top = Space.xs))
     }
 }
+
+/** A home-relative path, shorter on a phone screen. */
+private fun String.shortPath(): String = replace(Regex("^/(home|Users)/[^/]+"), "~")

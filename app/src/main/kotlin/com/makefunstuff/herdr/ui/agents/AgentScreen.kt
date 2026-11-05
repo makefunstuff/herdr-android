@@ -51,8 +51,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.makefunstuff.herdr.Routes
 import com.makefunstuff.herdr.ui.code.CodeSpot
-import com.makefunstuff.herdr.ui.quick.QuickPlace
-import com.makefunstuff.herdr.ui.quick.QuickSheets
 import com.makefunstuff.herdr.bubble.BubbleChat
 import com.makefunstuff.herdr.bubble.LocalBubble
 import com.makefunstuff.herdr.ui.common.rememberFloat
@@ -183,7 +181,6 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
     var sending by remember { mutableStateOf(false) }
     var showKeys by rememberSaveable { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
-    var quick by remember { mutableStateOf<QuickPlace?>(null) }
     val listState = rememberLazyListState()
     val stick = rememberStickToBottom(listState)
     // Pictures for the agent wait in the composer (and are copied to its machine) until the message goes.
@@ -630,19 +627,10 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
             onCode = (agent?.cwd ?: pane?.foregroundCwd ?: pane?.cwd)?.ifBlank { null }?.takeIf { !inBubble }?.let { dir ->
                 { menu = false; nav.navigate(Routes.codeAt(CodeSpot(machineId, dir, pane = paneId))) }
             },
-            // herdr-core reports no session to follow, and quick commands type into classic herdr's panes.
+            // herdr-core reports no session to follow.
             onActivity = if (inBubble || onCore) null else ({ menu = false; nav.navigate(Routes.activity(machineId, pane = paneId)) }),
-            onQuick = if (inBubble || onCore) null else ({
-                menu = false
-                val name = agent?.let { it.name?.takeIf { n -> n.isNotBlank() } ?: it.displayName }
-                quick = QuickPlace(
-                    machineId, (agent?.cwd ?: pane?.foregroundCwd ?: pane?.cwd).orEmpty(), label = name ?: pane?.displayName.orEmpty(),
-                    workspaceId = agent?.workspaceId ?: pane?.workspaceId, pane = paneId, agentName = name,
-                )
-            }),
         )
     }
-    quick?.let { place -> QuickSheets(nav, place, onDismiss = { quick = null }) }
     if (modelSheet) pill?.let { p ->
         val latest by container.usage.latest.collectAsStateWithLifecycle()
         val left = kind?.let { UsageRules.leftFor(it, latest[machineId]?.report, container.usage.nowSeconds(), container.usage.zone()) }

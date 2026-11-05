@@ -88,7 +88,7 @@ fun AlertRulesScreen(nav: NavHostController) {
                 RowDivider(inset = 0.dp)
                 SwitchRow(
                     "Went wrong",
-                    detail = "A review or a check failed, a task or a quick command went wrong. Comes through quiet hours.",
+                    detail = "A review or a check failed, or a task went wrong. Comes through quiet hours.",
                     checked = r.wentWrong,
                 ) { on -> change { it.copy(wentWrong = on) } }
                 RowDivider(inset = 0.dp)

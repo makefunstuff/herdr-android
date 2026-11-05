@@ -33,14 +33,12 @@ data class Alert(
     val agentName: String = "",
     /** A tap opens the machine's health screen (a machine low on RAM or disk). */
     val health: Boolean = false,
-    /** A tap opens this quick command's run (an AI one that ended). */
-    val quickRun: String = "",
     /** A tap opens the machine's usage page (a provider near or at a limit). */
     val usage: Boolean = false,
 ) {
     /**
      * What it is about, which the notification rules ([AlertRules]) switch on and off: something waits
-     * for you, something finished, something went wrong (a quick command failed), a test, a watch you set
+     * for you, something finished, something went wrong (a review or a check failed), a test, a watch you set
      * that fired ([Watch]), or an AI provider near or at a limit.
      */
     enum class Kind { NeedsYou, Finished, WentWrong, Test, Watch, Limits }
@@ -87,7 +85,6 @@ object Alerts {
     fun agentTag(machineId: String, paneId: String) = "agent:$machineId:$paneId"
     fun testTag(machineId: String) = "test:$machineId"
     fun healthTag(machineId: String) = "health:$machineId"
-    fun quickTag(machineId: String, runId: String) = "quick:$machineId:$runId"
     fun usageTag(machineId: String, provider: String, limit: String) = "usage:$machineId:$provider:$limit"
 
     /** The notifications [events] call for; what runs ([PushEvent.Live]) is a Live Update instead (LiveItems). */
@@ -98,7 +95,6 @@ object Alerts {
         is PushEvent.Live -> throw IllegalArgumentException("What runs is a Live Update, not an alert")
         is PushEvent.Agent -> agent(machineId, machineLabel, event)
         is PushEvent.Health -> health(machineId, machineLabel, event.report)
-        is PushEvent.Quick -> quick(machineId, machineLabel, event)
         is PushEvent.Usage -> usage(machineId, machineLabel, event)
         PushEvent.Test -> AlertChange.Show(
             Alert(
@@ -194,47 +190,6 @@ object Alerts {
                 health = true,
             ),
         )
-    }
-
-    /**
-     * An AI quick command that ended: what it answered (its first line), or why it stopped. One that
-     * was stopped by hand says nothing; it is the same run's notification each time it is told.
-     */
-    fun quick(machineId: String, machineLabel: String, e: PushEvent.Quick): AlertChange {
-        val tag = quickTag(machineId, e.id)
-        val answer = com.makefunstuff.herdr.core.quick.QuickText.line(e.text)
-        val (title, text) = when (e.state) {
-            "done" -> "${e.name} is done" to answer.ifEmpty { "Its answer is ready" }
-            "failed" -> "${e.name} failed" to e.error.ifEmpty { "It stopped with an error" }
-            "limit" -> "${e.name} stopped at its limit" to e.error.ifEmpty { answer }
-            else -> return AlertChange.Clear(tag)
-        }
-        val folder = e.cwd.trimEnd('/').substringAfterLast('/')
-        return AlertChange.Show(
-            Alert(
-                tag = tag,
-                sig = "quick:${e.state}",
-                kind = if (e.state == "done") Alert.Kind.Finished else Alert.Kind.WentWrong,
-                machineId = machineId,
-                title = title,
-                text = text,
-                detail = listOf(e.text.trim().take(600).ifEmpty { text }, listOf(machineLabel, folder).filter { it.isNotEmpty() }.joinToString(" · "))
-                    .joinToString("\n"),
-                quickRun = e.id,
-            ),
-        )
-    }
-
-    /** [Alerts.quick] for a run the app read itself (its own look while closed, or a run it showed); null for a script's or one not ended. */
-    fun quickRun(machineId: String, machineLabel: String, run: com.makefunstuff.herdr.core.quick.QuickRun): AlertChange? {
-        if (run.kind != com.makefunstuff.herdr.core.quick.QuickKind.Prompt) return null
-        val state = when (run.state) {
-            com.makefunstuff.herdr.core.quick.RunState.Done -> "done"
-            com.makefunstuff.herdr.core.quick.RunState.Failed -> "failed"
-            com.makefunstuff.herdr.core.quick.RunState.Limit -> "limit"
-            else -> return null
-        }
-        return quick(machineId, machineLabel, PushEvent.Quick(run.id, run.name, state, run.preview, run.error, run.cwd))
     }
 
     /**

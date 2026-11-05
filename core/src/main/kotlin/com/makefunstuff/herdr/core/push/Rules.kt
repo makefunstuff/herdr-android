@@ -14,9 +14,9 @@ import kotlinx.serialization.Serializable
 data class AlertRules(
     /** An agent asks something, a machine runs low. */
     val needsYou: Boolean = true,
-    /** An agent finished its turn, an AI quick command is done. */
+    /** An agent finished its turn. */
     val finished: Boolean = false,
-    /** A quick command failed. */
+    /** A review or a check failed, or a task went wrong. */
     val wentWrong: Boolean = true,
     /** An AI provider near (80%, 95%) or at a limit. */
     val limits: Boolean = true,

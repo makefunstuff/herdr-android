@@ -41,8 +41,6 @@ class RulesTest {
     fun eachAlertHasItsKind() {
         assertEquals(Alert.Kind.Finished, show(Alerts.of("m1", "devbox", PushEvent.Agent(agent("done"), "api"))).kind)
         assertEquals(Alert.Kind.NeedsYou, show(Alerts.of("m1", "devbox", PushEvent.Agent(agent("blocked"), "api"))).kind)
-        assertEquals(Alert.Kind.WentWrong, show(Alerts.of("m1", "devbox", PushEvent.Quick("q1", "Find TODOs", "failed", error = "exit 1"))).kind)
-        assertEquals(Alert.Kind.Finished, show(Alerts.of("m1", "devbox", PushEvent.Quick("q1", "Find TODOs", "done", "3 found"))).kind)
     }
 
     @Test
