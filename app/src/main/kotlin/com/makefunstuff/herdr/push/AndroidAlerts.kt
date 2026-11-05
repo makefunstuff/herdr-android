@@ -41,7 +41,7 @@ class AndroidAlerts(private val context: Context, private val appLock: () -> Boo
                     description = "An agent finished its work"
                 },
                 NotificationChannel(WENT_WRONG, "Went wrong", NotificationManager.IMPORTANCE_HIGH).apply {
-                    description = "A quick command failed"
+                    description = "A review or a check failed"
                 },
                 NotificationChannel(WATCHES, "Watches", NotificationManager.IMPORTANCE_HIGH).apply {
                     description = "A watch you set fired: an agent finished"
@@ -153,7 +153,7 @@ class AndroidAlerts(private val context: Context, private val appLock: () -> Boo
         )
         .build()
 
-    /** A tap: the agent's chat, the machine's health or usage, or a quick command's run. */
+    /** A tap: the agent's chat, or the machine's health or usage. */
     private fun openIntent(alert: Alert): PendingIntent {
         val intent = Intent(context, MainActivity::class.java)
             .setData(Uri.parse("herdr://alert/${Uri.encode(alert.tag)}"))
@@ -161,7 +161,6 @@ class AndroidAlerts(private val context: Context, private val appLock: () -> Boo
             .putExtra(MainActivity.OPEN_PANE, alert.paneId)
             .putExtra(MainActivity.OPEN_HEALTH, alert.health)
             .putExtra(MainActivity.OPEN_USAGE, alert.usage)
-            .putExtra(MainActivity.OPEN_QUICK, alert.quickRun)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         return PendingIntent.getActivity(context, alert.tag.hashCode(), intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
     }

@@ -115,7 +115,7 @@ The folders offered are the ones work was started in from the phone, then the wo
 
 ## Managing from the phone
 
-A machine's screen opens with its places as tiles in one row, each with a live line: **Board** (how many tasks need you, else how many are at work), **Coordinator** (idle, working, waits for you) and **Health**; **Usage** is a line under them (a tile on a machine without the board). Its workspaces follow, each with its branch and pull request under its name and one row per pane: the agent and its state, or the shell and its folder, a tap opening its chat (or terminal) and the terminal icon its terminal. Tab chips and the layout thumbnail show only for a workspace with several tabs. The bar says when the machine last answered ("Online · answered 4 s ago"), and **New** steps aside while you scroll down.
+A machine's screen opens with its places as tiles in one row, each with a live line: **Board** (how many tasks need you, else how many are at work), **Coordinator** (idle, working, waits for you) and **Health**; **Usage** is a line under them (a tile on a machine without the board). Its workspaces follow, each with its branch and pull request under its name and one row per pane: the agent and its state, or the shell and its folder, a tap opening its chat (or terminal) and the terminal icon its terminal. Tab chips and the layout thumbnail show only for a workspace with several tabs. The bar says when the machine last answered ("Online · answered 4 s ago").
 
 Everything that exists in a session is editable from the app, not just readable. A workspace or tab header has an actions button (a workspace's one tab is under its actions, **Its tab**), and panes and agents answer to a long press: rename, focus, reorder, move, swap, zoom, clear a pane's scrollback, read what a pane is running, and ask `agent.explain` why an agent is in the state it shows. Closing a workspace, tab or pane asks first. herdr's own refusals ("There's no pane in that direction.") come back as plain sentences.
 
@@ -123,21 +123,12 @@ The screens follow herdr's `events.subscribe` stream, so a change made anywhere 
 
 ## The terminal
 
-Any pane opens as a live terminal, sized to the phone (**Desktop size** in its **⋯** keeps the host's size and pans).
+Any pane opens as a live terminal, sized to the phone.
 
 - **The key bar** over the keyboard has two rows of keys on a phone: Esc, Tab, ^C, ^R (the shell's history), ^W (delete a word), `|`, `~`, **fn** (a page of F1 to F12, Page Up and Down), Ctrl, Alt, Space and the arrows. Ctrl, Alt and Shift are sticky: a tap holds one for the next key (the bar's or the keyboard's: Ctrl then ← is a word back), a second tap keeps it on (underlined) until a third. **Hold Space and drag** to move the cursor: a cell for each 12 dp across, a line for each 24 dp up or down.
 - **Your own keys.** The pencil at the end of the bar (or **⋯ → Edit key bar…**) lists the bar's keys, each moved earlier or later or taken off, and offers more by kind: modifiers and pages (Shift, the keyboard key), shortcuts (^D, ^Z, ^L, ^A, ^E, ^U, ^K, ^B, Alt+B, Alt+F, Alt+., Shift+Tab), keys (Enter, Backspace, Delete, Home, End, Page Up and Down…) and characters; a tap puts a key on the bar or takes it off. **A shortcut of your own** builds any other: Ctrl, Alt and Shift with a letter, a sign or a key's name (`F5`, `Home`, `Left`). **Back to the first keys** undoes it all. The bar is the phone's, the same in every terminal, and stays through restarts.
 - **Selected text** (a long press, or **⋯ → Select text**, then a drag) gets **Copy**, **Quote in chat** and **Send to Coordinator**. Quoting puts it in a fenced block, with where it came from (`From the terminal (shell on devbox):`), at the end of an agent's message box and opens its chat: the workspace's agent, or the one you pick when there are several. **Send to Coordinator** puts it in the machine's Coordinator chat the same way (on a machine with the board). Nothing is sent until you send it.
 - **Keep screen on** (the sun in the bar, or the **⋯**): the screen stays on while a terminal is open, for a long build or a log you follow. It is kept for every terminal until turned off.
-
-### Dev servers
-
-A workspace's **Dev servers** (in its actions on the machine screen, or a terminal's **⋯**) opens what it serves in an in-app browser through the app's own SSH connection: nothing has to listen on the machine's network, and nothing is installed there.
-
-- **What listens.** The app asks the machine what listens on its TCP ports (`ss -ltnp`, `lsof` on macOS) and which of those processes were started in that workspace, by the `HERDR_WORKSPACE_ID` they inherit from its panes (or, for one started outside herdr, by its folder), as the health probe ties processes to panes. Each shows as a chip with its port and what it is (`:5173 vite`, `:8000 uvicorn`, `:6006 storybook`); those that don't answer HTTP (a Gradle daemon) come last, dimmed, and the machine's other ports are a chip away (**+2 on the machine**). **Refresh** asks again.
-- **Through SSH.** The page is the machine's port forwarded to one on the phone (`ssh -L` over the app's connection, a channel per request), at the same number when it is free there, so a page that names its own port (a dev server's live reload) still finds it. It is only on the phone's own loopback address, and goes when the screen closes. Links that leave the machine open in the phone's browser; **⋯ → Open in the phone's browser** opens the page there too, while the screen is open.
-- **Phone size**, on at first, lays the page out at the phone's width, as a phone would see it; off, at a desktop's (1280 px, zoomed out).
-- **Screenshot to agent** puts the page as it shows in an agent's message box (the workspace's agent, or the one you pick), with a line saying which page and size, and opens its chat: the picture goes as any photo does (below).
 
 ## Reading a chat
 
@@ -219,7 +210,7 @@ Each state is shown once, however it arrives, and comes down again when it is ov
 
 ### What reaches the phone
 
-**Settings → Notifications → What reaches the phone** has a switch for each kind: **Needs you** (an agent asks, a machine runs low), **Finished** (an agent ended its turn, an AI quick command is done) and **Went wrong** (a quick command went wrong) and **Limits** (an AI provider at 80% or 95% of a limit or out of it; see Usage and limits). Finished is off unless you turn it on: a ping for every finished turn teaches you to ignore the ones that matter. What is switched off isn't shown, and turning it on later starts from then.
+**Settings → Notifications → What reaches the phone** has a switch for each kind: **Needs you** (an agent asks, a machine runs low), **Finished** (an agent ended its turn), **Went wrong** (a review or a check failed) and **Limits** (an AI provider at 80% or 95% of a limit or out of it; see Usage and limits). Finished is off unless you turn it on: a ping for every finished turn teaches you to ignore the ones that matter. What is switched off isn't shown, and turning it on later starts from then.
 
 - **Hold while I'm at the machine** (on by default): while you typed in herdr in the last two minutes, or a machine's screen is unlocked, notifications arrive silently, without a sound or a pop-up. herdr-push tells, with every push, how long ago someone typed in a herdr window there (the last input of its terminal, as `w` reads it), and whether a desktop session there is unlocked (logind's lock, or a screen locker running; on macOS the console's lock). Anything that touches `~/.local/state/herdr-push/present` counts as typing too, a shell prompt or an editor hook, say. Any machine counts: you are at your desk, whichever machine pings.
 - **Watches**: one-shot notifications you ask for. Long-press an agent (**Notify me when it finishes**). Each fires once, also when the pane closed instead, and removes itself; the screen lists them, each with a ×. The machine's herdr-push follows what is watched there and tells the phone each change of it, so a watch fires while the app is closed too.
@@ -257,52 +248,6 @@ The code your agents work on, to read and comment on from the phone, where you c
 - **Comment.** Tap a line number (or long-press a line), then another to take the lines between, in a file or in a diff, and **Comment**. It goes to the task's agent (into its chat, from a task's view) or an agent at work in that checkout, as a review note: the path, the lines, the quoted code (a diff's with its `+` and `-`) and your words. **Keep for later** adds it to the **Comments** waiting on that machine (the speech-bubble icon, with a count), to change, drop, or send together as one message.
 
 Everything is read over the machine's SSH connection with `git` and the shell, and nothing is changed there: Git runs with `GIT_OPTIONAL_LOCKS=0`, so not even `git status` touches the index. Only sending a comment does something, and that is a message.
-
-## Quick commands
-
-Your own scripts, one tap away: ask Claude (or any agent) to write a script into a commands folder, and the app shows it as a quick command. **Quick commands** (the ⚡ icon) opens from a machine's screen, a workspace's actions, an agent chat's **⋯** and a file in **Code** (for `{{file}}` and the lines chosen there). Tap one to run it; long-press (or **⋯**) to pin it to the top, run it in a new herdr pane, read its file or copy its path.
-
-**Where they live, on the machine:**
-
-| Folder | Shows |
-| --- | --- |
-| `<repo>/.herdr/commands/` | in that repository's workspaces, worktrees, agents and tasks (a worktree's own folder first, then its main checkout's) |
-| `~/.config/herdr/commands/` | everywhere on that machine |
-
-A project's commands come first; one with the same name as the machine's wins. A command is an **executable file** (a script in any language) or a **`<name>.prompt.md`** file (an AI command, below). The list is read again each time it opens and when the machine connects; pull it down (or **↻**) to read it again.
-
-**The header** is a comment block at the top of the file, one `# key: value` per line (after the `#!` line). Without one, the file's name is the command's name.
-
-```sh
-#!/usr/bin/env bash
-# name: Deploy staging
-# desc: Builds and pushes to the staging server
-# icon: rocket              # a Lucide icon name (git-branch, test-tube-diagonal, hard-drive…)
-# confirm: true             # asks before it runs
-# args: Which branch?       # asks for arguments in a small form first
-# pane: true                # runs in a new herdr pane (long or interactive ones)
-```
-
-**Running one.** It runs on the machine in the checkout's folder (the home folder for a machine command), detached from the phone: its output streams into a sheet (a long log shows its end, the last 256 KB, and says how much is left out), with how it ended (exit status, how long), **Stop**, **Copy** and **Run again**. Arguments typed in the form come as its arguments (split like a shell's words, quotes keep spaces) and whole in `$HERDR_ARGS`; it also gets `$HERDR_REPO`, `$HERDR_CWD` and `$HERDR_COMMAND`. **Run in a new pane** types it into a new tab of the workspace instead and opens its terminal. Every run is kept on the machine (`~/.local/state/herdr-android/quick/<run>/`, the newest 80), so closing the app or losing the connection doesn't stop it: **Runs** (the history icon in the sheet, or the machine's **⋯ → Quick command runs**) lists them with what they printed, to open, run again or remove.
-
-**AI commands** are prompts run by a durable AI worker on the machine ([`host/herdr-quick`](host/herdr-quick/README.md), on [pi-durable](https://www.npmjs.com/package/@earendil-works/pi-durable)): `<name>.prompt.md`, the same header (its keys at the top, so a Markdown heading starts the prompt) and the prompt as the rest of the file.
-
-```markdown
-# name: Summarise today
-# desc: What changed in this repo today
-# icon: newspaper
-# model: pi/deepseek/deepseek-flash   # or claude/claude-opus-5-5; none: pi's default model there
-# tools: read-only                    # read-only (the default: files, search, git history), shell (and writing files), web
-# args: Anything in particular?
-# timeout: 10m                        # its limits: 10 minutes and 200k tokens unless it says
-# tokens: 200k
-
-Summarise what changed today ({{date}}) in {{repo}} on {{branch}}. {{args}}
-```
-
-Placeholders: `{{args}}` (what was typed; added at the end when the prompt has none), `{{repo}}`, `{{worktree}}`, `{{branch}}`, `{{selection}}` (the lines chosen where it was opened, else the clipboard), `{{file}}`, `{{clipboard}}`, `{{machine}}`, `{{date}}`. Models: `claude/<model>` is Anthropic's API (with `ANTHROPIC_API_KEY` there or pi's key for it), `pi/<provider>/<model>` a provider of pi's own `~/.pi/agent/models.json` with pi's keys. Tapping one starts the worker in the checkout's folder; the app shows what it does and its answer as it is written (Markdown), and reattaches when you come back. It survives the phone going away, the app closing and the worker being killed (its conversation is kept in the run's folder, and **Carry on** picks it up where it stopped). When one ends while the app is closed, a notification says so (through herdr-push, or the app's own looks), and a tap opens it. Its answer can be copied, run again, or **sent to the Coordinator** (into its home space's Assistant's message box, on a Shepherdr machine). The first AI command on a machine installs pi-durable with npm (it needs Node.js 22 or newer there).
-
-**New command** (in the sheet) asks an agent to write one for you: what it should do, a script or an AI prompt, for this project or everywhere; it goes to the agent the sheet was opened from, as a request naming the folder and the header.
 
 ## The work board
 
@@ -364,7 +309,7 @@ UI changes are checked, and shown in review, with screen previews instead of an 
 ./gradlew -p tools/ui-preview render -Ponly=board,chat   # some of them
 ```
 
-It needs JDK 17, no Android SDK, and takes about half an hour for all 263 scenes (agents, search, start work and its folder browser, machines, adding one by its code (found, not answering) or by hand, the code (files, a file, a comment, changes, a diff, history, search, comments waiting), a task's Files, Changes and Pull request tabs, quick commands (a machine's, a project's with one pinned, arguments, a command's menu, a run, its runs, an AI answer and one at work, a long log, a new one, none yet), a machine, a machine's health and cleanup, agent chats, pictures in a chat (what + offers, two screenshots in the message box, one marked up and one cropped, sent ones in the chat and one full size), the Assistants' chats, floating chats, the board and a task, an agent's activity timeline, the brief and when it comes, a machine's usage and limits (its providers, one out of its allowance, one whose reset passed, a reading that failed), the terminal (a password asked there, sticky modifiers, the F-keys, the key bar's editor and a bar of one's own, selected text quoted in a chat or sent to the Coordinator), a workspace's dev servers (a page through SSH, at desktop size, a screenshot in an agent's message box, none serving), settings with its notifications and text sizes, TalkBack's actions on a card, the dialogs and sheets, and the three panes of a wide window, also across a rotation). CI renders them too, a quarter of them on each of four runners, and uploads them as the `herdr-screens-<run>` artifact. See [`tools/ui-preview/README.md`](tools/ui-preview/README.md) for how it works and how to add a scene, and [`AGENTS.md`](AGENTS.md) for how changes are reviewed.
+It needs JDK 17, no Android SDK, and takes about half an hour for all 248 scenes (agents, search, start work and its folder browser, machines, adding one by its code (found, not answering) or by hand, the code (files, a file, a comment, changes, a diff, history, search, comments waiting), a task's Files, Changes and Pull request tabs, a machine, a machine's health and cleanup, agent chats, pictures in a chat (what + offers, two screenshots in the message box, one marked up and one cropped, sent ones in the chat and one full size), the Assistants' chats, floating chats, the board and a task, an agent's activity timeline, the brief and when it comes, a machine's usage and limits (its providers, one out of its allowance, one whose reset passed, a reading that failed), the terminal (its menu, a password asked there, sticky modifiers, the F-keys, the key bar's editor and a bar of one's own, selected text quoted in a chat or sent to the Coordinator), settings with its notifications and text sizes, TalkBack's actions on a card, the dialogs and sheets, and the three panes of a wide window, also across a rotation). CI renders them too, a quarter of them on each of four runners, and uploads them as the `herdr-screens-<run>` artifact. See [`tools/ui-preview/README.md`](tools/ui-preview/README.md) for how it works and how to add a scene, and [`AGENTS.md`](AGENTS.md) for how changes are reviewed.
 
 ## Shepherdr
 
@@ -380,13 +325,12 @@ Shepherdr 2.x isn't supported any more. The code is `core/…/shepherdr/`; its t
 
 ## Layout
 
-- `core/`: pure Kotlin/JVM: SSH, herdr API, herdr-core's API (`core/hc`, [`docs/HERDR_CORE.md`](docs/HERDR_CORE.md)), host sessions, terminal emulator and its key bar (`core/terminal`), reading code (`core/code`), quick commands (`core/quick`), dev servers and port forwarding (`core/ports`, `core/ssh/PortForward.kt`). `./gradlew -p core test`.
+- `core/`: pure Kotlin/JVM: SSH, herdr API, herdr-core's API (`core/hc`, [`docs/HERDR_CORE.md`](docs/HERDR_CORE.md)), host sessions, terminal emulator and its key bar (`core/terminal`), reading code (`core/code`), port forwarding (`core/ssh/PortForward.kt`, for Shepherdr's service and voice). `./gradlew -p core test`.
 - `app/`: the Android app. `ui/theme` and `ui/design` hold its look and shared components ([`docs/DESIGN.md`](docs/DESIGN.md)).
 - `tools/ui-preview/`: the screen previews. `./gradlew -p tools/ui-preview render`.
 - `host/herdr-push/`: the watcher that runs on a machine and pushes to the phone (Python 3; core carries it as a resource, and its tests run it).
 - `host/herdr-usage/`: the AI providers' usage reader, run on a machine for its usage page and herdr-push's warnings (Python 3; core carries it, and its tests run it).
 - `host/herdr-logins/`: the agent CLIs' logins on a machine, and signing them in or out there with their own commands (Python 3; core carries it, and its tests run it against fake CLIs).
-- `host/herdr-quick/`: the AI quick commands' durable worker (Node.js and pi-durable; core carries it, and the app copies it to a machine as it runs one).
 
 ## Contributing
 

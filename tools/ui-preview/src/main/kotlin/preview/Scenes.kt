@@ -253,7 +253,6 @@ fun scenes(): List<Scene> = listOf(
     // Its chat not read yet (or not readable): the composer is whole and writable all the same; and attaching a file.
     Scene("task-shepherdr3-unread", route = Routes.board(DEVBOX, "AND-19"), setup = { shepherdr3(); host(DEVBOX).shepherdr?.chatRefused = "Couldn't read the chat" }),
     Scene("task-shepherdr3-attach", route = Routes.board(DEVBOX, "AND-19"), setup = { shepherdr3() }, actions = { tapLabel("Attach files") }),
-    Scene("machine-new", route = Routes.machine(DEVBOX), actions = { tapText("NEW") }),
     // Add machine: scanning the code herdr-push pair shows (the phone's own scanner is a system screen; the stand-in
     // reads studio's code), studio found on Tailscale, studio answering nowhere, and typing the address instead.
     Scene("add-machine", route = Routes.edit()),
@@ -659,39 +658,10 @@ fun scenes(): List<Scene> = listOf(
     Scene("code-search", route = Routes.codeSearch(TASK_CODE, "answered")),
     Scene("code-notes", route = Routes.codeNotes(TASK_CODE), heightDp = 1000, setup = { notes = Demo.notes() }),
 
-    // Quick commands: the machine's own from its screen; an agent's project's and the machine's, one pinned; a command
-    // that asks for its arguments, and its menu; a script that failed, an AI one's answer and one still at work, and
-    // the runs (a notification of an AI one that ended opens it there); asking an agent for a new one; a machine
-    // without any yet.
-    Scene("quick", route = Routes.machine(DEVBOX), actions = { tapLabel("Quick commands") }),
-    Scene(
-        "quick-project", route = Routes.agent(DEVBOX, APP_AGENT), heightDp = 1100,
-        setup = { quickPins = mapOf(DEVBOX to listOf("Project:Run unit tests")) },
-        actions = { tapLabel("More"); tapText("Quick commands") },
-    ),
-    Scene("quick-args", route = Routes.agent(DEVBOX, APP_AGENT), heightDp = 1100, actions = {
-        tapLabel("More"); tapText("Quick commands"); tapText("Draft a PR description"); typeInto("Anything to point out?", "Mention that the card's colour follows the theme")
-    }),
-    Scene("quick-menu", route = Routes.agent(DEVBOX, APP_AGENT), heightDp = 1100, actions = {
-        tapLabel("More"); tapText("Quick commands"); tapLabel("More for Render the screens")
-    }),
-    Scene("quick-run", route = Routes.agent(DEVBOX, APP_AGENT), heightDp = 1100, actions = {
-        tapLabel("More"); tapText("Quick commands"); tapText("Run unit tests"); settle()
-    }),
-    Scene("quick-failed", route = Routes.quickRuns(DEVBOX, FakeQuick.TESTS), heightDp = 1100),
-    Scene("quick-answer", route = Routes.quickRuns(DEVBOX, FakeQuick.TODOS), heightDp = 1100),
-    // A long build log: the sheet shows its end, where the error is, and says how much of it is left out.
-    Scene("quick-long", route = Routes.quickRuns(DEVBOX, FakeQuick.BUILD), heightDp = 1100),
-    Scene("quick-working", route = Routes.quickRuns(DEVBOX, FakeQuick.TODAY)),
-    Scene("quick-runs", route = Routes.quickRuns(DEVBOX)),
-    Scene("quick-new", route = Routes.agent(DEVBOX, APP_AGENT), heightDp = 1100, actions = {
-        tapLabel("More"); tapText("Quick commands"); tapText("New command"); tapText("AI prompt")
-        typeInto("What should it do?", "Check why the last CI run of this branch failed and say how to fix it")
-    }),
-    Scene("quick-empty", route = Routes.machine(GPU), actions = { tapLabel("Quick commands") }),
-
     // A pane as a live terminal.
     Scene("terminal", route = Routes.terminal(DEVBOX, APP_SHELL)),
+    // Its ⋯: find, select, copy, the key bar, keep the screen on, reconnect.
+    Scene("terminal-menu", route = Routes.terminal(DEVBOX, APP_SHELL), actions = { tapLabel("More") }),
     // sudo asks: a masked field over the keys; its own text size.
     Scene("terminal-password", route = Routes.terminal(DEVBOX, APP_SHELL), setup = { host(DEVBOX).screens += APP_SHELL to Demo.shellAsking() }),
     Scene("terminal-large-text", route = Routes.terminal(DEVBOX, APP_SHELL), setup = { textSizes = com.makefunstuff.herdr.data.TextSizeStore.Sizes(terminal = 15f) }),
@@ -714,13 +684,6 @@ fun scenes(): List<Scene> = listOf(
         actions = { tapLabel("More"); tapText("Select text"); tapText("Quote in chat") },
     ),
     Scene("terminal-to-coordinator", route = Routes.terminal(DEVBOX, APP_SHELL), setup = { selectTests(); shepherdr() }, actions = { tapLabel("More"); tapText("Select text"); tapText("Send to the Assistant") }),
-
-    // A workspace's dev servers through SSH: the website's vite, its storybook, the machine's others behind a chip;
-    // at desktop size; a screenshot in the website agent's message box; a workspace with no web server.
-    Scene("preview", route = Routes.preview(DEVBOX, "w3")),
-    Scene("preview-desktop", route = Routes.preview(DEVBOX, "w3"), actions = { tapText("Phone size") }),
-    Scene("preview-screenshot", route = Routes.preview(DEVBOX, "w3"), actions = { tapText("Screenshot to agent") }),
-    Scene("preview-none", route = Routes.preview(DEVBOX, "w1")),
 
     // A window 840 dp wide or more (a tablet, an open foldable, a large window): the spaces stay on the left, as 3.1's
     // sidebar, the app beside them. A landscape tablet on Tasks, then with a chat open from it; an open foldable with

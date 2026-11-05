@@ -316,11 +316,9 @@ object Demo {
             workspaceTokens = mapOf("w1" to mapOf("branch" to "work/9-last-answered", "pr" to "#9")),
             journal = devboxJournal(),
             code = FakeCode(),
-            quick = FakeQuick(),
             usage = FakeUsage(),
             logins = FakeLogins(),
             agentCommands = AGENT_COMMANDS,
-            ports = DEVBOX_PORTS,
         ),
         GPU to FakeMachine(
             GPU,
@@ -339,18 +337,6 @@ object Demo {
         ),
         MINI to FakeMachine(MINI, refuse = ConnectError.Auth(null)),
     )
-
-    /**
-     * What listens on devbox: the website's vite and storybook, the API's uvicorn (started outside
-     * herdr, in its folder), the herdr-android workspace's Gradle daemon, and sshd (not the account's).
-     */
-    val DEVBOX_PORTS = listOf(
-        "L\t22\t0.0.0.0\t\t\t\t\t\t\t",
-        "L\t5173\t127.0.0.1\t4101\tnode\tw3\tw3:p1\t/home/demo/src/website\t1\tnode /home/demo/src/website/node_modules/.bin/vite --port 5173",
-        "L\t6006\t127.0.0.1\t4133\tnode\tw3\tw3:p1\t/home/demo/src/website\t1\tnode /home/demo/src/website/node_modules/.bin/storybook dev -p 6006",
-        "L\t8000\t0.0.0.0\t4120\tpython3\t\t\t/home/demo/src/api-server\t1\t/usr/bin/python3 -m uvicorn app:api --reload",
-        "L\t41234\t127.0.0.1\t4200\tjava\tw1\t\t/home/demo/src/herdr-android\t0\tjava -cp gradle-launcher.jar org.gradle.launcher.daemon.bootstrap.GradleDaemon 8.10",
-    ).joinToString("\n") + "\n"
 
     /** The own commands and skills on devbox, as `herdr-agent-commands` prints them: herdr-android's `/ship`, and a skill of the person's. */
     private val AGENT_COMMANDS = listOf(

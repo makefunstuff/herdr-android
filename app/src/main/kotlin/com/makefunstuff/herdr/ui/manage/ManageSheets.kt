@@ -204,12 +204,8 @@ fun WorkspaceActionsSheet(
     meta: Map<String, String>,
     /** Opens the code of the workspace's folder. */
     onCode: (() -> Unit)? = null,
-    /** Opens the quick commands of the workspace's folder. */
-    onQuick: (() -> Unit)? = null,
     /** Opens its only tab's actions: the machine screen shows no row for a workspace's one tab. */
     onTab: ((TabInfo) -> Unit)? = null,
-    /** Opens its dev servers in the in-app browser. */
-    onDevServers: (() -> Unit)? = null,
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -230,8 +226,6 @@ fun WorkspaceActionsSheet(
             }
         }
         if (onCode != null) ManageRow("Browse the code", icon = HerdrIcons.Code, chevron = true) { onDismiss(); onCode() }
-        if (onQuick != null) ManageRow("Quick commands", detail = "Its project's scripts and AI commands", icon = HerdrIcons.Zap, chevron = true) { onDismiss(); onQuick() }
-        if (onDevServers != null) ManageRow("Dev servers", detail = "What it serves on a port, open here through SSH", icon = HerdrIcons.Globe, chevron = true) { onDismiss(); onDevServers() }
         ManageRow("Rename", icon = HerdrIcons.Pencil, chevron = true) { rename = true }
         val onlyTab = snap.tabs.filter { it.workspaceId == ws.workspaceId }.singleOrNull()
         if (onTab != null && onlyTab != null) {
@@ -548,8 +542,6 @@ fun AgentActionsSheet(
     onOpenApp: (() -> Unit)? = null,
     /** Opens the code of the agent's folder: its worktree, its changes. */
     onCode: (() -> Unit)? = null,
-    /** Opens the quick commands of the agent's folder. */
-    onQuick: (() -> Unit)? = null,
     /** Opens the timeline of what the agent did (its task's, when it works on one). */
     onActivity: (() -> Unit)? = null,
     /** The Agents list's triage of it: mark seen, pin, snooze, mute. */
@@ -581,7 +573,6 @@ fun AgentActionsSheet(
         if (onTerminal != null) ManageRow("Open terminal", icon = HerdrIcons.SquareTerminal, chevron = true) { onTerminal() }
         if (onActivity != null) ManageRow("Activity timeline", detail = "What it did, step by step: commands, edits, tests, reviews", icon = HerdrIcons.Activity, chevron = true) { onActivity() }
         if (onCode != null) ManageRow("Browse the code", detail = "Its files and changes, to read and comment on", icon = HerdrIcons.Code, chevron = true) { onCode() }
-        if (onQuick != null) ManageRow("Quick commands", detail = "Run a script or an AI command where it works", icon = HerdrIcons.Zap, chevron = true) { onQuick() }
         if (onFloat != null) ManageRow("Float over other apps", icon = HerdrIcons.PictureInPicture2) { onFloat() }
         if (onOpenApp != null) ManageRow("Open in the app", icon = HerdrIcons.Maximize2) { onOpenApp() }
         if (onToggleKeys != null) {

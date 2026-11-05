@@ -21,7 +21,6 @@ import com.makefunstuff.herdr.core.usage.HerdrUsage
 import com.makefunstuff.herdr.core.usage.UsageRules
 import com.makefunstuff.herdr.data.HostManager
 import com.makefunstuff.herdr.data.MachineStore
-import com.makefunstuff.herdr.data.quick
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
@@ -40,7 +39,6 @@ class AlertWork(
     private val live: LiveWork,
     private val quiet: QuietWork,
     private val tally: TallyStore,
-    private val quick: com.makefunstuff.herdr.data.QuickStore,
     private val watches: WatchWork,
     private val usage: com.makefunstuff.herdr.data.UsageStore,
 ) {
@@ -164,19 +162,6 @@ class AlertWork(
             }
             if (changes.isNotEmpty()) inbox.apply(changes, quiet = quiet.silent(), hold = quiet.check(), rules = rules)
         }
-        // AI quick commands that ended (where herdr-push runs, it told already: shown once). Only the last hours' are news.
-        runCatching { s.quick().runs(20) }.getOrNull()?.let { list ->
-            val changes = list.runs.filter { list.now - it.ended < QUICK_FRESH_SECONDS }
-                .mapNotNull { Alerts.quickRun(machineId, s.machine.label, it) }
-            if (changes.isNotEmpty()) inbox.apply(changes, quiet = quiet.silent(), hold = quiet.check(), rules = rules)
-        }
-    }
-
-    /** A quick command's run the app showed as it is now: no notification about it after this, and one up already comes down. */
-    fun quickSeen(machineId: String, machineLabel: String, run: com.makefunstuff.herdr.core.quick.QuickRun) {
-        val change = Alerts.quickRun(machineId, machineLabel, run) ?: return
-        inbox.markSeen(listOf(change))
-        inbox.dismiss(change.tag)
     }
 
     /** As the app leaves the screen: what its machines show now was seen, so a later look stays quiet about it. */
@@ -188,16 +173,6 @@ class AlertWork(
                 Alerts.of(h.machine.id, h.machine.label, com.makefunstuff.herdr.core.push.PushEvent.Agent(a, snap.location(a.workspaceId, a.tabId)))
             }
         }
-        // The quick commands' runs the screens read: their ends were seen too.
-        val quickRuns = quick.seen().flatMap { (id, runs) ->
-            val label = machines.get(id)?.label ?: return@flatMap emptyList()
-            runs.mapNotNull { Alerts.quickRun(id, label, it) }
-        }
-        if (changes.isNotEmpty() || quickRuns.isNotEmpty()) inbox.markSeen(changes + quickRuns)
-    }
-
-    private companion object {
-        /** A run that ended longer ago than this is no news to the app's own look (the phone was off). */
-        const val QUICK_FRESH_SECONDS = 6L * 3600
+        if (changes.isNotEmpty()) inbox.markSeen(changes)
     }
 }

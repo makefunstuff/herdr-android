@@ -122,7 +122,6 @@ class AppContainer(app: Application) {
     val usage = com.makefunstuff.herdr.data.UsageStore(java.io.File(app.filesDir, "usage.json"))
     /** Each machine's agent logins, as last read there (only in memory). */
     val logins = com.makefunstuff.herdr.data.LoginsStore()
-    val quick = com.makefunstuff.herdr.data.QuickStore(java.io.File(app.filesDir, "quick.json"))
     val shares = Shares(java.io.File(app.filesDir, "shares.json"), java.io.File(app.cacheDir, "shared"))
     // Pictures waiting in a composer are the app's own files; pictures sent are a cache Android may clear.
     val images = com.makefunstuff.herdr.data.ImageStore(
@@ -142,7 +141,7 @@ class AppContainer(app: Application) {
     val tally = TallyStore(java.io.File(app.filesDir, "tally.json"), machines)
     /** One-shot watches set from the long-press sheets. */
     val watchWork = com.makefunstuff.herdr.push.WatchWork(push, inbox, quietWork)
-    val alertWork = AlertWork(hosts, machines, push, inbox, liveWork, quietWork, tally, quick, watchWork, usage)
+    val alertWork = AlertWork(hosts, machines, push, inbox, liveWork, quietWork, tally, watchWork, usage)
     /**
      * Every board as last read, and which finished agents the phone has shown: the Agents screen's and the Board tab's.
      * The boards read while on screen are what the person saw: the widget counts them, and the brief compares with them.

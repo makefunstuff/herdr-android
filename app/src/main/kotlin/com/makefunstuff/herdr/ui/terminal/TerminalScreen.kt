@@ -69,7 +69,6 @@ import com.makefunstuff.herdr.Routes
 import com.makefunstuff.herdr.core.api.CopySearchResult
 import com.makefunstuff.herdr.core.api.HerdrApiException
 import com.makefunstuff.herdr.core.api.PaneScroll
-import com.makefunstuff.herdr.core.api.ResizeDirection
 import com.makefunstuff.herdr.core.api.ScrollbackSearch
 import com.makefunstuff.herdr.core.api.TextPoint
 import com.makefunstuff.herdr.core.api.urlAt
@@ -141,14 +140,11 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
     val pane = snapshot?.pane(paneId)
     // One of herdr-core's terminals: hc's own stream, and none of classic herdr's pane calls.
     val core = HcMapping.address(paneId)
-    // The size the program draws at on the machine: its pane's in herdr's layout, or what herdr-core reports.
-    val hostSize = if (core != null) state.herdrCore?.sizes?.get(paneId)
-    else snapshot?.paneRect(paneId)?.let { it.width to it.height }
+    // The size the program draws at on herdr-core's terminal, as it reports it.
+    val hostSize = if (core != null) state.herdrCore?.sizes?.get(paneId) else null
 
     // Its text size, its own (Settings → Text size), which pinching the terminal changes too.
     val sizes by container.textSizes.state.collectAsStateWithLifecycle()
-    // The pane is resized to fit the phone; "Desktop size" keeps the host's size and pans instead.
-    var keepHost by remember(paneId) { mutableStateOf(false) }
     var grid by remember { mutableStateOf<Pair<Int, Int>?>(null) }
     var stream by remember { mutableStateOf<LiveTerminal?>(null) }
     var generation by remember { mutableIntStateOf(0) }
@@ -170,23 +166,17 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
     var selecting by remember(paneId) { mutableStateOf(false) }
     // Selected text on its way to an agent's chat, while the sheet asks which one.
     var quoting by remember(paneId) { mutableStateOf<String?>(null) }
-    var resizeOpen by remember { mutableStateOf(false) }
     var autoReconnecting by remember { mutableStateOf(false) }
     val searchFocus = remember { FocusRequester() }
 
-    val keep = keepHost
-    val ready = (keep && hostSize != null) || grid != null
+    val ready = grid != null
     LaunchedEffect(generation, ready) {
         if (!ready) return@LaunchedEffect
         var retryAttempt = 0
         while (true) {
             val opened = runCatching {
                 val conn = session.awaitConnection(timeoutMs = 30_000)
-                val (cols, rows) = if (keep && hostSize != null && hostSize.first > 0 && hostSize.second > 0) {
-                    hostSize
-                } else {
-                    grid ?: (80 to 24)
-                }
+                val (cols, rows) = grid ?: (80 to 24)
                 val live: LiveTerminal = if (core != null) HcTerminalStream(session.awaitHerdrCore(30_000, paneId), core, cols, rows, container.scope)
                 else TerminalStream(conn, session.state.value.herdrMachine, paneId, cols, rows, container.scope)
                 live.also { it.open() }
@@ -223,11 +213,10 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
         }
     }
 
-    // In fit mode, follow the view's grid; switching back to host size restores the host's.
-    LaunchedEffect(stream, grid, keepHost) {
+    // The pane follows the view's grid: it is resized to fit the phone.
+    LaunchedEffect(stream, grid) {
         val s = stream ?: return@LaunchedEffect
-        if (!keepHost) grid?.let { (c, r) -> s.resize(c, r) }
-        else if (hostSize != null && hostSize.first > 0) s.resize(hostSize.first, hostSize.second)
+        grid?.let { (c, r) -> s.resize(c, r) }
     }
     // herdr-core: the desktop window took the size back (someone typed there); the phone draws what the program draws.
     // Only a change after attaching: until then the size is the one the phone's own attach replaces.
@@ -415,17 +404,6 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
         }
     }
 
-    fun resize(direction: ResizeDirection) {
-        scope.launch {
-            try {
-                val result = session.awaitApi().resizePane(paneId, direction)
-                if (!result.changed) context.toast(result.reason ?: "The pane can't resize that way")
-            } catch (e: Throwable) {
-                context.toast(plain(e))
-            }
-        }
-    }
-
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         containerColor = Herdr.colors.ground,
@@ -435,7 +413,6 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
                 subtitle = buildString {
                     append(session.machine.label)
                     stream?.emulator?.let { append(" · ${it.cols}×${it.rows}") }
-                    if (keepHost) append(" · desktop size")
                 },
                 onBack = { nav.popBackStack() },
             ) {
@@ -450,18 +427,8 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
                         context.toast("Drag to select, then Copy or Quote")
                     })
                     MenuRow("Copy screen", HerdrIcons.Copy, { menu = false; view?.let { context.copyToClipboard("terminal", it.screenText(), "Screen copied") } })
-                    // herdr-core has no splits, and the desktop app keeps its layout to itself.
-                    if (core == null) {
-                        MenuRow("Resize pane…", HerdrIcons.Maximize2, { menu = false; resizeOpen = true })
-                        MenuRow("Layout…", HerdrIcons.LayoutDashboard, { menu = false; nav.navigate(Routes.layout(machineId, paneId)) })
-                    }
-                    pane?.workspaceId?.takeIf { core == null }?.let { ws ->
-                        MenuRow("Dev servers", HerdrIcons.Globe, { menu = false; nav.navigate(Routes.preview(machineId, ws)) })
-                    }
                     MenuRow("Edit key bar…", HerdrIcons.Keyboard, { menu = false; editKeys = true })
                     MenuRow(if (bar.keepScreenOn) "Let the screen sleep" else "Keep screen on", HerdrIcons.Sun, { menu = false; container.keyBar.setKeepScreenOn(!bar.keepScreenOn) })
-                    // herdr-core's size is the last active viewer's, the phone's own once it attached: no desktop size to keep.
-                    if (core == null) MenuRow(if (keepHost) "Fit to phone" else "Desktop size", if (keepHost) HerdrIcons.Smartphone else HerdrIcons.Monitor, { menu = false; keepHost = !keepHost })
                     MenuRow("Reconnect", HerdrIcons.RefreshCcw, { menu = false; generation++ })
                 }
             }
@@ -535,7 +502,6 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
                         v.setColors(termPalette, hc.termSelection.toArgb())
                         v.onInput = { text -> if (!autoReconnecting) stream?.send(text) }
                         v.onScroll = { lines -> if (!autoReconnecting && lines != 0) stream?.scroll(lines > 0, kotlin.math.abs(lines)) }
-                        if (v.fitToView != !keepHost) v.fitToView = !keepHost
                         v.keepScreenOn = bar.keepScreenOn
                         if (kotlin.math.abs(v.fontSizeSp - sizes.terminal) > 0.01f) v.setFontSizeSp(sizes.terminal)
                     },
@@ -645,17 +611,6 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
             onDismiss = { quoting = null },
         )
     }
-
-    if (resizeOpen) {
-        HerdrSheet(onDismissRequest = { resizeOpen = false }) {
-            ResizeSheet(
-                onPick = {
-                    resize(it)
-                    resizeOpen = false
-                },
-            )
-        }
-    }
 }
 
 /**
@@ -684,33 +639,6 @@ private fun SelectionBar(onCopy: () -> Unit, onQuote: () -> Unit, onCoordinator:
             if (onCoordinator != null) SecondaryButton(onClick = onCoordinator) { Text("Send to the Assistant") }
         }
     }
-}
-
-/** Direction pad for `pane.resize`, which moves the pane's edge into a neighbouring split. */
-@Composable
-private fun ResizeSheet(onPick: (ResizeDirection) -> Unit) {
-    SheetTitle("Resize the pane", "Moves the pane's edge, so it only works when the tab is split. The pane grows toward the arrow.")
-    Column(
-        Modifier.fillMaxWidth().padding(horizontal = Space.xl).padding(bottom = Space.xl).navigationBarsPadding(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(Space.s),
-    ) {
-        PadKey(HerdrIcons.ChevronUp, "Grow up") { onPick(ResizeDirection.Up) }
-        Row(horizontalArrangement = Arrangement.spacedBy(72.dp)) {
-            PadKey(HerdrIcons.ChevronLeft, "Grow left") { onPick(ResizeDirection.Left) }
-            PadKey(HerdrIcons.ChevronRight, "Grow right") { onPick(ResizeDirection.Right) }
-        }
-        PadKey(HerdrIcons.ChevronDown, "Grow down") { onPick(ResizeDirection.Down) }
-    }
-}
-
-@Composable
-private fun PadKey(icon: androidx.compose.ui.graphics.vector.ImageVector, description: String, onClick: () -> Unit) {
-    Box(
-        Modifier.size(56.dp).clip(RectangleShape).background(Herdr.colors.field).clickable(role = Role.Button, onClick = onClick)
-            .semantics { contentDescription = description },
-        contentAlignment = Alignment.Center,
-    ) { Icon(icon, null, tint = Herdr.colors.text, modifier = Modifier.size(28.dp)) }
 }
 
 /** The text of the cells from [a] to [b] (either order) on [e]'s screen, each line's end trimmed. */
