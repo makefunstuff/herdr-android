@@ -170,6 +170,8 @@ class AppContainer(app: Application) {
     val voiceCalls: com.makefunstuff.herdr.voice.VoiceCalls = com.makefunstuff.herdr.voice.AndroidVoiceCalls(scope, hosts)
     /** The clock the screens read (a turn's "Working for 3m", the away card). */
     val clock: () -> Long = System::currentTimeMillis
+    /** The time zone the screens tell times in (Autopilot's "Next 10:00"). */
+    val zone: () -> java.time.ZoneId = java.time.ZoneId::systemDefault
     val bubbles: Bubbles = AndroidBubbles(app)
     /** The launcher's shortcuts: Needs you, the Coordinator, Start work, the agents opened last. */
     val shortcuts: com.makefunstuff.herdr.share.Shortcuts = com.makefunstuff.herdr.share.AndroidShortcuts(app)

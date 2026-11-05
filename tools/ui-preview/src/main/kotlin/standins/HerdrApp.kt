@@ -83,6 +83,8 @@ class AppContainer(app: Context) {
     val voiceCalls: com.makefunstuff.herdr.voice.VoiceCalls = preview.PreviewVoiceCalls(preview.PreviewVoiceCalls.next)
     /** The clock the screens read (a turn's "Working for 3m", the away card): the demo's fixed time. */
     val clock: () -> Long = { Demo.NOW }
+    /** The time zone the screens tell times in: UTC, as the demo's clock. */
+    val zone: () -> java.time.ZoneId = { java.time.ZoneOffset.UTC }
     val bubbles: Bubbles = PreviewBubbles
     val shortcuts: com.makefunstuff.herdr.share.Shortcuts = com.makefunstuff.herdr.share.NoShortcuts
     val starts = com.makefunstuff.herdr.data.StartStore(java.io.File(app.filesDir, "starts.json"))

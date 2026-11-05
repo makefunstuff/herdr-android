@@ -105,6 +105,7 @@ fun SettingsScreen(nav: NavHostController) {
             QuietCard(padded = true) { TextSizeCard() }
             QuietCard(padded = true) { VoiceCard() }
             QuietCard(padded = true) { NotificationsCard(onQuietHours = { nav.navigate(Routes.QUIET) }, onRules = { nav.navigate(Routes.RULES) }) }
+            AutopilotCard(onOpen = { nav.navigate(Routes.autopilot(it)) })
             QuietCard(padded = true) { BriefCard(onOpen = { nav.navigate(Routes.BRIEF) }, onSchedule = { nav.navigate(Routes.BRIEF_SETTINGS) }) }
             QuietCard(padded = true) {
                 Column(verticalArrangement = Arrangement.spacedBy(Space.xs)) {

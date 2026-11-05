@@ -39,6 +39,7 @@ object Autopilot {
     val EVENT_PICKS = listOf("added" to "Added", "ready" to "Ready", "failed" to "Failed", "needs-you" to "Needs you", "merged" to "Merged", "stalled" to "Stalled")
 
     const val SAVED = "Saved"
+    const val NO_HEARTBEAT = "Couldn't make the heartbeat file."
     /** The heartbeat is saved this long after typing stops (and on leaving its box). */
     const val SAVE_AFTER_MS = 600L
     const val WRITE_HEARTBEAT = "Write a heartbeat"

@@ -149,6 +149,8 @@ object Routes {
     /** What happened while you were away (the scheduled brief's notification opens it; set up in Settings). */
     const val BRIEF = "brief"
     const val BRIEF_SETTINGS = "settings/brief"
+    /** Settings › Autopilot on one machine: its heartbeat, schedule and events, the same in each of its spaces. */
+    const val AUTOPILOT = "settings/autopilot/{mid}"
     const val MACHINE = "machine/{id}"
     const val EDIT = "edit?id={id}"
     const val AGENT = "agent/{mid}/{pane}"
@@ -202,6 +204,7 @@ object Routes {
         if (task == null) "board/$mid" else "board/$mid?task=${Uri.encode(task)}" + if (alone) "&alone=1" else ""
     fun health(mid: String) = "health/$mid"
     fun usage(mid: String) = "usage/$mid"
+    fun autopilot(mid: String) = "settings/autopilot/$mid"
     fun logins(mid: String) = "logins/$mid"
     fun codeRepos(mid: String) = "code/$mid"
     fun codeAt(spot: CodeSpot, tab: CheckoutTab? = null) = "code/${spot.machine}/at?${spot.query()}" + (tab?.let { "&tab=${it.name}" } ?: "")
@@ -354,6 +357,7 @@ internal fun NavGraphBuilder.screens(nav: NavHostController, tasks: @Composable 
     composable(Routes.RULES) { com.makefunstuff.herdr.ui.settings.AlertRulesScreen(nav) }
     composable(Routes.BRIEF) { BriefScreen(nav) }
     composable(Routes.BRIEF_SETTINGS) { BriefSettingsScreen(nav) }
+    composable(Routes.AUTOPILOT) { com.makefunstuff.herdr.ui.settings.AutopilotScreen(nav, it.arguments?.getString("mid").orEmpty()) }
     composable(Routes.MACHINE) { MachineScreen(nav, it.arguments?.getString("id").orEmpty()) }
     composable(Routes.EDIT) { EditMachineScreen(nav, it.arguments?.getString("id")) }
     composable(Routes.AGENT) {

@@ -21,6 +21,10 @@ class FakeShepherdr(
     /** Each chat as its live link sends it (`Chat`), by its key. */
     var chats: Map<String, JsonObject> = DemoV2.chats(),
 ) {
+    init {
+        snapshot = DemoV2.withAutopilot(snapshot)
+    }
+
     /** When set, reading any chat fails with these words (Shepherdr down, or the chat's file unreadable). */
     var chatRefused: String? = null
 
@@ -119,6 +123,31 @@ class FakeShepherdr(
                 val id = a.getValue("task").jsonPrimitive.content
                 return DemoV2.evidence(task(id) ?: return 400 to "That task isn't here any more.")
             }
+            // A space's Autopilot switch: herdr-task's on or off, the next wake an hour on.
+            "mode" -> {
+                val place = a.getValue("place").jsonPrimitive.content
+                val on = a.getValue("mode").jsonPrimitive.content == "autopilot"
+                setPlace(place) { p ->
+                    val pilot = p["pilot"]?.jsonObject ?: return 400 to "Autopilot is set on that space's own machine."
+                    JsonObject(p + mapOf("mode" to JsonPrimitive(if (on) "autopilot" else "regular"),
+                        "pilot" to JsonObject(pilot + mapOf("on" to JsonPrimitive(on), "next_run" to if (on) JsonPrimitive(Demo.NOW + 60 * 60_000) else kotlinx.serialization.json.JsonNull))))
+                }
+            }
+            // Settings › Autopilot: its row takes the value; a schedule herdr-task can't read is refused in its words.
+            "setting" -> {
+                val key = a.getValue("key").jsonPrimitive.content
+                val value = a["value"]?.jsonPrimitive?.content.orEmpty()
+                if (key == "autopilot.every" && value.isNotEmpty() && !Regex("""^(every \d+ (minutes|hours?)|weekdays \d{1,2}:\d{2}|hourly|daily \d{1,2}:\d{2})( on weekdays)?""").containsMatchIn(value)) {
+                    return 200 to """{"ok":false,"error":${JsonPrimitive("Unknown time '$value'. " + DemoV2.HOW)}}"""
+                }
+                snapshot = JsonObject(snapshot + ("settings" to JsonArray((snapshot["settings"] as? JsonArray).orEmpty().map { sec ->
+                    val o = sec.jsonObject
+                    JsonObject(o + ("rows" to JsonArray(o["rows"]?.jsonArray.orEmpty().map { r ->
+                        if (r.jsonObject["key"]?.jsonPrimitive?.content == key) JsonObject(r.jsonObject + ("value" to JsonPrimitive(value))) else r
+                    })))
+                })))
+                return 200 to """{"ok":true}"""
+            }
             // Accepted: it merges.
             "accept" -> {
                 val id = a.getValue("task").jsonPrimitive.content
@@ -131,6 +160,10 @@ class FakeShepherdr(
     }
 
     private fun tasks() = (snapshot["tasks"] as? JsonArray).orEmpty().map { it.jsonObject }
+
+    private inline fun setPlace(id: String, f: (JsonObject) -> JsonObject) {
+        snapshot = JsonObject(snapshot + ("places" to JsonArray((snapshot["places"] as? JsonArray).orEmpty().map { val p = it.jsonObject; if (p["id"]?.jsonPrimitive?.content == id) f(p) else p })))
+    }
 
     private fun task(id: String) = tasks().firstOrNull { it["id"]?.jsonPrimitive?.content == id }
 
@@ -165,6 +198,48 @@ object DemoV2 {
 
     /** A space's Assistant chat key (`Place.chat`). */
     fun chat(space: String) = "p:$space"
+
+    /** herdr-task's words on how to write a schedule (`automations.py` HOW). */
+    const val HOW = "Write times like \"weekdays 9:00\", \"daily 9:00,17:30\", \"mon,thu 8:15\", \"every 30 minutes\", " +
+        "\"every 2 hours on weekdays from 8:00 to 18:00\", \"hourly\" or \"once 2026-11-05 9:00\" (this machine's time zone)."
+
+    /** The heartbeat devbox's Autopilot works from. */
+    const val HEARTBEAT = "Direction: keep herdr-android's main green and its board short.\n\nPriorities:\n- Failing checks first\n- Then the oldest Ready task\n\n" +
+        "Constraints: never merge; ask before anything that touches the release.\n\nReporting: one line after a wake, an alert only when a check fails.\n"
+
+    /**
+     * [s] with Autopilot as 3.1's service sends it: every space of this machine its switch (off), and Settings ›
+     * Autopilot, Everywhere's page (`service/compat.ts` headerPilot and pilotRows). A snapshot that has them is kept.
+     */
+    fun withAutopilot(s: JsonObject): JsonObject {
+        val places = (s["places"] as? JsonArray).orEmpty().map { p ->
+            val o = p.jsonObject
+            if ("pilot" in o || "/" in o["id"]?.jsonPrimitive?.content.orEmpty()) o
+            else JsonObject(o + mapOf("mode" to JsonPrimitive("regular"), "pilot" to pilot(on = false)))
+        }
+        val settings = (s["settings"] as? JsonArray).orEmpty()
+        val page = Json.parseToJsonElement(
+            """{"name":"Autopilot","level":"all","about":${JsonPrimitive(com.makefunstuff.herdr.core.shepherdr.Autopilot.ABOUT)},"rows":[
+              {"label":"Heartbeat","key":"autopilot.heartbeat","value":${JsonPrimitive(HEARTBEAT)},"doc":true,"hint":"What it works from: direction, priorities, limits and when to stop.","file":"~/.config/herdr-core/autopilot/everywhere.md"},
+              {"label":"Schedule","key":"autopilot.every","value":"every 60 minutes","text":true,"hint":"When it wakes by itself."},
+              {"label":"Events","key":"autopilot.events","value":"ready,failed","hint":"These wake a space's Assistant at once when they happen to its tasks."}]}""",
+        )
+        val withPage: JsonElement = if (settings.any { it.jsonObject["name"]?.jsonPrimitive?.content == "Autopilot" }) JsonArray(settings) else JsonArray(settings + page)
+        return JsonObject(s + mapOf<String, JsonElement>("places" to JsonArray(places), "settings" to withPage))
+    }
+
+    /** A space's `pilot`: [on], its next wake 40 minutes on, woken by Ready and Failed; [blank]: the heartbeat unwritten. */
+    fun pilot(on: Boolean, blank: Boolean = false, pending: Boolean = false) = Json.parseToJsonElement(
+        """{"on":$on,"next_run":${if (on) Demo.NOW + 40 * 60_000 else null},"pending":$pending,"inflight":false,"events":["ready","failed"],"blank":$blank}""",
+    )
+
+    /** [space]'s Autopilot switched on in [f]'s snapshot, its heartbeat still the starter where [blank]. */
+    fun autopilotOn(f: FakeShepherdr, space: String, blank: Boolean = false, pending: Boolean = false) {
+        f.snapshot = JsonObject(f.snapshot + ("places" to JsonArray((f.snapshot["places"] as? JsonArray).orEmpty().map { p ->
+            val o = p.jsonObject
+            if (o["id"]?.jsonPrimitive?.content == space) JsonObject(o + mapOf("mode" to JsonPrimitive("autopilot"), "pilot" to pilot(true, blank, pending))) else o
+        })))
+    }
 
     private fun place(id: String, name: String, status: String, folder: String) = """
         {"id":"$id","name":"$name","machine":"devbox","level":0,"status":"$status","mode":"regular","chat":"p:$id",

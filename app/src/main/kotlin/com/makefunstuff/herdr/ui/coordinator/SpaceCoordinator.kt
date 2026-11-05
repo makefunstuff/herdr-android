@@ -308,6 +308,8 @@ internal fun SpaceCoordinator(nav: NavController, machineId: String, session: Ho
     val calls = container.voiceCalls
     val call by calls.state.collectAsStateWithLifecycle()
     val callHere = call.machineId == machineId && call.space == space?.id && call.task == null && (call.on || call.problem != null)
+    // The space's Autopilot, switched here as in 3.1's Assistant header.
+    val pilot = rememberAutopilotFlip(board, space)
     Scaffold(
         containerColor = c.ground,
         topBar = {
@@ -316,6 +318,7 @@ internal fun SpaceCoordinator(nav: NavController, machineId: String, session: Ho
                 subtitle = listOfNotNull(space?.let(::spaceName), state.machine.label, stateWords(t, state.online, state.status.label())).joinToString(" · "),
                 onBack = { nav.popBackStack() },
                 actions = {
+                    pilot.shown?.let { p -> AutopilotBarSwitch(p.on, enabled = state.online && board != null, onFlip = pilot.flip) }
                     // The space's artifacts, where Shepherdr keeps them.
                     if (overview?.artifacts != null && space != null) {
                         BarIcon(HerdrIcons.LayoutDashboard, "Artifacts", { nav.navigate(Routes.artifacts(machineId, space.id)) })
@@ -343,6 +346,7 @@ internal fun SpaceCoordinator(nav: NavController, machineId: String, session: Ho
         },
     ) { padding ->
         Column(Modifier.padding(top = padding.calculateTopPadding()).fillMaxSize().imePadding().navigationBarsPadding()) {
+            pilot.shown?.takeIf { it.on && !typing }?.let { p -> AutopilotLine(p, onWrite = { nav.navigate(Routes.autopilot(machineId)) }) }
             // In the Chat tab the drawer picks the space.
             if (!typing && spaces.size > 1 && !com.makefunstuff.herdr.ui.design.LocalInTab.current) SpacePicker(spaces, space?.id) { picked = it }
             val sizes by container.textSizes.state.collectAsStateWithLifecycle()
