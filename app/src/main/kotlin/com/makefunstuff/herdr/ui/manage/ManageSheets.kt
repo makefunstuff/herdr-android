@@ -546,6 +546,8 @@ fun AgentActionsSheet(
     triage: (@Composable () -> Unit)? = null,
     /** The board task it works on, which names it in the title. */
     task: WorkTask? = null,
+    /** Its tab's menu (Shepherdr 3's: Rename, Switch agent, Restart, Model, Close), first. */
+    tabRows: (@Composable () -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -556,6 +558,10 @@ fun AgentActionsSheet(
 
     val (title, subtitle) = agentTitle(agent, paneLabel, task)
     ManageSheet(title, subtitle, onDismiss) {
+        if (tabRows != null) {
+            tabRows()
+            ManageHeading("Agent")
+        }
         // herdr-core's agents have none of classic herdr's names, focus or explanations: their details only.
         if (target != null && HcMapping.address(target) == null) {
             ManageRow("Rename agent", icon = HerdrIcons.Pencil, chevron = true) { rename = true }

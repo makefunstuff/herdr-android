@@ -119,6 +119,65 @@ object V2Actions {
         put("chat", chat)
     }
 
+    /** The agents a new tab of [place] can run, and Switch agent's list (`tab-agents`): each one's kind, name, installed. */
+    fun tabAgents(place: String): JsonObject = buildJsonObject {
+        put("type", "tab-agents")
+        put("place", place)
+    }
+
+    /** Names tab [tab] (the window's tab id), or the Assistant's tab of [place] when it has no id yet; empty unnames it. */
+    fun tabRename(tab: String?, place: String?, name: String): JsonObject = buildJsonObject {
+        put("type", "tab-rename")
+        if (tab != null) put("tab", tab) else put("place", place)
+        put("name", name)
+    }
+
+    /** Closes tab [tab]: its programs end. */
+    fun tabClose(tab: String): JsonObject = buildJsonObject {
+        put("type", "tab-close")
+        put("tab", tab)
+    }
+
+    /** Restarts the agent in [chat]'s tab, as it runs now, or as agent [kind] (Switch agent): `restart.sh` in its tab. */
+    fun tabSwitch(chat: String, kind: String? = null): JsonObject = buildJsonObject {
+        put("type", "tab-switch")
+        put("chat", chat)
+        kind?.let { put("kind", it) }
+    }
+
+    /** What the agent in [chat] runs on and what its CLIs offer: the model menu. */
+    fun modelMenu(chat: String): JsonObject = buildJsonObject {
+        put("type", "model-menu")
+        put("chat", chat)
+    }
+
+    /** Restarts the agent in [chat] on [pick] (its [level] the effort), as the model menu's Restart with…. */
+    fun restart(chat: String, pick: V2ModelPick, level: String?): JsonObject = buildJsonObject {
+        put("type", "restart")
+        put("chat", chat)
+        put("kind", pick.agent)
+        put("model", pick.model.orEmpty())
+        put("effort", level.orEmpty())
+        put("speed", if (pick.fast) "fast" else "normal")
+        put("perm", pick.perm.orEmpty())
+    }
+
+    /**
+     * Closes [place]'s Assistant: [mode] `count` only counts the workers it started, `stop` ends them first, `keep`
+     * lets them finish.
+     */
+    fun assistantClose(place: String, mode: String): JsonObject = buildJsonObject {
+        put("type", "assistant-close")
+        put("place", place)
+        put("mode", mode)
+    }
+
+    /** Closes space [place]: its tabs close and every program in them ends. */
+    fun spaceRemove(place: String): JsonObject = buildJsonObject {
+        put("type", "space-remove")
+        put("place", place)
+    }
+
     /** What the live link is told: the chats on screen. Sent as not visible, so the machine's alerts keep coming. */
     fun watch(chats: List<String>): JsonObject = buildJsonObject {
         put("type", "watch")

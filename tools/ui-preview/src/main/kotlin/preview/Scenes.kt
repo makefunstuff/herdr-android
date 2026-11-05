@@ -256,6 +256,18 @@ fun scenes(): List<Scene> = listOf(
     Scene("chat-shepherdr3-agent", route = Routes.agent(DEVBOX, "hc:t4"), setup = { shepherdr3() }),
     Scene("chat-shepherdr3-asks", route = Routes.agent(DEVBOX, "hc:t2"), setup = { shepherdr3() }),
     Scene("chat-shepherdr3-coordinator", route = Routes.agent(DEVBOX, "hc:t1"), setup = { shepherdr3() }),
+    // The tab menu (3.1's): the Chat tab's ⋯ starts with the shown tab's rows; an agent's More sheet with its tab's.
+    Scene("tab-menu", route = Routes.CHAT, setup = { shepherdr3Tabs() }, actions = { tapLabel("Tabs and new") }),
+    Scene("tab-restart", route = Routes.CHAT, setup = { shepherdr3Tabs() }, actions = { tapLabel("Tabs and new"); tapExact("Restart") }),
+    Scene("tab-close-assistant", route = Routes.CHAT, setup = { shepherdr3Tabs() }, actions = { tapLabel("Tabs and new"); tapExact("Close tab") }),
+    Scene("tab-assistant-more", route = Routes.agent(DEVBOX, "hc:t1"), setup = { shepherdr3Tabs() }, actions = { tapLabel("More") }),
+    Scene("tab-agent-more", route = Routes.agent(DEVBOX, "hc:t8"), setup = { shepherdr3Tabs() }, actions = { tapLabel("More") }),
+    Scene("tab-rename", route = Routes.agent(DEVBOX, "hc:t8"), setup = { shepherdr3Tabs() }, actions = { tapLabel("More"); tapExact("Rename…") }),
+    Scene("tab-switch", route = Routes.agent(DEVBOX, "hc:t8"), setup = { shepherdr3Tabs() }, actions = { tapLabel("More"); tapExact("Switch agent") }),
+    Scene("tab-switch-confirm", route = Routes.agent(DEVBOX, "hc:t8"), setup = { shepherdr3Tabs() }, actions = { tapLabel("More"); tapExact("Switch agent"); tapExact("Codex") }),
+    Scene("tab-model", route = Routes.agent(DEVBOX, "hc:t8"), setup = { shepherdr3Tabs() }, actions = { tapLabel("More"); tapExact("Model…") }),
+    Scene("tab-model-change", route = Routes.agent(DEVBOX, "hc:t8"), setup = { shepherdr3Tabs() }, actions = { tapLabel("More"); tapExact("Model…"); tapExact("Sonnet 5.5") }),
+    Scene("tab-close", route = Routes.agent(DEVBOX, "hc:t8"), setup = { shepherdr3Tabs() }, actions = { tapLabel("More"); tapExact("Close tab") }),
     Scene("task-shepherdr3", route = Routes.board(DEVBOX, "AND-19"), setup = { shepherdr3() }),
     // Its chat not read yet (or not readable): the composer is whole and writable all the same; and attaching a file.
     Scene("task-shepherdr3-unread", route = Routes.board(DEVBOX, "AND-19"), setup = { shepherdr3(); host(DEVBOX).shepherdr?.chatRefused = "Couldn't read the chat" }),
