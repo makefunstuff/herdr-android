@@ -1,10 +1,12 @@
 package com.makefunstuff.herdr.core.board
 
+import com.makefunstuff.herdr.core.shepherdr.AutopilotSettings
 import com.makefunstuff.herdr.core.shepherdr.Recipe
 import com.makefunstuff.herdr.core.shepherdr.V2Artifact
 import com.makefunstuff.herdr.core.shepherdr.V2Chat
 import com.makefunstuff.herdr.core.shepherdr.V2Evidence
 import com.makefunstuff.herdr.core.shepherdr.V2Need
+import com.makefunstuff.herdr.core.shepherdr.V2Pilot
 import com.makefunstuff.herdr.core.shepherdr.V2Question
 import com.makefunstuff.herdr.core.shepherdr.VoiceCall
 import kotlinx.coroutines.delay
@@ -66,6 +68,8 @@ data class WorkSpace(
     val store: String = "",
     /** Its icon, an emoji the person picked. */
     val emoji: String? = null,
+    /** Its Autopilot, switched in its Assistant's header; none where it can't be switched from here. */
+    val pilot: V2Pilot? = null,
 )
 
 /** One task on Shepherdr's board. */
@@ -109,6 +113,8 @@ data class WorkOverview(
     val tasks: List<WorkTask>,
     val artifacts: List<V2Artifact>? = null,
     val needs: List<V2Need> = emptyList(),
+    /** Settings › Autopilot on this machine; null where it has none. */
+    val autopilot: AutopilotSettings? = null,
 ) {
     val needsYou: List<WorkTask> get() = tasks.filter { it.status.needsYou }
     fun tasksIn(space: String): List<WorkTask> = tasks.filter { it.space == space }
@@ -241,6 +247,12 @@ interface WorkBoard {
      * phone's microphone and speaker, ElevenLabs' voice agent on the machine.
      */
     suspend fun call(space: String, task: WorkTask? = null): VoiceCall = throw IOException("This board takes no calls")
+
+    /** Switches [space]'s Autopilot on or off (its Assistant's header switch); herdr-task's refusal in the exception. */
+    suspend fun autopilot(space: String, on: Boolean): Unit = throw IOException("This board has no Autopilot")
+
+    /** Sets one of Settings › Autopilot's rows ([com.makefunstuff.herdr.core.shepherdr.Autopilot.EVERY] and the rest). */
+    suspend fun autopilotSetting(key: String, value: String): Unit = throw IOException("This board has no Autopilot")
 
     /** What was said in [audio], written down on the machine (Shepherdr's dictation, whisper.cpp there). */
     suspend fun dictate(audio: ByteArray, type: String): String = throw IOException("This board takes no dictation")

@@ -106,6 +106,24 @@ object V2Actions {
         put("chat", chat)
     }
 
+    /** Switches [place]'s Autopilot on or off, as its Assistant's header switch (`herdr-task autopilot on|off`). */
+    fun autopilot(place: String, on: Boolean): JsonObject = buildJsonObject {
+        put("type", "mode")
+        put("place", place)
+        put("mode", if (on) "autopilot" else "regular")
+    }
+
+    /**
+     * Sets one of Settings › Autopilot's rows ([Autopilot.HEARTBEAT], [Autopilot.EVERY], [Autopilot.EVENTS]): the
+     * same in every space of the machine, so Everywhere's.
+     */
+    fun autopilotSetting(key: String, value: String): JsonObject = buildJsonObject {
+        put("type", "setting")
+        put("key", key)
+        put("place", "all")
+        put("value", value)
+    }
+
     /** What the live link is told: the chats on screen. Sent as not visible, so the machine's alerts keep coming. */
     fun watch(chats: List<String>): JsonObject = buildJsonObject {
         put("type", "watch")
@@ -354,7 +372,7 @@ object V2Events {
     /** A snapshot, its lists read item by item where the whole doesn't read. */
     fun snapshot(o: JsonObject): V2Snapshot {
         runCatching { return ShepherdrJson.decodeFromJsonElement(V2Snapshot.serializer(), o) }
-        val lists = listOf("places", "machines", "tasks", "artifacts", "asks", "last", "read", "needs", "alerts")
+        val lists = listOf("places", "machines", "tasks", "artifacts", "asks", "last", "read", "needs", "alerts", "settings", "off")
         val base = runCatching { ShepherdrJson.decodeFromJsonElement(V2Snapshot.serializer(), JsonObject(o - lists.toSet())) }.getOrElse { V2Snapshot() }
         fun <T> each(k: String, s: kotlinx.serialization.KSerializer<T>): List<T>? =
             (o[k] as? JsonArray)?.mapNotNull { runCatching { ShepherdrJson.decodeFromJsonElement(s, it) }.getOrNull() }
@@ -367,6 +385,8 @@ object V2Events {
             artifacts = each("artifacts", V2Artifact.serializer()),
             needs = each("needs", V2Need.serializer()).orEmpty(),
             alerts = each("alerts", V2Alert.serializer()).orEmpty(),
+            settings = each("settings", V2SettingSection.serializer()).orEmpty(),
+            off = (o["off"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.contentOrNull },
             asks = map("asks") { it.contentOrNull },
             last = map("last") { it.doubleOrNull },
             read = map("read") { it.doubleOrNull },
