@@ -7,6 +7,8 @@ import com.makefunstuff.herdr.core.board.WorkSpace
 import com.makefunstuff.herdr.core.board.WorkTask
 import com.makefunstuff.herdr.core.board.WorkStatus
 import com.makefunstuff.herdr.core.host.HostState
+import com.makefunstuff.herdr.core.shepherdr.V2Need
+import com.makefunstuff.herdr.core.shepherdr.V2SecretAsk
 
 /** An agent as the home list sees it: the machine it runs on, where in herdr, and its workspace's name. */
 data class HomeAgent(
@@ -64,6 +66,21 @@ sealed interface Waiting {
     data class Coordinator(override val machineId: String, val machineLabel: String, val space: WorkSpace) : Waiting {
         override val key: String get() = "asks/$machineId/${space.id}"
         override val task: WorkTask? get() = null
+    }
+
+    /**
+     * An agent that asks for a secret by name ("Wants the secret GITHUB_TOKEN"), answered in a masked box: [need]
+     * carries the ask ([V2Need.secret]) and its chat; [task] its task, or none for a space's Assistant in [space].
+     */
+    data class Secret(
+        override val machineId: String,
+        val machineLabel: String,
+        val need: V2Need,
+        override val task: WorkTask?,
+        val space: WorkSpace?,
+    ) : Waiting {
+        override val key: String get() = "secret/$machineId/${need.id}"
+        val ask: V2SecretAsk get() = need.secret ?: V2SecretAsk()
     }
 }
 
@@ -133,9 +150,16 @@ data class Home(
             val taskOf = agents.associate { a -> a.key to taskOf(a, tasks[a.machineId].orEmpty()) }
             val questions = agents.filter { it.agent.agentStatus == AgentStatus.Blocked }
             val asked = questions.mapNotNull { taskOf[it.key]?.let { t -> it.machineId to t.id } }.toSet()
+            // Every secret an agent asks for, as 3.1's Needs you lists them: a task that waits on one is that item.
+            val secrets = boards.flatMap { b ->
+                b.work.needs.filter { it.secret != null && it.secret.saved == null }.map { n ->
+                    Waiting.Secret(b.machineId, b.machineLabel, n, n.task?.let { id -> b.tasks.firstOrNull { it.id == id } }, b.work.spaces.firstOrNull { it.id == n.place })
+                }
+            }
+            val secretTasks = secrets.mapNotNull { s -> s.task?.let { s.machineId to it.id } }.toSet()
             val waiting = boards.flatMap { b ->
                 // Ready to accept first, then what asks: as the board lists them otherwise.
-                b.tasks.filter { it.status.needsYou && (b.machineId to it.id) !in asked }.sortedBy { if (it.status == WorkStatus.Ready) 0 else 1 }
+                b.tasks.filter { it.status.needsYou && (b.machineId to it.id) !in asked && !(it.status == WorkStatus.Need && (b.machineId to it.id) in secretTasks) }.sortedBy { if (it.status == WorkStatus.Ready) 0 else 1 }
                     .map { t ->
                         val agent = agents.firstOrNull { it.machineId == b.machineId && taskOf[it.key]?.id == t.id }
                         Waiting.Task(b.machineId, b.machineLabel, t, agent)
@@ -154,7 +178,7 @@ data class Home(
             val snoozed = rest.filter { it.key !in triage.pins && triage.snoozeOf(it, now) != null }.sortedWith(bySeq)
             val listed = rest.filter { it !in pinned && it !in snoozed }
             return Home(
-                needsYou = questions.sortedWith(bySeq).map { Waiting.Question(it, taskOf[it.key]) } + waiting +
+                needsYou = questions.sortedWith(bySeq).map { Waiting.Question(it, taskOf[it.key]) } + secrets + waiting +
                     boards.flatMap { b -> b.work.spaces.filter { it.asks }.map { Waiting.Coordinator(b.machineId, b.machineLabel, it) } },
                 pinned = pinned.map(::row),
                 working = listed.filter { it.agent.agentStatus == AgentStatus.Working }.sortedWith(bySeq).map(::row),
@@ -202,7 +226,7 @@ class WaitingNews {
 
     private fun source(w: Waiting) = when (w) {
         is Waiting.Question -> "agents:${w.machineId}"
-        is Waiting.Task, is Waiting.Coordinator -> "board:${w.machineId}"
+        is Waiting.Task, is Waiting.Coordinator, is Waiting.Secret -> "board:${w.machineId}"
     }
 
     companion object {
@@ -211,6 +235,7 @@ class WaitingNews {
             is Waiting.Question -> "q${w.agent.agent.stateChangeSeq}"
             is Waiting.Task -> "${w.task.status}|${w.task.line}"
             is Waiting.Coordinator -> "asks"
+            is Waiting.Secret -> "secret"
         }
     }
 }

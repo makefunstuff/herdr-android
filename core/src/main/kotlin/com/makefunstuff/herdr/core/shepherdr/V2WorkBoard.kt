@@ -91,6 +91,12 @@ class V2WorkBoard(private val connect: suspend () -> ShepherdrClient, private va
         return ""
     }
 
+    override suspend fun keepSecret(chat: String, ask: V2SecretAsk, level: String, value: String): String {
+        if (value.isEmpty()) throw IOException("Type or paste the value first")
+        connect().act(V2Actions.secret(chat, ask.id, ask.name, level, value))
+        return "Kept for " + (ask.levels.firstOrNull { it.id == level }?.label ?: level)
+    }
+
     override suspend fun coordinator(space: String): CoordinatorThread =
         V2Board.thread(space, connect().chat(chatOf(space)))
 
@@ -228,7 +234,8 @@ object V2Board {
                 needsYou = p.status == V2Status.Need || s.asks.containsKey(p.id) || s.needs.any { it.place == p.id } ||
                     tasks.any { it.space == p.id && it.status.needsYou },
                 unreachable = p.unreachableSince != null,
-                asks = s.asks.containsKey(p.id) || s.needs.any { it.place == p.id && it.task == null },
+                // A secret ask is its own item on Needs you (Waiting.Secret), not the Assistant's question.
+                asks = s.asks.containsKey(p.id) || s.needs.any { it.place == p.id && it.task == null && it.secret == null },
                 level = p.level,
                 store = p.store?.key.orEmpty(),
                 emoji = p.emoji,

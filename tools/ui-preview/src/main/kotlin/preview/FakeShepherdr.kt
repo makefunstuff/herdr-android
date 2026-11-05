@@ -118,9 +118,15 @@ class FakeShepherdr(
     }
 
     private fun act(a: JsonObject): Pair<Int, String> {
-        actions += a
+        // A secret's value is never kept, here neither: only that one was sent.
+        actions += if (a["type"]?.jsonPrimitive?.content == "secret") JsonObject(a - "value") else a
         val chat = a["chat"]?.jsonPrimitive?.content.orEmpty()
         when (a["type"]?.jsonPrimitive?.content) {
+            // Kept in the vault: the agent no longer waits for it.
+            "secret" -> {
+                val id = a["card"]?.jsonObject?.get("id")?.jsonPrimitive?.content
+                snapshot = JsonObject(snapshot + ("needs" to JsonArray((snapshot["needs"] as? JsonArray).orEmpty().filter { it.jsonObject["id"]?.jsonPrimitive?.content != id })))
+            }
             // In at once, the agent at work on it.
             "send" -> change(chat) { c ->
                 val words = a.getValue("text").jsonPrimitive.content
@@ -270,6 +276,16 @@ object DemoV2 {
      * website, a task in every status, two tasks whose cards ask (one choice or your own words; several), and
      * website's Assistant waiting on a reply; the Assistants' chats above too.
      */
+    /**
+     * The home space's Assistant asking for a secret by name, as the service lists it under needs (`secretAsk` in its
+     * compat.ts): where it can be kept, narrowest first. No value anywhere: the box starts empty.
+     */
+    const val SECRET_NEED = """
+        {"id":"secret:t3:VERCEL_TOKEN","chat":"p:sp-home","place":"sp-home","at":1793228000000,
+         "secret":{"id":"secret:t3:VERCEL_TOKEN","name":"VERCEL_TOKEN","why":"To deploy the preview of the new pricing page",
+          "levels":[{"id":"p::sp-home","label":"This space"},{"id":"m:","label":"This computer"},{"id":"all","label":"Everywhere"}]}}
+    """
+
     fun board() = FakeShepherdr(
         snapshot = Json.parseToJsonElement(Demo.resource("shepherdr/snapshot.json")).jsonObject,
         chats = chats() + Json.parseToJsonElement(Demo.resource("shepherdr/chats.json")).jsonObject.mapValues { it.value.jsonObject },
