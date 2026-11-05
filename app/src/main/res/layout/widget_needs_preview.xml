@@ -34,7 +34,7 @@
             android:textSize="12sp" />
     </LinearLayout>
 
-    <View
+    <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="1dp"
         android:background="@color/widget_line" />
@@ -81,7 +81,7 @@
             android:visibility="visible" />
     </LinearLayout>
 
-    <View
+    <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="1dp"
         android:background="@color/widget_line" />

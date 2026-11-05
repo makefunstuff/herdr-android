@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  One row of the Needs you widget, under a hairline: what waits (as its notification's title) over why, dim (or how
+  One row of the Needs you widget, under a hairline (a FrameLayout: a widget may not hold a plain View): what waits (as its notification's title) over why, dim (or how
   its button went), and up to two of its notification's buttons, the first amber. A tap on the words opens it.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
@@ -8,7 +8,7 @@
     android:layout_height="wrap_content"
     android:orientation="vertical">
 
-    <View
+    <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="1dp"
         android:background="@color/widget_line" />

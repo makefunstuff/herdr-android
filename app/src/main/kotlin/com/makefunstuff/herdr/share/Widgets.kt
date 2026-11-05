@@ -69,13 +69,18 @@ object Widgets {
             // Of the machines still in the app: a removed one's buttons have nowhere to go.
             val waiting = container.inbox.waiting.value.filter { container.machines.get(it.alert.machineId) != null }
             // Each its own: one widget may be taller than another.
-            for (id in needs) manager.updateAppWidget(id, needs(context, waiting, rows(manager.getAppWidgetOptions(id))))
+            for (id in needs) manager.updateAppWidget(id, needs(context, waiting, rows(context, manager.getAppWidgetOptions(id))))
         }
     }
 
-    /** How many rows a Needs you widget [options] says the size of has room for: under its heading, 48dp each. */
-    private fun rows(options: Bundle): Int {
-        val height = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT).takeIf { it > 0 } ?: return 2
+    /**
+     * How many rows a Needs you widget of the size [options] gives has room for: under its heading, 49dp each (a
+     * row and its hairline). Its height upright is the larger the launcher names, on its side the smaller.
+     */
+    private fun rows(context: Context, options: Bundle): Int {
+        val upright = context.resources.configuration.orientation != android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        val key = if (upright) AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT else AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT
+        val height = options.getInt(key).takeIf { it > 0 } ?: return 2
         return ((height - 16 - 28) / 49).coerceIn(1, 6)
     }
 
