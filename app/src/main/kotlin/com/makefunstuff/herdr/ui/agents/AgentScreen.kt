@@ -373,6 +373,8 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
         upload = { file, name -> file.inputStream().use { session.upload(name, it) } },
         deliver = { remote, _ -> deliverVoice(remote) },
         fetch = { remote -> session.fetchImage(remote) },
+        machine = machineId,
+        board = { session.workBoardOrNull() },
     )
 
     /** A held message, now: sent as typed then (Claude Code and Codex take words mid-turn as their next). */
@@ -516,6 +518,7 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
                         },
                         attachments = { ComposerTray(tray) },
                         voice = voice.recorder,
+                        dictation = voice.dictation,
                         attached = !tray.isEmpty,
                         stop = if (status == AgentStatus.Working) ({ keys(listOf("esc")) }) else null,
                         floating = true,

@@ -128,6 +128,8 @@ class V2WorkBoard(private val connect: suspend () -> ShepherdrClient, private va
 
     override suspend fun dictate(audio: ByteArray, type: String): String = connect().dictate(audio, type)
 
+    override suspend fun canDictate(): Boolean = connect().canDictate()
+
     /** Its agent's chat from the live link, as [coordinatorThreads] follows a space's. */
     override fun taskThreads(task: WorkTask, everyMs: Long): Flow<CoordinatorThread> {
         val key = agentChat(task)

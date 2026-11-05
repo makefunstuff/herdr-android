@@ -261,6 +261,9 @@ interface WorkBoard {
     /** What was said in [audio], written down on the machine (Shepherdr's dictation, whisper.cpp there). */
     suspend fun dictate(audio: ByteArray, type: String): String = throw IOException("This board takes no dictation")
 
+    /** Whether [dictate] works here: the machine has whisper.cpp. */
+    suspend fun canDictate(): Boolean = false
+
     /**
      * [task]'s own chat, its agent's ([WorkTask.chat]), now and on every change: in a [CoordinatorThread]'s
      * shape, its [CoordinatorThread.space] the task's space.

@@ -245,7 +245,7 @@ fun scenes(): List<Scene> = listOf(
     Scene("artifacts-tab-none", route = Routes.ARTIFACTS_TAB, setup = { home() }),
     // A task's chat takes voice messages too (kept by Shepherdr's service, then the chat as its file), as the Assistant's.
     Scene("task-v2-voice-sent", route = Routes.board(DEVBOX, "AND-19"), setup = { shepherdr3() }, actions = {
-        tapLabel("Record a voice message")
+        recordVoice()
         tapLabel("Send voice message")
     }),
     // Every agent's chat keeps its whole composer (text, attach, mic, Send): a herdr-core agent at work, Shepherdr 3's
@@ -385,15 +385,15 @@ fun scenes(): List<Scene> = listOf(
     // that letting go cancels, tapped to go on hands-free; sent (copied to the machine, then to the agent as its
     // file) and played back; one whose copy failed, to retry; one held while the agent works; too short to send;
     // why the microphone is needed while Android asks for it, and again once refused.
-    Scene("chat-voice-recording", route = Routes.agent(DEVBOX, APP_AGENT), actions = { hold("Record a voice message", 0.5f to 0.5f) }),
-    Scene("chat-voice-cancel", route = Routes.agent(DEVBOX, APP_AGENT), actions = { hold("Record a voice message", 0.5f to 0.5f, -2.5f to 0.6f) }),
-    Scene("chat-voice-tap", route = Routes.agent(DEVBOX, APP_AGENT), actions = { tapLabel("Record a voice message") }),
+    Scene("chat-voice-recording", route = Routes.agent(DEVBOX, APP_AGENT), actions = { hold("Talk to type", 0.5f to 0.5f) }),
+    Scene("chat-voice-cancel", route = Routes.agent(DEVBOX, APP_AGENT), actions = { hold("Talk to type", 0.5f to 0.5f, -2.5f to 0.6f) }),
+    Scene("chat-voice-tap", route = Routes.agent(DEVBOX, APP_AGENT), actions = { recordVoice() }),
     Scene("chat-voice-sent", route = Routes.agent(DEVBOX, APP_AGENT), setup = { appDone() }, actions = {
-        tapLabel("Record a voice message")
+        recordVoice()
         tapLabel("Send voice message")
     }),
     Scene("chat-voice-playing", route = Routes.agent(DEVBOX, APP_AGENT), setup = { appDone() }, actions = {
-        tapLabel("Record a voice message")
+        recordVoice()
         tapLabel("Send voice message")
         tapLabel("Play voice message")
     }),
@@ -401,23 +401,43 @@ fun scenes(): List<Scene> = listOf(
         appDone()
         host(DEVBOX).uploadFails = "No space left on device"
     }, actions = {
-        tapLabel("Record a voice message")
+        recordVoice()
         tapLabel("Send voice message")
     }),
     Scene("chat-voice-held", route = Routes.agent(DEVBOX, APP_AGENT), actions = {
-        tapLabel("Record a voice message")
+        recordVoice()
         tapLabel("Send voice message")
     }),
     Scene("chat-voice-short", route = Routes.agent(DEVBOX, APP_AGENT), setup = { mic = PreviewMic.Setup(spokeFor = 400) }, actions = {
-        tapLabel("Record a voice message")
+        recordVoice()
         tapLabel("Send voice message")
     }),
     Scene("chat-voice-denied", route = Routes.agent(DEVBOX, APP_AGENT), setup = {
         mic = PreviewMic.Setup(allowed = false, answer = false)
-    }, actions = { tapLabel("Record a voice message") }),
+    }, actions = { tapLabel("Talk to type") }),
     Scene("chat-voice-asking", route = Routes.agent(DEVBOX, APP_AGENT), setup = {
         mic = PreviewMic.Setup(allowed = false, answer = null)
-    }, actions = { tapLabel("Record a voice message") }),
+    }, actions = { tapLabel("Talk to type") }),
+    // Talk to type, a tap on the mic: listening (the box gives way to how loud you are), the phone's recogniser's
+    // words as you speak, Done putting them in the box after what was typed, to edit and send; nothing heard. A task's
+    // chat on Shepherdr 3 has its machine write it down (whisper.cpp there), as 3.1's web app does.
+    Scene("chat-dictate", route = Routes.agent(DEVBOX, APP_AGENT), actions = { tapLabel("Talk to type") }),
+    Scene("chat-dictate-heard", route = Routes.agent(DEVBOX, APP_AGENT), setup = {
+        mic = PreviewMic.Setup(heard = "run the failing test again and")
+    }, actions = { tapLabel("Talk to type") }),
+    Scene("chat-dictate-done", route = Routes.agent(DEVBOX, APP_AGENT), actions = {
+        type("Before you merge,")
+        tapLabel("Talk to type")
+        tapLabel("Done: put it in the box")
+    }),
+    Scene("chat-dictate-nothing", route = Routes.agent(DEVBOX, APP_AGENT), setup = { mic = PreviewMic.Setup(said = "") }, actions = {
+        tapLabel("Talk to type")
+        tapLabel("Done: put it in the box")
+    }),
+    Scene("task-v2-dictate", route = Routes.board(DEVBOX, "AND-19"), setup = { shepherdr3(); mic = PreviewMic.Setup(recognises = false) }, actions = {
+        tapLabel("Talk to type")
+        tapLabel("Done: put it in the box")
+    }),
     // The chats' own text size (Settings → Text size), larger than the phone's.
     Scene("chat-large-text", route = Routes.agent(DEVBOX, APP_AGENT), setup = { textSizes = com.makefunstuff.herdr.data.TextSizeStore.Sizes(chat = 1.3f) }),
 
@@ -521,9 +541,9 @@ fun scenes(): List<Scene> = listOf(
     Scene("artifact-not-kept", route = Routes.artifact(DEVBOX, "rn09", 9), setup = { artifacts() }),
     Scene("artifacts-empty", route = Routes.artifacts(DEVBOX, "sp-website"), setup = { artifacts() }),
     // A voice message to a space's Assistant: recording, then kept by Shepherdr's service and in the chat as its file.
-    Scene("coordinator-v2-voice", route = Routes.coordinator(DEVBOX), setup = { shepherdr() }, actions = { tapLabel("Record a voice message") }),
+    Scene("coordinator-v2-voice", route = Routes.coordinator(DEVBOX), setup = { shepherdr() }, actions = { recordVoice() }),
     Scene("coordinator-v2-voice-sent", route = Routes.coordinator(DEVBOX), setup = { shepherdr() }, actions = {
-        tapLabel("Record a voice message")
+        recordVoice()
         tapLabel("Send voice message")
     }),
     // The Assistant's voice: turned on with the headphones, reading a reply (a tap stops it), hearing you
