@@ -316,6 +316,9 @@ internal fun TaskChatScreen(
     val callHere = call.machineId == machineId && call.task == t.id && (call.on || call.problem != null)
     val askMic = com.makefunstuff.herdr.voice.rememberVoiceMic()
     val canClose = t.status != WorkStatus.Done && t.status != WorkStatus.Merging
+    // Its agent's terminal, when it has one now: a tab in the strip and the way out of an empty chat.
+    val terminalPane = TabMenus.taskTerminal(state.view, t)
+    val openTerminal: (() -> Unit)? = terminalPane?.let { pane -> { nav.navigate(Routes.terminal(machineId, pane)) } }
     Box(Modifier.fillMaxSize()) {
         Scaffold(
             containerColor = c.ground,
@@ -345,8 +348,7 @@ internal fun TaskChatScreen(
                         BarIcon(HerdrIcons.Ellipsis, "Details and more", { sheet = TaskSheet.Menu })
                     }
                     TaskStrip(t, details, busy, onMerge, onPr = { picked = TaskView.PullRequest })
-                    TaskViewTabs(t, view, onView = { picked = it },
-                        onTerminal = TabMenus.taskTerminal(state.view, t)?.let { pane -> { nav.navigate(Routes.terminal(machineId, pane)) } })
+                    TaskViewTabs(t, view, onView = { picked = it }, onTerminal = openTerminal)
                 }
             },
         ) { padding ->
@@ -438,9 +440,20 @@ internal fun TaskChatScreen(
                                 Box(Modifier.fillParentMaxSize(), contentAlignment = Alignment.Center) {
                                     val finished = t.status == WorkStatus.Ready || t.status == WorkStatus.Done || t.status == WorkStatus.Merging
                                     if (notice != null) ChatEmpty(HerdrIcons.SquareTerminal, notice.first, notice.second.orEmpty())
+                                    else if (finished && openTerminal != null) ChatEmpty(
+                                        HerdrIcons.SquareTerminal, "No chat was kept",
+                                        "Its agent worked in its terminal, which is still open.",
+                                        action = {
+                                            PrimaryButton(openTerminal) {
+                                                Icon(HerdrIcons.SquareTerminal, null, Modifier.size(18.dp))
+                                                Spacer(Modifier.width(Space.s))
+                                                Text("Open terminal")
+                                            }
+                                        },
+                                    )
                                     else if (finished) ChatEmpty(
                                         HerdrIcons.SquareTerminal, "No chat was kept",
-                                        "Its agent worked in its terminal. Open the terminal from the tabs or ⋯.",
+                                        "Its agent worked in its terminal, which has ended.",
                                     )
                                     else ChatEmpty(HerdrIcons.MessagesSquare, "Nothing said yet", "Its agent writes here as it works. You can write to it too.")
                                 }
