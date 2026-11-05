@@ -658,6 +658,8 @@ fun scenes(): List<Scene> = listOf(
     Scene("task-v2-multi", route = Routes.board(DEVBOX, "AND-24"), setup = { v2() }, actions = { tapText("Key bar"); tapText("Alert rules") }),
     Scene("task-v2-ready", route = Routes.board(DEVBOX, "AND-20"), setup = { v2() }),
     Scene("task-v2-accept", route = Routes.board(DEVBOX, "AND-20"), heightDp = 1300, setup = { v2() }, actions = { settle(); tapExact("Accept") }),
+    // A task's Finished alert ("AND-20 · Finished") tapped: the task, its Accept card already up.
+    Scene("task-v2-alert-accept", route = Routes.board(DEVBOX, "AND-20", alone = true, accept = true), heightDp = 1300, setup = { v2() }),
     // A call with a task's agent.
     Scene("task-v2-call", route = Routes.board(DEVBOX, "AND-19"), setup = {
         v2()

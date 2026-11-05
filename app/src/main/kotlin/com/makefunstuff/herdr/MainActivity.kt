@@ -64,7 +64,9 @@ class MainActivity : FragmentActivity() {
         if (intent?.getBooleanExtra(OPEN_BRIEF, false) == true) { Links.open(Routes.BRIEF); return true }
         val machine = intent?.getStringExtra(OPEN_MACHINE)?.takeIf { it.isNotEmpty() } ?: return false
         val pane = intent.getStringExtra(OPEN_PANE).orEmpty()
+        val task = intent.getStringExtra(OPEN_TASK).orEmpty()
         when {
+            task.isNotEmpty() -> Links.open(Routes.board(machine, task, alone = true, accept = intent.getBooleanExtra(OPEN_ACCEPT, false)))
             intent.getBooleanExtra(OPEN_HEALTH, false) -> Links.open(Routes.health(machine))
             intent.getBooleanExtra(OPEN_USAGE, false) -> Links.open(Routes.usage(machine))
             intent.getBooleanExtra(OPEN_COORDINATOR, false) -> Links.open(Routes.coordinator(machine))
@@ -89,6 +91,9 @@ class MainActivity : FragmentActivity() {
     companion object {
         const val OPEN_MACHINE = "open_machine"
         const val OPEN_PANE = "open_pane"
+        /** A Shepherdr 3 task's id, from its alert; with [OPEN_ACCEPT] its Accept card opens over it. */
+        const val OPEN_TASK = "open_task"
+        const val OPEN_ACCEPT = "open_accept"
         const val OPEN_HEALTH = "open_health"
         const val OPEN_USAGE = "open_usage"
         const val OPEN_COORDINATOR = "open_coordinator"

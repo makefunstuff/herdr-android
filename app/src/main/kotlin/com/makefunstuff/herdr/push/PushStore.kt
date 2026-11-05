@@ -5,6 +5,8 @@ import com.makefunstuff.herdr.core.push.AlertRules
 import com.makefunstuff.herdr.core.push.PushSeal
 import com.makefunstuff.herdr.core.push.QuietHours
 import com.makefunstuff.herdr.core.push.Watch
+import com.makefunstuff.herdr.core.push.WebPush
+import com.makefunstuff.herdr.core.push.WebPushKeys
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -69,6 +71,10 @@ data class MachinePush(
     val live: Boolean? = null,
     /** The agents an older subscription followed for the one-shot watches (`pane:…`); null or empty: none, as subscriptions are made now. */
     val watching: String? = null,
+    /** Its Shepherdr 3 service's task alerts (Web Push): the keys this phone subscribed there with; made once. */
+    val webPush: WebPushKeys? = null,
+    /** The address its Shepherdr 3 service sends task alerts to; null when not subscribed there. */
+    val tasksTo: String? = null,
 ) {
     val keyBytes: ByteArray? get() = key.takeIf { it.isNotEmpty() }?.let { runCatching { Base64.getDecoder().decode(it) }.getOrNull() }
 }
@@ -101,6 +107,18 @@ class PushStore(private val file: File) {
         machine(id) { it.copy(key = Base64.getEncoder().encodeToString(key)) }
         return key
     }
+
+    /** The machine's Web Push keys for its Shepherdr 3 service, made the first time they are asked for. */
+    @Synchronized
+    fun webKeys(id: String): WebPushKeys {
+        state.value.machine(id).webPush?.let { return it }
+        val keys = WebPush.newKeys()
+        machine(id) { it.copy(webPush = keys) }
+        return keys
+    }
+
+    /** Whether a Shepherdr 3 service sends this phone its task alerts: a task's agent then alerts as its task alone. */
+    val taskAlerts: Boolean get() = state.value.on && state.value.machines.values.any { it.tasksTo != null && !it.off }
 
     /** Every machine's key, to find which one sealed a push. */
     fun keys(): Map<String, ByteArray> = state.value.machines.mapNotNull { (id, m) -> m.keyBytes?.let { id to it } }.toMap()

@@ -155,7 +155,7 @@ object Routes {
     /** A machine's Assistant: [space]'s (its id), else its home space's. */
     const val COORDINATOR = "coordinator/{mid}?space={space}"
     /** One machine's board; with [task] open, and with `alone` closing the task goes back instead of to the board. */
-    const val BOARD = "board/{mid}?task={task}&alone={alone}"
+    const val BOARD = "board/{mid}?task={task}&alone={alone}&accept={accept}"
     const val HEALTH = "health/{mid}"
     /** A machine's AI providers: limits, spend, balances, and what used them. */
     const val USAGE = "usage/{mid}"
@@ -188,8 +188,8 @@ object Routes {
     fun ask(to: String) = "ask/$to"
     fun artifacts(mid: String, space: String? = null) = "artifacts/$mid" + (space?.let { "?space=" + Uri.encode(it) } ?: "")
     fun artifact(mid: String, id: String, v: Int? = null) = "artifact/$mid/${Uri.encode(id)}" + (v?.let { "?v=$it" } ?: "")
-    fun board(mid: String, task: String? = null, alone: Boolean = false) =
-        if (task == null) "board/$mid" else "board/$mid?task=${Uri.encode(task)}" + if (alone) "&alone=1" else ""
+    fun board(mid: String, task: String? = null, alone: Boolean = false, accept: Boolean = false) =
+        if (task == null) "board/$mid" else "board/$mid?task=${Uri.encode(task)}" + (if (alone) "&alone=1" else "") + if (accept) "&accept=1" else ""
     fun health(mid: String) = "health/$mid"
     fun usage(mid: String) = "usage/$mid"
     fun autopilot(mid: String) = "settings/autopilot/$mid"
@@ -351,7 +351,10 @@ internal fun NavGraphBuilder.screens(nav: NavHostController, tasks: @Composable 
     composable(Routes.USAGE) { com.makefunstuff.herdr.ui.usage.UsageScreen(nav, it.arguments?.getString("mid").orEmpty()) }
     composable(Routes.LOGINS) { com.makefunstuff.herdr.ui.logins.LoginsScreen(nav, it.arguments?.getString("mid").orEmpty()) }
     composable(Routes.BOARD) {
-        BoardScreen(nav, it.arguments?.getString("mid").orEmpty(), it.arguments?.getString("task")?.let(Uri::decode), alone = it.arguments?.getString("alone") == "1")
+        BoardScreen(
+            nav, it.arguments?.getString("mid").orEmpty(), it.arguments?.getString("task")?.let(Uri::decode),
+            alone = it.arguments?.getString("alone") == "1", accept = it.arguments?.getString("accept") == "1",
+        )
     }
     composable(Routes.ASK) { AskScreen(nav, it.arguments?.getString("to").orEmpty()) }
     composable(Routes.CODE_AT) {

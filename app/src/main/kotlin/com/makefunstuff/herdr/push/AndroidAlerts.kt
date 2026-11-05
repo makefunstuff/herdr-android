@@ -150,12 +150,15 @@ class AndroidAlerts(private val context: Context, private val appLock: () -> Boo
         )
         .build()
 
-    /** A tap: the agent's chat, or the machine's health or usage. */
+    /** A tap: the agent's chat, a task (its Accept card when it is ready), Needs you, or the machine's health or usage. */
     private fun openIntent(alert: Alert): PendingIntent {
         val intent = Intent(context, MainActivity::class.java)
             .setData(Uri.parse("herdr://alert/${Uri.encode(alert.tag)}"))
             .putExtra(MainActivity.OPEN_MACHINE, alert.machineId)
             .putExtra(MainActivity.OPEN_PANE, alert.paneId)
+            .putExtra(MainActivity.OPEN_TASK, alert.task)
+            .putExtra(MainActivity.OPEN_ACCEPT, alert.accept)
+            .putExtra(MainActivity.OPEN_NEEDS, alert.chat.isNotEmpty())
             .putExtra(MainActivity.OPEN_HEALTH, alert.health)
             .putExtra(MainActivity.OPEN_USAGE, alert.usage)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)

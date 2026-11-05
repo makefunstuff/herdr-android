@@ -12,7 +12,7 @@ enum class Notify(val label: String) {
     NeedsMe("Needs me"),
     Off("Off");
 
-    /** Whether an agent's news of [kind] comes from a space set to this. */
+    /** Whether an agent's news of [kind] comes from a space set to this. A Ready task waits on you: [Alert.Kind.NeedsYou] ([TaskAlerts]). */
     fun allows(kind: Alert.Kind): Boolean = when (this) {
         All -> true
         NeedsMe -> kind != Alert.Kind.Finished
@@ -22,7 +22,7 @@ enum class Notify(val label: String) {
     /** As the sheet and the drawer say what it lets through. */
     val hint: String get() = when (this) {
         All -> "Its questions, and each time an agent there finishes"
-        NeedsMe -> "Only when an agent there asks you something"
+        NeedsMe -> "When an agent there asks you something, or a task is ready"
         Off -> "Nothing from its agents"
     }
 
