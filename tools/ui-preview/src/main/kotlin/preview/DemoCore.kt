@@ -45,8 +45,28 @@ object DemoCore {
             "t4" to "Summed up this week's notes in notes/2026-w42.md.\n",
             "t5" to "\u001b[32m  VITE v6.2.0\u001b[0m  ready in 412 ms\n\n  ➜  Local:   http://localhost:5173/\n",
         ),
+        // The shell's history above its screen: a test run with one failure, then the fix's commit.
+        histories = mapOf("t2" to shellHistory()),
         name = "devbox",
     )
+
+    private fun shellHistory() = buildString {
+        append(PROMPT + "./gradlew test\n")
+        for (t in listOf("JobsTest", "JobQueueTest", "RetryPolicyTest", "SchedulerTest", "MigrationTest", "ApiRoutesTest", "AuthTest", "BillingTest")) {
+            append("> Task :app:test $t\n")
+            if (t == "MigrationTest") {
+                append("$t > createdAtHasADefault() FAILED\n")
+                append("    org.opentest4j.AssertionFailedError: expected: <now()> but was: <null>\n")
+                append("        at app//demo.herdr.data.MigrationTest.createdAtHasADefault(MigrationTest.kt:42)\n")
+            } else {
+                append("$t > PASSED (${t.length * 7} tests)\n")
+            }
+        }
+        append("\n41 tests completed, 1 failed\n\nFAILURE: Build failed with an exception.\n\n")
+        append(PROMPT + "git commit -am \"Jobs: created_at defaults to now()\"\n")
+        append("[review 3f1c2ab] Jobs: created_at defaults to now()\n 2 files changed, 9 insertions(+), 1 deletion(-)\n")
+        for (i in 1..12) append(PROMPT + "\n")
+    }
 
     /** mac-mini with the desktop app and no classic herdr: the website's Claude at work, Codex done. */
     fun mini() = FakeCore(

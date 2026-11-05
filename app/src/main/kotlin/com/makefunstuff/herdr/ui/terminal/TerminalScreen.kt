@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -46,6 +47,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -94,6 +96,7 @@ import com.makefunstuff.herdr.ui.design.HerdrMenu
 import com.makefunstuff.herdr.ui.design.HerdrShapes
 import com.makefunstuff.herdr.ui.design.HerdrSheet
 import com.makefunstuff.herdr.ui.design.HerdrTopBar
+import com.makefunstuff.herdr.ui.design.hairline
 import com.makefunstuff.herdr.ui.design.MenuRow
 import com.makefunstuff.herdr.ui.design.QuietButton
 import com.makefunstuff.herdr.ui.design.SheetTitle
@@ -240,11 +243,13 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
         if (s.status.value == TerminalStream.Status.Opening) silent = true
     }
     LaunchedEffect(revision, view) { view?.invalidate() }
+    // herdr-core's history the phone keeps: how far back the view is scrolled (0 on the screen).
+    val scrolledBack = remember(revision, stream) { stream?.emulator?.let { e -> synchronized(e.lock) { e.scrolledBack } } ?: 0 }
     // The line the cursor stands on asks for a password: a masked field over the keys for it, until
     // it is answered or put away (then not again until the pane asks anew).
     val asks = remember(revision, stream) {
         stream?.emulator?.let { e ->
-            val line = e.lineText(e.cursorY)
+            val line = e.cursorLineText()
             if (line.drop(e.cursorX).isBlank()) PasswordPrompt.ask(line.take(e.cursorX)) else null
         }
     }
@@ -256,16 +261,25 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
         view?.ctrlSticky = sticky.ctrl.on
         view?.altSticky = sticky.alt.on
     }
-    LaunchedEffect(finding) { if (finding) searchFocus.requestFocus() }
+    LaunchedEffect(finding) {
+        if (!finding) return@LaunchedEffect
+        // Once the field is laid out: asked in the frame that adds it, its requester isn't attached yet.
+        withFrameNanos { }
+        runCatching { searchFocus.requestFocus() }
+    }
     DisposableEffect(Unit) { onDispose { stream?.close() } }
+    fun resetFind() {
+        search?.reset()
+        (stream as? HcTerminalStream)?.endFind()
+        found = null
+    }
     BackHandler(enabled = selecting || finding) {
         if (selecting) {
             view?.clearSelection()
             selecting = false
         } else {
             finding = false
-            search?.reset()
-            found = null
+            resetFind()
         }
     }
 
@@ -296,6 +310,12 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
     fun find(backward: Boolean) {
         val q = query.trim()
         if (q.isEmpty()) return
+        // herdr-core's: found in the history the phone keeps.
+        if (core != null) {
+            val result = (stream as? HcTerminalStream)?.find(q, backward) ?: return
+            found = CopySearchResult(total = result.total.toLong(), currentGlobal = result.place?.toLong())
+            return
+        }
         searching = true
         scope.launch {
             try {
@@ -416,10 +436,14 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
                 },
                 onBack = { nav.popBackStack() },
             ) {
-                if (!finding && core == null) BarIcon(HerdrIcons.Search, "Find", { finding = true })
+                if (!finding) BarIcon(HerdrIcons.Search, "Find", { finding = true })
                 BarIcon(HerdrIcons.Ellipsis, "More", { menu = true })
                 HerdrMenu(expanded = menu, onDismissRequest = { menu = false }, title = pane?.displayName ?: paneId, subtitle = session.machine.label) {
-                    if (core == null) MenuRow(if (finding) "Hide find" else "Find in scrollback", HerdrIcons.Search, { menu = false; finding = !finding })
+                    MenuRow(if (finding) "Hide find" else "Find in scrollback", HerdrIcons.Search, {
+                        menu = false
+                        if (finding) resetFind()
+                        finding = !finding
+                    })
                     MenuRow("Select text", HerdrIcons.TextSelect, {
                         menu = false
                         view?.startSelection(CellPoint(0, 0))
@@ -442,8 +466,7 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
                             value = query,
                             onValueChange = {
                                 query = it
-                                search?.reset()
-                                found = null
+                                resetFind()
                             },
                             placeholder = { Text("Find in scrollback") },
                             leadingIcon = { Icon(HerdrIcons.Search, null, Modifier.size(20.dp)) },
@@ -469,8 +492,7 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
                             BarIcon(HerdrIcons.ChevronDown, "Newer", { find(false) })
                             BarIcon(HerdrIcons.X, "Close", {
                                 finding = false
-                                search?.reset()
-                                found = null
+                                resetFind()
                             })
                         }
                     }
@@ -536,6 +558,9 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
                             Text("Reconnecting to ${session.machine.label}…", style = MaterialTheme.typography.labelSmall, color = Herdr.colors.muted)
                         }
                     }
+                }
+                if (scrolledBack > 0 && message == null) {
+                    BackToScreen(Modifier.align(Alignment.BottomCenter).padding(bottom = Space.s)) { stream?.scroll(false, scrolledBack) }
                 }
                 if (message == null && herdr?.mismatch == true) {
                     Text(
@@ -610,6 +635,25 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
             onPick = { quoting = null; quoteTo(it, quote) },
             onDismiss = { quoting = null },
         )
+    }
+}
+
+/** Scrolled back into the history: back to the live screen (typing goes back too). */
+@Composable
+private fun BackToScreen(modifier: Modifier, onClick: () -> Unit) {
+    val c = Herdr.colors
+    Row(
+        modifier.heightIn(min = 48.dp).clip(HerdrShapes.Pill).clickable(role = Role.Button, onClick = onClick).padding(vertical = Space.xs),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Row(
+            Modifier.clip(HerdrShapes.Pill).background(c.card).hairline(HerdrShapes.Pill, c.lineStrong).padding(horizontal = Space.l, vertical = Space.s),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(HerdrIcons.ArrowDown, null, tint = c.muted, modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(Space.s))
+            Text("Back to the screen", style = MaterialTheme.typography.labelLarge, color = c.strong)
+        }
     }
 }
 

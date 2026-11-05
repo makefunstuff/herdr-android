@@ -230,6 +230,8 @@ fun scenes(): List<Scene> = listOf(
     Scene("machine-desktop-only", route = Routes.machine(Demo.MINI), setup = { desktopApp() }),
     Scene("chat-desktop", route = Routes.agent(DEVBOX, DemoCore.CLAUDE), setup = { desktopApp() }),
     Scene("terminal-desktop", route = Routes.terminal(DEVBOX, DemoCore.SHELL), setup = { desktopApp() }),
+    // Its history is the phone's own (filled from terminal.read), found in as classic herdr's scrollback is: the match marked and scrolled to.
+    Scene("terminal-desktop-find", route = Routes.terminal(DEVBOX, DemoCore.SHELL), setup = { desktopApp() }, actions = { tapLabel("Find"); type("failed"); repeat(4) { tapLabel("Older") } }),
     // Shepherdr 3 on devbox: its agents run in herdr-core beside classic herdr, called by their task or space (from
     // Shepherdr's labels); on the Agents list with the rest (tapping one opens its task's chat), and on the machine screen.
     Scene("agents-shepherdr3", heightDp = 1700, setup = { home(); shepherdr3() }),

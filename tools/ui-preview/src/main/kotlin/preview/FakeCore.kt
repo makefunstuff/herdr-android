@@ -16,10 +16,14 @@ import kotlinx.serialization.json.jsonPrimitive
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
 
-/** What one machine's herdr-core has: its terminals (hc's records, `terminal.list`'s) and each one's screen (ANSI). */
+/**
+ * What one machine's herdr-core has: its terminals (hc's records, `terminal.list`'s), each one's
+ * screen (ANSI) and the history above it (`terminal.read` gives both, the attach draws the screen).
+ */
 class FakeCore(
     var terminals: List<JsonObject>,
     var screens: Map<String, String> = emptyMap(),
+    var histories: Map<String, String> = emptyMap(),
     val version: String = "0.1.14",
     val name: String = "devbox",
 ) {
@@ -92,7 +96,7 @@ class FakeCore(
                 "events.subscribe" -> obj("channel" to 1, "seq" to 40, "terminals" to JsonArray(terminals))
                 "terminal.list" -> obj("terminals" to JsonArray(terminals), "machines" to arr(), "hidden_finished" to 0)
                 "terminal.get" -> terminal
-                "terminal.read" -> terminal?.let { obj("text" to Shell.plain(screens[address].orEmpty()), "complete" to true, "how" to "stitched") }
+                "terminal.read" -> terminal?.let { obj("text" to Shell.plain(histories[address].orEmpty() + screens[address].orEmpty()), "complete" to true, "how" to "history") }
                 "terminal.attach" -> terminal?.let { attached = nextChannel++; obj("channel" to attached, "terminal" to it) }
                 "terminal.keys" -> terminal?.let {
                     sent += Triple(method, address!!, p["keys"].toString())
