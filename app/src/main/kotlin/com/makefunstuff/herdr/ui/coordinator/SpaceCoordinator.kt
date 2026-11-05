@@ -110,6 +110,8 @@ import com.makefunstuff.herdr.ui.design.ComposerIconButton
 import com.makefunstuff.herdr.ui.design.HerdrChip
 import com.makefunstuff.herdr.ui.design.HerdrField
 import com.makefunstuff.herdr.ui.design.HerdrIcons
+import com.makefunstuff.herdr.ui.design.HerdrMenu
+import com.makefunstuff.herdr.ui.design.MenuRow
 import com.makefunstuff.herdr.ui.design.HerdrTopBar
 import com.makefunstuff.herdr.ui.design.LoadingState
 import com.makefunstuff.herdr.ui.design.NewLine
@@ -336,47 +338,55 @@ internal fun SpaceCoordinator(nav: NavController, machineId: String, session: Ho
     val callHere = call.machineId == machineId && call.space == space?.id && call.task == null && (call.on || call.problem != null)
     // The space's Autopilot, switched here as in 3.1's Assistant header.
     val pilot = rememberAutopilotFlip(board, space)
+    // Its Assistant's terminal, one tap from the title as 3.1's task tabs are.
+    val assistantTerminal = space?.let { TabMenus.assistantTerminal(state.view, it.id) }
+    // What the bar's ⋯ holds: the chat's own actions, out of the title's way as in 3.1.
+    var chatMenu by remember { mutableStateOf(false) }
+    if (chatMenu) HerdrMenu(
+        expanded = true, onDismissRequest = { chatMenu = false },
+        title = space?.let(::spaceName) ?: "Assistant", subtitle = space?.where,
+    ) {
+        MenuRow(ChatFind.PLACEHOLDER, HerdrIcons.Search, { chatMenu = false; find.open = true }, enabled = t != null)
+        MenuRow("Search everything", HerdrIcons.Search, { chatMenu = false; nav.navigate(Routes.search()) })
+        if (overview?.artifacts != null && space != null) {
+            MenuRow("Artifacts", HerdrIcons.LayoutDashboard, { chatMenu = false; nav.navigate(Routes.artifacts(machineId, space.id)) })
+        }
+        MenuRow(
+            if (callHere && call.on) "End the call" else "Call the Assistant", HerdrIcons.Phone,
+            onClick = {
+                chatMenu = false
+                val s = space
+                if (callHere && call.on) calls.stop()
+                else if (s != null) askMic { allowed -> if (allowed) calls.start(machineId, s.id, null, "the ${spaceName(s)} Assistant") }
+            },
+            enabled = space != null && state.online,
+        )
+        MenuRow(
+            if (voiceHere) "Turn voice off" else "Hear the Assistant", HerdrIcons.Headphones,
+            onClick = {
+                chatMenu = false
+                val s = space
+                if (voiceHere) speech.stop()
+                else if (s != null) askMic { allowed -> speech.start(machineId, s.id, spaceName(s)) }
+            },
+            enabled = space != null,
+        )
+    }
     Scaffold(
         containerColor = c.ground,
         topBar = {
-            // Whose chat (3.1's header): "Assistant · Claude Code", then its space, machine when there are several, folder.
+            // Whose chat, as 3.1's phone header: the space's name, then who answers in it and where it works.
             if (!typing) HerdrTopBar(
-                space?.header?.ifBlank { null } ?: "Assistant",
-                subtitle = ChatHeader.line(
-                    space?.let(::spaceName), ChatHeader.machine(state.machine.label, machines.size), space?.where,
-                    stateWords(t, state.online, state.status.label()),
-                ),
+                space?.let(::spaceName) ?: "Assistant",
+                subtitle = ChatHeader.line("Assistant", space?.where, ChatHeader.machine(state.machine.label, machines.size)),
                 onBack = { nav.popBackStack() },
                 onTitle = { nav.navigate(Routes.machine(machineId)) }, titleAction = "Open ${state.machine.label}'s spaces",
                 actions = {
                     pilot.shown?.let { p -> AutopilotBarSwitch(p.on, enabled = state.online && board != null, onFlip = pilot.flip) }
-                    if (t != null && !find.open) BarIcon(HerdrIcons.Search, ChatFind.PLACEHOLDER, { find.open = true })
-                    // Its Assistant's terminal; in the Chat tab the bar's space menu holds it (Show › Terminal).
-                    if (com.makefunstuff.herdr.ui.design.LocalBarMore.current == null) space?.let { TabMenus.assistantTerminal(state.view, it.id) }?.let { pane ->
+                    assistantTerminal?.let { pane ->
                         BarIcon(HerdrIcons.SquareTerminal, "Terminal", { nav.navigate(Routes.terminal(machineId, pane)) })
                     }
-                    // The space's artifacts, where Shepherdr keeps them.
-                    if (overview?.artifacts != null && space != null) {
-                        BarIcon(HerdrIcons.LayoutDashboard, "Artifacts", { nav.navigate(Routes.artifacts(machineId, space.id)) })
-                    }
-                    BarIcon(
-                        HerdrIcons.Phone, if (callHere && call.on) "End the call" else "Call the Assistant",
-                        onClick = {
-                            val s = space
-                            if (callHere && call.on) calls.stop()
-                            else if (s != null) askMic { allowed -> if (allowed) calls.start(machineId, s.id, null, "the ${spaceName(s)} Assistant") }
-                        },
-                        enabled = space != null && state.online, selected = callHere && call.on,
-                    )
-                    BarIcon(
-                        HerdrIcons.Headphones, if (voiceHere) "Turn voice off" else "Hear the Assistant",
-                        onClick = {
-                            val s = space
-                            if (voiceHere) speech.stop()
-                            else if (s != null) askMic { speech.start(machineId, s.id, spaceName(s)) }
-                        },
-                        enabled = space != null, selected = voiceHere,
-                    )
+                    BarIcon(HerdrIcons.Ellipsis, "Chat actions", { chatMenu = true })
                 },
             )
         },
@@ -390,8 +400,6 @@ internal fun SpaceCoordinator(nav: NavController, machineId: String, session: Ho
                     }
                 }
             })
-            // In the Chat tab the drawer picks the space.
-            if (!typing && spaces.size > 1 && !com.makefunstuff.herdr.ui.design.LocalInTab.current) SpacePicker(spaces, space?.id) { picked = it }
             val sizes by container.textSizes.state.collectAsStateWithLifecycle()
             ChatSurface(
                 Modifier.weight(1f).fillMaxWidth(),

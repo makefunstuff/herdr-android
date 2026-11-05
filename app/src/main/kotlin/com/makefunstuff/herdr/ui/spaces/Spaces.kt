@@ -281,7 +281,7 @@ private fun Bus(n: Int, host: HostState, onOpen: () -> Unit) {
     val c = Herdr.colors
     val online = host.online
     Row(
-        Modifier.fillMaxWidth().background(c.panel).heightIn(min = 40.dp)
+        Modifier.fillMaxWidth().background(c.panel).heightIn(min = 48.dp)
             .clickable(onClickLabel = "Open ${host.machine.label}", onClick = onOpen)
             .padding(start = Space.l, end = Space.m, top = Space.s),
         verticalAlignment = Alignment.CenterVertically,
@@ -347,7 +347,7 @@ private fun Slot(n: Int, slot: SpaceSlot, on: Boolean, off: Boolean, onHold: () 
     Row(
         Modifier.fillMaxWidth().background(if (on) c.selected else c.panel)
             .drawBehind { if (on) drawRect(c.accent, size = Size(3.dp.toPx(), size.height)) }
-            .heightIn(min = 44.dp)
+            .heightIn(min = 48.dp)
             .combinedClickable(onClickLabel = "Show its chat", onLongClickLabel = "Notify", onLongClick = onHold, onClick = onClick)
             .semantics(mergeDescendants = true) {
                 selected = on
@@ -359,16 +359,19 @@ private fun Slot(n: Int, slot: SpaceSlot, on: Boolean, off: Boolean, onHold: () 
         SlotNumber(n, on)
         Spacer(Modifier.width(Space.s))
         Text(
-            slot.name.caps(), style = MaterialTheme.typography.labelLarge, color = if (on) c.accent else if (off) c.muted else c.text,
+            // The name is read, not shouted: it stays sentence case as in 3.1, so a long one still reads
+            // before its ellipsis; the mono capitals belong to the labels around it.
+            slot.name, style = MaterialTheme.typography.titleMedium, color = if (on) c.accent else if (off) c.muted else c.strong,
             maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
         )
         if (off) {
             Icon(HerdrIcons.BellOff, null, tint = c.muted, modifier = Modifier.size(14.dp))
             Spacer(Modifier.width(Space.s))
         }
+        // Only an agent that is the space itself (not the Assistant every Shepherdr space has, whose chip
+        // was the same on every row) takes a chip; "ASSISTANT" on every row said nothing either.
         val program = slot.lead?.let { it.agent ?: it.displayName }
-        if (slot.board != null) Text("ASSISTANT", style = MaterialTheme.typography.labelSmall, color = c.muted, maxLines = 1)
-        else if (program != null) ChipIcon(chipFor(program), size = 16.dp)
+        if (program != null) ChipIcon(chipFor(program), size = 16.dp)
         Spacer(Modifier.width(Space.s))
         Led(status?.color() ?: c.line)
     }

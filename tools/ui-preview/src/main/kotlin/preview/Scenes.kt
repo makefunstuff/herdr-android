@@ -177,6 +177,17 @@ private fun SceneData.v2() {
     host(DEVBOX).shepherdr = DemoV2.board()
 }
 
+/** The person's own work shape (Real): one machine, eleven spaces, thirteen tasks, an Assistant chat with long turns. */
+private fun SceneData.real() {
+    machines = machines.filter { it.id == DEVBOX }
+    host(DEVBOX).snapshot = obj(
+        "version" to "0.9.0", "protocol" to 4,
+        "workspaces" to emptyList<Any>(), "tabs" to emptyList<Any>(), "panes" to emptyList<Any>(),
+        "layouts" to emptyList<Any>(), "agents" to emptyList<Any>(),
+    )
+    host(DEVBOX).shepherdr = Real.board()
+}
+
 /** Shepherdr 3 on devbox, its home Assistant also asking for a secret ([DemoV2.SECRET_NEED]). */
 private fun SceneData.secretAsk() {
     val v2 = DemoV2.board()
@@ -201,7 +212,7 @@ fun scenes(): List<Scene> = listOf(
     Scene("agents-all", heightDp = 1500, setup = { home() }),
     // devbox on Shepherdr 3: its tasks that ask or are ready wait on Needs you too, answered or accepted from the card.
     Scene("agents-v2", heightDp = 1700, setup = { home(); v2() }),
-    Scene("agents-v2-answer", heightDp = 1700, setup = { home(); v2() }, actions = { settle(); tapText("Last answered 2 min ago") }),
+    Scene("agents-v2-answer", heightDp = 1700, setup = { home(); v2() }, actions = { settle(); tapText("Show when each machine last answered"); settle(); tapText("Last answered 2 min ago") }),
     // A Ready task's Accept on its card: the Accept card first.
     Scene("agents-v2-accept", heightDp = 1500, setup = { home(); v2() }, actions = { settle(); tapExact("Accept") }),
     Scene("agents-reply", setup = { home() }, actions = { tapText("Reply") }),
@@ -246,7 +257,7 @@ fun scenes(): List<Scene> = listOf(
     // numbered slot with its light), and one machine: its places in one row, its spaces under one heading.
     Scene("machines", setup = { home() }, actions = { tapLabel("Spaces") }),
     // A space's Notify from a long press in the drawer; llm-eval, set to Off, is dim beside a crossed-out bell.
-    Scene("machines-notify", setup = { home(); push = Demo.notify() }, actions = { tapLabel("Spaces"); longPressText("HERDR-ANDROID") }),
+    Scene("machines-notify", setup = { home(); push = Demo.notify() }, actions = { tapLabel("Spaces"); longPressText("api-server") }),
     Scene("machine", route = Routes.machine(DEVBOX)),
     // A workspace with two tabs keeps its tab chips and its layout; with one tab, its actions are in the workspace's ⋯.
     Scene("machine-tabs", route = Routes.machine(DEVBOX), setup = { host(DEVBOX).snapshot = Demo.devboxTabs() }),
@@ -617,7 +628,7 @@ fun scenes(): List<Scene> = listOf(
     }),
     // The Assistant's voice: turned on with the headphones, reading a reply (a tap stops it), hearing you
     // hands-free, and the phone's own voice while the server is away, muted.
-    Scene("coordinator-v2-hear", route = Routes.coordinator(DEVBOX, DemoV2.APP), setup = { shepherdr() }, actions = { tapLabel("Hear the Assistant") }),
+    Scene("coordinator-v2-hear", route = Routes.coordinator(DEVBOX, DemoV2.APP), setup = { shepherdr() }, actions = { tapLabel("Chat actions"); tapExact("Hear the Assistant") }),
     Scene("coordinator-v2-hear-speaking", route = Routes.coordinator(DEVBOX, DemoV2.APP), setup = {
         shepherdr()
         voice = VoiceState(on = true, machineId = DEVBOX, space = DemoV2.APP, spaceName = "herdr-android", phase = VoiceState.Phase.Speaking, level = 0.6f, speed = 1.2f)
@@ -641,8 +652,8 @@ fun scenes(): List<Scene> = listOf(
         settle(); longPressText("The card stays put now"); tapExact("Reply")
     }),
     Scene("coordinator-v2-reply-jump", route = Routes.coordinator(DEVBOX, DemoV2.APP), setup = { chatParity(between = 4) }, actions = { settle(); tapText("AND-13 passed its checks…") }),
-    Scene("coordinator-v2-find", route = Routes.coordinator(DEVBOX, DemoV2.APP), setup = { chatParity() }, actions = { settle(); tapLabel("Find in chat"); type("AND-13") }),
-    Scene("coordinator-v2-find-none", route = Routes.coordinator(DEVBOX, DemoV2.APP), setup = { chatParity() }, actions = { settle(); tapLabel("Find in chat"); type("zebra") }),
+    Scene("coordinator-v2-find", route = Routes.coordinator(DEVBOX, DemoV2.APP), setup = { chatParity() }, actions = { settle(); tapLabel("Chat actions"); tapExact("Find in chat"); type("AND-13") }),
+    Scene("coordinator-v2-find-none", route = Routes.coordinator(DEVBOX, DemoV2.APP), setup = { chatParity() }, actions = { settle(); tapLabel("Chat actions"); tapExact("Find in chat"); type("zebra") }),
     Scene("task-shepherdr3-find", route = Routes.board(DEVBOX, "AND-19"), setup = { shepherdr3() }, actions = { settle(); tapLabel("Find in chat"); type("index") }),
     Scene("coordinator-v2-up", route = Routes.coordinator(DEVBOX, DemoV2.APP), setup = { shepherdr() }, actions = { scrollTo(4) }),
     Scene("coordinator-v2-new-message", route = Routes.coordinator(DEVBOX, DemoV2.APP), setup = { shepherdr() }, actions = { ctx ->
@@ -651,7 +662,9 @@ fun scenes(): List<Scene> = listOf(
         waitForRead()
     }),
     Scene("coordinator-v2-switch", route = Routes.coordinator(DEVBOX, DemoV2.APP), setup = { shepherdr(); longWebsiteChat() }, actions = {
-        scrollTo(4)
+        // The space's name above the chat opens its machine's spaces; another space there is its Assistant.
+        tapText("herdr-android")
+        settle()
         tapText("website")
     }),
     // Reaching the Coordinator from outside the app: a share (a log line and a screenshot) choosing its machine,
@@ -846,7 +859,7 @@ fun scenes(): List<Scene> = listOf(
     Scene("settings-voice", route = Routes.SETTINGS, heightDp = 1700, setup = {
         voiceSettings = com.makefunstuff.herdr.data.VoiceSettingsStore.Settings(server = "http://devbox:18101", key = "sk-demo-key", speed = 1.2f)
     }, actions = { tapText("Test") }),
-    Scene("settings-new-key", route = Routes.SETTINGS, actions = { tapText("New key") }),
+    Scene("settings-new-key", route = Routes.SETTINGS, heightDp = 1900, actions = { tapText("SSH key"); tapText("New key") }),
     Scene("key-setup", key = IdentityStore.State.Missing),
     // The fingerprint before what can't be undone, and the app lock: its settings (one action turned off, the lock
     // on), the same on a phone with no screen lock, the app locked, and a merge confirmed in the app without a screen lock.
@@ -884,4 +897,15 @@ fun scenes(): List<Scene> = listOf(
         "settings-no-push-app", route = Routes.SETTINGS, heightDp = 1320,
         setup = { push = Demo.push().copy(endpoint = null, distributor = null); pushApps = emptyList(); notificationsAllowed = false },
     ),
+
+    // The person's own work, not the tidy demo: eleven spaces, thirteen tasks, long titles and a chat that runs on.
+    // The drawer with all of it, the Assistant's chat on the phone, the Tasks list, a ready task and one at work,
+    // the Android space's artifacts, and Settings.
+    Scene("real-spaces", route = Routes.CHAT, setup = { real() }, actions = { settle(); tapLabel("Spaces") }),
+    Scene("real-chat", route = Routes.CHAT, setup = { real() }, space = "${DEVBOX}/herdr-android"),
+    Scene("real-tasks", route = Routes.TASKS, setup = { real() }),
+    Scene("real-task-ready", route = Routes.board(DEVBOX, "HMWL-1"), setup = { real() }),
+    Scene("real-task-work", route = Routes.board(DEVBOX, "HERD-31"), setup = { real() }),
+    Scene("real-artifacts", route = Routes.ARTIFACTS_TAB, setup = { real() }, space = "${DEVBOX}/herdr-android"),
+    Scene("real-settings", route = Routes.SETTINGS, setup = { real() }),
 )

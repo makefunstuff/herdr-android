@@ -47,6 +47,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -96,6 +98,7 @@ import com.makefunstuff.herdr.ui.design.HerdrIcons
 import com.makefunstuff.herdr.ui.design.HerdrShapes
 import com.makefunstuff.herdr.ui.design.HerdrTopBar
 import com.makefunstuff.herdr.ui.design.InfoLine
+import com.makefunstuff.herdr.ui.design.Led
 import com.makefunstuff.herdr.ui.design.LoadingState
 import com.makefunstuff.herdr.ui.design.MenuRow
 import com.makefunstuff.herdr.ui.design.NewLine
@@ -313,6 +316,9 @@ internal fun TaskChatScreen(
     val callHere = call.machineId == machineId && call.task == t.id && (call.on || call.problem != null)
     val askMic = com.makefunstuff.herdr.voice.rememberVoiceMic()
     val canClose = t.status != WorkStatus.Done && t.status != WorkStatus.Merging
+    // Its agent's terminal, when it has one now: a tab in the strip and the way out of an empty chat.
+    val terminalPane = TabMenus.taskTerminal(state.view, t)
+    val openTerminal: (() -> Unit)? = terminalPane?.let { pane -> { nav.navigate(Routes.terminal(machineId, pane)) } }
     Box(Modifier.fillMaxSize()) {
         Scaffold(
             containerColor = c.ground,
@@ -320,9 +326,10 @@ internal fun TaskChatScreen(
                 if (!typing) Column {
                     // Whose chat (3.1's): the task, then its agent, space, machine when there are several, branch.
                     HerdrTopBar(
-                        ChatHeader.task(t.name, t.title),
+                        // The task's own title first, as 3.1's phone shows it: its key and branch go under it.
+                        t.title,
                         subtitle = ChatHeader.line(
-                            kind.takeIf { t.agent.isNotEmpty() }, space, ChatHeader.machine(state.machine.label, machines.size),
+                            t.name, kind.takeIf { t.agent.isNotEmpty() }, space, ChatHeader.machine(state.machine.label, machines.size),
                             details?.branch?.ifBlank { null } ?: ChatHeader.folder(worker?.cwd),
                         ).ifEmpty { null },
                         onBack = onBack, backLabel = "Back to the board",
@@ -341,7 +348,7 @@ internal fun TaskChatScreen(
                         BarIcon(HerdrIcons.Ellipsis, "Details and more", { sheet = TaskSheet.Menu })
                     }
                     TaskStrip(t, details, busy, onMerge, onPr = { picked = TaskView.PullRequest })
-                    TaskViewTabs(t, view) { picked = it }
+                    TaskViewTabs(t, view, onView = { picked = it }, onTerminal = openTerminal)
                 }
             },
         ) { padding ->
@@ -431,7 +438,23 @@ internal fun TaskChatScreen(
                                 item(key = "own-note") { Notice(ChatOwner.NOTE, null) }
                             } else if (items.isEmpty()) item(key = "empty") {
                                 Box(Modifier.fillParentMaxSize(), contentAlignment = Alignment.Center) {
+                                    val finished = t.status == WorkStatus.Ready || t.status == WorkStatus.Done || t.status == WorkStatus.Merging
                                     if (notice != null) ChatEmpty(HerdrIcons.SquareTerminal, notice.first, notice.second.orEmpty())
+                                    else if (finished && openTerminal != null) ChatEmpty(
+                                        HerdrIcons.SquareTerminal, "No chat was kept",
+                                        "Its agent worked in its terminal, which is still open.",
+                                        action = {
+                                            PrimaryButton(openTerminal) {
+                                                Icon(HerdrIcons.SquareTerminal, null, Modifier.size(18.dp))
+                                                Spacer(Modifier.width(Space.s))
+                                                Text("Open terminal")
+                                            }
+                                        },
+                                    )
+                                    else if (finished) ChatEmpty(
+                                        HerdrIcons.SquareTerminal, "No chat was kept",
+                                        "Its agent worked in its terminal, which has ended.",
+                                    )
                                     else ChatEmpty(HerdrIcons.MessagesSquare, "Nothing said yet", "Its agent writes here as it works. You can write to it too.")
                                 }
                             } else if (notice != null) item(key = "notice") { Notice(listOfNotNull(notice.first, notice.second).joinToString(". "), null) }
@@ -509,8 +532,11 @@ private fun TaskStrip(t: WorkTask, d: WorkTaskDetails?, busy: String?, onMerge: 
             Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(start = Space.screen, end = Space.screen, top = Space.xs, bottom = Space.xs),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // At work, the chat's own working line says so: the status shows here only when it says something else.
-            if (t.status != WorkStatus.Work) StatusBadge(t.status.label, t.status.color())
+            // Its status once: a Ready one says it with its Accept button, so only its light shows; every
+            // other state keeps its word because nothing else on the strip says it.
+            if (t.status == WorkStatus.Ready) Led(
+                t.status.color(), Modifier.semantics { contentDescription = "Ready" },
+            ) else if (t.status != WorkStatus.Work) StatusBadge(t.status.label, t.status.color())
             prNumberOf(t.pr)?.let { n ->
                 Spacer(Modifier.width(Space.s))
                 Row(

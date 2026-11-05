@@ -75,11 +75,28 @@ internal enum class TaskView(val label: String) { Chat("Chat"), Files("Files"), 
 /** The tabs [t] has now: Pull request only once it has one, as 3.1's (`itemsFor`). */
 internal fun taskViews(t: WorkTask): List<TaskView> = TaskView.entries.filter { it != TaskView.PullRequest || t.pr.isNotEmpty() }
 
-/** The task view's tab strip, under its bar. */
+/**
+ * The task view's tab strip, under its bar: Chat, its agent's Terminal (as 3.1's task view has it),
+ * then Files, Changes and its Pull request. Terminal opens the terminal full screen; the tab that is
+ * shown stays Chat, which is where Back returns.
+ */
 @Composable
-internal fun TaskViewTabs(t: WorkTask, view: TaskView, onView: (TaskView) -> Unit) {
+internal fun TaskViewTabs(t: WorkTask, view: TaskView, onView: (TaskView) -> Unit, onTerminal: (() -> Unit)? = null) {
     val views = taskViews(t)
-    ViewTabs(views.map { it.label }, views.indexOf(view).coerceAtLeast(0), onSelect = { onView(views[it]) })
+    val labels = buildList {
+        add(TaskView.Chat.label)
+        if (onTerminal != null) add("Terminal")
+        views.drop(1).forEach { add(it.label) }
+    }
+    val offset = if (onTerminal != null) 1 else 0
+    val selected = if (view == TaskView.Chat) 0 else offset + views.indexOf(view)
+    ViewTabs(labels, selected, onSelect = { i ->
+        when {
+            i == 0 -> onView(TaskView.Chat)
+            onTerminal != null && i == 1 -> onTerminal()
+            else -> onView(views[i - offset])
+        }
+    })
 }
 
 /**

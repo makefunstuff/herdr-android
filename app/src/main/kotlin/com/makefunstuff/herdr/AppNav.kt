@@ -107,11 +107,17 @@ import kotlinx.coroutines.flow.receiveAsFlow
 
 /** The whole app: theme, container, navigation and toasts. [nav] and [dark] are given by the desktop preview's scenes. */
 @Composable
-fun HerdrRoot(container: AppContainer, dark: Boolean = isSystemInDarkTheme(), nav: NavHostController = rememberNavController()) {
+fun HerdrRoot(
+    container: AppContainer,
+    dark: Boolean = isSystemInDarkTheme(),
+    nav: NavHostController = rememberNavController(),
+    /** The space the Chat tab shows first (the preview's scenes); null picks the first one as the app does. */
+    space: String? = null,
+) {
     CompositionLocalProvider(LocalContainer provides container) {
         HerdrTheme(dark) {
             Box {
-                com.makefunstuff.herdr.ui.common.GuardHost(container.guard) { AppNav(nav) }
+                com.makefunstuff.herdr.ui.common.GuardHost(container.guard) { AppNav(nav, space) }
                 com.makefunstuff.herdr.ui.design.ToastHost()
             }
         }
@@ -220,7 +226,7 @@ object Routes {
 }
 
 @Composable
-private fun AppNav(nav: NavHostController) {
+private fun AppNav(nav: NavHostController, startSpace: String? = null) {
     val container = LocalContainer.current
     val entry by nav.currentBackStackEntryAsState()
     val route = entry?.destination?.route
@@ -229,14 +235,14 @@ private fun AppNav(nav: NavHostController) {
     val triage by container.triage.state.collectAsStateWithLifecycle()
     val push by container.push.state.collectAsStateWithLifecycle()
     val homeBoards = rememberBoards()
-    // The Tasks tab's badge: everything on its Needs you list, Shepherdr 3's tasks too.
+    // The Tasks tab's badge: what waits for an answer, not the Ready tasks (their Accept is on the list).
     val waiting = rememberNeedsYou(homeBoards)
-    val needsYou = waiting.size
+    val needsYou = waiting.count { it !is Waiting.Task || it.task.status != com.makefunstuff.herdr.core.board.WorkStatus.Ready }
     val keyState by container.identity.state.collectAsStateWithLifecycle()
     var keySetupDismissed by rememberSaveable { mutableStateOf(false) }
     // The Tasks list's scroll, kept here: it stays as the window crosses the wide line.
     val tasksList = rememberLazyListState()
-    val space = rememberSaveable(saver = SpaceChoice.Saver) { SpaceChoice() }
+    val space = rememberSaveable(saver = SpaceChoice.Saver) { SpaceChoice(startSpace) }
     val drawer = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
 

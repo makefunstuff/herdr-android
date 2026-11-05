@@ -492,7 +492,12 @@ fun Color.readableText(): Color = readable(this, MaterialTheme.colorScheme.surfa
 @Composable
 fun BarTitle(title: String, subtitle: String? = null) {
     Column {
-        Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleLarge, color = Herdr.colors.strong)
+        // A name that needs a second line gets one, as 3.1's task header does: a long title cut at the
+        // first line hides which piece of work it is.
+        Text(
+            title, maxLines = if (subtitle == null) 1 else 2, overflow = TextOverflow.Ellipsis,
+            style = MaterialTheme.typography.titleLarge, color = Herdr.colors.strong,
+        )
         if (subtitle != null) Text(
             subtitle, maxLines = 1, overflow = TextOverflow.Ellipsis,
             style = MaterialTheme.typography.bodySmall, color = Herdr.colors.muted,
@@ -550,7 +555,7 @@ fun HerdrTopBar(
             .padding(start = if (onBack == null && drawer == null) Space.screen else Space.xs, end = Space.xs),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (drawer != null) BarIcon(HerdrIcons.Sidebar, "Spaces", drawer)
+        if (drawer != null) BarIcon(HerdrIcons.Menu, "Spaces", drawer)
         else if (onBack != null) BarIcon(HerdrIcons.ArrowLeft, backLabel, onBack)
         val change = LocalScreenChange.current
         if (change != null) SideEffect { change.title = title }
