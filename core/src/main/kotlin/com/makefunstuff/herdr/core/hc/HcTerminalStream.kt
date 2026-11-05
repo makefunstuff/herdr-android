@@ -2,6 +2,7 @@ package com.makefunstuff.herdr.core.hc
 
 import com.makefunstuff.herdr.core.terminal.LiveTerminal
 import com.makefunstuff.herdr.core.terminal.TerminalEmulator
+import com.makefunstuff.herdr.core.terminal.TerminalFind
 import com.makefunstuff.herdr.core.terminal.TerminalHistory
 import com.makefunstuff.herdr.core.terminal.TerminalStream
 import kotlinx.coroutines.CancellationException
@@ -121,6 +122,21 @@ class HcTerminalStream(
         if (observe) return
         synchronized(emulator.lock) { emulator.resize(cols, rows) }
         outbound.trySend { it.resize(cols, rows) }
+    }
+
+    private val finder = TerminalFind(emulator)
+
+    /** Finds [query] in the history and screen ([TerminalFind]), scrolled to and marked. */
+    fun find(query: String, backward: Boolean): TerminalFind.Found {
+        val found = synchronized(emulator.lock) { finder.find(query, backward) }
+        _revision.update { it + 1 }
+        return found
+    }
+
+    /** Find is over: no match marked. */
+    fun endFind() {
+        synchronized(emulator.lock) { finder.reset() }
+        _revision.update { it + 1 }
     }
 
     override fun scroll(up: Boolean, lines: Int) {

@@ -8,6 +8,7 @@ import android.view.View
 import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import com.makefunstuff.herdr.core.terminal.TerminalCanvas
@@ -108,11 +109,12 @@ class TerminalView(context: Context) : View(context) {
 
     @Composable
     override fun Content(modifier: Modifier) {
-        Canvas(modifier) {
+        // Within its bounds, as an Android View draws: clear() would wipe the whole window's layer, the Find bar above too.
+        Canvas(modifier.clipToBounds()) {
             drawRevision.longValue // redraw on invalidate()
+            drawRect(androidx.compose.ui.graphics.Color(painter.palette.background))
             drawIntoCanvas { c ->
                 val canvas = c.nativeCanvas
-                canvas.clear(painter.palette.background)
                 val emu = emulator ?: return@drawIntoCanvas
                 val pad = PAD * density
                 synchronized(emu.lock) {
