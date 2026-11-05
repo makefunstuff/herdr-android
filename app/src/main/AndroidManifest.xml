@@ -139,7 +139,8 @@
                 <action android:name="android.service.quicksettings.action.QS_TILE" />
             </intent-filter>
         </service>
-        <!-- The home-screen widgets: one that opens the Coordinator chat, one with the counts across machines. -->
+        <!-- The home-screen widgets: one that opens the Coordinator chat, one with the counts across machines, and
+             one listing what needs you with its buttons. -->
         <receiver
             android:name=".share.AskWidget"
             android:exported="false"
@@ -157,6 +158,15 @@
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_status_info" />
+        </receiver>
+        <receiver
+            android:name=".share.NeedsWidget"
+            android:exported="false"
+            android:label="@string/widget_needs">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_needs_info" />
         </receiver>
 
         <!-- A notification's button, the app's own look at its machines while it is closed, the scheduled

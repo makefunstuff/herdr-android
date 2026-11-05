@@ -86,13 +86,14 @@ class HerdrApp : Application() {
                 container.quietWork.check()
             }
         }, modes, ContextCompat.RECEIVER_NOT_EXPORTED)
-        // The widgets follow the counts (their time to the minute) and the Coordinator used last.
+        // The widgets follow the counts (their time to the minute), the Coordinator used last and what waits on you.
         container.scope.launch {
             combine(
                 container.tally.counts.map { it.copy(at = it.at / 60_000) }.distinctUntilChanged(),
                 container.shares.last,
                 container.usage.latest,
-            ) { _, _, _ -> }.collect { Widgets.update(this@HerdrApp) }
+                container.inbox.waiting,
+            ) { _, _, _, _ -> }.collect { Widgets.update(this@HerdrApp) }
         }
         // The launcher's shortcuts say how many things need you, and which Coordinator they open.
         container.scope.launch {
@@ -146,7 +147,7 @@ class AppContainer(app: Application) {
      * Every board as last read, and which finished agents the phone has shown: the Agents screen's and the Board tab's.
      * The boards read while on screen are what the person saw: the widget counts them, and the brief compares with them.
      */
-    val boards = com.makefunstuff.herdr.data.BoardLists(hosts, onRead = { id, tasks -> tally.tasks(id, tasks); briefWork.looked(id, tasks, null) }, onBoard = taskSpaces::put)
+    val boards = com.makefunstuff.herdr.data.BoardLists(hosts, onRead = { id, tasks -> tally.tasks(id, tasks); briefWork.looked(id, tasks, null) }, onBoard = { id, o -> taskSpaces.put(id, o); inbox.looked(id, o) })
     val seen = com.makefunstuff.herdr.data.SeenStore(java.io.File(app.filesDir, "seen.json"))
     /** When each agent's chat was last on screen, for its "While you were away" card. */
     val looked = com.makefunstuff.herdr.data.LookedStore(java.io.File(app.filesDir, "looked.json"))
