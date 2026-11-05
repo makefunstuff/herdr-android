@@ -146,6 +146,10 @@ class FakeShepherdr(
                 val id = a.getValue("task").jsonPrimitive.content
                 return DemoV2.evidence(task(id) ?: return 400 to "That task isn't here any more.")
             }
+            // The tab menu: Switch agent's list, the model menu, the Assistant's workers before it closes.
+            "tab-agents" -> return 200 to DemoV2.TAB_AGENTS
+            "model-menu" -> return 200 to """{"ok":true,"menu":${DemoV2.MODEL_MENU}}"""
+            "assistant-close" -> if (a["mode"]?.jsonPrimitive?.content == "count") return 200 to """{"ok":true,"workers":4}"""
             // Accepted: it merges.
             "accept" -> {
                 val id = a.getValue("task").jsonPrimitive.content
@@ -155,6 +159,16 @@ class FakeShepherdr(
         }
         a["type"]?.jsonPrimitive?.content?.takeIf { it.startsWith("artifact-") }?.let { return 200 to """{"ok":true,"to":"AND-19 agent"}""" }
         return 200 to """{"ok":true}"""
+    }
+
+    /** Gives space [place] its Assistant's tab ([assistant], `assistantTab`) and its other [tabs] (`tabs`, a JSON list). */
+    fun tabs(place: String, assistant: String, tabs: String) {
+        val places = (snapshot["places"] as? JsonArray).orEmpty().map { p ->
+            val o = p.jsonObject
+            if (o["id"]?.jsonPrimitive?.content != place) o
+            else JsonObject(o + mapOf("assistantTab" to Json.parseToJsonElement(assistant), "tabs" to Json.parseToJsonElement(tabs)))
+        }
+        snapshot = JsonObject(snapshot + ("places" to JsonArray(places)))
     }
 
     private fun tasks() = (snapshot["tasks"] as? JsonArray).orEmpty().map { it.jsonObject }
@@ -189,6 +203,28 @@ object DemoV2 {
     const val HOME = "sp-home"
     const val APP = "sp-herdr-android"
     const val API = "sp-api-server"
+
+    /** herdr-android's Assistant's tab, as `Place.assistantTab` names it once it has a tab. */
+    const val TAB_ASSISTANT = """{"id":"tb-herdr-android","name":"Assistant","named":true,"state":"blocked","live":true,"cli":"claude","agent":"claude"}"""
+
+    /** What `tab-agents` answers on devbox: Claude Code and Codex installed, Pi not. */
+    const val TAB_AGENTS = """{"ok":true,"agents":[{"kind":"claude","name":"Claude Code","installed":true},{"kind":"codex","name":"Codex","installed":true},{"kind":"pi","name":"Pi","installed":false}]}"""
+
+    /** The model menu of a Claude Code on devbox (`service/agents.ts` `menu()`): Opus 5.5 at High, Auto. */
+    val MODEL_MENU = """
+        {"current":{"agent":"claude","model":"opus","effort":"high","fast":false,"perm":"auto"},
+         "menus":{
+           "claude":{"name":"Claude Code","fastLocked":false,
+             "perms":[{"id":"manual","label":"Ask"},{"id":"auto","label":"Auto"},{"id":"acceptEdits","label":"Accept edits"},{"id":"plan","label":"Plan"},{"id":"bypassPermissions","label":"Full access"}],
+             "models":[{"id":"opus","name":"Opus 5.5","efforts":["low","medium","high","xhigh","max"],"defaultEffort":"high","fast":true},
+                       {"id":"opus[1m]","name":"Opus 5.5 · 1M","efforts":["low","medium","high","xhigh","max"],"defaultEffort":"high","fast":true},
+                       {"id":"claude-fable-5-1","name":"Fable 5.1","efforts":["low","medium","high","xhigh","max"],"defaultEffort":"high","fast":false},
+                       {"id":"sonnet","name":"Sonnet 5.5","efforts":["low","medium","high","xhigh","max"],"defaultEffort":"medium","fast":false}]},
+           "codex":{"name":"Codex","fastLocked":false,
+             "perms":[{"id":"read-only","label":"Read only"},{"id":"auto","label":"Auto"},{"id":"full","label":"Full access"}],
+             "models":[{"id":"gpt-5.5","name":"GPT-5.5","efforts":["low","medium","high","xhigh"],"defaultEffort":"medium","fast":true}]}},
+         "permDefault":{"claude":"manual","codex":"auto"},"remote":null}
+    """.trimIndent()
 
     /** A space's Assistant chat key (`Place.chat`). */
     fun chat(space: String) = "p:$space"

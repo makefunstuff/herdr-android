@@ -50,6 +50,7 @@ import com.makefunstuff.herdr.core.api.PaneInfo
 import com.makefunstuff.herdr.core.api.WorkspaceInfo
 import com.makefunstuff.herdr.core.board.WorkOverview
 import com.makefunstuff.herdr.core.board.WorkSpace
+import com.makefunstuff.herdr.core.board.WorkTab
 import com.makefunstuff.herdr.core.host.HostState
 import com.makefunstuff.herdr.core.usage.UsageRules
 import com.makefunstuff.herdr.ui.agents.AgentScreen
@@ -359,6 +360,7 @@ fun ChatTab(nav: NavController) {
     val slot = shownSpace(spaces, choice.key)
     val host = spaces.firstOrNull { it.first.machine.id == slot?.machineId }?.first
     var menu by remember { mutableStateOf(false) }
+    val tabMenu = rememberTabMenu()
     val more: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {
         if (slot != null) BarIcon(HerdrIcons.Layers, "Tabs and new", { menu = true })
     }
@@ -393,14 +395,23 @@ fun ChatTab(nav: NavController) {
             }
         }
     }
-    if (menu && slot != null && host != null) SpaceMenu(nav, slot, host) { menu = false }
+    if (menu && slot != null && host != null) SpaceMenu(nav, slot, host, tabMenu) { menu = false }
+    TabMenuDialogs(tabMenu)
 }
 
-/** The shown space's ⋯ on a phone (3.1's header menu): its tabs (each agent's chat, each terminal), then New task, the Assistant and Start an agent, and its machine. */
+/** The tab the Chat tab shows, as Shepherdr's tab bar knows it: a Shepherdr space's chat is its Assistant's tab. */
+fun SpaceSlot.shownTab(host: HostState): WorkTab? = board?.takeIf { host.onShepherdr }?.tabs?.firstOrNull { it.assistant }
+
+/**
+ * The shown space's ⋯ on a phone (3.1's header menu): the shown tab's menu, its tabs (each agent's chat, each
+ * terminal), then New task, the Assistant and Start an agent, and its machine.
+ */
 @Composable
-private fun SpaceMenu(nav: NavController, slot: SpaceSlot, host: HostState, onDismiss: () -> Unit) {
+private fun SpaceMenu(nav: NavController, slot: SpaceSlot, host: HostState, tabMenu: TabMenuState, onDismiss: () -> Unit) {
     fun go(route: String) { onDismiss(); nav.navigate(route) }
     HerdrMenu(expanded = true, onDismissRequest = onDismiss, title = slot.name, subtitle = host.machine.label) {
+        val board = slot.board
+        slot.shownTab(host)?.let { tab -> if (board != null) TabMenuRows(tabMenu, slot.machineId, board, tab, onPicked = onDismiss) }
         if (slot.panes.isNotEmpty()) {
             MenuSection("Tabs")
             slot.panes.forEach { p ->

@@ -67,6 +67,9 @@ object ModelMenus {
 
     fun levelName(level: String): String = LEVEL[level] ?: level
 
+    /** A level as a phone's five segments fit it: "Extra high" as "X-high". */
+    fun shortLevelName(level: String): String = if (level == "xhigh") "X-high" else levelName(level)
+
     /** Every installed CLI's models, in the menu's order, each with its CLI's kind. */
     fun models(m: V2ModelMenu): List<Pair<String, V2MenuModel>> = m.menus.flatMap { (agent, menu) -> menu.models.map { agent to it } }
 

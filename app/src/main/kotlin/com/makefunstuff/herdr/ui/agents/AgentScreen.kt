@@ -109,6 +109,12 @@ import com.makefunstuff.herdr.ui.common.StatusDot
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.width
 import com.makefunstuff.herdr.ui.manage.AgentActionsSheet
+import com.makefunstuff.herdr.ui.manage.ManageRow
+import com.makefunstuff.herdr.ui.spaces.TabMenuDialogs
+import com.makefunstuff.herdr.ui.spaces.TabMenuOpen
+import com.makefunstuff.herdr.ui.spaces.TabMenuRows
+import com.makefunstuff.herdr.ui.spaces.rememberTabMenu
+import com.makefunstuff.herdr.core.board.TabMenus
 import com.makefunstuff.herdr.ui.theme.Herdr
 import com.makefunstuff.herdr.ui.theme.Space
 import com.makefunstuff.herdr.ui.theme.color
@@ -200,6 +206,12 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
     var heldSending by remember { mutableStateOf(false) }
     var heldOpen by remember { mutableStateOf(false) }
     var modelSheet by remember { mutableStateOf(false) }
+    // Its tab in Shepherdr 3's tab bar, when it has one: the tab menu (Restart, Switch agent, Model…) acts on it.
+    val tabMenu = rememberTabMenu()
+    val work = com.makefunstuff.herdr.ui.board.rememberWorkBoards()[machineId]
+    val tab = remember(work, paneId, agent?.shepherdrSpace) {
+        work?.takeIf { host.onShepherdr }?.let { TabMenus.tabOf(it.spaces, paneId, agent?.shepherdrSpace) }
+    }
     val kind = agent?.agent?.takeIf { it.isNotBlank() }
     val pill = remember(agent?.tokens, state.use) { ModelPill.of(agent?.tokens.orEmpty(), state.use) }
     // Its folder, for `@` files; its own `/` commands. Read over SSH the first time each is asked for.
@@ -621,6 +633,13 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
             agent = agent,
             paneLabel = pane?.displayName ?: paneId,
             onDismiss = { menu = false },
+            tabRows = tab?.takeIf { !inBubble }?.let { (space, t) ->
+                {
+                    TabMenuRows(tabMenu, machineId, space, t, onPicked = { menu = false }) { label, icon, destructive, onClick ->
+                        ManageRow(label, icon = icon, destructive = destructive, onClick = onClick)
+                    }
+                }
+            },
             onTerminal = { menu = false; nav.navigate(Routes.terminal(machineId, paneId)) },
             onToggleKeys = { menu = false; showKeys = !showKeys },
             showKeys = showKeys,
@@ -653,8 +672,12 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
             limit = left?.let { "${it.provider.name}: ${it.words}" },
             onUsage = if (inBubble) null else ({ modelSheet = false; nav.navigate(Routes.usage(machineId)) }),
             onDismiss = { modelSheet = false },
+            onChange = tab?.takeIf { (_, t) -> TabMenus.Row.Model in TabMenus.rows(t) && !inBubble }?.let { (space, t) ->
+                { modelSheet = false; tabMenu.show(TabMenuOpen(machineId, space, t, TabMenus.Row.Model)) }
+            },
         )
     }
+    TabMenuDialogs(tabMenu)
     if (attachMenu) AttachMenu(attach, tray, online = host.online, onDismiss = { attachMenu = false })
 }
 
