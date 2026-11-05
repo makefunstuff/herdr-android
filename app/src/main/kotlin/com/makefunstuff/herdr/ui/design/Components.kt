@@ -525,6 +525,7 @@ val LocalScreenChange = compositionLocalOf<ScreenChange?> { null }
  * without, a top-level screen's (22sp display title), or with a [subtitle] a pane's (the detail
  * bar's title and place, no arrow). Actions are [BarIcon]s.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun HerdrTopBar(
     title: String,
@@ -533,6 +534,9 @@ fun HerdrTopBar(
     onBack: (() -> Unit)? = null,
     backLabel: String = "Back",
     titleContent: (@Composable () -> Unit)? = null,
+    /** Where a tap on the title and its line goes (a chat's: its space or task), said by [titleAction]. */
+    onTitle: (() -> Unit)? = null,
+    titleAction: String = "Open",
     actions: @Composable RowScope.() -> Unit = {},
 ) {
     val c = Herdr.colors
@@ -563,6 +567,12 @@ fun HerdrTopBar(
                     title.caps(), style = MaterialTheme.typography.headlineMedium, color = c.strong, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.semantics { heading(); contentDescription = title },
                 )
+                onTitle != null -> Box(
+                    Modifier.fillMaxWidth().combinedClickable(
+                        onClickLabel = titleAction, onClick = onTitle,
+                        onLongClick = change?.let { ch -> { ch.open() } }, onLongClickLabel = change?.let { "Change this screen" },
+                    ),
+                ) { BarTitle(title, subtitle) }
                 else -> BarTitle(title, subtitle)
             }
         }

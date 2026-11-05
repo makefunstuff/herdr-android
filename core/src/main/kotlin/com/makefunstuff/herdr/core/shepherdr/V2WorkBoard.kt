@@ -304,6 +304,8 @@ object V2Board {
                 emoji = p.emoji,
                 pilot = Autopilot.pilotOf(s, p),
                 tabs = tabs(s, p),
+                header = p.header.orEmpty(),
+                where = p.where.orEmpty(),
             )
         }
         return WorkOverview(spaces, tasks, s.artifacts, s.needs, Autopilot.settingsOf(s))

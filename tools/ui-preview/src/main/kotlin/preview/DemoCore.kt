@@ -134,6 +134,12 @@ fun SceneData.shepherdr3() {
     host(Demo.DEVBOX).transcripts += "4304" to Demo.resource("claude-api.jsonl")
 }
 
+/** Shepherdr answers chat [key] with "Can't find this conversation" (`notice: none`), as 3.1.2 did on a real machine. */
+fun SceneData.lostChat(key: String) {
+    val sh = host(Demo.DEVBOX).shepherdr!!
+    sh.chats = sh.chats + (key to obj("key" to key, "messages" to kotlinx.serialization.json.JsonArray(emptyList()), "notice" to "none", "cli" to "claude"))
+}
+
 /**
  * [shepherdr3], with herdr-android's tabs as Shepherdr 3.1's tab bar has them: its Assistant's (`tb-herdr-android`)
  * and a Claude Code of its own beside it (`hc:t8`, tab `tb-and-claude`), stuck on a long test run: what the tab

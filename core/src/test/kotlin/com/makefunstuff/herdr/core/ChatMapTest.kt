@@ -103,6 +103,11 @@ class ChatMapTest {
         assertEquals("Claude · lfm-pixel", ChatHeader.line("Claude", "claude", "lfm-pixel"))
         assertNull(ChatHeader.machine("devbox", 1))
         assertEquals("devbox", ChatHeader.machine("devbox", 2))
+        // Who: an Assistant as 3.1 calls it, a plain agent by what its terminal says it works on, else its space.
+        val agents = HcMapping.snapshot(terminals).agents
+        assertEquals("Assistant", ChatHeader.agentTitle(agents.first { it.terminalId == "t2c" }))
+        assertEquals(terminals.first { it.address == "t3m" }.title, ChatHeader.agentTitle(agents.first { it.terminalId == "t3m" }, space = "voice-computer"))
+        assertEquals("voice-computer", ChatHeader.agentTitle(agents.first { it.terminalId == "t3m" }.copy(terminalTitle = null), space = "voice-computer"))
         assertEquals("HERD-30 · Chats show the right conversation", ChatHeader.task("HERD-30", "Chats show the right conversation"))
     }
 }
