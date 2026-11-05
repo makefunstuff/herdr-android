@@ -24,6 +24,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
@@ -440,10 +441,12 @@ fun SpaceSlot.shownTerminal(host: HostState): String? =
 class NewTerminal internal constructor(
     private val container: com.makefunstuff.herdr.AppContainer,
     private val scope: kotlinx.coroutines.CoroutineScope,
-    private val nav: NavController,
 ) {
     var opening by mutableStateOf(false)
         private set
+
+    /** The terminal it opened, on its machine, for the screen to show: navigation moves on the UI's own thread. */
+    internal var opened by mutableStateOf<Pair<String, String>?>(null)
 
     /** The space's workspace classic herdr has, where a new tab can open; null on herdr-core alone. */
     private fun SpaceSlot.classic(): WorkspaceInfo? = workspaces.firstOrNull { !it.workspaceId.startsWith(HcMapping.PREFIX) }
@@ -470,7 +473,7 @@ class NewTerminal internal constructor(
                     session.awaitApi(10_000).openShell(ws.workspaceId, "shell", slot.panes.firstOrNull()?.cwd).also { session.refresh() }
                 }
             }.onSuccess { pane ->
-                if (pane != null) nav.navigate(Routes.terminal(slot.machineId, pane)) else Toasts.show("A terminal opened in ${slot.name}")
+                if (pane != null) opened = slot.machineId to pane else Toasts.show("A terminal opened in ${slot.name}")
             }.onFailure { Toasts.show(it.message ?: "The terminal didn't open") }
             opening = false
         }
@@ -481,7 +484,14 @@ class NewTerminal internal constructor(
 fun rememberNewTerminal(nav: NavController): NewTerminal {
     val container = LocalContainer.current
     val scope = rememberCoroutineScope()
-    return remember(container, scope, nav) { NewTerminal(container, scope, nav) }
+    val terminals = remember(container, scope) { NewTerminal(container, scope) }
+    terminals.opened?.let { (machine, pane) ->
+        LaunchedEffect(machine, pane) {
+            terminals.opened = null
+            nav.navigate(Routes.terminal(machine, pane))
+        }
+    }
+    return terminals
 }
 
 /**
