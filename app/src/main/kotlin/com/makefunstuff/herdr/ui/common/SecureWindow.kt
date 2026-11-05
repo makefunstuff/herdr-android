@@ -15,11 +15,12 @@ private val holders = WeakHashMap<Window, Int>()
 
 /**
  * While this is shown, the app's window is secure (`FLAG_SECURE`): no screenshot, screen recording, cast or recent-apps
- * thumbnail shows it. For a box a secret is typed in.
+ * thumbnail shows it. For a box a secret is typed in. False where there is no window to secure (not in an activity):
+ * then the box isn't shown.
  */
 @Composable
-fun SecureWindow() {
-    val window = LocalContext.current.activity()?.window ?: return
+fun SecureWindow(): Boolean {
+    val window = LocalContext.current.activity()?.window ?: return false
     DisposableEffect(window) {
         val n = holders[window] ?: 0
         holders[window] = n + 1
@@ -33,6 +34,7 @@ fun SecureWindow() {
             }
         }
     }
+    return true
 }
 
 private tailrec fun Context.activity(): Activity? = when (this) {

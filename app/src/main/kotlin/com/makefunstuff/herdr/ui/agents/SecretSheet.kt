@@ -39,8 +39,8 @@ import kotlinx.coroutines.launch
  * keyboard's password mode, so it neither shows nor learns it), where it is kept (this space, its machine,
  * Everywhere) and Save. [keep] sends it once to the machine's vault ([com.makefunstuff.herdr.core.board.WorkBoard.keepSecret])
  * and says where it went; the agent hears its name only. The value lives in this sheet's memory alone: no draft, no
- * saved state, never logged, and the window is secure while it shows (no screenshot, recording or recents thumbnail).
- * [value] starts the box filled, for the preview's scene only.
+ * saved state, never logged, and the window is secure while it shows (no screenshot, recording or recents thumbnail);
+ * where it can't be, there is no box. It doesn't close while the value is on its way, so its answer is always seen.
  */
 @Composable
 fun SecretSheet(
@@ -48,14 +48,13 @@ fun SecretSheet(
     onDismiss: () -> Unit,
     onKept: (String) -> Unit,
     keep: suspend (level: String, value: String) -> String,
-    value: String = "",
 ) {
-    SecureWindow()
+    val secure = SecureWindow()
     val c = Herdr.colors
     val scope = rememberCoroutineScope()
     val ask = w.ask
     // Not rememberSaveable: saved state is written to disk when Android stops the app.
-    var typed by remember(w.key) { mutableStateOf(value) }
+    var typed by remember(w.key) { mutableStateOf("") }
     var level by remember(w.key) { mutableStateOf(ask.levels.firstOrNull()?.id ?: "all") }
     var busy by remember(w.key) { mutableStateOf(false) }
     var error by remember(w.key) { mutableStateOf<String?>(null) }
@@ -77,12 +76,13 @@ fun SecretSheet(
             }
         }
     }
+    val close = { if (!busy) onDismiss() }
     BoardPanel(
         "Secret: ${ask.name}",
-        onDismiss = onDismiss,
+        onDismiss = close,
         buttons = {
-            PanelCancel(onDismiss)
-            PrimaryButton(if (busy) "Saving" else "Save", enabled = typed.isNotEmpty() && !busy) { save() }
+            PanelCancel(close)
+            if (secure) PrimaryButton(if (busy) "Saving" else "Save", enabled = typed.isNotEmpty() && !busy) { save() }
         },
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(Space.m)) {
@@ -91,6 +91,10 @@ fun SecretSheet(
                 style = MaterialTheme.typography.bodySmall, color = c.muted, maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
             ask.why?.takeIf { it.isNotBlank() }?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = c.text) }
+            if (!secure) {
+                Text("This screen can't be hidden from screenshots here, so give it on the machine.", style = MaterialTheme.typography.bodyMedium, color = c.red)
+                return@Column
+            }
             HerdrField(
                 value = typed,
                 // As the web's password box: a pasted line break is no part of a key.
