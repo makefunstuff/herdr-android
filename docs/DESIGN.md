@@ -61,7 +61,7 @@ Near-black panels, amber frames, status lights. Flat and minimal: frames and fla
   *Start an agent*, and its machine.
 - **Tasks tab** (3.1's Tasks list): a filter row (All, then each group with its count), then
   *Pinned*, *Needs you* (cards with their answers), *Ready* (with Accept), *Working*, *Queued*,
-  *To do*, *Done* (five, then *Show N more*), *Idle*, *Snoozed*. One row per task: a task's agent is
+  *To do*, *Done* (five, then *Show N more*), *Idle*. One row per task: a task's agent is
   its row. A + offers *New task*, *Assistant* and *Start an agent*.
 - **Wide** (840dp and more): the drawer stays open on the left as a sidebar; the app fills the rest.
 

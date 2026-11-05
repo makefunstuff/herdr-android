@@ -101,12 +101,14 @@ object Demo {
     private fun machine(id: String, label: String, host: String = label, port: Int = 22, user: String = "demo", via: String? = null) =
         Machine(id = id, label = label, host = host, port = port, user = user, viaMachineId = via, hostKey = FakeMachine(id).fingerprint)
 
-    /** The Agents list triaged: gpu-box's eval pinned and muted, AND-6's agent snoozed for three hours. */
-    fun triage() = com.makefunstuff.herdr.core.home.Triage(
-        pins = listOf("$GPU/w1:p1"),
-        snoozes = mapOf("$DEVBOX/w4:p1" to com.makefunstuff.herdr.core.home.Snooze(until = NOW + 3 * 3_600_000L)),
-        muted = setOf("$GPU/w1:p1"),
-        used = true,
+    /** The Agents list triaged: gpu-box's eval pinned. */
+    fun triage() = com.makefunstuff.herdr.core.home.Triage(pins = listOf("$GPU/w1:p1"), used = true)
+
+    /** Each space's Notify as someone might pick it: gpu-box's llm-eval Off, devbox's herdr-android All (Finished off everywhere). */
+    fun notify(): PushState = push().copy(
+        rules = com.makefunstuff.herdr.core.push.AlertRules()
+            .withSpace(com.makefunstuff.herdr.core.push.Notify.key(GPU, "llm-eval"), com.makefunstuff.herdr.core.push.Notify.Off)
+            .withSpace(com.makefunstuff.herdr.core.push.Notify.key(DEVBOX, "herdr-android"), com.makefunstuff.herdr.core.push.Notify.All),
     )
 
     /** Notifications on: devbox and gpu-box send, ci-runner is left out, mac-mini has no python3. */
@@ -122,11 +124,6 @@ object Demo {
             ),
         )
     }
-
-    /** Watches set from the long-press sheets: the eval on gpu-box finishing. */
-    fun watches() = listOf(
-        com.makefunstuff.herdr.core.push.Watch(GPU, com.makefunstuff.herdr.core.push.Watch.What.AgentDone, paneId = "w1:p1", name = "the eval"),
-    )
 
     /** Quiet hours as someone might set them: with the phone's modes, and weeknights from 22:00 to 07:00. */
     fun quiet() = QuietHours(followPhone = true, schedule = true, start = 22 * 60, end = 7 * 60, days = (1..5).toSet())

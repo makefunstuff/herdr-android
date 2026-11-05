@@ -35,13 +35,15 @@ data class Alert(
     val health: Boolean = false,
     /** A tap opens the machine's usage page (a provider near or at a limit). */
     val usage: Boolean = false,
+    /** The space an agent's news comes from (its workspace's name), whose [Notify] it follows; empty for the rest. */
+    val space: String = "",
 ) {
     /**
      * What it is about, which the notification rules ([AlertRules]) switch on and off: something waits
-     * for you, something finished, something went wrong (a review or a check failed), a test, a watch you set
-     * that fired ([Watch]), or an AI provider near or at a limit.
+     * for you, something finished, something went wrong (a review or a check failed), a test, or an AI
+     * provider near or at a limit.
      */
-    enum class Kind { NeedsYou, Finished, WentWrong, Test, Watch, Limits }
+    enum class Kind { NeedsYou, Finished, WentWrong, Test, Limits }
 }
 
 /** A notification's button. */
@@ -113,6 +115,7 @@ object Alerts {
         val tag = agentTag(machineId, a.paneId)
         val name = a.name?.takeIf { it.isNotBlank() } ?: a.displayName
         val where = listOf(machineLabel, e.where).filter { it.isNotBlank() }.joinToString(" · ")
+        val space = Notify.spaceOf(e.where)
         return when (a.agentStatus) {
             AgentStatus.Blocked -> {
                 val prompt = e.screen?.let { BlockedPrompt.parse(it) }
@@ -129,6 +132,7 @@ object Alerts {
                         paneId = a.paneId,
                         agentName = name,
                         actions = choices(prompt) + AlertAction(AlertAction.Type.ReplyAgent, "Reply", hint = "Answer $name"),
+                        space = space,
                     ),
                 )
             }
@@ -146,6 +150,7 @@ object Alerts {
                         paneId = a.paneId,
                         agentName = name,
                         actions = listOf(AlertAction(AlertAction.Type.ReplyAgent, "Reply", hint = "Next prompt for $name")),
+                        space = space,
                     ),
                 )
             }

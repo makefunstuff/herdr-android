@@ -39,7 +39,6 @@ class AlertWork(
     private val live: LiveWork,
     private val quiet: QuietWork,
     private val tally: TallyStore,
-    private val watches: WatchWork,
     private val usage: com.makefunstuff.herdr.data.UsageStore,
 ) {
     private val rules get() = store.state.value.rules
@@ -61,7 +60,6 @@ class AlertWork(
         // Who is at the machine as it sent this (a push that took long says so of then, not of now).
         msg.presence?.let { quiet.presence.record(machineId, label, it, minOf(now, msg.at * 1000).takeIf { msg.at > 0 } ?: now) }
         inbox.apply(changes, quiet = quiet.silent(now), hold = quiet.check(now), rules = rules)
-        watches.events(machineId, label, msg.events)
         // A limit's warning carries its reading: the glance and the widget show it at once.
         msg.events.filterIsInstance<PushEvent.Usage>().forEach { usage.putLimit(machineId, it.provider, it.limit, msg.at) }
         return true
@@ -137,7 +135,6 @@ class AlertWork(
         if (rules.holdAtMachine) HerdrPush.Client(conn, s.machine.label).presence()?.let { quiet.presence.record(machineId, s.machine.label, it, System.currentTimeMillis()) }
         inbox.apply(Alerts.all(machineId, s.machine.label, events), quiet = quiet.silent(), hold = quiet.check(), rules = rules)
         if (st.agentsKnown) {
-            watches.look(machineId, s.machine.label, snapshot.agents)
             live.looked(machineId, s.machine.label, snapshot)
         }
         // Low on RAM or disk, for a machine without herdr-push (where it runs, the push said so already: shown once).

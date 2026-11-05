@@ -51,17 +51,14 @@ class AppContainer(app: Context) {
         java.io.File(app.filesDir, "images.json"), java.io.File(app.filesDir, "images"), java.io.File(app.filesDir, "sent-images"),
     )
     val push = PushStore(app)
-    // Snoozes at the demo's fixed time, on UTC, so "until 09:00" reads the same every run.
-    val triage = com.makefunstuff.herdr.data.TriageStore(java.io.File(app.filesDir, "triage.json"), now = { Demo.NOW }, zone = { java.time.ZoneOffset.UTC })
+    val triage = com.makefunstuff.herdr.data.TriageStore(java.io.File(app.filesDir, "triage.json"))
     val inbox = Inbox(java.io.File(app.filesDir, "alerts.json"), PreviewAlerts, muted = triage::mutes)
     val phone = PreviewPhone
     val pushHosts = PushHosts(scope, hosts, machines, push, phone)
     val quietWork = QuietWork(scope, push.state, phone, inbox, foreground = { hosts.isForeground })
-    val liveWork = LiveWork(scope, hosts, machines, push, PreviewLive, quietWork, muted = triage.state.map { it.muted })
+    val liveWork = LiveWork(scope, hosts, machines, push, PreviewLive, quietWork, muted = triage.muted(push.state, hosts.hosts))
     val tally = TallyStore(java.io.File(app.filesDir, "tally.json"), machines)
-    /** One-shot watches set from the long-press sheets. */
-    val watchWork = com.makefunstuff.herdr.push.WatchWork(push, inbox, quietWork)
-    val alertWork = AlertWork(hosts, machines, push, inbox, liveWork, quietWork, tally, watchWork, usage)
+    val alertWork = AlertWork(hosts, machines, push, inbox, liveWork, quietWork, tally, usage)
     /** Every board's list as last read, and which finished agents the phone has shown: the Agents screen's and the Board tab's. */
     val boards = com.makefunstuff.herdr.data.BoardLists(hosts, onRead = { id, tasks -> tally.tasks(id, tasks); briefWork.looked(id, tasks, null) })
     val seen = com.makefunstuff.herdr.data.SeenStore(java.io.File(app.filesDir, "seen.json"))
@@ -98,7 +95,6 @@ class AppContainer(app: Context) {
         // What quiet hours mean now, before the first frame.
         quietWork.check()
         briefWork.start()
-        watchWork.start(scope, hosts)
         usage.start(scope, hosts, machines)
     }
 

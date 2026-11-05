@@ -39,7 +39,7 @@ data class PushState(
     val quiet: QuietHours = QuietHours(),
     /** Which kinds reach the phone, and whether they stay silent while you are at a machine. */
     val rules: AlertRules = AlertRules(),
-    /** One-shot watches set from the long-press sheets, oldest first; each is removed once it fires. */
+    /** One-shot watches set from the long-press sheets before Notify: each becomes its space's Notify: All once its agent is found ([com.makefunstuff.herdr.core.home.NotifyMove]). */
     val watches: List<Watch> = emptyList(),
     val machines: Map<String, MachinePush> = emptyMap(),
 ) {
@@ -67,7 +67,7 @@ data class MachinePush(
     val lastAt: Long = 0,
     /** Whether its subscription asks for what runs (Live Updates); null before one was made with it. */
     val live: Boolean? = null,
-    /** What its subscription watches ([com.makefunstuff.herdr.core.push.HerdrPush.watching]); null before one was made with it. */
+    /** The agents an older subscription followed for the one-shot watches (`pane:…`); null or empty: none, as subscriptions are made now. */
     val watching: String? = null,
 ) {
     val keyBytes: ByteArray? get() = key.takeIf { it.isNotEmpty() }?.let { runCatching { Base64.getDecoder().decode(it) }.getOrNull() }

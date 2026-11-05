@@ -76,8 +76,8 @@ interface PushPhone {
 /**
  * Turns alert changes into notifications, each state once: a push and the app's own look can both
  * report an agent that asks, and a notification swiped away stays away until something new happens.
- * What the notification rules switch off ([AlertRules]) isn't shown, nor what a muted agent says
- * ([muted]: by machine and pane; a watch you set on it still comes). During quiet hours what can wait
+ * What the notification rules switch off ([AlertRules]: the kinds, each space's Notify) isn't shown,
+ * nor what an agent muted before Notify says ([muted]: by machine and pane, until it is moved onto its space). During quiet hours what can wait
  * is held instead ([QuietHours.holds]), and [release]d as one.
  */
 class Inbox(
@@ -189,7 +189,7 @@ class Inbox(
         saveHeld()
     }
 
-    /** An agent's own news (it asks, finished, went wrong) while it is muted; a watch and a test always come. */
+    /** An agent's own news (it asks, finished) while it is muted from before Notify; a test always comes. */
     private fun muted(a: Alert): Boolean =
         a.tag == Alerts.agentTag(a.machineId, a.paneId) && muted(a.machineId, a.paneId)
 
@@ -202,7 +202,9 @@ class Inbox(
             ?: mutableMapOf()
 
     private fun loadHeld(): LinkedHashMap<String, Alert> {
-        val list = runCatching { if (heldFile.exists()) json.decodeFromString(heldSerializer, heldFile.readText()) else null }.getOrNull().orEmpty()
+        // One by one: one of a kind this app no longer has (a watch's) is left out, not the night's others with it.
+        val saved = runCatching { if (heldFile.exists()) json.parseToJsonElement(heldFile.readText()) as? kotlinx.serialization.json.JsonArray else null }.getOrNull()
+        val list = saved.orEmpty().mapNotNull { runCatching { json.decodeFromJsonElement(Alert.serializer(), it) }.getOrNull() }
         return LinkedHashMap<String, Alert>().apply { list.forEach { put(it.tag, it) } }
     }
 
