@@ -31,12 +31,6 @@ sealed interface PushEvent {
     data class Health(val report: HealthReport) : PushEvent
 
     /**
-     * An AI quick command ended there: run [id] of [name], in [state] (`done`, `failed`, `limit`),
-     * with the start of its answer ([text]) or why it failed ([error]).
-     */
-    data class Quick(val id: String, val name: String, val state: String, val text: String = "", val error: String = "", val cwd: String = "") : PushEvent
-
-    /**
      * A provider's [limit] passed a mark ([level] 80, 95 or 100), or (level 0) is back under them after
      * a reset: herdr-usage's readings, as herdr-push watches them.
      */
@@ -102,9 +96,6 @@ object PushMessages {
             },
         )
         "health" -> PushEvent.Health(health(e))
-        "quick" -> e.str("id").takeIf { it.isNotEmpty() }?.let {
-            PushEvent.Quick(it, e.str("name").ifEmpty { it }, e.str("state"), e.str("text"), e.str("error"), e.str("cwd"))
-        }
         "usage" -> (e["limit"] as? JsonObject)?.let { l ->
             val percent = (l["percent"] as? JsonPrimitive)?.takeIf { !it.isString }?.doubleOrNull ?: return@let null
             val limit = UsageLimit(

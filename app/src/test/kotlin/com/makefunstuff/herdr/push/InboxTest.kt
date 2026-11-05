@@ -3,6 +3,7 @@ package com.makefunstuff.herdr.push
 import com.makefunstuff.herdr.core.push.Alert
 import com.makefunstuff.herdr.core.push.AlertChange
 import com.makefunstuff.herdr.core.push.AlertRules
+import com.makefunstuff.herdr.core.push.Notify
 import com.makefunstuff.herdr.core.push.QuietSummary
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -121,10 +122,12 @@ class InboxTest {
         inbox.apply(listOf(AlertChange.Show(alert("task:m1:r/7", "approval"))), quiet = false, rules = AlertRules(wentWrong = false))
         inbox.apply(listOf(AlertChange.Show(alert("task:m1:r/7", "failed").copy(kind = Alert.Kind.WentWrong))), quiet = false, rules = AlertRules(wentWrong = false))
         assertEquals(listOf("show task:m1:r/7 approval", "cancel task:m1:r/7"), sink.log.takeLast(2))
-        // A watch you set comes whatever is switched off.
-        val watch = Alert("watch:m1:ChecksPass:r/7", "", Alert.Kind.Watch, "m1", "AND-7's checks passed", "Board view")
-        inbox.apply(listOf(AlertChange.Show(watch)), quiet = true, rules = AlertRules(needsYou = false, wentWrong = false))
-        assertEquals("show watch:m1:ChecksPass:r/7  quiet", sink.log.last())
+        // A space set to Notify: All tells each finish of its agents, with Finished off everywhere; one set to Off, nothing.
+        val spaces = AlertRules().withSpace("m1/api", Notify.All).withSpace("m1/web", Notify.Off)
+        inbox.apply(listOf(AlertChange.Show(finished("agent:m1:p7", "done#1").copy(space = "api"))), quiet = false, rules = spaces)
+        assertEquals("show agent:m1:p7 done#1", sink.log.last())
+        inbox.apply(listOf(AlertChange.Show(alert("agent:m1:p8", "blocked#1").copy(space = "web"))), quiet = false, rules = spaces)
+        assertEquals("cancel agent:m1:p8", sink.log.last())
     }
 
     @Test fun aMutedAgentStaysQuiet() {
@@ -135,10 +138,6 @@ class InboxTest {
         // Muted: it asks, and nothing shows (one up from before comes down); another agent still comes through.
         inbox.apply(listOf(AlertChange.Show(asks), AlertChange.Show(alert("agent:m1:p2", "blocked#2").copy(paneId = "p2"))), quiet = false)
         assertEquals(listOf("cancel agent:m1:p1", "show agent:m1:p2 blocked#2"), sink.log)
-        // A watch you set on it still comes.
-        val watch = Alert("watch:m1:AgentDone:p1", "", Alert.Kind.Watch, "m1", "claude finished", "Fixed it", paneId = "p1")
-        inbox.apply(listOf(AlertChange.Show(watch)), quiet = false)
-        assertEquals("show watch:m1:AgentDone:p1 ", sink.log.last())
         // Unmuted, its next news shows.
         muted.clear()
         inbox.apply(listOf(AlertChange.Show(alert("agent:m1:p1", "blocked#9").copy(paneId = "p1"))), quiet = false)

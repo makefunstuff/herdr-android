@@ -8,13 +8,11 @@ When that is over (answered on the desktop, the agent back at work), it says so 
 
 It also looks at the machine itself every 30 seconds (`HERDR_PUSH_HEALTH_EVERY`, 0 for never): when RAM runs low (under 10% available) or a disk does (less than a tenth free, at most 20 GB), it tells the phone once, naming the three processes using the most memory, and again when there is room (15%, one and a half times the disk's mark). The readings of the last hour go to `health.json` for the app's chart.
 
-It also tells the phone when an **AI quick command** the app started there ends (done, failed, or at its time or token limit; not one stopped by hand), with the start of its answer: it looks at the runs in `~/.local/state/herdr-android/quick/` (`HERDR_PUSH_QUICK` for another folder; see [herdr-quick](../herdr-quick/README.md)), once each, and only at runs that ended in the last hour. A tap opens the run in the app.
-
 It also warns about the **AI providers' limits** every 5 minutes (`HERDR_PUSH_USAGE_EVERY`, 0 for never), where the app put [herdr-usage](../herdr-usage/README.md) (`~/.local/share/herdr-usage/herdr-usage`, `HERDR_PUSH_USAGE` for another): when Claude Code's, Codex's or an API key's limit passes 80% or 95%, or runs out, it tells the phone once per mark and window, and again when that window is over (the notification comes down): a new reset time, its reset time passed, or, for a rolling window without one, under 70%. A tap opens the machine's usage page. Quiet hours hold it.
 
 It also keeps a **journal** of the last week for the app's brief: each time an agent finishes or asks something, with the time and the agent as it was then (`journal.json`, at most 600 entries per herdr session; `HERDR_PUSH_JOURNAL_DAYS` changes the 8 days). The first look only learns how things stand, as for the pushes. The app reads it with `herdr-push journal --session <name> --since <seconds>`, which answers `{"ok": true, "now", "from", "upto", "entries": [...]}`: `from` is when the journal began (null before any look), `upto` its last look, so the app can tell a journal that stopped keeping track.
 
-It also follows what a phone **watches** (a one-shot watch set in the app: "when this agent finishes"): each change of a watched agent's status goes to that phone alone, so its watch can fire while the app is closed. The subscription lists them (`watch_panes`); the app subscribes again when they change.
+It can also follow agents a phone **watches** (`watch_panes` in its subscription): each change of a watched agent's status goes to that phone alone. The app's one-shot watches used it; it now asks for none (a space's Notify: All covers it), and subscribes again without them.
 
 Every push also says whether someone is **at the machine** (`present`), so the phone can keep quiet then: how many seconds ago someone typed in a herdr client there (the last input of the terminal it runs in, as `w` reads it, or the last touch of `~/.local/state/herdr-push/present`, which anything may touch, a shell prompt say), and whether a desktop session of yours there is unlocked (logind's `LockedHint` and `IdleHint`, or a screen locker such as hyprlock or swaylock running; on macOS the console's lock), or null with no desktop. `herdr-push presence` answers the same, for the app's own looks.
 
@@ -131,7 +129,6 @@ Inside, the message is:
   {"type": "health", "low": ["ram", "disk:/"], "memory": {"total": 65536000, "available": 3276800, "swap_total": 0, "swap_free": 0},
    "disks": [{"mount": "/", "device": "/dev/nvme0n1p2", "total": 500000000, "used": 495000000, "avail": 5000000}],
    "top": [["Android emulator · Pixel_8", 5872000], ["Gradle daemon", 3250000]]},
-  {"type": "quick", "id": "q1792222540000-0a1f", "name": "Find TODOs", "state": "done", "text": "…the start of its answer…", "error": "", "cwd": "/home/demo/src/app"},
   {"type": "live", "agents": [{"agent": {"pane_id": "w1:p3", "agent_status": "working", "…": "…"}, "where": "api › agents", "workspace": "api", "since": 1759999000}]}
 ]}
 ```

@@ -146,6 +146,13 @@ private fun SceneData.v2() {
     host(DEVBOX).shepherdr = DemoV2.board()
 }
 
+/** Shepherdr 3 on devbox, its home Assistant also asking for a secret ([DemoV2.SECRET_NEED]). */
+private fun SceneData.secretAsk() {
+    val v2 = DemoV2.board()
+    v2.snapshot = JsonObject(v2.snapshot + ("needs" to JsonArray(v2.snapshot.getValue("needs").jsonArray + Json.parseToJsonElement(DemoV2.SECRET_NEED))))
+    host(DEVBOX).shepherdr = v2
+}
+
 /** Where a 540×1200 screenshot is drawn in the editor's [w]×[h] canvas: as large as fits, in the middle. */
 private fun screenshotIn(w: Float, h: Float): androidx.compose.ui.geometry.Rect {
     val scale = minOf(w / 540f, h / 1200f)
@@ -176,20 +183,24 @@ fun scenes(): List<Scene> = listOf(
     }, actions = { tapText("Always allow") }),
     Scene("agents-filter", heightDp = 1500, setup = { home() }, actions = { tapText("Working 3") }),
     Scene("tasks-new", setup = { home(); shepherdr() }, actions = { tapLabel("New task, Assistant or agent") }),
+    // An agent asking for a secret by name: its own item under Needs you, then the masked box (empty, then dots: a
+    // made-up value, never a real one), and the list once it is kept.
+    Scene("tasks-secret", heightDp = 1700, setup = { home(); secretAsk() }),
+    Scene("secret-sheet", setup = { home(); secretAsk() }, actions = { settle(); tapExact("Give it") }),
+    Scene("secret-sheet-typed", setup = { home(); secretAsk() }, actions = { settle(); tapExact("Give it"); type("demo-not-a-real-token") }),
+    Scene("secret-kept", heightDp = 1700, setup = { home(); secretAsk() }, actions = { settle(); tapExact("Give it"); type("demo-not-a-real-token"); tapExact("Save") }),
     Scene("agents-seen", heightDp = 1500, setup = { home() }, actions = { tapText("Mark all seen") }),
-    // Triage: the eval pinned on top (and muted), AND-6 snoozed for three hours, the profile still new in Done.
-    Scene("agents-triage", heightDp = 1500, setup = { home(); triage = Demo.triage() }),
-    // A row swiped left shows Pin, Snooze and Mute under it; one swiped right is seen and leaves Done.
+    // Triage: the eval pinned on top, its space (llm-eval) set to Notify Off: a crossed-out bell; the profile still new in Done.
+    Scene("agents-triage", heightDp = 1500, setup = { home(); triage = Demo.triage(); push = Demo.notify() }),
+    // A row swiped left shows Pin under it; one swiped right is seen and leaves Done.
     Scene("agents-swipe", heightDp = 1500, setup = { home() }, actions = { drag("Long-context eval", 0.85f to 0.5f, 0.15f to 0.5f) }),
     Scene("agents-swiped-seen", heightDp = 1500, setup = { home() }, actions = { drag("Profile the data loader", 0.1f to 0.5f, 0.7f to 0.5f) }),
-    // The same in the long-press sheet, and how long to snooze.
+    // The same in the long-press sheet: Mark seen, Pin, and its space's Notify (All / Needs me / Off), here picked Off.
     Scene("agent-triage", heightDp = 1500, setup = { home() }, actions = { longPressText("Profile the data loader") }),
-    Scene("agent-snooze", heightDp = 1500, setup = { home() }, actions = { longPressText("Profile the data loader"); tapText("Snooze") }),
+    Scene("agent-notify", heightDp = 1500, setup = { home() }, actions = { longPressText("Profile the data loader"); tapExact("Off") }),
     Scene("agent-actions", setup = { home() }, actions = { longPressText("Speed up /jobs") }),
-    // A one-shot watch from the long-press sheet: tell me once it finishes.
-    Scene("agent-watch", setup = { home() }, actions = { longPressText("Speed up /jobs"); tapText("Notify me when it finishes") }),
     // TalkBack: everything behind a long press offered as actions on the card or row (read from the app's semantics,
-    // drawn as TalkBack's Actions menu): a question's answers first, then its terminal, why this state, mute, the sheet;
+    // drawn as TalkBack's Actions menu): a question's answers first, then its terminal, why this state, the sheet;
     // a row's triage; a board card's actions. One carried out: why this state.
     Scene("agent-talkback", setup = { home() }, actions = { talkback("Speed up /jobs") }),
     Scene("agent-line-talkback", heightDp = 1500, setup = { home() }, actions = { talkback("Profile the data loader") }),
@@ -200,15 +211,11 @@ fun scenes(): List<Scene> = listOf(
         ctx.refresh(DEVBOX)
         settle(4)
     }),
-    // A watch fires while the app is open: it shows the same way.
-    Scene("pill-watch", route = Routes.agent(DEVBOX, APP_AGENT), actions = { ctx ->
-        ctx.container.watchWork.add(Demo.watches().first())
-        ctx.container.watchWork.look(GPU, "gpu-box", emptyList())
-        settle(4)
-    }),
     // The spaces drawer (3.1's sidebar, as the workbench's: each machine a numbered bus with its meter, each space a
     // numbered slot with its light), and one machine: its places in one row, its spaces under one heading.
     Scene("machines", setup = { home() }, actions = { tapLabel("Spaces") }),
+    // A space's Notify from a long press in the drawer; llm-eval, set to Off, is dim beside a crossed-out bell.
+    Scene("machines-notify", setup = { home(); push = Demo.notify() }, actions = { tapLabel("Spaces"); longPressText("HERDR-ANDROID") }),
     Scene("machine", route = Routes.machine(DEVBOX)),
     // A workspace with two tabs keeps its tab chips and its layout; with one tab, its actions are in the workspace's ⋯.
     Scene("machine-tabs", route = Routes.machine(DEVBOX), setup = { host(DEVBOX).snapshot = Demo.devboxTabs() }),
@@ -241,7 +248,7 @@ fun scenes(): List<Scene> = listOf(
     Scene("artifacts-tab-none", route = Routes.ARTIFACTS_TAB, setup = { home() }),
     // A task's chat takes voice messages too (kept by Shepherdr's service, then the chat as its file), as the Assistant's.
     Scene("task-v2-voice-sent", route = Routes.board(DEVBOX, "AND-19"), setup = { shepherdr3() }, actions = {
-        tapLabel("Record a voice message")
+        recordVoice()
         tapLabel("Send voice message")
     }),
     // Every agent's chat keeps its whole composer (text, attach, mic, Send): a herdr-core agent at work, Shepherdr 3's
@@ -252,11 +259,22 @@ fun scenes(): List<Scene> = listOf(
     Scene("chat-shepherdr3-agent", route = Routes.agent(DEVBOX, "hc:t4"), setup = { shepherdr3() }),
     Scene("chat-shepherdr3-asks", route = Routes.agent(DEVBOX, "hc:t2"), setup = { shepherdr3() }),
     Scene("chat-shepherdr3-coordinator", route = Routes.agent(DEVBOX, "hc:t1"), setup = { shepherdr3() }),
+    // The tab menu (3.1's): the Chat tab's ⋯ starts with the shown tab's rows; an agent's More sheet with its tab's.
+    Scene("tab-menu", route = Routes.CHAT, setup = { shepherdr3Tabs() }, actions = { tapLabel("Tabs and new") }),
+    Scene("tab-restart", route = Routes.CHAT, setup = { shepherdr3Tabs() }, actions = { tapLabel("Tabs and new"); tapExact("Restart") }),
+    Scene("tab-close-assistant", route = Routes.CHAT, setup = { shepherdr3Tabs() }, actions = { tapLabel("Tabs and new"); tapExact("Close tab") }),
+    Scene("tab-assistant-more", route = Routes.agent(DEVBOX, "hc:t1"), setup = { shepherdr3Tabs() }, actions = { tapLabel("More") }),
+    Scene("tab-agent-more", route = Routes.agent(DEVBOX, "hc:t8"), setup = { shepherdr3Tabs() }, actions = { tapLabel("More") }),
+    Scene("tab-rename", route = Routes.agent(DEVBOX, "hc:t8"), setup = { shepherdr3Tabs() }, actions = { tapLabel("More"); tapExact("Rename…") }),
+    Scene("tab-switch", route = Routes.agent(DEVBOX, "hc:t8"), setup = { shepherdr3Tabs() }, actions = { tapLabel("More"); tapExact("Switch agent") }),
+    Scene("tab-switch-confirm", route = Routes.agent(DEVBOX, "hc:t8"), setup = { shepherdr3Tabs() }, actions = { tapLabel("More"); tapExact("Switch agent"); tapExact("Codex") }),
+    Scene("tab-model", route = Routes.agent(DEVBOX, "hc:t8"), setup = { shepherdr3Tabs() }, actions = { tapLabel("More"); tapExact("Model…") }),
+    Scene("tab-model-change", route = Routes.agent(DEVBOX, "hc:t8"), setup = { shepherdr3Tabs() }, actions = { tapLabel("More"); tapExact("Model…"); tapExact("Sonnet 5.5") }),
+    Scene("tab-close", route = Routes.agent(DEVBOX, "hc:t8"), setup = { shepherdr3Tabs() }, actions = { tapLabel("More"); tapExact("Close tab") }),
     Scene("task-shepherdr3", route = Routes.board(DEVBOX, "AND-19"), setup = { shepherdr3() }),
     // Its chat not read yet (or not readable): the composer is whole and writable all the same; and attaching a file.
     Scene("task-shepherdr3-unread", route = Routes.board(DEVBOX, "AND-19"), setup = { shepherdr3(); host(DEVBOX).shepherdr?.chatRefused = "Couldn't read the chat" }),
     Scene("task-shepherdr3-attach", route = Routes.board(DEVBOX, "AND-19"), setup = { shepherdr3() }, actions = { tapLabel("Attach files") }),
-    Scene("machine-new", route = Routes.machine(DEVBOX), actions = { tapText("NEW") }),
     // Add machine: scanning the code herdr-push pair shows (the phone's own scanner is a system screen; the stand-in
     // reads studio's code), studio found on Tailscale, studio answering nowhere, and typing the address instead.
     Scene("add-machine", route = Routes.edit()),
@@ -382,15 +400,15 @@ fun scenes(): List<Scene> = listOf(
     // that letting go cancels, tapped to go on hands-free; sent (copied to the machine, then to the agent as its
     // file) and played back; one whose copy failed, to retry; one held while the agent works; too short to send;
     // why the microphone is needed while Android asks for it, and again once refused.
-    Scene("chat-voice-recording", route = Routes.agent(DEVBOX, APP_AGENT), actions = { hold("Record a voice message", 0.5f to 0.5f) }),
-    Scene("chat-voice-cancel", route = Routes.agent(DEVBOX, APP_AGENT), actions = { hold("Record a voice message", 0.5f to 0.5f, -2.5f to 0.6f) }),
-    Scene("chat-voice-tap", route = Routes.agent(DEVBOX, APP_AGENT), actions = { tapLabel("Record a voice message") }),
+    Scene("chat-voice-recording", route = Routes.agent(DEVBOX, APP_AGENT), actions = { hold("Talk to type", 0.5f to 0.5f) }),
+    Scene("chat-voice-cancel", route = Routes.agent(DEVBOX, APP_AGENT), actions = { hold("Talk to type", 0.5f to 0.5f, -2.5f to 0.6f) }),
+    Scene("chat-voice-tap", route = Routes.agent(DEVBOX, APP_AGENT), actions = { recordVoice() }),
     Scene("chat-voice-sent", route = Routes.agent(DEVBOX, APP_AGENT), setup = { appDone() }, actions = {
-        tapLabel("Record a voice message")
+        recordVoice()
         tapLabel("Send voice message")
     }),
     Scene("chat-voice-playing", route = Routes.agent(DEVBOX, APP_AGENT), setup = { appDone() }, actions = {
-        tapLabel("Record a voice message")
+        recordVoice()
         tapLabel("Send voice message")
         tapLabel("Play voice message")
     }),
@@ -398,23 +416,43 @@ fun scenes(): List<Scene> = listOf(
         appDone()
         host(DEVBOX).uploadFails = "No space left on device"
     }, actions = {
-        tapLabel("Record a voice message")
+        recordVoice()
         tapLabel("Send voice message")
     }),
     Scene("chat-voice-held", route = Routes.agent(DEVBOX, APP_AGENT), actions = {
-        tapLabel("Record a voice message")
+        recordVoice()
         tapLabel("Send voice message")
     }),
     Scene("chat-voice-short", route = Routes.agent(DEVBOX, APP_AGENT), setup = { mic = PreviewMic.Setup(spokeFor = 400) }, actions = {
-        tapLabel("Record a voice message")
+        recordVoice()
         tapLabel("Send voice message")
     }),
     Scene("chat-voice-denied", route = Routes.agent(DEVBOX, APP_AGENT), setup = {
         mic = PreviewMic.Setup(allowed = false, answer = false)
-    }, actions = { tapLabel("Record a voice message") }),
+    }, actions = { tapLabel("Talk to type") }),
     Scene("chat-voice-asking", route = Routes.agent(DEVBOX, APP_AGENT), setup = {
         mic = PreviewMic.Setup(allowed = false, answer = null)
-    }, actions = { tapLabel("Record a voice message") }),
+    }, actions = { tapLabel("Talk to type") }),
+    // Talk to type, a tap on the mic: listening (the box gives way to how loud you are), the phone's recogniser's
+    // words as you speak, Done putting them in the box after what was typed, to edit and send; nothing heard. A task's
+    // chat on Shepherdr 3 has its machine write it down (whisper.cpp there), as 3.1's web app does.
+    Scene("chat-dictate", route = Routes.agent(DEVBOX, APP_AGENT), actions = { tapLabel("Talk to type") }),
+    Scene("chat-dictate-heard", route = Routes.agent(DEVBOX, APP_AGENT), setup = {
+        mic = PreviewMic.Setup(heard = "run the failing test again and")
+    }, actions = { tapLabel("Talk to type") }),
+    Scene("chat-dictate-done", route = Routes.agent(DEVBOX, APP_AGENT), actions = {
+        type("Before you merge,")
+        tapLabel("Talk to type")
+        tapLabel("Done: put it in the box")
+    }),
+    Scene("chat-dictate-nothing", route = Routes.agent(DEVBOX, APP_AGENT), setup = { mic = PreviewMic.Setup(said = "") }, actions = {
+        tapLabel("Talk to type")
+        tapLabel("Done: put it in the box")
+    }),
+    Scene("task-v2-dictate", route = Routes.board(DEVBOX, "AND-19"), setup = { shepherdr3(); mic = PreviewMic.Setup(recognises = false) }, actions = {
+        tapLabel("Talk to type")
+        tapLabel("Done: put it in the box")
+    }),
     // The chats' own text size (Settings → Text size), larger than the phone's.
     Scene("chat-large-text", route = Routes.agent(DEVBOX, APP_AGENT), setup = { textSizes = com.makefunstuff.herdr.data.TextSizeStore.Sizes(chat = 1.3f) }),
 
@@ -524,9 +562,9 @@ fun scenes(): List<Scene> = listOf(
     Scene("artifact-not-kept", route = Routes.artifact(DEVBOX, "rn09", 9), setup = { artifacts() }),
     Scene("artifacts-empty", route = Routes.artifacts(DEVBOX, "sp-website"), setup = { artifacts() }),
     // A voice message to a space's Assistant: recording, then kept by Shepherdr's service and in the chat as its file.
-    Scene("coordinator-v2-voice", route = Routes.coordinator(DEVBOX), setup = { shepherdr() }, actions = { tapLabel("Record a voice message") }),
+    Scene("coordinator-v2-voice", route = Routes.coordinator(DEVBOX), setup = { shepherdr() }, actions = { recordVoice() }),
     Scene("coordinator-v2-voice-sent", route = Routes.coordinator(DEVBOX), setup = { shepherdr() }, actions = {
-        tapLabel("Record a voice message")
+        recordVoice()
         tapLabel("Send voice message")
     }),
     // The Assistant's voice: turned on with the headphones, reading a reply (a tap stops it), hearing you
@@ -668,39 +706,10 @@ fun scenes(): List<Scene> = listOf(
     Scene("code-search", route = Routes.codeSearch(TASK_CODE, "answered")),
     Scene("code-notes", route = Routes.codeNotes(TASK_CODE), heightDp = 1000, setup = { notes = Demo.notes() }),
 
-    // Quick commands: the machine's own from its screen; an agent's project's and the machine's, one pinned; a command
-    // that asks for its arguments, and its menu; a script that failed, an AI one's answer and one still at work, and
-    // the runs (a notification of an AI one that ended opens it there); asking an agent for a new one; a machine
-    // without any yet.
-    Scene("quick", route = Routes.machine(DEVBOX), actions = { tapLabel("Quick commands") }),
-    Scene(
-        "quick-project", route = Routes.agent(DEVBOX, APP_AGENT), heightDp = 1100,
-        setup = { quickPins = mapOf(DEVBOX to listOf("Project:Run unit tests")) },
-        actions = { tapLabel("More"); tapText("Quick commands") },
-    ),
-    Scene("quick-args", route = Routes.agent(DEVBOX, APP_AGENT), heightDp = 1100, actions = {
-        tapLabel("More"); tapText("Quick commands"); tapText("Draft a PR description"); typeInto("Anything to point out?", "Mention that the card's colour follows the theme")
-    }),
-    Scene("quick-menu", route = Routes.agent(DEVBOX, APP_AGENT), heightDp = 1100, actions = {
-        tapLabel("More"); tapText("Quick commands"); tapLabel("More for Render the screens")
-    }),
-    Scene("quick-run", route = Routes.agent(DEVBOX, APP_AGENT), heightDp = 1100, actions = {
-        tapLabel("More"); tapText("Quick commands"); tapText("Run unit tests"); settle()
-    }),
-    Scene("quick-failed", route = Routes.quickRuns(DEVBOX, FakeQuick.TESTS), heightDp = 1100),
-    Scene("quick-answer", route = Routes.quickRuns(DEVBOX, FakeQuick.TODOS), heightDp = 1100),
-    // A long build log: the sheet shows its end, where the error is, and says how much of it is left out.
-    Scene("quick-long", route = Routes.quickRuns(DEVBOX, FakeQuick.BUILD), heightDp = 1100),
-    Scene("quick-working", route = Routes.quickRuns(DEVBOX, FakeQuick.TODAY)),
-    Scene("quick-runs", route = Routes.quickRuns(DEVBOX)),
-    Scene("quick-new", route = Routes.agent(DEVBOX, APP_AGENT), heightDp = 1100, actions = {
-        tapLabel("More"); tapText("Quick commands"); tapText("New command"); tapText("AI prompt")
-        typeInto("What should it do?", "Check why the last CI run of this branch failed and say how to fix it")
-    }),
-    Scene("quick-empty", route = Routes.machine(GPU), actions = { tapLabel("Quick commands") }),
-
     // A pane as a live terminal.
     Scene("terminal", route = Routes.terminal(DEVBOX, APP_SHELL)),
+    // Its ⋯: find, select, copy, the key bar, keep the screen on, reconnect.
+    Scene("terminal-menu", route = Routes.terminal(DEVBOX, APP_SHELL), actions = { tapLabel("More") }),
     // sudo asks: a masked field over the keys; its own text size.
     Scene("terminal-password", route = Routes.terminal(DEVBOX, APP_SHELL), setup = { host(DEVBOX).screens += APP_SHELL to Demo.shellAsking() }),
     Scene("terminal-large-text", route = Routes.terminal(DEVBOX, APP_SHELL), setup = { textSizes = com.makefunstuff.herdr.data.TextSizeStore.Sizes(terminal = 15f) }),
@@ -723,13 +732,6 @@ fun scenes(): List<Scene> = listOf(
         actions = { tapLabel("More"); tapText("Select text"); tapText("Quote in chat") },
     ),
     Scene("terminal-to-coordinator", route = Routes.terminal(DEVBOX, APP_SHELL), setup = { selectTests(); shepherdr() }, actions = { tapLabel("More"); tapText("Select text"); tapText("Send to the Assistant") }),
-
-    // A workspace's dev servers through SSH: the website's vite, its storybook, the machine's others behind a chip;
-    // at desktop size; a screenshot in the website agent's message box; a workspace with no web server.
-    Scene("preview", route = Routes.preview(DEVBOX, "w3")),
-    Scene("preview-desktop", route = Routes.preview(DEVBOX, "w3"), actions = { tapText("Phone size") }),
-    Scene("preview-screenshot", route = Routes.preview(DEVBOX, "w3"), actions = { tapText("Screenshot to agent") }),
-    Scene("preview-none", route = Routes.preview(DEVBOX, "w1")),
 
     // A window 840 dp wide or more (a tablet, an open foldable, a large window): the spaces stay on the left, as 3.1's
     // sidebar, the app beside them. A landscape tablet on Tasks, then with a chat open from it; an open foldable with
@@ -781,8 +783,8 @@ fun scenes(): List<Scene> = listOf(
     // Notifications while the app is closed: each machine's herdr-push, and before a push app is there.
     // A taller window shows the whole section under the SSH key (scrolling never settles in the desktop test harness).
     Scene("settings-notifications", route = Routes.SETTINGS, heightDp = 1580, setup = { push = Demo.push() }),
-    // What reaches the phone: a switch per kind (Finished off), silent while you are at a machine (devbox, now), the watches.
-    Scene("settings-rules", heightDp = 1100, setup = { push = Demo.push().copy(watches = Demo.watches()) }, actions = { ctx ->
+    // What reaches the phone: a switch per kind (Finished off), silent while you are at a machine (devbox, now), the spaces with their own Notify.
+    Scene("settings-rules", heightDp = 1100, setup = { push = Demo.notify() }, actions = { ctx ->
         ctx.container.quietWork.presence.record(DEVBOX, "devbox", com.makefunstuff.herdr.core.push.Presence(typedAgo = 20), System.currentTimeMillis())
         runOnUiThread { ctx.nav.navigate(Routes.RULES) }
         settle()

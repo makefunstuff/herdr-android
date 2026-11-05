@@ -112,7 +112,7 @@ object Tally {
                 next
             }
             // A machine low on RAM or disk is neither an agent nor a task: the counts stay.
-            PushEvent.Test, is PushEvent.Health, is PushEvent.Quick, is PushEvent.Usage -> acc
+            PushEvent.Test, is PushEvent.Health, is PushEvent.Usage -> acc
         }
     }
 

@@ -53,6 +53,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.makefunstuff.herdr.core.home.Waiting
+import com.makefunstuff.herdr.core.push.Notify
 import com.makefunstuff.herdr.data.IdentityStore
 import com.makefunstuff.herdr.ui.activity.ActivityScreen
 import com.makefunstuff.herdr.ui.agents.AgentScreen
@@ -91,7 +92,6 @@ import com.makefunstuff.herdr.ui.design.HerdrIcons
 import com.makefunstuff.herdr.ui.design.HerdrNavBar
 import com.makefunstuff.herdr.ui.design.NavItem
 import com.makefunstuff.herdr.ui.health.HealthScreen
-import com.makefunstuff.herdr.ui.layout.LayoutScreen
 import com.makefunstuff.herdr.ui.machines.EditMachineScreen
 import com.makefunstuff.herdr.ui.machines.MachineScreen
 import com.makefunstuff.herdr.ui.settings.KeySetupDialog
@@ -101,7 +101,6 @@ import com.makefunstuff.herdr.ui.share.AskScreen
 import com.makefunstuff.herdr.ui.terminal.TerminalScreen
 import com.makefunstuff.herdr.ui.theme.Herdr
 import com.makefunstuff.herdr.ui.theme.HerdrTheme
-import com.makefunstuff.herdr.ui.worktrees.WorktreesScreen
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.receiveAsFlow
 
@@ -153,12 +152,10 @@ object Routes {
     const val EDIT = "edit?id={id}"
     const val AGENT = "agent/{mid}/{pane}"
     const val TERMINAL = "terminal/{mid}/{pane}"
-    const val LAYOUT = "layout/{mid}/{pane}"
     /** A machine's Assistant: [space]'s (its id), else its home space's. */
     const val COORDINATOR = "coordinator/{mid}?space={space}"
     /** One machine's board; with [task] open, and with `alone` closing the task goes back instead of to the board. */
     const val BOARD = "board/{mid}?task={task}&alone={alone}"
-    const val WORKTREES = "worktrees/{mid}?ws={ws}"
     const val HEALTH = "health/{mid}"
     /** A machine's AI providers: limits, spend, balances, and what used them. */
     const val USAGE = "usage/{mid}"
@@ -178,10 +175,6 @@ object Routes {
     const val START = "start?mid={mid}&text={text}"
     /** What an agent did, as a timeline: its own session (its pane). */
     const val ACTIVITY = "activity/{mid}?pane={pane}"
-    /** A machine's quick-command runs, with one open ([quickRuns]'s run, from its notification). */
-    const val QUICK = "quick/{mid}?run={run}"
-    /** A workspace's dev servers, one open in the in-app browser through SSH ([port] first when given). */
-    const val PREVIEW = "preview/{mid}?ws={ws}&port={port}"
     /** A Shepherdr space's artifacts ([space], its id; every one on the machine without). */
     const val ARTIFACTS = "artifacts/{mid}?space={space}"
     /** One artifact full screen, at its latest or at version [v]. */
@@ -191,7 +184,6 @@ object Routes {
     fun edit(id: String? = null) = if (id == null) "edit" else "edit?id=$id"
     fun agent(mid: String, pane: String) = "agent/$mid/${Uri.encode(pane)}"
     fun terminal(mid: String, pane: String) = "terminal/$mid/${Uri.encode(pane)}"
-    fun layout(mid: String, pane: String) = "layout/$mid/${Uri.encode(pane)}"
     fun coordinator(mid: String, space: String? = null) = "coordinator/$mid" + (space?.let { "?space=" + Uri.encode(it) } ?: "")
     fun ask(to: String) = "ask/$to"
     fun artifacts(mid: String, space: String? = null) = "artifacts/$mid" + (space?.let { "?space=" + Uri.encode(it) } ?: "")
@@ -211,15 +203,10 @@ object Routes {
     fun codeCommit(spot: CodeSpot, sha: String) = "code/${spot.machine}/commit?${spot.query()}&sha=$sha"
     fun codeNotes(spot: CodeSpot) = "code/${spot.machine}/notes?${spot.query()}"
     fun activity(mid: String, pane: String) = "activity/$mid?pane=" + Uri.encode(pane)
-    fun preview(mid: String, workspaceId: String, port: Int? = null) =
-        "preview/$mid?ws=${Uri.encode(workspaceId)}" + (port?.let { "&port=$it" } ?: "")
     fun search(mid: String? = null, q: String? = null) =
         "search" + listOfNotNull(mid?.let { "mid=" + Uri.encode(it) }, q?.let { "q=" + Uri.encode(it) }).joinToString("&").let { if (it.isEmpty()) "" else "?$it" }
     fun start(mid: String? = null, text: String? = null) =
         "start" + listOfNotNull(mid?.let { "mid=" + Uri.encode(it) }, text?.let { "text=" + Uri.encode(it) }).joinToString("&").let { if (it.isEmpty()) "" else "?$it" }
-    fun quickRuns(mid: String, run: String? = null) = if (run == null) "quick/$mid" else "quick/$mid?run=${Uri.encode(run)}"
-    fun worktrees(mid: String, workspaceId: String? = null) =
-        if (workspaceId == null) "worktrees/$mid" else "worktrees/$mid?ws=${Uri.encode(workspaceId)}"
 
     /** The machine and the task of a [board] route; null for any other route. */
     fun boardOf(route: String): Pair<String, String?>? {
@@ -237,6 +224,7 @@ private fun AppNav(nav: NavHostController) {
     val topLevel = route in setOf(Routes.CHAT, Routes.TASKS, Routes.ARTIFACTS_TAB)
     val hosts by container.hosts.hosts.collectAsStateWithLifecycle()
     val triage by container.triage.state.collectAsStateWithLifecycle()
+    val push by container.push.state.collectAsStateWithLifecycle()
     val homeBoards = rememberBoards()
     // The Tasks tab's badge: everything on its Needs you list, Shepherdr 3's tasks too.
     val waiting = rememberNeedsYou(homeBoards)
@@ -330,11 +318,12 @@ private fun AppNav(nav: NavHostController) {
             }
             // Another agent needs you while you are in a chat: one line drops from the top.
             AlertPill(
-                // A muted agent asking doesn't drop a line either; its card still waits on the list.
-                nav, panes, entry, remember(waiting, triage) { waiting.filter { !(it is Waiting.Question && it.agent.key in triage.muted) } },
+                // An agent asking in a space set to Notify Off (or muted before) doesn't drop a line either; its card still waits on the list.
+                nav, panes, entry, remember(waiting, triage, push.rules) {
+                    waiting.filter { !(it is Waiting.Question && (it.agent.key in triage.muted || push.rules.notifyOf(it.agent.space) == Notify.Off)) }
+                },
                 agentsRead = remember(hosts) { hosts.filter { it.agentsKnown }.map { it.machine.id }.toSet() },
                 boardsRead = remember(homeBoards) { homeBoards.map { it.machineId }.toSet() },
-                fired = container.watchWork.fired,
             )
         }
     }
@@ -358,9 +347,6 @@ internal fun NavGraphBuilder.screens(nav: NavHostController, tasks: @Composable 
     composable(Routes.AGENT) {
         AgentScreen(nav, it.arguments?.getString("mid").orEmpty(), Uri.decode(it.arguments?.getString("pane").orEmpty()))
     }
-    composable(Routes.WORKTREES) {
-        WorktreesScreen(nav, it.arguments?.getString("mid").orEmpty(), it.arguments?.getString("ws")?.let(Uri::decode))
-    }
     composable(Routes.HEALTH) { HealthScreen(nav, it.arguments?.getString("mid").orEmpty()) }
     composable(Routes.USAGE) { com.makefunstuff.herdr.ui.usage.UsageScreen(nav, it.arguments?.getString("mid").orEmpty()) }
     composable(Routes.LOGINS) { com.makefunstuff.herdr.ui.logins.LoginsScreen(nav, it.arguments?.getString("mid").orEmpty()) }
@@ -381,9 +367,6 @@ internal fun NavGraphBuilder.screens(nav: NavHostController, tasks: @Composable 
     }
     composable(Routes.CODE_COMMIT) { CommitScreen(nav, it.codeSpot(), it.arguments?.getString("sha").orEmpty()) }
     composable(Routes.CODE_NOTES) { NotesScreen(nav, it.codeSpot()) }
-    composable(Routes.QUICK) {
-        com.makefunstuff.herdr.ui.quick.QuickRunsScreen(nav, it.arguments?.getString("mid").orEmpty(), it.arguments?.getString("run")?.let(Uri::decode)?.ifEmpty { null })
-    }
     composable(Routes.ACTIVITY) {
         ActivityScreen(nav, it.arguments?.getString("mid").orEmpty(), it.arguments?.getString("pane")?.let(Uri::decode).orEmpty())
     }
@@ -399,12 +382,6 @@ internal fun NavGraphBuilder.screens(nav: NavHostController, tasks: @Composable 
             v = it.arguments?.getString("v")?.toIntOrNull(),
         )
     }
-    composable(Routes.PREVIEW) {
-        com.makefunstuff.herdr.ui.preview.DevServerScreen(
-            nav, it.arguments?.getString("mid").orEmpty(), it.arguments?.getString("ws")?.let(Uri::decode).orEmpty(),
-            startPort = it.arguments?.getString("port")?.toIntOrNull(),
-        )
-    }
     composable(Routes.SEARCH) {
         com.makefunstuff.herdr.ui.search.SearchScreen(
             nav, it.arguments?.getString("mid")?.let(Uri::decode)?.ifEmpty { null }, it.arguments?.getString("q")?.let(Uri::decode).orEmpty(),
@@ -417,9 +394,6 @@ internal fun NavGraphBuilder.screens(nav: NavHostController, tasks: @Composable 
     }
     composable(Routes.TERMINAL) {
         TerminalScreen(nav, it.arguments?.getString("mid").orEmpty(), Uri.decode(it.arguments?.getString("pane").orEmpty()))
-    }
-    composable(Routes.LAYOUT) {
-        LayoutScreen(nav, it.arguments?.getString("mid").orEmpty(), Uri.decode(it.arguments?.getString("pane").orEmpty()))
     }
 }
 

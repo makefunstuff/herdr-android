@@ -64,11 +64,9 @@ class MainActivity : FragmentActivity() {
         if (intent?.getBooleanExtra(OPEN_BRIEF, false) == true) { Links.open(Routes.BRIEF); return true }
         val machine = intent?.getStringExtra(OPEN_MACHINE)?.takeIf { it.isNotEmpty() } ?: return false
         val pane = intent.getStringExtra(OPEN_PANE).orEmpty()
-        val quick = intent.getStringExtra(OPEN_QUICK).orEmpty()
         when {
             intent.getBooleanExtra(OPEN_HEALTH, false) -> Links.open(Routes.health(machine))
             intent.getBooleanExtra(OPEN_USAGE, false) -> Links.open(Routes.usage(machine))
-            quick.isNotEmpty() -> Links.open(Routes.quickRuns(machine, quick))
             intent.getBooleanExtra(OPEN_COORDINATOR, false) -> Links.open(Routes.coordinator(machine))
             pane.isNotEmpty() -> Links.open(agentRoute(machine, pane))
             else -> Links.open(Routes.SETTINGS)
@@ -93,7 +91,6 @@ class MainActivity : FragmentActivity() {
         const val OPEN_PANE = "open_pane"
         const val OPEN_HEALTH = "open_health"
         const val OPEN_USAGE = "open_usage"
-        const val OPEN_QUICK = "open_quick"
         const val OPEN_COORDINATOR = "open_coordinator"
         const val OPEN_ASK = "open_ask"
         const val OPEN_BRIEF = "open_brief"

@@ -65,9 +65,39 @@ data class V2Version(val ok: Boolean = true, val version: String = "", val core:
 @Serializable
 data class V2Store(val folder: String = "", val name: String = "", val key: String = "")
 
-/** A space's Assistant's own tab (`Place.assistantTab`): [live] while its agent runs. */
+/**
+ * A space's Assistant's own tab (`Place.assistantTab`): [live] while its agent runs. [id]: the Herdr window's tab id,
+ * none before it has a tab; [named]: someone gave it its name; [agent]: which known agent runs in it (`claude`).
+ */
 @Serializable
-data class V2AssistantTab(val name: String = "Assistant", val state: String = "idle", val live: Boolean = false, val cli: String? = null)
+data class V2AssistantTab(
+    val name: String = "Assistant",
+    val state: String = "idle",
+    val live: Boolean = false,
+    val cli: String? = null,
+    val id: String? = null,
+    val named: Boolean = false,
+    val agent: String? = null,
+)
+
+/**
+ * One of a space's other tabs (`PlaceTab`, 3.0's tab bar): the window's tab [id], its [name] as the bar shows it
+ * ([named]: someone gave it), the chat key of its first terminal [term] (`t:<address>`, another machine's
+ * `t:<machine>/<address>`), the known agent running in it ([agent], [cli] for Claude Code and Codex), its [state]
+ * (`working`, `blocked`, `done`, `idle`) and what its header calls it ([prog]).
+ */
+@Serializable
+data class V2Tab(
+    val id: String,
+    val name: String = "",
+    val named: Boolean = false,
+    val term: String = "",
+    val cli: String? = null,
+    val agent: String? = null,
+    val state: String = "idle",
+    val where: String? = null,
+    val prog: String? = null,
+)
 
 /** A space (`Place`): a folder on a machine with its own Assistant, whose chat key is [chat] (`p:<space id>`). */
 @Serializable
@@ -93,6 +123,8 @@ data class V2Place(
     val where: String? = null,
     val store: V2Store? = null,
     val assistantTab: V2AssistantTab? = null,
+    /** Its tabs other than the Assistant's, in the bar's order. */
+    val tabs: List<V2Tab> = emptyList(),
     /** A git worktree of another space. */
     val worktree: Boolean = false,
     val branch: String? = null,
@@ -310,9 +342,23 @@ data class V2Brief(val label: String = "", val bare: Boolean = false)
 @Serializable
 data class V2Mention(val task: String, val ref: String = "", val title: String = "")
 
-/** An agent asking for a secret (`SecretAsk`): kept in the vault on the machine, never typed into the chat. */
+/**
+ * An agent asking for a secret (`SecretAsk`): kept in the vault on the machine, never typed into the chat. [levels]:
+ * where it can be kept, narrowest first (this space, the agent's machine, Everywhere), as the web's card offers them.
+ */
 @Serializable
-data class V2SecretAsk(val id: String = "", val name: String = "", val why: String? = null, val by: V2By? = null, val saved: String? = null)
+data class V2SecretAsk(
+    val id: String = "",
+    val name: String = "",
+    val why: String? = null,
+    val by: V2By? = null,
+    val saved: String? = null,
+    val levels: List<V2SecretLevel> = emptyList(),
+)
+
+/** Where a secret is kept (`p:<machine>:<space>`, `m:<machine>`, `all`), and its words ("This space"). */
+@Serializable
+data class V2SecretLevel(val id: String, val label: String = "")
 
 /** What a needs-you card in a space's chat asks, from its task's chat (`CardAsk`). */
 @Serializable

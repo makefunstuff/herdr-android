@@ -455,6 +455,48 @@ class ShepherdrTest {
     }
 
     @Test
+    fun theTabMenuSendsWhat31sWebSends() = runBlocking {
+        FakeShepherdr().use { fake ->
+            fake.on("POST /api/action") { body ->
+                when {
+                    body.contains("\"tab-agents\"") -> 200 to """{"ok":true,"agents":[{"kind":"claude","name":"Claude Code","installed":true},{"kind":"pi","name":"Pi","installed":false}]}"""
+                    body.contains("\"count\"") -> 200 to """{"ok":true,"workers":2}"""
+                    body.contains("\"model-menu\"") -> 200 to """{"ok":true,"menu":{"current":{"agent":"claude","model":"opus","effort":"high","fast":false,"perm":"auto"},"menus":{"claude":{"name":"Claude Code","models":[{"id":"opus","name":"Opus 5.5","efforts":["high"]}]}},"permDefault":{"claude":"manual"},"remote":null}}"""
+                    body.contains("\"tab-close\"") -> 200 to """{"error":"Tabs are the Herdr window's: it needs the window open."}"""
+                    else -> 200 to """{"ok":true}"""
+                }
+            }
+            val forward = PortForward("127.0.0.1", 7788, preferred = 0) { _, _ -> fake.channel() }
+            val board = V2WorkBoard(ShepherdrClient(ForwardTransport.over(forward, "t0k")), "3.1.2")
+            fun last() = fake.bodies("POST /api/action").last()
+            val tab = com.makefunstuff.herdr.core.board.WorkTab(id = "tb1", name = "Claude", chat = "t:t4", agent = "claude", live = true)
+            assertEquals(listOf("Claude Code", "Pi"), board.tabAgents("sp1").map { it.name })
+            assertEquals("""{"type":"tab-agents","place":"sp1"}""", last())
+            board.renameTab("sp1", tab, "  Review  ")
+            assertEquals("""{"type":"tab-rename","tab":"tb1","name":"Review"}""", last())
+            board.renameTab("sp1", tab.copy(id = null, assistant = true), "")
+            assertEquals("""{"type":"tab-rename","place":"sp1","name":""}""", last())
+            board.restartTab(tab)
+            assertEquals("""{"type":"tab-switch","chat":"t:t4"}""", last())
+            board.restartTab(tab, "codex")
+            assertEquals("""{"type":"tab-switch","chat":"t:t4","kind":"codex"}""", last())
+            val menu = board.modelMenu("t:t4")
+            assertEquals("Opus 5.5", menu.menus.getValue("claude").models[0].name)
+            board.restartWith("t:t4", menu.current.copy(model = "sonnet"), "high")
+            assertEquals("""{"type":"restart","chat":"t:t4","kind":"claude","model":"sonnet","effort":"high","speed":"normal","perm":"auto"}""", last())
+            assertEquals(2, board.assistantWorkers("sp1"))
+            assertEquals("""{"type":"assistant-close","place":"sp1","mode":"count"}""", last())
+            board.closeAssistant("sp1", stopWorkers = true)
+            assertEquals("""{"type":"assistant-close","place":"sp1","mode":"stop"}""", last())
+            board.closeSpace("sp1")
+            assertEquals("""{"type":"space-remove","place":"sp1"}""", last())
+            // The service's own reason, word for word.
+            assertEquals("Tabs are the Herdr window's: it needs the window open.", assertFailsWith<IOException> { board.closeTab("tb1") }.message)
+            forward.close()
+        }
+    }
+
+    @Test
     fun theBoardOverASshStylePortForward() = runBlocking {
         FakeShepherdr().use { fake ->
             fake.onSocket { ws ->
@@ -565,6 +607,19 @@ class ShepherdrTest {
             val board = V2WorkBoard(ShepherdrClient(ForwardTransport({ ForwardTransport.socket(fake.port, it) })))
             assertEquals("merge the dark mode task", board.dictate("AUDIO".toByteArray(), "audio/mp4"))
             assertEquals("That recording couldn't be read.", assertFailsWith<IOException> { board.dictate("x".toByteArray(), "audio/mp4") }.message)
+        }
+    }
+
+    @Test
+    fun aMachineSaysWhetherItWritesSpeechDown() = runBlocking {
+        for ((answer, can) in listOf(
+            400 to """{"error":"That recording couldn't be read."}""" to true,
+            400 to """{"error":"Dictation needs whisper.cpp and its model on the Shepherdr machine (shepherdr whisper)."}""" to false,
+            404 to "Not found" to false,
+        )) FakeShepherdr().use { fake ->
+            fake.on("POST /api/dictate") { body -> if (body.isEmpty()) answer else 500 to "{}" }
+            val board = V2WorkBoard(ShepherdrClient(ForwardTransport({ ForwardTransport.socket(fake.port, it) })))
+            assertEquals(can, board.canDictate(), answer.second)
         }
     }
 

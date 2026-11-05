@@ -7,6 +7,10 @@ import com.makefunstuff.herdr.core.board.WorkSpace
 import com.makefunstuff.herdr.core.board.WorkTask
 import com.makefunstuff.herdr.core.board.WorkStatus
 import com.makefunstuff.herdr.core.host.HostState
+import com.makefunstuff.herdr.core.shepherdr.V2Need
+import com.makefunstuff.herdr.core.shepherdr.V2SecretAsk
+import com.makefunstuff.herdr.core.push.AlertRules
+import com.makefunstuff.herdr.core.push.Notify
 
 /** An agent as the home list sees it: the machine it runs on, where in herdr, and its workspace's name. */
 data class HomeAgent(
@@ -19,6 +23,9 @@ data class HomeAgent(
     val workspace: String = location.substringBefore(" › "),
 ) {
     val key: String get() = "$machineId/${agent.paneId}"
+
+    /** Its space, as the drawer keys it ([com.makefunstuff.herdr.core.push.Notify.key]): its workspace's name on its machine. */
+    val space: String get() = Notify.key(machineId, workspace.ifBlank { agent.workspaceId })
 
     companion object {
         /** Every agent on the machines' last snapshots (classic herdr's, then herdr-core's), in the machines' order. */
@@ -65,26 +72,40 @@ sealed interface Waiting {
         override val key: String get() = "asks/$machineId/${space.id}"
         override val task: WorkTask? get() = null
     }
+
+    /**
+     * An agent that asks for a secret by name ("Wants the secret GITHUB_TOKEN"), answered in a masked box: [need]
+     * carries the ask ([V2Need.secret]) and its chat; [task] its task, or none for a space's Assistant in [space].
+     */
+    data class Secret(
+        override val machineId: String,
+        val machineLabel: String,
+        val need: V2Need,
+        override val task: WorkTask?,
+        val space: WorkSpace?,
+    ) : Waiting {
+        override val key: String get() = "secret/$machineId/${need.id}"
+        val ask: V2SecretAsk get() = need.secret ?: V2SecretAsk()
+    }
 }
 
 /**
  * An agent on the list below Needs you: its task when it has one; [new] for a finish not looked
- * at yet; how the phone triaged it: [pinned], [snooze] (while it holds), [muted].
+ * at yet; [pinned] on top by the phone; [muted]: its space's Notify is Off (or it was muted before Notify).
  */
 data class AgentRow(
     val agent: HomeAgent,
     val task: WorkTask?,
     val new: Boolean = false,
     val pinned: Boolean = false,
-    val snooze: Snooze? = null,
     val muted: Boolean = false,
 )
 
 /**
  * The Agents screen's list, across machines: what waits for you first (blocked agents and tasks
  * waiting for an answer or an Accept, an agent and its task shown once), then the agents
- * pinned, the agents at work, the ones that finished and weren't looked at yet, the rest (a finish
- * seen is at rest), and those snoozed. A question always shows in Needs you, pinned, snoozed or not.
+ * pinned, the agents at work, the ones that finished and weren't looked at yet, and the rest (a finish
+ * seen is at rest). A question always shows in Needs you, pinned or not.
  */
 data class Home(
     val needsYou: List<Waiting> = emptyList(),
@@ -92,12 +113,11 @@ data class Home(
     val working: List<AgentRow> = emptyList(),
     val done: List<AgentRow> = emptyList(),
     val idle: List<AgentRow> = emptyList(),
-    val snoozed: List<AgentRow> = emptyList(),
 ) {
     /** Finished and not looked at: herdr still says `done`, and the phone hasn't opened it since (pinned ones too). */
     val fresh: Int get() = done.count { it.new } + pinned.count { it.new }
 
-    val isEmpty: Boolean get() = needsYou.isEmpty() && pinned.isEmpty() && working.isEmpty() && done.isEmpty() && idle.isEmpty() && snoozed.isEmpty()
+    val isEmpty: Boolean get() = needsYou.isEmpty() && pinned.isEmpty() && working.isEmpty() && done.isEmpty() && idle.isEmpty()
 
     companion object {
         /**
@@ -119,23 +139,30 @@ data class Home(
         /**
          * The list from every machine's [agents] (in the machines' order) and [boards]. [seen] holds,
          * by [HomeAgent.key], the finish the phone last showed of an agent ([HomeAgent.finish]);
-         * [triage] what is pinned, snoozed (as it stands at [now]) and muted.
+         * [triage] what is pinned (and muted from before Notify); [rules] each space's Notify.
          */
         fun of(
             agents: List<HomeAgent>,
             boards: List<HomeBoard>,
             seen: Map<String, Long> = emptyMap(),
             triage: Triage = Triage(),
-            now: Long = 0,
+            rules: AlertRules = AlertRules(),
         ): Home {
             val tasks = boards.associate { it.machineId to it.tasks }
             // Each agent's task: one of its own machine's board.
             val taskOf = agents.associate { a -> a.key to taskOf(a, tasks[a.machineId].orEmpty()) }
             val questions = agents.filter { it.agent.agentStatus == AgentStatus.Blocked }
             val asked = questions.mapNotNull { taskOf[it.key]?.let { t -> it.machineId to t.id } }.toSet()
+            // Every secret an agent asks for, as 3.1's Needs you lists them: a task that waits on one is that item.
+            val secrets = boards.flatMap { b ->
+                b.work.needs.filter { it.secret != null && it.secret.saved == null }.map { n ->
+                    Waiting.Secret(b.machineId, b.machineLabel, n, n.task?.let { id -> b.tasks.firstOrNull { it.id == id } }, b.work.spaces.firstOrNull { it.id == n.place })
+                }
+            }
+            val secretTasks = secrets.mapNotNull { s -> s.task?.let { s.machineId to it.id } }.toSet()
             val waiting = boards.flatMap { b ->
                 // Ready to accept first, then what asks: as the board lists them otherwise.
-                b.tasks.filter { it.status.needsYou && (b.machineId to it.id) !in asked }.sortedBy { if (it.status == WorkStatus.Ready) 0 else 1 }
+                b.tasks.filter { it.status.needsYou && (b.machineId to it.id) !in asked && !(it.status == WorkStatus.Need && (b.machineId to it.id) in secretTasks) }.sortedBy { if (it.status == WorkStatus.Ready) 0 else 1 }
                     .map { t ->
                         val agent = agents.firstOrNull { it.machineId == b.machineId && taskOf[it.key]?.id == t.id }
                         Waiting.Task(b.machineId, b.machineLabel, t, agent)
@@ -146,22 +173,21 @@ data class Home(
             val rest = agents.filter { it.agent.agentStatus != AgentStatus.Blocked && it.key !in inCards }
             fun isNew(a: HomeAgent) = a.agent.agentStatus == AgentStatus.Done && seen[a.key] != a.finish
             fun row(a: HomeAgent) = AgentRow(
-                a, taskOf[a.key], new = isNew(a), pinned = triage.pinned(a.key), snooze = triage.snoozeOf(a, now), muted = a.key in triage.muted,
+                a, taskOf[a.key], new = isNew(a), pinned = triage.pinned(a.key),
+                muted = a.key in triage.muted || rules.notifyOf(a.space) == Notify.Off,
             )
             val bySeq = compareByDescending<HomeAgent> { it.agent.stateChangeSeq }
-            // Pinned stay on top in the order pinned; snoozed wait at the bottom; the rest by their state.
+            // Pinned stay on top in the order pinned; the rest by their state.
             val pinned = triage.pins.mapNotNull { k -> rest.firstOrNull { it.key == k } }
-            val snoozed = rest.filter { it.key !in triage.pins && triage.snoozeOf(it, now) != null }.sortedWith(bySeq)
-            val listed = rest.filter { it !in pinned && it !in snoozed }
+            val listed = rest.filter { it !in pinned }
             return Home(
-                needsYou = questions.sortedWith(bySeq).map { Waiting.Question(it, taskOf[it.key]) } + waiting +
+                needsYou = questions.sortedWith(bySeq).map { Waiting.Question(it, taskOf[it.key]) } + secrets + waiting +
                     boards.flatMap { b -> b.work.spaces.filter { it.asks }.map { Waiting.Coordinator(b.machineId, b.machineLabel, it) } },
                 pinned = pinned.map(::row),
                 working = listed.filter { it.agent.agentStatus == AgentStatus.Working }.sortedWith(bySeq).map(::row),
                 done = listed.filter(::isNew).sortedWith(bySeq).map(::row),
                 idle = listed.filter { it.agent.agentStatus == AgentStatus.Idle || it.agent.agentStatus == AgentStatus.Unknown || it.agent.agentStatus == AgentStatus.Done && !isNew(it) }
                     .sortedWith(bySeq).map(::row),
-                snoozed = snoozed.map(::row),
             )
         }
 
@@ -202,7 +228,7 @@ class WaitingNews {
 
     private fun source(w: Waiting) = when (w) {
         is Waiting.Question -> "agents:${w.machineId}"
-        is Waiting.Task, is Waiting.Coordinator -> "board:${w.machineId}"
+        is Waiting.Task, is Waiting.Coordinator, is Waiting.Secret -> "board:${w.machineId}"
     }
 
     companion object {
@@ -211,6 +237,7 @@ class WaitingNews {
             is Waiting.Question -> "q${w.agent.agent.stateChangeSeq}"
             is Waiting.Task -> "${w.task.status}|${w.task.line}"
             is Waiting.Coordinator -> "asks"
+            is Waiting.Secret -> "secret"
         }
     }
 }

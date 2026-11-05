@@ -303,6 +303,8 @@ fun ModelSheet(
     limit: String?,
     onUsage: (() -> Unit)?,
     onDismiss: () -> Unit,
+    /** Opens the model menu, to restart it on another model, level or mode. */
+    onChange: (() -> Unit)? = null,
 ) {
     val c = Herdr.colors
     val use = pill.use
@@ -348,8 +350,18 @@ fun ModelSheet(
                 )
             }
         }
-        if (onUsage != null) {
+        if (onChange != null) {
             Spacer(Modifier.height(Space.s))
+            ListRow(
+                title = "Change model",
+                subtitle = "Restart it on another model, reasoning or permissions",
+                leading = { Icon(HerdrIcons.Cpu, null, tint = c.muted, modifier = Modifier.size(20.dp)) },
+                trailing = { Icon(HerdrIcons.ChevronRight, null, tint = c.muted, modifier = Modifier.size(18.dp)) },
+                onClick = onChange,
+            )
+        }
+        if (onUsage != null) {
+            Spacer(Modifier.height(if (onChange != null) 0.dp else Space.s))
             ListRow(
                 title = "Usage and limits",
                 subtitle = limit ?: "What each provider allows, and what was used",

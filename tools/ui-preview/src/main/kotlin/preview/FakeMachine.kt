@@ -81,15 +81,11 @@ class FakeMachine(
     var journal: JsonObject? = null,
     /** Its repositories, for the code browser; null answers no code command. */
     var code: FakeCode? = null,
-    /** Its quick commands and their runs; null answers no quick-command command. */
-    var quick: FakeQuick? = null,
     /** Pictures on it by their path there (the files they are), for a chat that reads one back (`Images.fetchCommand`). */
     var pictures: Map<String, java.io.File> = emptyMap(),
     /** What `herdr-agent-commands` prints there (AgentCommands.listCommand): the person's and the projects' own commands and skills. */
     var agentCommands: String = "",
-    /** What listens on its ports, as the dev servers' probe prints it (`DevServers.command`): `L` lines. */
-    var ports: String = "",
-    /** The agents whose programs are there, as `integration.list` reports them (Start work and the New sheet offer these). */
+    /** The agents whose programs are there, as `integration.list` reports them (Start work offers these). */
     var installed: List<String> = listOf("claude", "codex", "pi", "opencode"),
     /** Its folders for the folder browser (Folder.command), by path: `R name` for a Git repository, `D name` for a folder. */
     var folders: Map<String, List<String>> = mapOf(
@@ -135,14 +131,12 @@ class FakeMachine(
             }
         }
         code?.run(command)?.let { return it }
-        quick?.run(command)?.let { return it }
         health.run(command)?.let { return it }
         usage?.run(command)?.let { return it }
         logins?.run(command)?.let { return it }
         val w = Shell.words(command)
         return when {
             "pgrep" in command -> ok("server\t/home/demo/.local/bin/herdr\therdr $version\n")
-            "herdr-ports" in w -> ok(com.makefunstuff.herdr.core.ports.DevServers.MARK + " 1\n" + ports)
             w.containsAll(listOf("session", "list", "--json")) && !classic -> CommandResult(127, "", "herdr: not found")
             w.containsAll(listOf("session", "list", "--json")) ->
                 ok("""{"sessions":[{"name":"default","default":true,"running":true,"socket_path":"/home/demo/.config/herdr/herdr.sock"}]}""")
@@ -272,10 +266,6 @@ class FakeMachine(
                 obj("read" to obj("pane_id" to pane, "text" to screens[pane].orEmpty().let { if (ansi) it else Shell.plain(it) }, "revision" to 1))
             }
             "pane.get" -> obj("pane" to list("panes").first { it["pane_id"]?.jsonPrimitive?.content == pane })
-            "pane.layout" -> {
-                val tab = list("panes").first { it["pane_id"]?.jsonPrimitive?.content == pane }["tab_id"]
-                obj("layout" to list("layouts").first { it["tab_id"] == tab })
-            }
             "workspace.get" -> {
                 val ws = p["workspace_id"]?.jsonPrimitive?.content
                 val info = list("workspaces").first { it["workspace_id"]?.jsonPrimitive?.content == ws }

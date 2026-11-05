@@ -106,6 +106,7 @@ private fun sig(w: Waiting): String = when (w) {
     is Waiting.Question -> "${w.agent.agent.stateChangeSeq}"
     is Waiting.Task -> "${w.task.status}|${w.task.line}"
     is Waiting.Coordinator -> "asks"
+    is Waiting.Secret -> "secret"
 }
 
 /** What is being said back from a card: an answer to an agent's question. */
@@ -122,7 +123,7 @@ private data class Refusal(val words: String)
  * machines (each card with its answers: Yes, No and Reply for a question; the card's choices for a
  * task), the Ready tasks with Accept, then the work by status: at work, queued, to do, done. One
  * row per task: a task's agent is its row. Agents that work on no task are rows too, and swipe:
- * right marks one seen, left shows Pin, Snooze and Mute. The + offers New task, the Assistant and
+ * right marks one seen, left shows Pin. The + offers New task, the Assistant and
  * Start an agent. On a wide window it is the left pane ([com.makefunstuff.herdr.Panes]): what it
  * opens shows beside it, chosen here. [listState] comes from above, so it stays as the list moves
  * between the two layouts.
@@ -139,13 +140,7 @@ fun TasksScreen(
     val hosts by container.hosts.hosts.collectAsStateWithLifecycle()
     val seen by container.seen.marks.collectAsStateWithLifecycle()
     val triage by container.triage.state.collectAsStateWithLifecycle()
-    // Snoozes for a time end on their own: the list looks again every half minute.
-    val now by produceState(container.triage.now()) {
-        while (true) {
-            delay(30_000)
-            value = container.triage.now()
-        }
-    }
+    val push by container.push.state.collectAsStateWithLifecycle()
     val boards = rememberBoards()
     val boardProblems = rememberBoardProblems()
     val readNow = remember { Channel<Unit>(Channel.CONFLATED) }
@@ -155,22 +150,20 @@ fun TasksScreen(
     val inMiddle = if (panes.wide) entry?.let(::opened) else null
     // The agent whose long-press sheet is open, with the task it works on.
     var menuAgent by remember { mutableStateOf<Pair<HomeAgent, WorkTask?>?>(null) }
-    var snoozing by remember { mutableStateOf<HomeAgent?>(null) }
     // "Why this state?" asked from TalkBack's actions on a card.
     var why by remember { mutableStateOf<HomeAgent?>(null) }
-    // The row swiped open on the left (Pin, Snooze, Mute), by agent key: one at a time.
+    // The row swiped open on the left (Pin), by agent key: one at a time.
     var swiped by remember { mutableStateOf<String?>(null) }
-    val triageActions = rememberTriageActions { snoozing = it }
+    val triageActions = rememberTriageActions()
     var reply by remember { mutableStateOf<Reply?>(null) }
     var refusal by remember { mutableStateOf<Refusal?>(null) }
     var allDone by rememberSaveable { mutableStateOf(false) }
     var allIdle by rememberSaveable { mutableStateOf(false) }
-    var allSnoozed by rememberSaveable { mutableStateOf(false) }
     // Cards answered here, by key, with how they stood; and the ones whose answer is on its way.
     val handled = remember { mutableStateMapOf<String, String>() }
     val busy = remember { mutableStateMapOf<String, String>() }
     val agents = remember(hosts) { HomeAgent.of(hosts) }
-    val home = remember(agents, boards, seen, triage, now) { Home.of(agents, boards, seen, triage, now) }
+    val home = remember(agents, boards, seen, triage, push.rules) { Home.of(agents, boards, seen, triage, push.rules) }
     val needsYou = home.needsYou.filter { handled[it.key] != sig(it) }
     // A card answered here shows again once it changed and waits anew: a task that asked again, worded the same.
     LaunchedEffect(home.needsYou) {
@@ -251,6 +244,9 @@ fun TasksScreen(
         }
     }
 
+    /** The secret ask whose masked box is up. */
+    var giving by remember { mutableStateOf<Waiting.Secret?>(null) }
+
     /** A Ready task whose Accept card is up, and its machine. */
     var acceptFor by remember { mutableStateOf<Pair<Waiting.Task, WorkTask>?>(null) }
     // Shepherdr's Accept: its card first, which says what you approve.
@@ -286,13 +282,13 @@ fun TasksScreen(
         when (w) {
             is Waiting.Question -> titleOf(w.agent, w.task)
             is Waiting.Task -> w.machineId to w.task.title
-            is Waiting.Coordinator -> null
+            is Waiting.Coordinator, is Waiting.Secret -> null
         }
     }.toSet()
     fun rows(list: List<AgentRow>) = list.filter { r ->
         if (r.task != null) (r.agent.machineId to r.task!!.id) !in asked else titleOf(r.agent, null) !in askedTitles
     }
-    val agentRows = rows(home.pinned + home.working + home.done + home.idle + home.snoozed)
+    val agentRows = rows(home.pinned + home.working + home.done + home.idle)
     val taskWithAgent = agentRows.mapNotNull { r -> r.task?.let { r.agent.machineId to it.id } }.toSet()
     val agentTitles = agentRows.map { titleOf(it.agent, it.task) }.toSet() + askedTitles
     val ready = needsYou.filter { it is Waiting.Task && it.task.status == WorkStatus.Ready }
@@ -311,12 +307,11 @@ fun TasksScreen(
     val workingRows = rows(home.working)
     val doneRows = rows(home.done)
     val idleRows = rows(home.idle)
-    val snoozedRows = rows(home.snoozed)
     val counts = mapOf(
         TaskFilter.NeedsYou to waiting.size, TaskFilter.Ready to ready.size,
         TaskFilter.Working to workingRows.size + workingTasks.size, TaskFilter.Queued to queued.size,
         TaskFilter.Todo to todo.size, TaskFilter.Done to doneRows.size + doneTasks.size,
-        TaskFilter.Idle to idleRows.size + snoozedRows.size,
+        TaskFilter.Idle to idleRows.size,
     )
     var shown by rememberSaveable { mutableStateOf(TaskFilter.All) }
     fun on(f: TaskFilter) = shown == TaskFilter.All || shown == f
@@ -369,7 +364,7 @@ fun TasksScreen(
                 }
                 val lines = Lines(
                     inMiddle, showMachine, triageActions, swiped, { swiped = it },
-                    snoozed = { r -> r.snooze?.label(now, container.triage.zone()) }, onOpen = ::openAgent, onMenu = { a, t -> menuAgent = a to t },
+                    onOpen = ::openAgent, onMenu = { a, t -> menuAgent = a to t },
                     more = ::sheetActions,
                 )
                 if (shown == TaskFilter.All) section("Pinned", "Pinned · ${pinnedRows.size}", pinnedRows, showAll = true, onMore = {}, lines)
@@ -395,10 +390,7 @@ fun TasksScreen(
                         onOpen = { openAgent(w.agent) }, onMenu = { menuAgent = w.agent to w.task },
                         onChoose = { prompt, i -> answer(w, prompt, i) },
                         onReply = { reply = Reply.ToAgent(w) },
-                        more = sheetActions(w.agent, w.task).let { sheet ->
-                            // Muting it, before the sheet's last one (More actions).
-                            sheet.dropLast(1) + triageActions.muteAction(AgentRow(w.agent, w.task, muted = w.agent.key in triage.muted)) + sheet.last()
-                        },
+                        more = sheetActions(w.agent, w.task),
                     )
                     is Waiting.Task -> {
                         val t = w.task
@@ -420,6 +412,13 @@ fun TasksScreen(
                         )
                     }
                     is Waiting.Coordinator -> CoordinatorCard(w, showMachine) { panes.open(nav, Routes.coordinator(w.machineId, w.space.id)) }
+                    is Waiting.Secret -> SecretCard(
+                        w, showMachine, onGive = { giving = w },
+                        onOpen = {
+                            val t = w.task
+                            if (t != null) panes.openBoard(nav, w.machineId, t.id) else panes.open(nav, Routes.coordinator(w.machineId, w.space?.id))
+                        },
+                    )
                 }
                 if (on(TaskFilter.NeedsYou)) items(waiting, key = { it.key }) { card(it) }
                 if (on(TaskFilter.Ready) && ready.isNotEmpty()) {
@@ -453,12 +452,11 @@ fun TasksScreen(
                 }
                 if (on(TaskFilter.Idle)) {
                     section("Idle", "Idle · ${idleRows.size}", idleRows, showAll = allIdle, onMore = { allIdle = !allIdle }, lines)
-                    section("Snoozed", "Snoozed · ${snoozedRows.size}", snoozedRows, showAll = allSnoozed, onMore = { allSnoozed = !allSnoozed }, lines)
                 }
                 if (!triage.used && (workingRows.size + doneRows.size + idleRows.size) > 0 && shown == TaskFilter.All) {
                     item(key = "triage-hint") {
                         Notice(
-                            "Swipe an agent right: seen. Left: pin, snooze, mute. The same are in its long-press menu.",
+                            "Swipe an agent right: seen. Left: pin. Its long-press menu has those and its space's Notify.",
                             Modifier.padding(horizontal = Space.screen, vertical = Space.l),
                         )
                     }
@@ -484,12 +482,11 @@ fun TasksScreen(
                 paneLabel = a.agent.paneId,
                 onDismiss = { menuAgent = null },
                 onTerminal = { menuAgent = null; panes.open(nav, Routes.terminal(a.machineId, a.agent.paneId)) },
-                triage = { TriageRows(a, onSnooze = { menuAgent = null; snoozing = a }) },
+                triage = { TriageRows(a) },
                 task = task,
             )
         }
     }
-    snoozing?.let { a -> SnoozeSheet(a, onDismiss = { snoozing = null }) }
     why?.let { a -> container.hosts.session(a.machineId)?.let { ExplainSheet(it, a.agent.paneId, onDismiss = { why = null }) } }
     reply?.let { r ->
         var text by remember(r) { mutableStateOf("") }
@@ -520,6 +517,21 @@ fun TasksScreen(
             MarkdownText(r.words)
         }
     }
+    giving?.let { w ->
+        SecretSheet(
+            w, onDismiss = { giving = null },
+            onKept = { said ->
+                giving = null
+                handled[w.key] = sig(w)
+                context.toast(said)
+                readNow.trySend(Unit)
+            },
+            keep = { level, value ->
+                (container.hosts.session(w.machineId) ?: error("This machine isn't in the app any more")).awaitWorkBoard()
+                    .keepSecret(w.need.chat, w.ask, level, value)
+            },
+        )
+    }
     acceptFor?.let { (w, t) ->
         val board by androidx.compose.runtime.produceState<com.makefunstuff.herdr.core.board.WorkBoard?>(null, w.machineId) {
             value = runCatching { container.hosts.session(w.machineId)?.awaitWorkBoard() }.getOrNull()
@@ -544,7 +556,6 @@ private class Lines(
     /** The row swiped open on the left, by agent key. */
     val swiped: String?,
     val onSwiped: (String?) -> Unit,
-    val snoozed: (AgentRow) -> String?,
     val onOpen: (HomeAgent) -> Unit,
     val onMenu: (HomeAgent, WorkTask?) -> Unit,
     /** The rest of an agent's long-press sheet, as TalkBack's actions on its row. */
@@ -578,7 +589,6 @@ private fun LazyListScope.section(
             AgentLine(
                 row, lines.showMachine, selected = lines.inMiddle == key,
                 onOpen = { lines.onOpen(row.agent) }, onMenu = { lines.onMenu(row.agent, row.task) },
-                snoozed = lines.snoozed(row),
                 actions = lines.actions.accessibility(row) + lines.more(row.agent, row.task),
             )
         }

@@ -214,6 +214,8 @@ internal fun SpaceCoordinator(nav: NavController, machineId: String, session: Ho
             val b = board ?: throw java.io.IOException("Shepherdr isn't reachable")
             b.file(space?.id ?: throw java.io.IOException("No space"), remote)
         },
+        machine = machineId,
+        board = { board ?: session.awaitWorkBoard() },
     )
     val tray = rememberImageTray(draftKey, machineId, session, state.online)
     val attach = rememberAttacher(session, onAttached = { path -> draft = Attachments.withMention(draft, path) }, onImage = tray::add)
@@ -393,6 +395,7 @@ internal fun SpaceCoordinator(nav: NavController, machineId: String, session: Ho
                             floating = true,
                             leading = { ComposerIconButton(HerdrIcons.Plus, "Attach files", enabled = state.online && !uploading) { attachMenu = true } },
                             voice = voice.recorder,
+                            dictation = voice.dictation,
                         )
                     }
                 },

@@ -6,10 +6,13 @@ import com.makefunstuff.herdr.core.shepherdr.TaskFolder
 import com.makefunstuff.herdr.core.shepherdr.V2Artifact
 import com.makefunstuff.herdr.core.shepherdr.V2Chat
 import com.makefunstuff.herdr.core.shepherdr.V2Evidence
+import com.makefunstuff.herdr.core.shepherdr.V2ModelMenu
+import com.makefunstuff.herdr.core.shepherdr.V2ModelPick
 import com.makefunstuff.herdr.core.shepherdr.V2Need
 import com.makefunstuff.herdr.core.shepherdr.V2Pilot
 import com.makefunstuff.herdr.core.shepherdr.V2PrAnswer
 import com.makefunstuff.herdr.core.shepherdr.V2Question
+import com.makefunstuff.herdr.core.shepherdr.V2SecretAsk
 import com.makefunstuff.herdr.core.shepherdr.VoiceCall
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -72,6 +75,8 @@ data class WorkSpace(
     val emoji: String? = null,
     /** Its Autopilot, switched in its Assistant's header; none where it can't be switched from here. */
     val pilot: V2Pilot? = null,
+    /** Its tabs as the bar shows them, the Assistant's first ([TabMenus]). */
+    val tabs: List<WorkTab> = emptyList(),
 )
 
 /** One task on Shepherdr's board. */
@@ -221,6 +226,13 @@ interface WorkBoard {
 
     suspend fun answer(answer: CardAnswer): String
 
+    /**
+     * Keeps [value] for [ask], an agent's secret ask in [chat], at [level]: into the machine's vault, the agent told
+     * its name only. Where it is kept, in words ("Kept for This space").
+     */
+    suspend fun keepSecret(chat: String, ask: V2SecretAsk, level: String, value: String): String =
+        throw IOException("This board can't keep secrets")
+
     /** [space]'s coordinator chat as it is now. */
     suspend fun coordinator(space: String): CoordinatorThread
 
@@ -265,6 +277,9 @@ interface WorkBoard {
     /** What was said in [audio], written down on the machine (Shepherdr's dictation, whisper.cpp there). */
     suspend fun dictate(audio: ByteArray, type: String): String = throw IOException("This board takes no dictation")
 
+    /** Whether [dictate] works here: the machine has whisper.cpp. */
+    suspend fun canDictate(): Boolean = false
+
     /**
      * [task]'s own chat, its agent's ([WorkTask.chat]), now and on every change: in a [CoordinatorThread]'s
      * shape, its [CoordinatorThread.space] the task's space.
@@ -300,8 +315,36 @@ interface WorkBoard {
      */
     suspend fun artifactSay(a: V2Artifact, v: Int, text: String, answer: Boolean = false, block: String? = null): String =
         throw IOException(NO_ARTIFACTS)
+
+    /** The agents a tab of [space] can switch to ([TabMenus.switchChoices]). */
+    suspend fun tabAgents(space: String): List<WorkAgentChoice> = throw IOException(NO_TABS)
+
+    /** Names [tab] of [space] [name]; an empty name unnames it. */
+    suspend fun renameTab(space: String, tab: WorkTab, name: String): Unit = throw IOException(NO_TABS)
+
+    /** Closes the window's tab [id]: its programs end. */
+    suspend fun closeTab(id: String): Unit = throw IOException(NO_TABS)
+
+    /** Restarts [tab]'s agent in its tab: as it runs now, or as agent [kind] (Switch agent). */
+    suspend fun restartTab(tab: WorkTab, kind: String? = null): Unit = throw IOException(NO_TABS)
+
+    /** The model menu of the agent in [chat]. */
+    suspend fun modelMenu(chat: String): V2ModelMenu = throw IOException(NO_TABS)
+
+    /** Restarts the agent in [chat] on [pick], as the model menu's Restart with…. */
+    suspend fun restartWith(chat: String, pick: V2ModelPick, level: String?): Unit = throw IOException(NO_TABS)
+
+    /** How many workers [space]'s Assistant started are still running. */
+    suspend fun assistantWorkers(space: String): Int = throw IOException(NO_TABS)
+
+    /** Closes [space]'s Assistant: [stopWorkers] ends the workers it started first, else they finish. */
+    suspend fun closeAssistant(space: String, stopWorkers: Boolean): Unit = throw IOException(NO_TABS)
+
+    /** Closes [space]: its tabs close and every program in them ends. */
+    suspend fun closeSpace(space: String): Unit = throw IOException(NO_TABS)
 }
 
+private const val NO_TABS = "This board has no tabs"
 private const val NO_ARTIFACTS = "This board keeps no artifacts"
 
 object WorkTasks {

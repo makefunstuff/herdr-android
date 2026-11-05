@@ -182,6 +182,8 @@ internal fun TaskChatScreen(
         upload = { file, name -> session.awaitWorkBoard().uploadFor(t, name, file.readBytes(), VoiceNotes.MIME) },
         deliver = { remote, id -> session.awaitWorkBoard().tellFiles(t, listOf(remote), cid = id) },
         fetch = { remote -> session.awaitWorkBoard().taskFile(t, remote) },
+        machine = machineId,
+        board = { session.awaitWorkBoard() },
     )
     var problem by remember(t.chat) { mutableStateOf<String?>(null) }
     LaunchedEffect(t.id, t.chat, state.online) {
@@ -342,6 +344,7 @@ internal fun TaskChatScreen(
                                 floating = true,
                                 leading = { ComposerIconButton(HerdrIcons.Plus, "Attach files", enabled = state.online && !attach.uploading) { attachMenu = true } },
                                 voice = voice.recorder,
+                                dictation = voice.dictation,
                             )
                         }
                     },

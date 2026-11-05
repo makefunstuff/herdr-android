@@ -109,10 +109,8 @@ class SceneData {
     /** Comments on code kept for later (CodeStore), and how code is shown. */
     var notes: List<com.makefunstuff.herdr.core.code.ReviewNote> = emptyList()
     var codeView: com.makefunstuff.herdr.data.CodeView? = null
-    /** The Agents list's pins, snoozes and mutes (TriageStore), as saved before the app opens. */
+    /** The Agents list's pins (TriageStore), as saved before the app opens. */
     var triage: com.makefunstuff.herdr.core.home.Triage? = null
-    /** Quick commands pinned, per machine (`Project:Run unit tests`). */
-    var quickPins: Map<String, List<String>> = emptyMap()
     /** When each agent's chat was last on screen (LookedStore), by `<machine>/<pane>`: its "While you were away" card counts from it. */
     var looked: Map<String, Long> = emptyMap()
     /** The messages held over the agents' composers and the quick replies (ComposerStore), as saved before the app opens. */
@@ -215,6 +213,8 @@ fun render(scene: Scene, dark: Boolean, file: File) {
     PreviewScanner.code = data.scanned
     PreviewTerminal.selection = data.selection
     PreviewMic.set(data.mic)
+    // What a machine said it can write down is kept process-wide: each scene asks afresh.
+    com.makefunstuff.herdr.core.chat.DictationCheck.forget()
     PreviewCoordinatorVoice.next = data.voice
     PreviewVoiceCalls.next = data.call
     PreviewScanner.hostKeys = data.reachable
@@ -236,7 +236,6 @@ fun render(scene: Scene, dark: Boolean, file: File) {
     data.shared?.let { container.shares.share(it) }
     data.notes.forEach { container.code.add(it) }
     data.codeView?.let { container.code.setView(it) }
-    data.quickPins.forEach { (m, keys) -> keys.forEach { container.quick.setPinned(m, it, true) } }
     data.images.forEach { (key, pictures) ->
         pictures.forEach { (name, file) ->
             com.makefunstuff.herdr.ui.images.ImageCodec.prepare(file, null, name, container.images)?.let { container.images.add(key, it) }
@@ -367,6 +366,15 @@ fun ComposeUiTest.hold(label: String, vararg points: Pair<Float, Float>) {
         advanceEventTime(1_000)
         moveBy(androidx.compose.ui.geometry.Offset.Zero)
     }
+    settle()
+}
+
+/** A voice message hands-free: TalkBack's "Record a voice message" on the composer's mic (a tap on it talks to type). */
+fun ComposeUiTest.recordVoice() {
+    val mic = node(hasContentDescription("Talk to type")).fetchSemanticsNode()
+    val action = mic.config.getOrElseNullable(androidx.compose.ui.semantics.SemanticsActions.CustomActions) { null }.orEmpty()
+        .firstOrNull { it.label == "Record a voice message" } ?: error("No “Record a voice message” on the mic")
+    runOnUiThread { action.action() }
     settle()
 }
 

@@ -101,12 +101,14 @@ object Demo {
     private fun machine(id: String, label: String, host: String = label, port: Int = 22, user: String = "demo", via: String? = null) =
         Machine(id = id, label = label, host = host, port = port, user = user, viaMachineId = via, hostKey = FakeMachine(id).fingerprint)
 
-    /** The Agents list triaged: gpu-box's eval pinned and muted, AND-6's agent snoozed for three hours. */
-    fun triage() = com.makefunstuff.herdr.core.home.Triage(
-        pins = listOf("$GPU/w1:p1"),
-        snoozes = mapOf("$DEVBOX/w4:p1" to com.makefunstuff.herdr.core.home.Snooze(until = NOW + 3 * 3_600_000L)),
-        muted = setOf("$GPU/w1:p1"),
-        used = true,
+    /** The Agents list triaged: gpu-box's eval pinned. */
+    fun triage() = com.makefunstuff.herdr.core.home.Triage(pins = listOf("$GPU/w1:p1"), used = true)
+
+    /** Each space's Notify as someone might pick it: gpu-box's llm-eval Off, devbox's herdr-android All (Finished off everywhere). */
+    fun notify(): PushState = push().copy(
+        rules = com.makefunstuff.herdr.core.push.AlertRules()
+            .withSpace(com.makefunstuff.herdr.core.push.Notify.key(GPU, "llm-eval"), com.makefunstuff.herdr.core.push.Notify.Off)
+            .withSpace(com.makefunstuff.herdr.core.push.Notify.key(DEVBOX, "herdr-android"), com.makefunstuff.herdr.core.push.Notify.All),
     )
 
     /** Notifications on: devbox and gpu-box send, ci-runner is left out, mac-mini has no python3. */
@@ -122,11 +124,6 @@ object Demo {
             ),
         )
     }
-
-    /** Watches set from the long-press sheets: the eval on gpu-box finishing. */
-    fun watches() = listOf(
-        com.makefunstuff.herdr.core.push.Watch(GPU, com.makefunstuff.herdr.core.push.Watch.What.AgentDone, paneId = "w1:p1", name = "the eval"),
-    )
 
     /** Quiet hours as someone might set them: with the phone's modes, and weeknights from 22:00 to 07:00. */
     fun quiet() = QuietHours(followPhone = true, schedule = true, start = 22 * 60, end = 7 * 60, days = (1..5).toSet())
@@ -316,11 +313,9 @@ object Demo {
             workspaceTokens = mapOf("w1" to mapOf("branch" to "work/9-last-answered", "pr" to "#9")),
             journal = devboxJournal(),
             code = FakeCode(),
-            quick = FakeQuick(),
             usage = FakeUsage(),
             logins = FakeLogins(),
             agentCommands = AGENT_COMMANDS,
-            ports = DEVBOX_PORTS,
         ),
         GPU to FakeMachine(
             GPU,
@@ -339,18 +334,6 @@ object Demo {
         ),
         MINI to FakeMachine(MINI, refuse = ConnectError.Auth(null)),
     )
-
-    /**
-     * What listens on devbox: the website's vite and storybook, the API's uvicorn (started outside
-     * herdr, in its folder), the herdr-android workspace's Gradle daemon, and sshd (not the account's).
-     */
-    val DEVBOX_PORTS = listOf(
-        "L\t22\t0.0.0.0\t\t\t\t\t\t\t",
-        "L\t5173\t127.0.0.1\t4101\tnode\tw3\tw3:p1\t/home/demo/src/website\t1\tnode /home/demo/src/website/node_modules/.bin/vite --port 5173",
-        "L\t6006\t127.0.0.1\t4133\tnode\tw3\tw3:p1\t/home/demo/src/website\t1\tnode /home/demo/src/website/node_modules/.bin/storybook dev -p 6006",
-        "L\t8000\t0.0.0.0\t4120\tpython3\t\t\t/home/demo/src/api-server\t1\t/usr/bin/python3 -m uvicorn app:api --reload",
-        "L\t41234\t127.0.0.1\t4200\tjava\tw1\t\t/home/demo/src/herdr-android\t0\tjava -cp gradle-launcher.jar org.gradle.launcher.daemon.bootstrap.GradleDaemon 8.10",
-    ).joinToString("\n") + "\n"
 
     /** The own commands and skills on devbox, as `herdr-agent-commands` prints them: herdr-android's `/ship`, and a skill of the person's. */
     private val AGENT_COMMANDS = listOf(

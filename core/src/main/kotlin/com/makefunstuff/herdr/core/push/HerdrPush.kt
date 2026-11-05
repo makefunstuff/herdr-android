@@ -73,7 +73,7 @@ object HerdrPush {
         session: String,
         herdrPath: String?,
         live: Boolean = false,
-        /** The agents (by pane) the phone watches here ([Watch]): herdr-push tells it each change of theirs. */
+        /** Agents (by pane) herdr-push tells each change of (the app's one-shot watches did; it asks for none now). */
         watchPanes: Collection<String> = emptyList(),
     ): String = buildJsonObject {
         put("id", id)
@@ -86,11 +86,6 @@ object HerdrPush {
         if (live) put("live", true)
         if (watchPanes.isNotEmpty()) put("watch_panes", kotlinx.serialization.json.JsonArray(watchPanes.sorted().map(::JsonPrimitive)))
     }.toString()
-
-    /** What a phone's watches ask of [machineId]'s herdr-push, in one string: a change of it needs a new subscription. */
-    fun watching(watches: List<Watch>, machineId: String): String =
-        watches.filter { it.machineId == machineId }.map { "pane:" + it.paneId }
-            .distinct().sorted().joinToString(",")
 
     /** herdr-push's answer: its last JSON line with an `ok`. */
     fun answer(stdout: String): JsonObject? = stdout.lines().asReversed().firstNotNullOfOrNull { l ->

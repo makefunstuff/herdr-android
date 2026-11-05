@@ -51,8 +51,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.makefunstuff.herdr.Routes
 import com.makefunstuff.herdr.ui.code.CodeSpot
-import com.makefunstuff.herdr.ui.quick.QuickPlace
-import com.makefunstuff.herdr.ui.quick.QuickSheets
 import com.makefunstuff.herdr.bubble.BubbleChat
 import com.makefunstuff.herdr.bubble.LocalBubble
 import com.makefunstuff.herdr.ui.common.rememberFloat
@@ -109,6 +107,12 @@ import com.makefunstuff.herdr.ui.common.StatusDot
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.width
 import com.makefunstuff.herdr.ui.manage.AgentActionsSheet
+import com.makefunstuff.herdr.ui.manage.ManageRow
+import com.makefunstuff.herdr.ui.spaces.TabMenuDialogs
+import com.makefunstuff.herdr.ui.spaces.TabMenuOpen
+import com.makefunstuff.herdr.ui.spaces.TabMenuRows
+import com.makefunstuff.herdr.ui.spaces.rememberTabMenu
+import com.makefunstuff.herdr.core.board.TabMenus
 import com.makefunstuff.herdr.ui.theme.Herdr
 import com.makefunstuff.herdr.ui.theme.Space
 import com.makefunstuff.herdr.ui.theme.color
@@ -183,7 +187,6 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
     var sending by remember { mutableStateOf(false) }
     var showKeys by rememberSaveable { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
-    var quick by remember { mutableStateOf<QuickPlace?>(null) }
     val listState = rememberLazyListState()
     val stick = rememberStickToBottom(listState)
     // Pictures for the agent wait in the composer (and are copied to its machine) until the message goes.
@@ -200,6 +203,12 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
     var heldSending by remember { mutableStateOf(false) }
     var heldOpen by remember { mutableStateOf(false) }
     var modelSheet by remember { mutableStateOf(false) }
+    // Its tab in Shepherdr 3's tab bar, when it has one: the tab menu (Restart, Switch agent, Model…) acts on it.
+    val tabMenu = rememberTabMenu()
+    val work = com.makefunstuff.herdr.ui.board.rememberWorkBoards()[machineId]
+    val tab = remember(work, paneId, agent?.shepherdrSpace) {
+        work?.takeIf { host.onShepherdr }?.let { TabMenus.tabOf(it.spaces, paneId, agent?.shepherdrSpace) }
+    }
     val kind = agent?.agent?.takeIf { it.isNotBlank() }
     val pill = remember(agent?.tokens, state.use) { ModelPill.of(agent?.tokens.orEmpty(), state.use) }
     // Its folder, for `@` files; its own `/` commands. Read over SSH the first time each is asked for.
@@ -376,6 +385,8 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
         upload = { file, name -> file.inputStream().use { session.upload(name, it) } },
         deliver = { remote, _ -> deliverVoice(remote) },
         fetch = { remote -> session.fetchImage(remote) },
+        machine = machineId,
+        board = { session.workBoardOrNull() },
     )
 
     /** A held message, now: sent as typed then (Claude Code and Codex take words mid-turn as their next). */
@@ -519,6 +530,7 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
                         },
                         attachments = { ComposerTray(tray) },
                         voice = voice.recorder,
+                        dictation = voice.dictation,
                         attached = !tray.isEmpty,
                         stop = if (status == AgentStatus.Working) ({ keys(listOf("esc")) }) else null,
                         floating = true,
@@ -621,6 +633,13 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
             agent = agent,
             paneLabel = pane?.displayName ?: paneId,
             onDismiss = { menu = false },
+            tabRows = tab?.takeIf { !inBubble }?.let { (space, t) ->
+                {
+                    TabMenuRows(tabMenu, machineId, space, t, onPicked = { menu = false }) { label, icon, destructive, onClick ->
+                        ManageRow(label, icon = icon, destructive = destructive, onClick = onClick)
+                    }
+                }
+            },
             onTerminal = { menu = false; nav.navigate(Routes.terminal(machineId, paneId)) },
             onToggleKeys = { menu = false; showKeys = !showKeys },
             showKeys = showKeys,
@@ -630,19 +649,10 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
             onCode = (agent?.cwd ?: pane?.foregroundCwd ?: pane?.cwd)?.ifBlank { null }?.takeIf { !inBubble }?.let { dir ->
                 { menu = false; nav.navigate(Routes.codeAt(CodeSpot(machineId, dir, pane = paneId))) }
             },
-            // herdr-core reports no session to follow, and quick commands type into classic herdr's panes.
+            // herdr-core reports no session to follow.
             onActivity = if (inBubble || onCore) null else ({ menu = false; nav.navigate(Routes.activity(machineId, pane = paneId)) }),
-            onQuick = if (inBubble || onCore) null else ({
-                menu = false
-                val name = agent?.let { it.name?.takeIf { n -> n.isNotBlank() } ?: it.displayName }
-                quick = QuickPlace(
-                    machineId, (agent?.cwd ?: pane?.foregroundCwd ?: pane?.cwd).orEmpty(), label = name ?: pane?.displayName.orEmpty(),
-                    workspaceId = agent?.workspaceId ?: pane?.workspaceId, pane = paneId, agentName = name,
-                )
-            }),
         )
     }
-    quick?.let { place -> QuickSheets(nav, place, onDismiss = { quick = null }) }
     if (modelSheet) pill?.let { p ->
         val latest by container.usage.latest.collectAsStateWithLifecycle()
         val left = kind?.let { UsageRules.leftFor(it, latest[machineId]?.report, container.usage.nowSeconds(), container.usage.zone()) }
@@ -653,8 +663,12 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
             limit = left?.let { "${it.provider.name}: ${it.words}" },
             onUsage = if (inBubble) null else ({ modelSheet = false; nav.navigate(Routes.usage(machineId)) }),
             onDismiss = { modelSheet = false },
+            onChange = tab?.takeIf { (_, t) -> TabMenus.Row.Model in TabMenus.rows(t) && !inBubble }?.let { (space, t) ->
+                { modelSheet = false; tabMenu.show(TabMenuOpen(machineId, space, t, TabMenus.Row.Model)) }
+            },
         )
     }
+    TabMenuDialogs(tabMenu)
     if (attachMenu) AttachMenu(attach, tray, online = host.online, onDismiss = { attachMenu = false })
 }
 

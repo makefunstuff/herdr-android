@@ -114,6 +114,29 @@ fun SceneData.shepherdr3() {
     host(Demo.DEVBOX).transcripts += "4304" to Demo.resource("claude-api.jsonl")
 }
 
+/**
+ * [shepherdr3], with herdr-android's tabs as Shepherdr 3.1's tab bar has them: its Assistant's (`tb-herdr-android`)
+ * and a Claude Code of its own beside it (`hc:t8`, tab `tb-and-claude`), stuck on a long test run: what the tab
+ * menu acts on.
+ */
+fun SceneData.shepherdr3Tabs() {
+    shepherdr3()
+    host(Demo.DEVBOX).core!!.apply {
+        terminals = terminals + FakeCore.terminal(
+            "t8", listOf("claude"), "/home/demo/src/herdr-android", Demo.NOW - 90 * 60_000L,
+            status = obj("state" to "working", "app" to "claude-code", "msg" to "Running the connected tests"), statusMs = Demo.NOW - 38 * 60_000L,
+            title = "Connected tests", turn = 2,
+            labels = mapOf("herdr.space" to "sp-herdr-android", "herdr.tab" to "tb-and-claude", "herdr.agent" to "claude", "where" to "herdr-android / Claude Code"),
+        )
+        screens = screens + ("t8" to Demo.resource("screen-claude-app.txt"))
+    }
+    host(Demo.DEVBOX).shepherdr!!.tabs(
+        "sp-herdr-android",
+        DemoV2.TAB_ASSISTANT,
+        """[{"id":"tb-and-claude","name":"Claude Code","named":false,"term":"t:t8","cli":"claude","agent":"claude","state":"working","where":"~/src/herdr-android","prog":"Claude Code"}]""",
+    )
+}
+
 /** devbox runs the desktop app's herdr-core next to classic herdr; mac-mini runs only the desktop app. */
 fun SceneData.desktopApp() {
     host(Demo.DEVBOX).core = DemoCore.devbox()
