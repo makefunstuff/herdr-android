@@ -534,6 +534,19 @@ class ShepherdrTest {
     }
 
     @Test
+    fun aMachineSaysWhetherItWritesSpeechDown() = runBlocking {
+        for ((answer, can) in listOf(
+            400 to """{"error":"That recording couldn't be read."}""" to true,
+            400 to """{"error":"Dictation needs whisper.cpp and its model on the Shepherdr machine (shepherdr whisper)."}""" to false,
+            404 to "Not found" to false,
+        )) FakeShepherdr().use { fake ->
+            fake.on("POST /api/dictate") { body -> if (body.isEmpty()) answer else 500 to "{}" }
+            val board = V2WorkBoard(ShepherdrClient(ForwardTransport({ ForwardTransport.socket(fake.port, it) })))
+            assertEquals(can, board.canDictate(), answer.second)
+        }
+    }
+
+    @Test
     fun cancellingALongCallLetsGoAtOnce() = runBlocking {
         FakeShepherdr().use { fake ->
             val asked = java.util.concurrent.CountDownLatch(1)

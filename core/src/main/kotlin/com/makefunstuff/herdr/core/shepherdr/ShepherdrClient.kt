@@ -220,6 +220,19 @@ class ShepherdrClient(private val transport: ShepherdrTransport) {
     }
 
     /**
+     * Whether the service's machine writes speech down ([dictate]: whisper.cpp and its model there). Asked with no
+     * audio: a service that has them says it can't read the recording, one without says it needs them, and one
+     * older than dictation doesn't know the path.
+     */
+    suspend fun canDictate(): Boolean {
+        val r = transport.bytes("POST", "/api/dictate", ByteArray(0), "audio/mp4")
+        if (r.status in 200..299) return true
+        val error = runCatching { ShepherdrJson.parseToJsonElement(r.body.toString(Charsets.UTF_8)).jsonObject["error"] }.getOrNull()
+        val why = (error as? JsonPrimitive)?.contentOrNull ?: return false
+        return r.status == 400 && !why.contains("needs whisper", ignoreCase = true)
+    }
+
+    /**
      * A voice call with [chat]'s running agent (`/api/voice`, the Voice add-on): 16 kHz PCM both ways as binary
      * messages, and the call's state as text ones ([VoiceCall]).
      */
