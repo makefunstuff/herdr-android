@@ -89,7 +89,7 @@ Ranked by value to a phone user of 3.1. Size: S (a day or less), M (a few days),
 | A7 | **Autopilot switch** per space and Settings › Autopilot | Turning a space's autopilot on or off away from the desk (3.1 header switch, `docs/parity/autopilot.md`). | S | HERD-8 | **HERD-19** (done) |
 | A8 | **Tab menu**: Switch agent, Restart, Rename, Close; Model menu | Recovering a stuck agent from the phone (3.1 `docs/parity/header.md`). | S–M | HERD-8 | **HERD-20**: the Chat tab's ⋯ and an agent's More sheet (`ui/spaces/TabMenu.kt`, scenes `tab-*`) |
 | A9 | **Chat parity**: reply/quote a message, reactions, find in chat, task news lines | Smaller conveniences 3.1's chat has (`docs/parity/chat.md`). | S each | HERD-8 | **Own task** |
-| A10 | **Needs you widget with buttons** (rows with Accept / Yes / No), beside today's count and Ask widgets | Answering without opening the app. | M | A1 | **Own task** |
+| A10 | **Needs you widget with buttons** (rows with Accept / Yes / No), beside today's count and Ask widgets | Answering without opening the app. | M | A1 | **Done** in HERD-23: the Needs you widget, with each notification's Accept, Approve and Deny |
 | A11 | **Pull request review from the phone**: threads, comment, approve, request changes, checks (the desktop's PR and Reviews panels) | Reviewing on the go; the desktop has it, 3.1 shows only the PR's state. | L | A2 | **Own task**, later |
 | A12 | **Live browser** of a task (3.1's Browser tab) | Seeing what the agent sees in its browser. | L | HERD-8; the 3.1 service's relay | **Own task**, later |
 | A13 | **Docs viewer** for `herdr.doc/2` (the desktop's Docs panel: investigations, runbooks) | Reading an agent's write-up on the phone. | M | none (files over SSH) | **Own task**, later |

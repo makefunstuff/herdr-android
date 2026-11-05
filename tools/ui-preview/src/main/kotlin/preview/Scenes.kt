@@ -540,9 +540,9 @@ fun scenes(): List<Scene> = listOf(
     // headed by its task to approve, and a ready line with Accept; the home space's quiet one; one at work with your
     // message on its way and Shepherdr's working line; and a plan approved from here.
     Scene("coordinator-v2", route = Routes.coordinator(DEVBOX, DemoV2.APP), setup = { shepherdr() }),
-    // A news line's agent chip opens that task's chat.
+    // A task's news line (its agent chip until HERD-22) opens that task's chat.
     Scene("coordinator-v2-chips", route = Routes.coordinator(DEVBOX, DemoV2.APP), setup = { host(DEVBOX).shepherdr = FakeShepherdr() }),
-    Scene("coordinator-v2-agent", route = Routes.coordinator(DEVBOX, DemoV2.APP), setup = { host(DEVBOX).shepherdr = FakeShepherdr() }, actions = { tapText("claude") }),
+    Scene("coordinator-v2-agent", route = Routes.coordinator(DEVBOX, DemoV2.APP), setup = { host(DEVBOX).shepherdr = FakeShepherdr() }, actions = { settle(); tapText("Fix the flaky upload test") }),
     Scene("coordinator-v2-home", route = Routes.coordinator(DEVBOX), setup = { shepherdr() }),
     // Autopilot, as 3.1's Assistant header: the switch in the bar; on, what it waits for under it, and "Write a
     // heartbeat" while the heartbeat is still herdr-task's starter; switched on from here.

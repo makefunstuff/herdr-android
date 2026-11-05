@@ -61,7 +61,7 @@ class AppContainer(app: Context) {
     val taskSpaces = com.makefunstuff.herdr.push.TaskSpaces(java.io.File(app.filesDir, "task-spaces.json"))
     val alertWork = AlertWork(hosts, machines, push, inbox, liveWork, quietWork, tally, usage, taskSpaces)
     /** Every board's list as last read, and which finished agents the phone has shown: the Agents screen's and the Board tab's. */
-    val boards = com.makefunstuff.herdr.data.BoardLists(hosts, onRead = { id, tasks -> tally.tasks(id, tasks); briefWork.looked(id, tasks, null) }, onBoard = taskSpaces::put)
+    val boards = com.makefunstuff.herdr.data.BoardLists(hosts, onRead = { id, tasks -> tally.tasks(id, tasks); briefWork.looked(id, tasks, null) }, onBoard = { id, o -> taskSpaces.put(id, o); inbox.looked(id, o) })
     val seen = com.makefunstuff.herdr.data.SeenStore(java.io.File(app.filesDir, "seen.json"))
     /** When each agent's chat was last on screen, for its "While you were away" card. */
     val looked = com.makefunstuff.herdr.data.LookedStore(java.io.File(app.filesDir, "looked.json"))
