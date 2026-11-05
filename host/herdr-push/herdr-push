@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# version: 10
+# version: 11
 """herdr-push: tells your phone when a herdr agent needs you.
 
 It runs on the machine with herdr, watches its agents (`herdr api snapshot`, and the Herdr desktop
@@ -63,7 +63,7 @@ import urllib.parse
 import urllib.request
 import zlib
 
-VERSION = "10"
+VERSION = "11"
 NAME = "herdr-push"
 
 HOME = os.path.expanduser("~")
@@ -329,6 +329,15 @@ def hc_agent_name(t):
     return fg if fg in HC_KNOWN else None
 
 
+def hc_task(t):
+    """The Shepherdr 3 task a terminal's agent works on, as people say it (`HERD-8`), or None: its label holds the
+    task list's key and number (`data-jpl-Work-app#8`), the ref's letters come from the name herdr-task gives its
+    worker (`herd-8-dark-mode`), as the app reads it (core/hc/HcView.kt shepherdrTask)."""
+    n = ((t.get("labels") or {}).get("herdr.task") or "").rpartition("#")[2]
+    m = re.match(r"^([A-Za-z][A-Za-z0-9]*)-(\d+)(?:-|$)", t.get("name") or "")
+    return m.group(1).upper() + "-" + n if n.isdigit() and m and m.group(2) == n else None
+
+
 def hc_snapshot(terminals):
     """Live terminals as herdr's snapshot has agents: pane ids `hc:<address>`, the desktop app's spaces
     and tabs from its labels (`herdr.space`, `herdr.tab`, `where`), the rest in "Other terminals"."""
@@ -374,6 +383,10 @@ def hc_snapshot(terminals):
              "state_change_seq": t.get("status_ms") or t.get("created_ms") or 0}
         if t.get("turn"):
             a["completion_seq"] = t["turn"]
+        # A task's agent: the phone has its task's own alert from Shepherdr ("HERD-8 · Needs you"), one per task.
+        task = hc_task(t)
+        if task:
+            a["shepherdr_task"] = task
         snap["agents"].append(a)
     return snap
 

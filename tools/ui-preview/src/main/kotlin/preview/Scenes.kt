@@ -24,6 +24,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import preview.Demo.API_AGENT
 import preview.Demo.APP_AGENT
 import preview.Demo.APP_SHELL
@@ -75,6 +76,30 @@ private fun SceneData.longWebsiteChat() {
 }
 
 private const val WEBSITE_CHAT = "p:sp-website"
+
+/**
+ * herdr-android's Assistant chat with 3.1's conveniences in use: reactions on its last reply (yours and one you both
+ * gave) and your answer to it quoting it, whose line goes back to it.
+ */
+private fun SceneData.chatParity(between: Int = 0) {
+    shepherdr()
+    val v2 = host(DEVBOX).shepherdr!!
+    val key = DemoV2.chat(DemoV2.APP)
+    val c = v2.chats.getValue(key)
+    val msgs = c.getValue("messages").jsonArray.map { m ->
+        if (m.jsonObject["id"]?.jsonPrimitive?.content != "m6") m
+        else JsonObject(m.jsonObject + ("reactions" to JsonArray(listOf(obj("emoji" to "👍", "by" to "me"), obj("emoji" to "🙌", "by" to "both")))))
+    }
+    val reply = obj(
+        "id" to "m8", "who" to "you", "at" to 8, "text" to "Great. Merge it once the release notes say so too.",
+        "reply" to obj("id" to "m6", "who" to "agent", "text" to "AND-13 passed its checks…"),
+    )
+    // Talk between the two, so the one quoted is off the screen.
+    val talk = (1..between).flatMap { i ->
+        listOf(obj("id" to "b$i-q", "who" to "you", "at" to 7, "text" to "Check $i: does the card hold on a slow network?"), obj("id" to "b$i-a", "who" to "agent", "at" to 7, "text" to "Check $i passed: it stays put."))
+    }
+    v2.chats = v2.chats + (key to JsonObject(c + ("messages" to JsonArray(msgs + talk + reply))))
+}
 
 /** An Assistant's chat whose log Shepherdr can't find on its machine: its notice, and the news lines it still has. */
 private fun SceneData.chatNotFound() {
@@ -584,6 +609,20 @@ fun scenes(): List<Scene> = listOf(
         shepherdr()
         voice = VoiceState(on = true, machineId = DEVBOX, space = DemoV2.APP, spaceName = "herdr-android", muted = true, engine = VoiceState.Engine.Phone)
     }),
+    // 3.1's chat conveniences: reactions and a reply's line, a held message's bar, a reaction given, a reply's line
+    // pressed (it goes to what it answers, lit), and Find in chat with its count and lit matches.
+    Scene("coordinator-v2-reactions", route = Routes.coordinator(DEVBOX, DemoV2.APP), setup = { chatParity() }),
+    Scene("coordinator-v2-hold", route = Routes.coordinator(DEVBOX, DemoV2.APP), setup = { chatParity() }, actions = { settle(); longPressText("The card stays put now") }),
+    Scene("coordinator-v2-reacted", route = Routes.coordinator(DEVBOX, DemoV2.APP), setup = { chatParity() }, actions = {
+        settle(); longPressText("The card stays put now"); tapLabel("React ✅"); waitForRead(4)
+    }),
+    Scene("coordinator-v2-replying", route = Routes.coordinator(DEVBOX, DemoV2.APP), setup = { chatParity() }, actions = {
+        settle(); longPressText("The card stays put now"); tapExact("Reply")
+    }),
+    Scene("coordinator-v2-reply-jump", route = Routes.coordinator(DEVBOX, DemoV2.APP), setup = { chatParity(between = 4) }, actions = { settle(); tapText("AND-13 passed its checks…") }),
+    Scene("coordinator-v2-find", route = Routes.coordinator(DEVBOX, DemoV2.APP), setup = { chatParity() }, actions = { settle(); tapLabel("Find in chat"); type("AND-13") }),
+    Scene("coordinator-v2-find-none", route = Routes.coordinator(DEVBOX, DemoV2.APP), setup = { chatParity() }, actions = { settle(); tapLabel("Find in chat"); type("zebra") }),
+    Scene("task-shepherdr3-find", route = Routes.board(DEVBOX, "AND-19"), setup = { shepherdr3() }, actions = { settle(); tapLabel("Find in chat"); type("index") }),
     Scene("coordinator-v2-up", route = Routes.coordinator(DEVBOX, DemoV2.APP), setup = { shepherdr() }, actions = { scrollTo(4) }),
     Scene("coordinator-v2-new-message", route = Routes.coordinator(DEVBOX, DemoV2.APP), setup = { shepherdr() }, actions = { ctx ->
         scrollTo(4)
@@ -619,6 +658,8 @@ fun scenes(): List<Scene> = listOf(
     Scene("task-v2-multi", route = Routes.board(DEVBOX, "AND-24"), setup = { v2() }, actions = { tapText("Key bar"); tapText("Alert rules") }),
     Scene("task-v2-ready", route = Routes.board(DEVBOX, "AND-20"), setup = { v2() }),
     Scene("task-v2-accept", route = Routes.board(DEVBOX, "AND-20"), heightDp = 1300, setup = { v2() }, actions = { settle(); tapExact("Accept") }),
+    // A task's Finished alert ("AND-20 · Finished") tapped: the task, its Accept card already up.
+    Scene("task-v2-alert-accept", route = Routes.board(DEVBOX, "AND-20", alone = true, accept = true), heightDp = 1300, setup = { v2() }),
     // A call with a task's agent.
     Scene("task-v2-call", route = Routes.board(DEVBOX, "AND-19"), setup = {
         v2()

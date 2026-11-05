@@ -57,6 +57,15 @@ import com.makefunstuff.herdr.core.host.HostSession
 import com.makefunstuff.herdr.core.shepherdr.OutgoingLine
 import com.makefunstuff.herdr.core.shepherdr.SpaceChat
 import com.makefunstuff.herdr.core.shepherdr.V2Board
+import androidx.compose.runtime.rememberUpdatedState
+import com.makefunstuff.herdr.core.shepherdr.ChatFind
+import com.makefunstuff.herdr.ui.coordinator.ChatJump
+import com.makefunstuff.herdr.ui.coordinator.ChatPlaces
+import com.makefunstuff.herdr.ui.coordinator.ChatReactions
+import com.makefunstuff.herdr.ui.coordinator.FindBar
+import com.makefunstuff.herdr.ui.coordinator.MessageSheet
+import com.makefunstuff.herdr.ui.coordinator.lit
+import com.makefunstuff.herdr.ui.coordinator.rememberChatFind
 import com.makefunstuff.herdr.core.shepherdr.V2ReplyQuote
 import com.makefunstuff.herdr.data.DraftStore
 import com.makefunstuff.herdr.ui.common.LocalContainer
@@ -215,6 +224,16 @@ internal fun TaskChatScreen(
     val stick = rememberStickToBottom(list)
     val foot = th?.working == true || problem != null || !th?.v2?.blocked.isNullOrBlank()
     stick.Follow(remember(items) { items.map { it.id } }, content = items to foot)
+    val notice = items.isNotEmpty() && th?.v2?.let(com.makefunstuff.herdr.core.shepherdr.ChatNotice::of) != null
+    // Where each message sits in the list, newest first under the foot and the notice: for find and a reply's line.
+    val where = rememberUpdatedState { id: String -> items.indexOfFirst { it.id == id }.takeIf { it >= 0 }?.let { i -> (if (foot) 1 else 0) + (if (notice) 1 else 0) + items.size - 1 - i } }
+    val places = remember(list) { ChatPlaces(list) { where.value(it) } }
+    val find = rememberChatFind(t.id, items, places)
+    val jump = remember(places) { ChatJump(scope, places) }
+    val reactions = remember(t.id, t.chat) {
+        ChatReactions(scope, { m, e -> session.awaitWorkBoard().react(t.space, t, m, e) }) { context.toast(it) }
+    }
+    LaunchedEffect(items) { reactions.settle(items) }
 
     var draft by rememberDraft(DraftStore.task(machineId, t.id))
     // Files and pictures, as in an agent's own chat: copied to its machine, named in the message by their path.
@@ -299,6 +318,7 @@ internal fun TaskChatScreen(
                             },
                             enabled = state.online, selected = callHere && call.on,
                         )
+                        if (view == TaskView.Chat && th != null && !find.open) BarIcon(HerdrIcons.Search, ChatFind.PLACEHOLDER, { find.open = true })
                         BarIcon(HerdrIcons.Ellipsis, "Details and more", { sheet = TaskSheet.Menu })
                     }
                     TaskStrip(t, details, busy, onMerge, onPr = { picked = TaskView.PullRequest })
@@ -312,6 +332,13 @@ internal fun TaskChatScreen(
                     else -> TaskPullRequest(session, t)
                 }
             } else Column(Modifier.padding(top = padding.calculateTopPadding()).fillMaxSize().imePadding().navigationBarsPadding()) {
+                if (find.open) FindBar(find, earlier = th?.v2?.earlier?.takeIf { it }?.let {
+                    {
+                        scope.launch {
+                            runCatching { session.awaitWorkBoard().earlier(t.space, t) }.onFailure { find.loading = false; context.toast(it.message ?: "Couldn't read earlier") }
+                        }
+                    }
+                })
                 val sizes by container.textSizes.state.collectAsStateWithLifecycle()
                 ChatSurface(
                     Modifier.weight(1f).fillMaxWidth(),
@@ -389,13 +416,15 @@ internal fun TaskChatScreen(
                             items(items.asReversed(), key = { it.id }) { item ->
                                 Column(verticalArrangement = Arrangement.spacedBy(Space.m)) {
                                     if (item.id == stick.unread) NewLine()
-                                    ChatItem(
+                                    Box(Modifier.lit(item.id, find, jump)) { ChatItem(
                                         item, answering,
                                         onAnswer = ::answer,
                                         onReply = { q -> replyTo = q },
                                         onRetry = { w -> outgoing = outgoing.filterNot { "cid:${it.cid}" == w.id }; send(w.text, w.reply) },
                                         who = kind,
-                                    )
+                                        reactions = reactions,
+                                        onJump = jump::to,
+                                    ) }
                                 }
                             }
                         }
@@ -407,6 +436,7 @@ internal fun TaskChatScreen(
         }
 
         if (attachMenu) AttachMenu(attach, tray, online = state.online, onDismiss = { attachMenu = false })
+        MessageSheet(reactions) { replyTo = it }
         val d = details
         when (sheet) {
             TaskSheet.Menu -> BoardPanel("${t.name} · ${t.title}", onDismiss = { sheet = null }) {

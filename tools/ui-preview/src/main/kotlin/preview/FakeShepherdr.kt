@@ -151,6 +151,12 @@ class FakeShepherdr(
                 chats.keys.forEach { key -> change(key) { c -> JsonObject(c + ("messages" to JsonArray(messages(c).map { answered(it.jsonObject, q, choice) }))) } }
                 snapshot = JsonObject(snapshot + ("needs" to JsonArray((snapshot["needs"] as? JsonArray).orEmpty().filter { it.jsonObject["id"]?.jsonPrimitive?.content != q })))
             }
+            // Yours added, or taken back when it is yours already; the agent's stays.
+            "react" -> change(chat) { c ->
+                val id = a.getValue("message").jsonPrimitive.content
+                val emoji = a.getValue("emoji").jsonPrimitive.content
+                JsonObject(c + ("messages" to JsonArray(messages(c).map { m -> if (m.jsonObject["id"]?.jsonPrimitive?.content == id) reacted(m.jsonObject, emoji) else m })))
+            }
             // What its Accept card shows.
             "evidence" -> {
                 val id = a.getValue("task").jsonPrimitive.content
@@ -227,6 +233,20 @@ class FakeShepherdr(
     private fun quote(c: JsonObject, id: String): JsonObject {
         val m = messages(c).firstOrNull { it.jsonObject["id"]?.jsonPrimitive?.content == id }?.jsonObject
         return obj("id" to id, "who" to "agent", "text" to (m?.get("text") ?: JsonPrimitive("")))
+    }
+
+    /** [m] with yours [emoji] toggled: "me" added or gone, "both" when the agent gave it too. */
+    private fun reacted(m: JsonObject, emoji: String): JsonObject {
+        val list = (m["reactions"] as? JsonArray).orEmpty().map { it.jsonObject }
+        val was = list.firstOrNull { it["emoji"]?.jsonPrimitive?.content == emoji }
+        val by = was?.get("by")?.jsonPrimitive?.content
+        val now = when (by) {
+            null -> list + obj("emoji" to emoji, "by" to "me")
+            "me" -> list - was
+            "both" -> list.map { if (it === was) obj("emoji" to emoji, "by" to "them") else it }
+            else -> list.map { if (it === was) obj("emoji" to emoji, "by" to "both") else it }
+        }
+        return JsonObject(m + ("reactions" to JsonArray(now)))
     }
 
     private fun answered(m: JsonObject, q: String, choice: JsonElement): JsonObject {

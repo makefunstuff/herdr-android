@@ -117,6 +117,14 @@ class V2WorkBoard(private val connect: suspend () -> ShepherdrClient, private va
         return ""
     }
 
+    override suspend fun react(space: String, task: WorkTask?, message: String, emoji: String) {
+        connect().act(V2Actions.react(task?.let(::agentChat) ?: chatOf(space), message, emoji))
+    }
+
+    override suspend fun earlier(space: String, task: WorkTask?) {
+        connect().act(V2Actions.earlier(task?.let(::agentChat) ?: chatOf(space)))
+    }
+
     override suspend fun upload(space: String, name: String, data: ByteArray, type: String): String =
         connect().upload(name, data, type)
 

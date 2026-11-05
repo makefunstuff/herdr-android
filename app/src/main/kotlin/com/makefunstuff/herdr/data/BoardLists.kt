@@ -24,6 +24,8 @@ import java.io.File
 class BoardLists(
     private val hosts: HostManager,
     private val onRead: (String, List<WorkTask>) -> Unit = { _, _ -> },
+    /** Every board read or put, wherever in the app. */
+    private val onBoard: (String, WorkOverview) -> Unit = { _, _ -> },
     private val now: () -> Long = System::currentTimeMillis,
 ) {
     /** One board as Shepherdr sent it ([work], null before one was read); [problem] when the last read failed (the board is then the read before). */
@@ -41,6 +43,7 @@ class BoardLists(
     fun put(machineId: String, work: WorkOverview) {
         readAt[machineId] = now()
         _lists.update { it + (machineId to Read(work)) }
+        onBoard(machineId, work)
     }
 
     /** Reads every connected machine's board now, side by side; one read within [freshMs] is left as it is. */

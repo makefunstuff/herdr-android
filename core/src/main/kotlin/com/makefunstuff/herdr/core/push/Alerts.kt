@@ -37,6 +37,12 @@ data class Alert(
     val usage: Boolean = false,
     /** The space an agent's news comes from (its workspace's name), whose [Notify] it follows; empty for the rest. */
     val space: String = "",
+    /** A Shepherdr 3 task's id ([TaskAlerts]): a tap opens the task, its buttons act on it. */
+    val task: String = "",
+    /** A Shepherdr 3 Assistant's chat that waits on you, for its Answer. */
+    val chat: String = "",
+    /** A tap opens [task]'s Accept card: it is ready to accept. */
+    val accept: Boolean = false,
 ) {
     /**
      * What it is about, which the notification rules ([AlertRules]) switch on and off: something waits
@@ -67,9 +73,13 @@ data class AlertAction(
         Choose,
         /** Words to the agent: its answer when blocked, its next prompt when done. */
         ReplyAgent,
+        /** Accepts a Ready Shepherdr 3 task ([Alert.task]): it merges. */
+        Accept,
+        /** Words to what a Shepherdr 3 task (or Assistant) waits on you for: its question's answer. */
+        AnswerTask,
     }
 
-    val reply: Boolean get() = type == Type.ReplyAgent
+    val reply: Boolean get() = type == Type.ReplyAgent || type == Type.AnswerTask
 }
 
 /** What an event does to the notifications: show (or replace) one, or take one away. */
@@ -89,13 +99,18 @@ object Alerts {
     fun healthTag(machineId: String) = "health:$machineId"
     fun usageTag(machineId: String, provider: String, limit: String) = "usage:$machineId:$provider:$limit"
 
-    /** The notifications [events] call for; what runs ([PushEvent.Live]) is a Live Update instead (LiveItems). */
-    fun all(machineId: String, machineLabel: String, events: List<PushEvent>, host: String = ""): List<AlertChange> =
-        events.filter { it !is PushEvent.Live }.map { of(machineId, machineLabel, it, host) }
+    /**
+     * The notifications [events] call for; what runs ([PushEvent.Live]) is a Live Update instead (LiveItems).
+     * [taskAlerts]: Shepherdr 3 tells the phone of its tasks itself ([TaskAlerts]), so a task's agent alerts as its task, once.
+     */
+    fun all(machineId: String, machineLabel: String, events: List<PushEvent>, host: String = "", taskAlerts: Boolean = false): List<AlertChange> =
+        events.filter { it !is PushEvent.Live }.map { of(machineId, machineLabel, it, host, taskAlerts) }
 
-    fun of(machineId: String, machineLabel: String, event: PushEvent, host: String = ""): AlertChange = when (event) {
+    fun of(machineId: String, machineLabel: String, event: PushEvent, host: String = "", taskAlerts: Boolean = false): AlertChange = when (event) {
         is PushEvent.Live -> throw IllegalArgumentException("What runs is a Live Update, not an alert")
-        is PushEvent.Agent -> agent(machineId, machineLabel, event)
+        is PushEvent.Agent ->
+            if (taskAlerts && event.agent.shepherdrTask != null) AlertChange.Clear(agentTag(machineId, event.agent.paneId))
+            else agent(machineId, machineLabel, event)
         is PushEvent.Health -> health(machineId, machineLabel, event.report)
         is PushEvent.Usage -> usage(machineId, machineLabel, event)
         PushEvent.Test -> AlertChange.Show(

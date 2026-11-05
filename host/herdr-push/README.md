@@ -18,6 +18,8 @@ Every push also says whether someone is **at the machine** (`present`), so the p
 
 For a phone with **Live Updates** on, it also sends what runs: the working agents, which the phone shows as Live Updates with a Stop button. That push goes out at once when one starts or stops, with their names and titles at most every 90 seconds (`HERDR_PUSH_LIVE_MINOR`), and again every 30 minutes while anything runs (`HERDR_PUSH_LIVE_KEEP`), so the phone knows the machine still watches. A phone without Live Updates gets none of these.
 
+**Shepherdr 3's tasks** ("HERD-4 · Needs you", "HERD-4 · Finished") don't come from here: the app subscribes to the Shepherdr service's own push alerts, as its web pages do, with the same push address. herdr-push marks a task's agent with its task (`shepherdr_task` in the agent), so the phone then shows the task's alert alone, not the agent's too.
+
 The phone shows each one as a notification with buttons: **Approve** and **Deny** for an agent's yes-or-no question, and **Reply** to the agent. A tap opens the agent's chat. The buttons work over the app's own SSH connection, never through the push.
 
 It is one Python 3 file (`herdr-push`), standard library only, and needs nothing installed besides `python3` (3.6 or newer).

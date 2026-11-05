@@ -82,6 +82,12 @@ object V2Actions {
         put("emoji", emoji)
     }
 
+    /** The page of [chat]'s log before what it shows (`Search earlier`, `Loading earlier…`): the chat then comes again, longer. */
+    fun earlier(chat: String): JsonObject = buildJsonObject {
+        put("type", "earlier")
+        put("chat", chat)
+    }
+
     /** Marks task [task]'s chat's task done with nothing merged (`herdr-task done`): its chat key, `<task>/worker`. */
     fun close(chat: String): JsonObject = buildJsonObject {
         put("type", "close")
@@ -264,6 +270,22 @@ class ShepherdrClient(private val transport: ShepherdrTransport) {
     /** What the Accept card shows of [task] before it is accepted. */
     suspend fun evidence(task: String): V2Evidence =
         ShepherdrJson.decodeFromJsonElement(V2Evidence.serializer(), act(V2Actions.evidence(task)))
+
+    /**
+     * Subscribes [endpoint] (the phone's UnifiedPush address) to the service's push alerts, as a web page subscribes
+     * (`POST /api/push/subscribe`): the alerts come encrypted for [keys] ([com.makefunstuff.herdr.core.push.WebPush]).
+     * [device] names the phone in the service's list.
+     */
+    suspend fun subscribePush(endpoint: String, keys: com.makefunstuff.herdr.core.push.WebPushKeys, device: String) {
+        val body = buildJsonObject {
+            put("sub", buildJsonObject {
+                put("endpoint", endpoint)
+                put("keys", buildJsonObject { put("p256dh", keys.public); put("auth", keys.auth) })
+            })
+            put("device", device)
+        }
+        ok(transport.http("POST", "/api/push/subscribe", body.toString()))
+    }
 
     /** Where [task] works ([Worktree.folderOf]), as the web app's Files reads it (`GET /api/worktree?what=dir`). */
     suspend fun taskFolder(task: String): TaskFolder {
