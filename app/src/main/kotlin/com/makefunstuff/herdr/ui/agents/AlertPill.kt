@@ -54,13 +54,11 @@ import com.makefunstuff.herdr.ui.design.HerdrShapes
 import com.makefunstuff.herdr.ui.theme.Space
 import kotlinx.coroutines.delay
 
-/** What the in-app alert shows: something that newly needs you (and how many more came with it), or a watch that fired. */
+/** What the in-app alert shows: something that newly needs you (and how many more came with it). */
 sealed interface PillItem {
     val id: String
 
     data class Needs(val waiting: Waiting, val more: Int, override val id: String) : PillItem
-
-    data class Fired(val alert: Alert, override val id: String) : PillItem
 }
 
 /** How long the alert stays before it leaves by itself. */
@@ -70,7 +68,7 @@ const val PILL_MS = 5_000L
  * The in-app alert: when another agent (or a board task) needs you while you are in the app, one
  * black line drops from the top ("api-server · needs you: run db:migrate?"); a tap opens it, and it
  * leaves after a few seconds. Never about the chat (or task) open now, and not on the Agents list,
- * which shows it already. A watch that fires while the app is open shows here too, there as well.
+ * which shows it already.
  */
 @Composable
 fun AlertPill(
@@ -80,7 +78,6 @@ fun AlertPill(
     needsYou: List<Waiting>,
     agentsRead: Set<String>,
     boardsRead: Set<String>,
-    fired: kotlinx.coroutines.flow.Flow<Alert>,
 ) {
     val news = remember { WaitingNews() }
     var item by remember { mutableStateOf<PillItem?>(null) }
@@ -93,7 +90,6 @@ fun AlertPill(
         // The Agents list in front shows it already.
         if (fresh.isNotEmpty() && route != Routes.TASKS) item = PillItem.Needs(fresh.first(), fresh.size - 1, "n${count++}")
     }
-    LaunchedEffect(fired) { fired.collect { item = PillItem.Fired(it, "f${count++}") } }
     val shown = item
     LaunchedEffect(shown?.id) {
         if (shown != null) {
@@ -102,7 +98,7 @@ fun AlertPill(
         }
     }
     // Opened meanwhile (or the Agents list in front, which lists what needs you): it goes.
-    val visible = shown != null && (shown is PillItem.Fired || route != Routes.TASKS) && !shown.isOpen(route, args)
+    val visible = shown != null && route != Routes.TASKS && !shown.isOpen(route, args)
     Box(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = Space.m, vertical = Space.s), contentAlignment = Alignment.TopCenter) {
         AnimatedVisibility(
             visible,
@@ -123,7 +119,6 @@ private fun Pill(p: PillItem, onOpen: () -> Unit) {
     val ink = Color(0xFFF5F5F7)
     val words = when (p) {
         is PillItem.Needs -> words(p.waiting)
-        is PillItem.Fired -> listOf(p.alert.title, p.alert.text).filter { it.isNotBlank() }.joinToString(" · ")
     }
     Surface(
         color = Color.Black, contentColor = ink, shape = HerdrShapes.Pill, 
@@ -141,7 +136,6 @@ private fun Pill(p: PillItem, onOpen: () -> Unit) {
                     if (agent != null) AgentMark(agent.agent.agent, size = 26.dp)
                     else Icon(HerdrIcons.SquareKanban, null, tint = Color(0xFFF0A830), modifier = Modifier.padding(4.dp).size(18.dp))
                 }
-                is PillItem.Fired -> Icon(HerdrIcons.BellRing, null, tint = Color(0xFFF0A830), modifier = Modifier.padding(4.dp).size(18.dp))
             }
             Spacer(Modifier.width(Space.s))
             Text(
@@ -178,10 +172,6 @@ private fun open(nav: NavHostController, panes: Panes, p: PillItem, hosts: List<
             is Waiting.Coordinator -> panes.open(nav, Routes.coordinator(w.machineId, w.space.id))
             is Waiting.Secret -> w.task?.let { panes.openBoard(nav, w.machineId, it.id) } ?: panes.open(nav, Routes.coordinator(w.machineId, w.space?.id))
         }
-        is PillItem.Fired -> {
-            val a = p.alert
-            if (a.paneId.isNotEmpty()) panes.openPane(nav, hosts.firstOrNull { it.machine.id == a.machineId }, a.machineId, a.paneId)
-        }
     }
 }
 
@@ -214,7 +204,4 @@ private fun Waiting.isOpen(route: String?, args: (String) -> String?): Boolean {
 
 private fun PillItem.isOpen(route: String?, args: (String) -> String?): Boolean = when (this) {
     is PillItem.Needs -> waiting.isOpen(route, args)
-    is PillItem.Fired -> front(route, args)?.let { f ->
-        f.machine == alert.machineId && f.pane != null && f.pane == alert.paneId
-    } == true
 }

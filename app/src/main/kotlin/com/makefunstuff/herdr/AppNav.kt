@@ -53,6 +53,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.makefunstuff.herdr.core.home.Waiting
+import com.makefunstuff.herdr.core.push.Notify
 import com.makefunstuff.herdr.data.IdentityStore
 import com.makefunstuff.herdr.ui.activity.ActivityScreen
 import com.makefunstuff.herdr.ui.agents.AgentScreen
@@ -220,6 +221,7 @@ private fun AppNav(nav: NavHostController) {
     val topLevel = route in setOf(Routes.CHAT, Routes.TASKS, Routes.ARTIFACTS_TAB)
     val hosts by container.hosts.hosts.collectAsStateWithLifecycle()
     val triage by container.triage.state.collectAsStateWithLifecycle()
+    val push by container.push.state.collectAsStateWithLifecycle()
     val homeBoards = rememberBoards()
     // The Tasks tab's badge: everything on its Needs you list, Shepherdr 3's tasks too.
     val waiting = rememberNeedsYou(homeBoards)
@@ -313,11 +315,12 @@ private fun AppNav(nav: NavHostController) {
             }
             // Another agent needs you while you are in a chat: one line drops from the top.
             AlertPill(
-                // A muted agent asking doesn't drop a line either; its card still waits on the list.
-                nav, panes, entry, remember(waiting, triage) { waiting.filter { !(it is Waiting.Question && it.agent.key in triage.muted) } },
+                // An agent asking in a space set to Notify Off (or muted before) doesn't drop a line either; its card still waits on the list.
+                nav, panes, entry, remember(waiting, triage, push.rules) {
+                    waiting.filter { !(it is Waiting.Question && (it.agent.key in triage.muted || push.rules.notifyOf(it.agent.space) == Notify.Off)) }
+                },
                 agentsRead = remember(hosts) { hosts.filter { it.agentsKnown }.map { it.machine.id }.toSet() },
                 boardsRead = remember(homeBoards) { homeBoards.map { it.machineId }.toSet() },
-                fired = container.watchWork.fired,
             )
         }
     }

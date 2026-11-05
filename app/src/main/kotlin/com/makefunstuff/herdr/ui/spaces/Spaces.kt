@@ -2,6 +2,7 @@ package com.makefunstuff.herdr.ui.spaces
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -51,6 +52,7 @@ import com.makefunstuff.herdr.core.api.WorkspaceInfo
 import com.makefunstuff.herdr.core.board.WorkOverview
 import com.makefunstuff.herdr.core.board.WorkSpace
 import com.makefunstuff.herdr.core.host.HostState
+import com.makefunstuff.herdr.core.push.Notify
 import com.makefunstuff.herdr.core.usage.UsageRules
 import com.makefunstuff.herdr.ui.agents.AgentScreen
 import com.makefunstuff.herdr.ui.board.rememberWorkBoards
@@ -98,7 +100,7 @@ data class SpaceSlot(
     val panes: List<PaneInfo>,
     val board: WorkSpace?,
 ) {
-    val key: String get() = "$machineId/${name.lowercase()}"
+    val key: String get() = Notify.key(machineId, name)
 
     /** The space's one status: what needs you first, then work, then a finish; none at rest. */
     val status: AgentStatus?
@@ -171,7 +173,7 @@ fun shownSpace(spaces: List<Pair<HostState, List<SpaceSlot>>>, chosen: String?):
 /**
  * The drawer: the brand row (the workbench chip, HERDR, its WORKBENCH tag, search), SPACES, then
  * each machine as a bus (BUS 1 · DEVBOX, its light, its meter; a tap opens the machine) with its
- * spaces as numbered slots, and at its foot Settings and Add machine.
+ * spaces as numbered slots (a long press: the space's Notify), and at its foot Settings and Add machine.
  */
 @Composable
 fun SpacesDrawer(nav: NavController, onPick: (SpaceSlot) -> Unit, onClose: () -> Unit, modifier: Modifier = Modifier) {
@@ -179,7 +181,10 @@ fun SpacesDrawer(nav: NavController, onPick: (SpaceSlot) -> Unit, onClose: () ->
     val spaces = rememberSpaces()
     val choice = LocalSpaceChoice.current
     val shown = shownSpace(spaces, choice.key)
+    val push by LocalContainer.current.push.state.collectAsStateWithLifecycle()
+    var held by remember { mutableStateOf<Pair<SpaceSlot, String>?>(null) }
     fun go(route: String) { onClose(); nav.navigate(route) }
+    held?.let { (slot, machine) -> SpaceSheet(slot, machine, onDismiss = { held = null }) }
     Column(modifier.fillMaxHeight().background(c.panel).statusBarsPadding().navigationBarsPadding()) {
         // Brand row.
         Row(
@@ -218,7 +223,10 @@ fun SpacesDrawer(nav: NavController, onPick: (SpaceSlot) -> Unit, onClose: () ->
                             )
                         }
                         items(slots, key = { "slot/${it.key}" }) { slot ->
-                            Slot(slots.indexOf(slot) + 1, slot, on = slot.key == shown?.key) { onPick(slot); onClose() }
+                            Slot(
+                                slots.indexOf(slot) + 1, slot, on = slot.key == shown?.key, off = push.rules.notifyOf(slot.key) == Notify.Off,
+                                onHold = { held = slot to host.machine.label },
+                            ) { onPick(slot); onClose() }
                         }
                     }
                 }
@@ -314,19 +322,23 @@ private fun Meter(machineId: String) {
     }
 }
 
-/** A space as a numbered slot: its index cell, its name in capitals, its one status light; the shown one amber with a bar at its start. */
+/**
+ * A space as a numbered slot: its index cell, its name in capitals, its one status light; the shown one amber
+ * with a bar at its start. [off]: its Notify is Off, so its name is dim beside a crossed-out bell (its light still shows).
+ */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-private fun Slot(n: Int, slot: SpaceSlot, on: Boolean, onClick: () -> Unit) {
+private fun Slot(n: Int, slot: SpaceSlot, on: Boolean, off: Boolean, onHold: () -> Unit, onClick: () -> Unit) {
     val c = Herdr.colors
     val status = slot.status
     Row(
         Modifier.fillMaxWidth().background(if (on) c.selected else c.panel)
             .drawBehind { if (on) drawRect(c.accent, size = Size(3.dp.toPx(), size.height)) }
             .heightIn(min = 44.dp)
-            .clickable(onClickLabel = "Show its chat", onClick = onClick)
+            .combinedClickable(onClickLabel = "Show its chat", onLongClickLabel = "Notify", onLongClick = onHold, onClick = onClick)
             .semantics(mergeDescendants = true) {
                 selected = on
-                contentDescription = listOfNotNull(slot.name, status?.let { it.name.lowercase() }).joinToString(", ")
+                contentDescription = listOfNotNull(slot.name, status?.let { it.name.lowercase() }, "notify off".takeIf { off }).joinToString(", ")
             }
             .padding(start = Space.l, end = Space.m),
         verticalAlignment = Alignment.CenterVertically,
@@ -334,9 +346,13 @@ private fun Slot(n: Int, slot: SpaceSlot, on: Boolean, onClick: () -> Unit) {
         SlotNumber(n, on)
         Spacer(Modifier.width(Space.s))
         Text(
-            slot.name.caps(), style = MaterialTheme.typography.labelLarge, color = if (on) c.accent else c.text,
+            slot.name.caps(), style = MaterialTheme.typography.labelLarge, color = if (on) c.accent else if (off) c.muted else c.text,
             maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
         )
+        if (off) {
+            Icon(HerdrIcons.BellOff, null, tint = c.muted, modifier = Modifier.size(14.dp))
+            Spacer(Modifier.width(Space.s))
+        }
         val program = slot.lead?.let { it.agent ?: it.displayName }
         if (slot.board != null) Text("ASSISTANT", style = MaterialTheme.typography.labelSmall, color = c.muted, maxLines = 1)
         else if (program != null) ChipIcon(chipFor(program), size = 16.dp)

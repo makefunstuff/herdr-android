@@ -128,7 +128,7 @@ class AppContainer(app: Application) {
         java.io.File(app.filesDir, "images.json"), java.io.File(app.filesDir, "images"), java.io.File(app.cacheDir, "sent-images"),
     )
     val push = PushStore(app)
-    /** The Agents list's pins, snoozes and mutes; a muted agent's notifications don't show. */
+    /** The Agents list's pins, and the mutes from before Notify until they are moved onto their spaces. */
     val triage = com.makefunstuff.herdr.data.TriageStore(java.io.File(app.filesDir, "triage.json"))
     /** Which actions ask for the fingerprint, and the app lock. */
     val guard = com.makefunstuff.herdr.data.GuardStore(java.io.File(app.filesDir, "guard.json"), com.makefunstuff.herdr.guard.AndroidUnlock(app))
@@ -137,11 +137,9 @@ class AppContainer(app: Application) {
     val phone = AndroidPhone(app, push)
     val pushHosts = PushHosts(scope, hosts, machines, push, phone)
     val quietWork = QuietWork(scope, push.state, phone, inbox, foreground = { hosts.isForeground })
-    val liveWork = LiveWork(scope, hosts, machines, push, AndroidLive(app), quietWork, muted = triage.state.map { it.muted })
+    val liveWork = LiveWork(scope, hosts, machines, push, AndroidLive(app), quietWork, muted = triage.muted(push.state, hosts.hosts))
     val tally = TallyStore(java.io.File(app.filesDir, "tally.json"), machines)
-    /** One-shot watches set from the long-press sheets. */
-    val watchWork = com.makefunstuff.herdr.push.WatchWork(push, inbox, quietWork)
-    val alertWork = AlertWork(hosts, machines, push, inbox, liveWork, quietWork, tally, watchWork, usage)
+    val alertWork = AlertWork(hosts, machines, push, inbox, liveWork, quietWork, tally, usage)
     /**
      * Every board as last read, and which finished agents the phone has shown: the Agents screen's and the Board tab's.
      * The boards read while on screen are what the person saw: the widget counts them, and the brief compares with them.
@@ -188,12 +186,16 @@ class AppContainer(app: Application) {
         quietWork.start()
         tally.start(scope, hosts)
         briefWork.start()
-        watchWork.start(scope, hosts)
         usage.start(scope, hosts, machines)
         // Shared files waiting for a machine taken out of the app go with it.
         scope.launch { machines.machines.collect { list -> shares.keep(list.map { it.id }.toSet()) } }
-        // Pins, snoozes and mutes of panes gone (or snoozes over) go as the machines are read.
-        scope.launch { hosts.hosts.collect { triage.keep(it, machines.machines.value.map { m -> m.id }.toSet()) } }
+        // Old mutes and watches move onto their spaces' Notify, and pins of panes gone go, as the machines are read.
+        scope.launch {
+            hosts.hosts.collect {
+                triage.move(it, push)
+                triage.keep(it, machines.machines.value.map { m -> m.id }.toSet())
+            }
+        }
         // The push app's address may have lapsed while the app was closed: ask again, it answers with the same or a new one.
         if (push.state.value.on) phone.register()
         // When network returns (e.g. WiFi connects, cellular signal restored), retry any sessions waiting in backoff.

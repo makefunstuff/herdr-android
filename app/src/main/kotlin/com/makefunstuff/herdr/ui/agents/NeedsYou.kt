@@ -388,7 +388,7 @@ fun WorkWaitingCard(
  * An agent below Needs you as one line: its mark, what it works on over its key and where, and on the
  * right how far along it is (working), a dot for a finish not seen yet (done). A working one has a
  * thin bar under it: its task's progress when the board knows it, else one that only says it works.
- * The phone's triage shows last: how long it is snoozed, a crossed bell when muted, a pin.
+ * Last, a crossed bell when its space's Notify is Off, and a pin.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -398,8 +398,6 @@ fun AgentLine(
     selected: Boolean,
     onOpen: () -> Unit,
     onMenu: () -> Unit,
-    /** How long it is snoozed, as the row says it ("until 18:00"); null when it isn't. */
-    snoozed: String? = null,
     /** Its long-press sheet (triage, terminal, why this state, …) as TalkBack offers it. */
     actions: List<CustomAccessibilityAction> = emptyList(),
 ) {
@@ -408,7 +406,7 @@ fun AgentLine(
     val t: WorkTask? = row.task
     val status = a.agentStatus
     val working = status == AgentStatus.Working
-    val quiet = status == AgentStatus.Done && !row.new || status == AgentStatus.Idle || status == AgentStatus.Unknown || snoozed != null
+    val quiet = status == AgentStatus.Done && !row.new || status == AgentStatus.Idle || status == AgentStatus.Unknown
     val title = t?.title ?: a.subtitle ?: a.displayName
     Row(
         Modifier.fillMaxWidth().heightIn(min = 56.dp)
@@ -418,7 +416,7 @@ fun AgentLine(
                 this.selected = selected
                 contentDescription = listOfNotNull(
                     title, t?.name, a.displayName, if (row.new) "finished, new" else a.statusWord(),
-                    "pinned".takeIf { row.pinned }, snoozed?.let { "snoozed $it" }, "muted".takeIf { row.muted },
+                    "pinned".takeIf { row.pinned }, "notify off".takeIf { row.muted },
                 ).joinToString(", ")
                 if (actions.isNotEmpty()) customActions = actions
             }
@@ -442,8 +440,7 @@ fun AgentLine(
             }
         }
         val trailing = when {
-            // Snoozed, it says only until when.
-            working && snoozed == null -> listOfNotNull(t?.progress?.let { "$it%" }, t?.eta?.let { "${it}m left" }).joinToString(" · ")
+            working -> listOfNotNull(t?.progress?.let { "$it%" }, t?.eta?.let { "${it}m left" }).joinToString(" · ")
             else -> ""
         }
         if (trailing.isNotEmpty()) {
@@ -455,12 +452,6 @@ fun AgentLine(
             Text("new", style = MaterialTheme.typography.labelMedium, color = c.done)
             Spacer(Modifier.width(Space.xs))
             StatusDot(c.done)
-        }
-        if (snoozed != null) {
-            Spacer(Modifier.width(Space.m))
-            Text(snoozed, style = MaterialTheme.typography.labelMedium, color = c.muted, maxLines = 1)
-            Spacer(Modifier.width(Space.xs))
-            Icon(HerdrIcons.Clock, null, tint = c.accent, modifier = Modifier.size(16.dp))
         }
         if (row.muted) {
             Spacer(Modifier.width(Space.s))

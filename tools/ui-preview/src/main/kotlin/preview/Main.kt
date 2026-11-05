@@ -109,7 +109,7 @@ class SceneData {
     /** Comments on code kept for later (CodeStore), and how code is shown. */
     var notes: List<com.makefunstuff.herdr.core.code.ReviewNote> = emptyList()
     var codeView: com.makefunstuff.herdr.data.CodeView? = null
-    /** The Agents list's pins, snoozes and mutes (TriageStore), as saved before the app opens. */
+    /** The Agents list's pins (TriageStore), as saved before the app opens. */
     var triage: com.makefunstuff.herdr.core.home.Triage? = null
     /** When each agent's chat was last on screen (LookedStore), by `<machine>/<pane>`: its "While you were away" card counts from it. */
     var looked: Map<String, Long> = emptyMap()

@@ -10,14 +10,12 @@ import com.makefunstuff.herdr.core.push.Alert
 import com.makefunstuff.herdr.core.push.AlertChange
 import com.makefunstuff.herdr.core.push.AlertRules
 import com.makefunstuff.herdr.core.push.Alerts
-import com.makefunstuff.herdr.core.push.HerdrPush
 import com.makefunstuff.herdr.core.push.Presence
 import com.makefunstuff.herdr.core.push.PresenceBook
 import com.makefunstuff.herdr.core.push.PushEvent
 import com.makefunstuff.herdr.core.push.PushMessages
 import com.makefunstuff.herdr.core.push.QuietHours
-import com.makefunstuff.herdr.core.push.Watch
-import com.makefunstuff.herdr.core.push.Watches
+import com.makefunstuff.herdr.core.push.Notify
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlin.test.Test
@@ -53,17 +51,16 @@ class RulesTest {
         // A provider near its limit comes by default, and can be turned off.
         assertTrue(r.allows(a(Alert.Kind.Limits)))
         assertFalse(r.copy(limits = false).allows(a(Alert.Kind.Limits)))
-        // A test and a watch you set always come.
+        // A test always comes.
         val none = AlertRules(needsYou = false, finished = false, wentWrong = false, limits = false)
         assertTrue(none.allows(a(Alert.Kind.Test)))
-        assertTrue(none.allows(a(Alert.Kind.Watch)))
         assertFalse(none.allows(a(Alert.Kind.NeedsYou)))
         assertEquals("Needs you, Went wrong and Limits", r.label)
         assertEquals("Needs you and Went wrong", r.copy(limits = false).label)
         assertEquals("Needs you, Finished, Went wrong and Limits", AlertRules.ALL.label)
-        assertEquals("Only your watches", none.label)
-        // Quiet hours hold what finished and a watch; what went wrong comes through, as what needs you does.
-        assertTrue(QuietHours.holds(a(Alert.Kind.Watch)))
+        assertEquals("Nothing", none.label)
+        // Quiet hours hold what finished and a limit; what went wrong comes through, as what needs you does.
+        assertTrue(QuietHours.holds(a(Alert.Kind.Finished)))
         assertFalse(QuietHours.holds(a(Alert.Kind.WentWrong)))
         assertTrue(QuietHours.holds(a(Alert.Kind.Limits)))
     }
@@ -97,39 +94,39 @@ class RulesTest {
     }
 
     @Test
-    fun anAgentWatchFiresWhenItFinishes() {
-        val w = Watches.offers("m1", agent("working", seq = 7)).single()
-        assertEquals("When api finishes", w.label)
-        // Done, or idle, at a later state change.
-        assertNull(Watches.agent(w, agent("working", seq = 7), "devbox"))
-        assertNull(Watches.agent(w, agent("blocked", seq = 8), "devbox"))
-        val fired = assertNotNull(Watches.agent(w, agent("done", seq = 9), "devbox")?.alert)
-        assertEquals("api finished", fired.title)
-        assertEquals(Alert.Kind.Watch, fired.kind)
-        assertEquals("w1:p1", fired.paneId)
-        assertEquals(listOf("Reply"), fired.actions.map { it.label })
-        assertNotNull(Watches.agent(w, agent("idle", seq = 9), "devbox"))
-        // Its pane closed: it says so.
-        assertEquals("api is gone", Watches.agent(w, null, "devbox")?.alert?.title)
-        // An agent at rest offers nothing to wait for.
-        assertTrue(Watches.offers("m1", agent("idle")).isEmpty())
+    fun aSpacesNotifyDecidesForItsAgents() {
+        fun agentAlert(kind: Alert.Kind, space: String = "api") = Alert("agent:m1:w1:p1", "s", kind, "m1", "", "", paneId = "w1:p1", space = space)
+        val r = AlertRules()
+        // Picking nothing follows the switches: Needs you on, Finished off by default.
+        assertEquals(Notify.NeedsMe, r.everywhere)
+        assertEquals(Notify.NeedsMe, r.notifyOf(Notify.key("m1", "API")))
+        assertFalse(r.allows(agentAlert(Alert.Kind.Finished)))
+        // All: its finishes come too (a watch, for good); Off: nothing, not even a question.
+        val all = r.withSpace(Notify.key("m1", "API"), Notify.All)
+        assertTrue(all.allows(agentAlert(Alert.Kind.Finished)))
+        assertTrue(all.allows(agentAlert(Alert.Kind.NeedsYou)))
+        assertFalse(all.allows(agentAlert(Alert.Kind.Finished, space = "web")))
+        val off = r.withSpace("m1/api", Notify.Off)
+        assertFalse(off.allows(agentAlert(Alert.Kind.NeedsYou)))
+        // What isn't an agent's news follows the switches whatever its space.
+        assertTrue(off.allows(Alert("health:m1", "low", Alert.Kind.NeedsYou, "m1", "", "")))
+        assertTrue(off.allows(agentAlert(Alert.Kind.Test)))
+        // Needs me: questions, no finishes, even with Finished on everywhere.
+        val needs = AlertRules(finished = true).withSpace("m1/api", Notify.NeedsMe)
+        assertEquals(Notify.All, needs.everywhere)
+        assertTrue(needs.allows(agentAlert(Alert.Kind.NeedsYou)))
+        assertFalse(needs.allows(agentAlert(Alert.Kind.Finished)))
+        // Picking what it would get anyway, or nothing, follows the switches again.
+        assertTrue(all.withSpace("m1/api", Notify.NeedsMe).spaces.isEmpty())
+        assertTrue(off.withSpace("m1/api", null).spaces.isEmpty())
     }
 
     @Test
-    fun watchesFireFromPushesAndLooks() {
-        val a = Watch("m1", Watch.What.AgentDone, paneId = "w1:p1", name = "api", seq = 7)
-        val other = Watch("m2", Watch.What.AgentDone, paneId = "w1:p1", name = "api", seq = 7)
-        val all = listOf(a, other)
-        // The agent's done push: it fires, the other machine's doesn't.
-        val fired = Watches.events(all, "m1", "devbox", listOf(PushEvent.Agent(agent("done", seq = 9), "api")))
-        assertEquals(listOf(a.id), fired.map { it.watch.id })
-        // A look: the agent still works.
-        assertTrue(Watches.look(all, "m1", "devbox", listOf(agent("working"))).isEmpty())
-        // A look without the agent: its pane is gone.
-        assertEquals(listOf(a.id), Watches.look(all, "m1", "devbox", emptyList()).map { it.watch.id })
-        // herdr-push follows what is watched on its machine.
-        assertEquals("pane:w1:p1", HerdrPush.watching(all, "m1"))
-        assertTrue(HerdrPush.subscription("p:m1", "Pixel", "https://x", ByteArray(32), "default", null, watchPanes = listOf("w1:p1")).contains("\"watch_panes\":[\"w1:p1\"]"))
+    fun anAgentsAlertSaysItsSpace() {
+        val a = agent("done", seq = 9)
+        val shown = Alerts.of("m1", "devbox", PushEvent.Agent(a, "herdr-android › main")) as AlertChange.Show
+        assertEquals("herdr-android", shown.alert.space)
+        assertEquals("api", Notify.spaceOf("api"))
     }
 
     @Test

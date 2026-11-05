@@ -19,8 +19,6 @@ import com.makefunstuff.herdr.core.push.PushMessage
 import com.makefunstuff.herdr.core.push.PushMessages
 import com.makefunstuff.herdr.core.push.PushSeal
 import com.makefunstuff.herdr.core.push.Presence
-import com.makefunstuff.herdr.core.push.Watch
-import com.makefunstuff.herdr.core.push.Watches
 import com.sun.net.httpserver.HttpServer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
@@ -569,8 +567,7 @@ class HerdrPushTest {
             agents("idle")
             assertEquals(0, sh(dir, env, HerdrPush.command("once")).exit)
             val idle = pushes("/watching", key).last()
-            val agentWatch = Watch("m1", Watch.What.AgentDone, paneId = "w1:p1", name = "api", seq = 3)
-            assertEquals("api finished", Watches.events(listOf(agentWatch), "m1", "devbox", idle.events).single().alert?.title)
+            assertEquals("idle", idle.events.filterIsInstance<PushEvent.Agent>().single().agent.agentStatusRaw)
             val here = assertNotNull(idle.presence)
             assertEquals(true, here.unlocked)
             assertTrue(here.typedAgo!! in 0..30)

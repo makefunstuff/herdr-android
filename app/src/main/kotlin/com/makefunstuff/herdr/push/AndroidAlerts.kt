@@ -32,6 +32,8 @@ class AndroidAlerts(private val context: Context, private val appLock: () -> Boo
 
     init {
         val system = context.getSystemService(NotificationManager::class.java)
+        // The one-shot watches became a space's Notify: All, and their channel went with them.
+        system.deleteNotificationChannel(WATCHES)
         system.createNotificationChannels(
             listOf(
                 NotificationChannel(NEEDS_YOU, "Needs you", NotificationManager.IMPORTANCE_HIGH).apply {
@@ -42,9 +44,6 @@ class AndroidAlerts(private val context: Context, private val appLock: () -> Boo
                 },
                 NotificationChannel(WENT_WRONG, "Went wrong", NotificationManager.IMPORTANCE_HIGH).apply {
                     description = "A review or a check failed"
-                },
-                NotificationChannel(WATCHES, "Watches", NotificationManager.IMPORTANCE_HIGH).apply {
-                    description = "A watch you set fired: an agent finished"
                 },
                 NotificationChannel(LIMITS, "Limits", NotificationManager.IMPORTANCE_DEFAULT).apply {
                     description = "An AI provider near or at a limit"
@@ -124,7 +123,6 @@ class AndroidAlerts(private val context: Context, private val appLock: () -> Boo
     private fun channel(kind: Alert.Kind) = when (kind) {
         Alert.Kind.NeedsYou -> NEEDS_YOU
         Alert.Kind.WentWrong -> WENT_WRONG
-        Alert.Kind.Watch -> WATCHES
         Alert.Kind.Limits -> LIMITS
         Alert.Kind.Finished, Alert.Kind.Test -> FINISHED
     }
@@ -146,7 +144,6 @@ class AndroidAlerts(private val context: Context, private val appLock: () -> Boo
             when (alert.kind) {
                 Alert.Kind.NeedsYou -> "Something needs you."
                 Alert.Kind.WentWrong -> "Something went wrong."
-                Alert.Kind.Watch -> "Something you watch changed."
                 Alert.Kind.Limits -> "A limit is near."
                 Alert.Kind.Finished, Alert.Kind.Test -> "Something finished."
             } + " Unlock to see it.",

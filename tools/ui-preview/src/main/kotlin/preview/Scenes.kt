@@ -187,19 +187,17 @@ fun scenes(): List<Scene> = listOf(
     Scene("secret-sheet-typed", setup = { home(); secretAsk() }, actions = { settle(); tapExact("Give it"); type("demo-not-a-real-token") }),
     Scene("secret-kept", heightDp = 1700, setup = { home(); secretAsk() }, actions = { settle(); tapExact("Give it"); type("demo-not-a-real-token"); tapExact("Save") }),
     Scene("agents-seen", heightDp = 1500, setup = { home() }, actions = { tapText("Mark all seen") }),
-    // Triage: the eval pinned on top (and muted), AND-6 snoozed for three hours, the profile still new in Done.
-    Scene("agents-triage", heightDp = 1500, setup = { home(); triage = Demo.triage() }),
-    // A row swiped left shows Pin, Snooze and Mute under it; one swiped right is seen and leaves Done.
+    // Triage: the eval pinned on top, its space (llm-eval) set to Notify Off: a crossed-out bell; the profile still new in Done.
+    Scene("agents-triage", heightDp = 1500, setup = { home(); triage = Demo.triage(); push = Demo.notify() }),
+    // A row swiped left shows Pin under it; one swiped right is seen and leaves Done.
     Scene("agents-swipe", heightDp = 1500, setup = { home() }, actions = { drag("Long-context eval", 0.85f to 0.5f, 0.15f to 0.5f) }),
     Scene("agents-swiped-seen", heightDp = 1500, setup = { home() }, actions = { drag("Profile the data loader", 0.1f to 0.5f, 0.7f to 0.5f) }),
-    // The same in the long-press sheet, and how long to snooze.
+    // The same in the long-press sheet: Mark seen, Pin, and its space's Notify (All / Needs me / Off), here picked Off.
     Scene("agent-triage", heightDp = 1500, setup = { home() }, actions = { longPressText("Profile the data loader") }),
-    Scene("agent-snooze", heightDp = 1500, setup = { home() }, actions = { longPressText("Profile the data loader"); tapText("Snooze") }),
+    Scene("agent-notify", heightDp = 1500, setup = { home() }, actions = { longPressText("Profile the data loader"); tapExact("Off") }),
     Scene("agent-actions", setup = { home() }, actions = { longPressText("Speed up /jobs") }),
-    // A one-shot watch from the long-press sheet: tell me once it finishes.
-    Scene("agent-watch", setup = { home() }, actions = { longPressText("Speed up /jobs"); tapText("Notify me when it finishes") }),
     // TalkBack: everything behind a long press offered as actions on the card or row (read from the app's semantics,
-    // drawn as TalkBack's Actions menu): a question's answers first, then its terminal, why this state, mute, the sheet;
+    // drawn as TalkBack's Actions menu): a question's answers first, then its terminal, why this state, the sheet;
     // a row's triage; a board card's actions. One carried out: why this state.
     Scene("agent-talkback", setup = { home() }, actions = { talkback("Speed up /jobs") }),
     Scene("agent-line-talkback", heightDp = 1500, setup = { home() }, actions = { talkback("Profile the data loader") }),
@@ -210,15 +208,11 @@ fun scenes(): List<Scene> = listOf(
         ctx.refresh(DEVBOX)
         settle(4)
     }),
-    // A watch fires while the app is open: it shows the same way.
-    Scene("pill-watch", route = Routes.agent(DEVBOX, APP_AGENT), actions = { ctx ->
-        ctx.container.watchWork.add(Demo.watches().first())
-        ctx.container.watchWork.look(GPU, "gpu-box", emptyList())
-        settle(4)
-    }),
     // The spaces drawer (3.1's sidebar, as the workbench's: each machine a numbered bus with its meter, each space a
     // numbered slot with its light), and one machine: its places in one row, its spaces under one heading.
     Scene("machines", setup = { home() }, actions = { tapLabel("Spaces") }),
+    // A space's Notify from a long press in the drawer; llm-eval, set to Off, is dim beside a crossed-out bell.
+    Scene("machines-notify", setup = { home(); push = Demo.notify() }, actions = { tapLabel("Spaces"); longPressText("HERDR-ANDROID") }),
     Scene("machine", route = Routes.machine(DEVBOX)),
     // A workspace with two tabs keeps its tab chips and its layout; with one tab, its actions are in the workspace's ⋯.
     Scene("machine-tabs", route = Routes.machine(DEVBOX), setup = { host(DEVBOX).snapshot = Demo.devboxTabs() }),
@@ -737,8 +731,8 @@ fun scenes(): List<Scene> = listOf(
     // Notifications while the app is closed: each machine's herdr-push, and before a push app is there.
     // A taller window shows the whole section under the SSH key (scrolling never settles in the desktop test harness).
     Scene("settings-notifications", route = Routes.SETTINGS, heightDp = 1580, setup = { push = Demo.push() }),
-    // What reaches the phone: a switch per kind (Finished off), silent while you are at a machine (devbox, now), the watches.
-    Scene("settings-rules", heightDp = 1100, setup = { push = Demo.push().copy(watches = Demo.watches()) }, actions = { ctx ->
+    // What reaches the phone: a switch per kind (Finished off), silent while you are at a machine (devbox, now), the spaces with their own Notify.
+    Scene("settings-rules", heightDp = 1100, setup = { push = Demo.notify() }, actions = { ctx ->
         ctx.container.quietWork.presence.record(DEVBOX, "devbox", com.makefunstuff.herdr.core.push.Presence(typedAgo = 20), System.currentTimeMillis())
         runOnUiThread { ctx.nav.navigate(Routes.RULES) }
         settle()
