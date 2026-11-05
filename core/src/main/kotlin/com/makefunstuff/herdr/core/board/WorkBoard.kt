@@ -77,6 +77,9 @@ data class WorkSpace(
     val pilot: V2Pilot? = null,
     /** Its tabs as the bar shows them, the Assistant's first ([TabMenus]). */
     val tabs: List<WorkTab> = emptyList(),
+    /** Its Assistant's header as 3.1's says it ("Assistant · Claude Code"), and the folder it works in ("~/Work/app"). */
+    val header: String = "",
+    val where: String = "",
 )
 
 /** One task on Shepherdr's board. */

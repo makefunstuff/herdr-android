@@ -120,10 +120,17 @@ private fun MetaLine(key: String?, parts: List<String>, modifier: Modifier = Mod
 
 /**
  * Where an agent works, for a meta line: the agent, its workspace (its task's list when it works on one:
- * the workspace is named after the task, which the line already shows), and its machine when there are several.
+ * the workspace is named after the task, which the line already shows) with its tab for an agent on no task, so two
+ * in one space read apart (an Assistant's own name says its space), and its machine when there are several.
  */
 private fun where(a: HomeAgent, task: WorkTask?, showMachine: Boolean) =
-    listOfNotNull(a.agent.displayName, task?.listName?.ifEmpty { null } ?: a.workspace.ifEmpty { a.location }, a.machineLabel.takeIf { showMachine })
+    listOfNotNull(
+        a.agent.displayName,
+        task?.listName?.ifEmpty { null }
+            ?: (if (task == null && a.agent.shepherdrSpace == null && a.agent.shepherdrTask == null) a.location.ifEmpty { null } else null)
+            ?: a.workspace.ifEmpty { a.location },
+        a.machineLabel.takeIf { showMachine },
+    )
 
 /**
  * A card of the Needs you list: hairline card, chosen on a wide window when it is open beside the

@@ -30,6 +30,12 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import com.makefunstuff.herdr.LocalPanes
+import com.makefunstuff.herdr.core.api.AgentStatus
+import com.makefunstuff.herdr.core.chat.ChatHeader
+import com.makefunstuff.herdr.core.chat.ChatOwner
+import com.makefunstuff.herdr.ui.agents.ownRows
+import com.makefunstuff.herdr.ui.agents.rememberOwnTranscript
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -243,6 +249,11 @@ internal fun TaskChatScreen(
     val attach = rememberAttacher(session, onAttached = { path -> draft = Attachments.withMention(draft, path) }, onImage = tray::add)
     var attachMenu by remember { mutableStateOf(false) }
     val kind = V2Board.agentKind(t.agent).ifEmpty { "the agent" }
+    // Its agent's terminal: where Shepherdr lost its log, its own transcript shows in place of "Can't find this conversation".
+    val worker = state.view?.agents?.let { ChatOwner.taskAgent(it, t.id) }
+    val own = rememberOwnTranscript(session, worker?.paneId?.takeIf { ChatOwner.readsOwn(th?.v2, worker) }, worker?.agentStatus ?: AgentStatus.Unknown)
+    val machines by container.hosts.hosts.collectAsStateWithLifecycle()
+    val panes = LocalPanes.current
 
     /** The screen is still open: a send that fails after it closed puts its words back in the saved draft instead. */
     var open by remember { mutableStateOf(true) }
@@ -307,10 +318,16 @@ internal fun TaskChatScreen(
             containerColor = c.ground,
             topBar = {
                 if (!typing) Column {
+                    // Whose chat (3.1's): the task, then its agent, space, machine when there are several, branch.
                     HerdrTopBar(
-                        "${t.name} ${t.title}",
-                        subtitle = listOfNotNull(kind.takeIf { t.agent.isNotEmpty() }, space.ifEmpty { null }).joinToString(" · ").ifEmpty { null },
+                        ChatHeader.task(t.name, t.title),
+                        subtitle = ChatHeader.line(
+                            kind.takeIf { t.agent.isNotEmpty() }, space, ChatHeader.machine(state.machine.label, machines.size),
+                            details?.branch?.ifBlank { null } ?: ChatHeader.folder(worker?.cwd),
+                        ).ifEmpty { null },
                         onBack = onBack, backLabel = "Back to the board",
+                        onTitle = if (t.space.isNotEmpty()) ({ panes.open(nav, Routes.coordinator(machineId, t.space)) }) else null,
+                        titleAction = "Open ${space.ifEmpty { "its space" }}'s Assistant",
                     ) {
                         if (t.chat.isNotEmpty() && t.status != WorkStatus.Done) BarIcon(
                             HerdrIcons.Phone, if (callHere && call.on) "End the call" else "Call ${t.name}",
@@ -409,13 +426,16 @@ internal fun TaskChatScreen(
                                 }
                             }
                             val notice = th.v2?.let(com.makefunstuff.herdr.core.shepherdr.ChatNotice::of)
-                            if (items.isEmpty()) item(key = "empty") {
+                            if (own != null) {
+                                ownRows(own)
+                                item(key = "own-note") { Notice(ChatOwner.NOTE, null) }
+                            } else if (items.isEmpty()) item(key = "empty") {
                                 Box(Modifier.fillParentMaxSize(), contentAlignment = Alignment.Center) {
                                     if (notice != null) ChatEmpty(HerdrIcons.SquareTerminal, notice.first, notice.second.orEmpty())
                                     else ChatEmpty(HerdrIcons.MessagesSquare, "Nothing said yet", "Its agent writes here as it works. You can write to it too.")
                                 }
                             } else if (notice != null) item(key = "notice") { Notice(listOfNotNull(notice.first, notice.second).joinToString(". "), null) }
-                            items(items.asReversed(), key = { it.id }) { item ->
+                            if (own == null) items(items.asReversed(), key = { it.id }) { item ->
                                 Column(verticalArrangement = Arrangement.spacedBy(Space.m)) {
                                     if (item.id == stick.unread) NewLine()
                                     Box(Modifier.lit(item.id, find, jump)) { ChatItem(

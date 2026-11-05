@@ -67,6 +67,11 @@ import com.makefunstuff.herdr.core.host.Images
 import com.makefunstuff.herdr.core.shepherdr.OutgoingLine
 import com.makefunstuff.herdr.core.shepherdr.SpaceChat
 import com.makefunstuff.herdr.core.shepherdr.ChatNotice
+import com.makefunstuff.herdr.core.api.AgentStatus
+import com.makefunstuff.herdr.core.chat.ChatHeader
+import com.makefunstuff.herdr.core.chat.ChatOwner
+import com.makefunstuff.herdr.ui.agents.ownRows
+import com.makefunstuff.herdr.ui.agents.rememberOwnTranscript
 import com.makefunstuff.herdr.core.shepherdr.ChatFind
 import androidx.compose.runtime.rememberUpdatedState
 import com.makefunstuff.herdr.core.shepherdr.SpaceChatItem
@@ -192,7 +197,9 @@ internal fun SpaceCoordinator(nav: NavController, machineId: String, session: Ho
         }
     }
     val spaces = overview?.spaces.orEmpty()
-    val space = spaces.firstOrNull { it.id == picked } ?: spaces.firstOrNull { it.home } ?: spaces.firstOrNull()
+    // The space asked for, never another's chat in its place: one that isn't there any more says so.
+    val gone = picked != null && overview != null && spaces.none { it.id == picked }
+    val space = if (picked != null) spaces.firstOrNull { it.id == picked } else spaces.firstOrNull { it.home } ?: spaces.firstOrNull()
 
     // The home space's draft is the machine's, where a share puts its words.
     val draftKey = if (space == null || space.home) DraftStore.coordinator(machineId) else DraftStore.coordinator(machineId, space.id)
@@ -314,6 +321,10 @@ internal fun SpaceCoordinator(nav: NavController, machineId: String, session: Ho
     LaunchedEffect(items) { reactions.settle(items) }
     val typing = typingInShortWindow()
     val c = Herdr.colors
+    // Its Assistant's terminal: where Shepherdr lost its log, its own transcript shows in place of "Can't find this conversation".
+    val assistant = space?.let { sp -> state.view?.agents?.let { ChatOwner.assistant(it, sp.id) } }
+    val own = rememberOwnTranscript(session, assistant?.paneId?.takeIf { ChatOwner.readsOwn(t?.v2, assistant) }, assistant?.agentStatus ?: AgentStatus.Unknown)
+    val machines by container.hosts.hosts.collectAsStateWithLifecycle()
     // The coordinator's voice: on for one chat at a time, this one's bar shown over its composer.
     val speech = container.coordinatorVoice
     val heard by speech.state.collectAsStateWithLifecycle()
@@ -328,10 +339,15 @@ internal fun SpaceCoordinator(nav: NavController, machineId: String, session: Ho
     Scaffold(
         containerColor = c.ground,
         topBar = {
+            // Whose chat (3.1's header): "Assistant · Claude Code", then its space, machine when there are several, folder.
             if (!typing) HerdrTopBar(
-                "Assistant",
-                subtitle = listOfNotNull(space?.let(::spaceName), state.machine.label, stateWords(t, state.online, state.status.label())).joinToString(" · "),
+                space?.header?.ifBlank { null } ?: "Assistant",
+                subtitle = ChatHeader.line(
+                    space?.let(::spaceName), ChatHeader.machine(state.machine.label, machines.size), space?.where,
+                    stateWords(t, state.online, state.status.label()),
+                ),
                 onBack = { nav.popBackStack() },
+                onTitle = { nav.navigate(Routes.machine(machineId)) }, titleAction = "Open ${state.machine.label}'s spaces",
                 actions = {
                     pilot.shown?.let { p -> AutopilotBarSwitch(p.on, enabled = state.online && board != null, onFlip = pilot.flip) }
                     if (t != null && !find.open) BarIcon(HerdrIcons.Search, ChatFind.PLACEHOLDER, { find.open = true })
@@ -430,6 +446,9 @@ internal fun SpaceCoordinator(nav: NavController, machineId: String, session: Ho
                 },
             ) { bottom ->
                 when {
+                    gone -> Box(Modifier.fillMaxSize().padding(bottom = bottom), contentAlignment = Alignment.Center) {
+                        ChatEmpty(HerdrIcons.CircleAlert, "This space is gone", "${state.machine.label} has no such space any more. Pick another above.")
+                    }
                     !state.online && t == null -> Box(Modifier.padding(bottom = bottom)) {
                         ChatEmpty(HerdrIcons.Monitor, state.status.label(), listOfNotNull(state.status.detail() ?: "Waiting for ${state.machine.label}…", shared.waitNote).joinToString("\n\n"))
                     }
@@ -462,7 +481,10 @@ internal fun SpaceCoordinator(nav: NavController, machineId: String, session: Ho
                                     shared.waitNote?.let { Notice(it, null) }
                                 }
                             }
-                            if (items.isEmpty()) {
+                            if (own != null) {
+                                ownRows(own)
+                                item(key = "own-note") { Notice(ChatOwner.NOTE, null) }
+                            } else if (items.isEmpty()) {
                                 item(key = "empty") {
                                     Box(Modifier.fillParentMaxSize(), contentAlignment = Alignment.Center) {
                                         val n = t.v2?.let(ChatNotice::of)
@@ -474,7 +496,7 @@ internal fun SpaceCoordinator(nav: NavController, machineId: String, session: Ho
                                 // Shepherdr's notice instead of the conversation; what it read of the chat still shows.
                                 item(key = "notice") { Notice(listOfNotNull(n.first, n.second).joinToString(". "), null) }
                             }
-                            items(items.asReversed(), key = { it.id }) { item ->
+                            if (own == null) items(items.asReversed(), key = { it.id }) { item ->
                                 Column(verticalArrangement = Arrangement.spacedBy(Space.m)) {
                                     if (item.id == stick.unread) NewLine()
                                     Box(Modifier.lit(item.id, find, jump)) { ChatItem(

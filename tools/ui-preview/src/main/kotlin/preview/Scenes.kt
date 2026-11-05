@@ -315,6 +315,13 @@ fun scenes(): List<Scene> = listOf(
     Scene("task-shepherdr3", route = Routes.board(DEVBOX, "AND-19"), setup = { shepherdr3() }),
     // Its chat not read yet (or not readable): the composer is whole and writable all the same; and attaching a file.
     Scene("task-shepherdr3-unread", route = Routes.board(DEVBOX, "AND-19"), setup = { shepherdr3(); host(DEVBOX).shepherdr?.chatRefused = "Couldn't read the chat" }),
+    // Shepherdr can't find the chat's log (3.1.2 on a real machine): the agent's own transcript, from its process.
+    Scene("task-shepherdr3-lost", route = Routes.board(DEVBOX, "AND-19"), setup = { shepherdr3(); lostChat("AND-19/worker") }),
+    Scene("coordinator-lost", route = Routes.coordinator(DEVBOX, "sp-herdr-android"), setup = {
+        shepherdr3(); lostChat("p:sp-herdr-android"); host(DEVBOX).transcripts += "4301" to Demo.resource("claude-app.jsonl")
+    }),
+    // A chat's header goes to its task: from the agent's chat on the machine screen to AND-19's.
+    Scene("chat-shepherdr3-agent-header", route = Routes.agent(DEVBOX, "hc:t4"), setup = { shepherdr3() }, actions = { settle(); tapText("AND-19 · Speed up") }),
     Scene("task-shepherdr3-attach", route = Routes.board(DEVBOX, "AND-19"), setup = { shepherdr3() }, actions = { tapLabel("Attach files") }),
     // Add machine: scanning the code herdr-push pair shows (the phone's own scanner is a system screen; the stand-in
     // reads studio's code), studio found on Tailscale, studio answering nowhere, and typing the address instead.

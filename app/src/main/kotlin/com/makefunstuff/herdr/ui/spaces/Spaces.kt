@@ -143,7 +143,9 @@ data class SpaceSlot(
                 val board = agents.firstNotNullOfOrNull { a -> a.shepherdrSpace?.let { id -> boardSpaces.firstOrNull { it.id == id } } }
                     ?: boardSpaces.firstOrNull { it.name.equals(name, ignoreCase = true) && it.id !in used }
                 board?.let { used += it.id }
-                SpaceSlot(host.machine.id, name, list, agents, view?.panes.orEmpty().filter { it.workspaceId in ids }, board)
+                // A space only its Assistant's terminal is in carries just its id there: Shepherdr's name for it.
+                val shown = board?.takeIf { b -> name == b.id || name.endsWith("/" + b.id) }?.let { if (it.home) "Home" else it.name } ?: name
+                SpaceSlot(host.machine.id, shown, list, agents, view?.panes.orEmpty().filter { it.workspaceId in ids }, board)
             }
             val alone = boardSpaces.filter { it.id !in used && !it.unreachable }.map {
                 SpaceSlot(host.machine.id, if (it.home) "Home" else it.name, emptyList(), emptyList(), emptyList(), it)
