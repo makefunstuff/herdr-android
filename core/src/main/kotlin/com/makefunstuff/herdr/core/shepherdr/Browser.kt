@@ -155,6 +155,9 @@ object BrowserView {
     /** The view stopped: started again, not more than every 10 s (the window's). */
     const val RETRY_MS = 10_000L
 
+    /** Open browser unanswered this long: its note shows again, with Open browser. */
+    const val OPENING_MS = 20_000L
+
     /** Quiet this long while you drive: handed back (the window's IDLE_DRIVE_MS). */
     const val IDLE_DRIVE_MS = 60_000L
 

@@ -748,9 +748,9 @@ fun scenes(): List<Scene> = listOf(
     Scene("task-v2-changes", route = Routes.board(DEVBOX, "AND-20"), setup = { v2() }, actions = { tapText("CHANGES") }),
     Scene("task-v2-pr", route = Routes.board(DEVBOX, "AND-20"), setup = { v2() }, actions = { tapText("PULL REQUEST") }),
     // Its Browser (3.1's, through the service's relay): AND-19's agent checking its dev server, live; a touch takes it
-    // over; AND-20's not open now, with Open browser; and a task on another machine, which can't be watched from here.
+    // over (a touch on the page, at the top of the tab); AND-20's not open now, with Open browser; and a task on another machine, which can't be watched from here.
     Scene("task-v2-browser", route = Routes.board(DEVBOX, "AND-19"), setup = { v2() }, actions = { tapText("BROWSER") }),
-    Scene("task-v2-browser-driving", route = Routes.board(DEVBOX, "AND-19"), setup = { v2() }, actions = { tapText("BROWSER"); drag("The task's browser", 0.5f to 0.5f) }),
+    Scene("task-v2-browser-driving", route = Routes.board(DEVBOX, "AND-19"), setup = { v2() }, actions = { tapText("BROWSER"); drag("The task's browser", 0.5f to 0.1f) }),
     Scene("task-v2-browser-closed", route = Routes.board(DEVBOX, "AND-20"), setup = { v2() }, actions = { tapText("BROWSER") }),
     Scene("task-v2-browser-elsewhere", route = Routes.board(DEVBOX, "AND-18"), setup = { v2(); elsewhere("AND-18", "vm") }, actions = { tapText("BROWSER") }),
     Scene(

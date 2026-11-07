@@ -102,12 +102,13 @@ private fun LiveBrowser(session: HostSession, t: WorkTask) {
     var gone by remember(t.id) { mutableStateOf<String?>(null) }
     var picture by remember(t.id) { mutableStateOf<ImageBitmap?>(null) }
     var pageWidth by remember(t.id) { mutableStateOf(0) }
-    // What goes up, in order, on the link of the moment.
-    val outbox = remember(t.id) { Channel<(TaskBrowser) -> Unit>(Channel.UNLIMITED) }
+    // What goes up, in order, on the link of the moment; with no link it goes nowhere (as 3.1's), never replayed later.
+    var outbox by remember(t.id) { mutableStateOf<Channel<(TaskBrowser) -> Unit>?>(null) }
     var lastInput by remember(t.id) { mutableLongStateOf(0L) }
     fun send(input: Boolean = false, m: (TaskBrowser) -> Unit) {
+        val box = outbox ?: return
         if (input) lastInput = System.currentTimeMillis()
-        outbox.trySend(m)
+        box.trySend(m)
     }
 
     LaunchedEffect(t.id) {
@@ -127,15 +128,20 @@ private fun LiveBrowser(session: HostSession, t: WorkTask) {
                                 }
                                 is TaskBrowser.Event.State -> {
                                     state = e.state
-                                    if (e.state.connected) opening = false
+                                    // Open browser answered: open, or why not (its error, shown with Open browser again).
+                                    if (e.state.connected || e.state.error != null) opening = false
                                 }
                                 is TaskBrowser.Event.Gone -> gone = e.message.ifBlank { "Its browser closed with the task." }
                             }
                         }
-                        val writer = launch(Dispatchers.IO) { for (m in outbox) m(link) }
+                        val box = Channel<(TaskBrowser) -> Unit>(Channel.UNLIMITED)
+                        outbox = box
+                        val writer = launch(Dispatchers.IO) { for (m in box) m(link) }
                         try {
                             reader.join()
                         } finally {
+                            outbox = null
+                            box.close()
                             writer.cancel()
                             withContext(NonCancellable + Dispatchers.IO) { runCatching { link.close() } }
                         }
@@ -154,7 +160,15 @@ private fun LiveBrowser(session: HostSession, t: WorkTask) {
 
     val st = state
     val driving = st?.driving == true
-    val live = st?.connected == true && picture != null
+    // A view that stopped shows its last page under its note, but takes no input until it is back.
+    val live = !stopped && st?.connected == true && picture != null
+    // Open browser that never comes back: its note again after a while, with Open browser.
+    LaunchedEffect(opening) {
+        if (opening) {
+            delay(BrowserView.OPENING_MS)
+            opening = false
+        }
+    }
     // A minute without your input while you drive: handed back (the window's).
     LaunchedEffect(driving) {
         while (driving) {
@@ -216,6 +230,11 @@ private fun LiveBrowser(session: HostSession, t: WorkTask) {
             BasicTextField(
                 held,
                 onValueChange = { v ->
+                    // A word the keyboard is still composing goes in once it is committed.
+                    if (v.composition != null) {
+                        held = v
+                        return@BasicTextField
+                    }
                     if (!v.text.startsWith(HELD)) send(input = true) { it.key("Backspace") }
                     else v.text.removePrefix(HELD).split('\n').forEachIndexed { i, part ->
                         if (i > 0) send(input = true) { it.key("Enter") }
