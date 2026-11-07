@@ -175,4 +175,22 @@ class ShpTest {
         assertEquals(BoardApi.Shp, BoardDetection.decide(null, shp = true, choice = "shp"))
         assertEquals(BoardApi.None, BoardDetection.decide(v3, shp = false, choice = "shp"))
     }
+
+    @Test
+    fun `a message that starts with a dash stays the message`() {
+        val sent = ShpCommands.say("APP-1", "--help", "a1")
+        // Options, then `--`, then the task and the words (the login shell quotes them once more).
+        val at = listOf("shp say --ask", "a1", " -- ", "APP-1", "--help").map { sent.indexOf(it) }
+        assertTrue(at.all { it >= 0 } && at == at.sorted(), sent)
+    }
+
+    @Test
+    fun `a shp that fails is the board's problem, not an empty board`() = runTest {
+        val fake = Fake { command ->
+            if (command == ShpCommands.list()) Ran("${ShpCommands.SPACE_MARK}app\n${ShpCommands.LIST_MARK}\n", exit = 127, err = "sh: shp: not found")
+            else Ran(exit = 2, err = "unexpected")
+        }
+        val e = assertFailsWith<IOException> { ShpClient(fake).spaces() }
+        assertEquals("sh: shp: not found", e.message)
+    }
 }

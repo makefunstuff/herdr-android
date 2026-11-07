@@ -60,7 +60,8 @@ object ShpCommands {
 
     /** Sends a person's words to a task's worker; [ask] closes that ask on a confirmed send. */
     fun say(id: String, text: String, ask: String? = null) =
-        login("shp say ${quote(id)} ${quote(text)}" + (ask?.let { " --ask ${quote(it)}" } ?: ""))
+        // Options first and then `--`: a message that starts with `-` (a list, `-1`, `--help`) stays the message.
+        login("shp say" + (ask?.let { " --ask ${quote(it)}" } ?: "") + " -- ${quote(id)} ${quote(text)}")
 
     /** The task's live worker terminal, by the labels shp puts on it. */
     fun worker(id: String) = login("hc ls --json --label herdr.role=worker --label herdr.task=${quote(id)}")
@@ -124,7 +125,8 @@ class ShpClient(private val runner: ShpRunner) {
      * went between the two reads is left out; a bad file is named by shp on stderr and the rest still read.
      */
     suspend fun spaces(): List<Pair<String, List<ShpTask>>> {
-        val text = ok(runner.run(ShpCommands.list(), null, 45))
+        val result = runner.run(ShpCommands.list(), null, 45)
+        val text = result.stdout
         val names = mutableListOf<String>()
         val places = mutableMapOf<String, String>()
         val list = StringBuilder()
@@ -141,6 +143,8 @@ class ShpClient(private val runner: ShpRunner) {
                 }
             }
         }
+        // The marks always print, so a shp that failed (missing, crashed) shows as its empty list: that's its refusal.
+        if (result.exitStatus != 0 && list.isBlank()) throw IOException(reason(result))
         val tasks = parseList(list.toString().trim())
         return names.filter { it.isNotEmpty() }.distinct().map { name -> name to tasks.filter { places[it.id] == name } }
     }

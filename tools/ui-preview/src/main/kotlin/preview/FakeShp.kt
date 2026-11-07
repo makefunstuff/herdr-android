@@ -77,8 +77,8 @@ class FakeShp(spaces: Map<String, List<ShpCard>>, var refuseAccept: String? = nu
             c.asks.clear()
             return CommandResult(0, "$id accepted\n", "")
         }
-        val said = Regex("""^shp say '([^']*)' '(.*)'(?: --ask '([^']*)')?""").find(command) ?: return null
-        val (task, text, ask) = said.destructured
+        val said = Regex("""^shp say(?: --ask '([^']*)')? -- '([^']*)' '(.*)'$""", RegexOption.DOT_MATCHES_ALL).find(command) ?: return null
+        val (ask, task, text) = said.destructured
         val c = card(task) ?: return CommandResult(1, "", "there is no task $task")
         if (c.transcript == null) return CommandResult(1, "", "$task has no live worker; edit its status to todo or queued and start it")
         c.transcript = (c.transcript.orEmpty().trimEnd() + "\n\n❯ " + text + "\n\n● Noted. I'll carry on with that.\n")
