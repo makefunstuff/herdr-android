@@ -20,7 +20,7 @@ import kotlin.test.assertTrue
 /**
  * The app's shp client against a real simple-herdr-projects on a scratch store: the spaces and tasks `shp list
  * --json` gives, a task's brief from `shp show`, and an ask that clears only when `shp say`'s `hc send` is
- * confirmed. Runs only with SHP_BIN set to a built shp (`go build -o /tmp/shp` in simple-herdr-projects).
+ * confirmed, and an accept that shp refuses on a dirty worktree and then merges. Runs only with SHP_BIN set to a built shp (`go build -o /tmp/shp` in simple-herdr-projects).
  */
 class LiveShpTest {
     private val shp = System.getenv("SHP_BIN")
@@ -113,7 +113,37 @@ class LiveShpTest {
         assertEquals(WorkStatus.Need, kept.status)
         assertTrue(kept.line.contains("And the branch?"))
 
-        println("shp $shp; store $home; say sent: " + File(home, "hc.sent").readText().trim().lines())
+        // Accept: a reviewed, ready task on its own branch, as `shp review`/`ready` leave it.
+        val worktree = File(root, "wt-app-2")
+        run("git worktree add -q -b task/app-2 ${worktree.path} && cd ${worktree.path} && echo rows > rows.txt && git add rows.txt && " +
+            "git -c user.name=t -c user.email=t@t commit -qm 'Smaller rows'", repo, home, bin)
+        val reviewed = output("git rev-parse HEAD", worktree, home, bin)
+        val ready = File(home, ".herdr/simple/spaces/app/APP-2.md")
+        val fields = mapOf(
+            "status" to "ready", "branch" to "task/app-2", "worktree" to worktree.path, "review" to "2",
+            "reviewed_commit" to reviewed, "blocking" to "0", "summary" to "The rows are smaller.",
+        )
+        ready.writeText(
+            fields.entries.fold(ready.readText()) { text, (k, v) ->
+                val line = Regex("(?m)^$k: .*$")
+                if (line.containsMatchIn(text)) text.replace(line, "$k: $v") else text.replaceFirst("---\n", "---\n$k: $v\n")
+            },
+        )
+        val toAccept = board.overview().tasks.first { it.id == "APP-2" }
+        assertEquals(WorkStatus.Ready, toAccept.status)
+        // A dirty worktree: shp refuses and says why, and the task stays ready.
+        File(worktree, "stray.txt").writeText("not committed\n")
+        val dirty = assertFailsWith<java.io.IOException> { board.approve(toAccept) }
+        assertTrue(dirty.message!!.contains("uncommitted changes"), dirty.message)
+        assertEquals(WorkStatus.Ready, board.overview().tasks.first { it.id == "APP-2" }.status)
+        File(worktree, "stray.txt").delete()
+        // Then it merges into main and is done.
+        board.approve(toAccept)
+        assertEquals(WorkStatus.Done, board.overview().tasks.first { it.id == "APP-2" }.status)
+        run("git merge-base --is-ancestor $reviewed main", repo, home, bin)
+
+        println("shp $shp; store $home; say sent: " + File(home, "hc.sent").readText().trim().lines() +
+            "; refused while dirty: ${dirty.message}; main: " + output("git log --oneline -2 main", repo, home, bin).lines())
     }
 
     /** Runs shp and hc as the app's connection would, in the scratch HOME. */
@@ -127,6 +157,18 @@ class LiveShpTest {
         val err = process.errorStream.readBytes().toString(Charsets.UTF_8)
         process.waitFor(60, TimeUnit.SECONDS)
         CommandResult(process.exitValue(), out, err)
+    }
+
+    private fun output(command: String, dir: File, home: File, bin: File): String {
+        val p = ProcessBuilder("sh", "-c", command).directory(dir).apply {
+            environment()["HOME"] = home.path
+            environment()["PATH"] = bin.path + ":" + System.getenv("PATH")
+        }.start()
+        p.outputStream.close()
+        val text = p.inputStream.readBytes().toString(Charsets.UTF_8).trim()
+        p.waitFor(60, TimeUnit.SECONDS)
+        check(p.exitValue() == 0) { "$command failed" }
+        return text
     }
 
     private fun run(command: String, dir: File, home: File, bin: File, stdin: String? = null) {
