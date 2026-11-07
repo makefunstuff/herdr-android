@@ -147,7 +147,9 @@ data class SpaceSlot(
                 val shown = board?.takeIf { b -> name == b.id || name.endsWith("/" + b.id) }?.let { if (it.home) "Home" else it.name } ?: name
                 SpaceSlot(host.machine.id, shown, list, agents, view?.panes.orEmpty().filter { it.workspaceId in ids }, board)
             }
-            val alone = boardSpaces.filter { it.id !in used && !it.unreachable }.map {
+            // A board space of its own (no terminal here) needs a chat to open: Shepherdr has its Assistant;
+            // simple-herdr-projects has none, and its spaces are in the Tasks tab instead.
+            val alone = boardSpaces.filter { host.onShepherdr && it.id !in used && !it.unreachable }.map {
                 SpaceSlot(host.machine.id, if (it.home) "Home" else it.name, emptyList(), emptyList(), emptyList(), it)
             }
             return alone.filter { it.board?.home == true } + slots + alone.filter { it.board?.home != true }
@@ -180,7 +182,9 @@ fun rememberSpaces(): List<Pair<HostState, List<SpaceSlot>>> {
 fun shownSpace(spaces: List<Pair<HostState, List<SpaceSlot>>>, chosen: String?): SpaceSlot? {
     val all = spaces.filter { it.first.online }.flatMap { it.second }
     return all.firstOrNull { it.key == chosen }
-        ?: all.firstOrNull { it.board != null } ?: all.firstOrNull { it.agents.isNotEmpty() } ?: all.firstOrNull()
+        // A board space with a chat (Shepherdr's Assistant, or an agent): shp's have none.
+        ?: all.firstOrNull { it.board != null && (it.board.chat.isNotEmpty() || it.agents.isNotEmpty()) }
+        ?: all.firstOrNull { it.agents.isNotEmpty() } ?: all.firstOrNull()
 }
 
 /**

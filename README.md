@@ -252,7 +252,7 @@ Everything is read over the machine's SSH connection with `git` and the shell, a
 
 ## The work board
 
-The **Board** tab shows every machine's Shepherdr board in one list, grouped by machine (what needs you, then what is at work and what is to do), with a chip per machine; a task opens on its machine's board, a machine's heading opens that whole board. What the board is and reads: [Shepherdr](#shepherdr), below.
+The **Board** tab shows every machine's task board in one list, grouped by machine (what needs you, then what is at work and what is to do), with a chip per machine; a task opens on its machine's board, a machine's heading opens that whole board. A machine's board is [Shepherdr](#shepherdr) 3.1's where its service runs, or [simple-herdr-projects](#simple-herdr-projects) where `shp` is there; the choice is per machine and detected.
 
 ### What an agent did, step by step
 
@@ -343,6 +343,12 @@ On a machine running [Shepherdr](https://github.com/eliasstravik/shepherdr) 3.x 
 - **Voice calls** with an Assistant or a task's agent (the phone icon), through the machine's ElevenLabs voice agent (`core/voice.js`, `/api/voice`): 16 kHz audio both ways, echo cancelled so you can talk over it.
 
 Shepherdr 2.x isn't supported any more. The code is `core/…/shepherdr/`; its tests read 3.1.2's own answers, scrubbed (`core/src/test/resources/shepherdr/`).
+
+## simple-herdr-projects
+
+On a machine with [simple-herdr-projects](https://github.com/makefunstuff/simple-herdr-projects) (`shp` on the `PATH`), the board can be its tasks instead, read over the same SSH connection with no service, port, token or push: `shp list --json` and `shp show` for the board and a task, `shp accept --yes` for Accept after the app's own confirmation, and `shp say` to answer what a worker asks. A task's chat is its worker's terminal: read with `hc read`, written with `shp say` (which sends through `hc send`), and an ask clears only once shp confirms the send. It polls while a screen is open. It has no Assistant, artifacts, Autopilot or voice, so those screens stay Shepherdr's, and 3.1 keeps working unchanged where it runs.
+
+Choose the task source per machine in **Edit machine → Tasks**: **Detect** (the default) picks simple-herdr-projects where `shp` is on the machine and Shepherdr 3 otherwise; **Shepherdr 3** or **simple-herdr-projects** pins one. The code is `core/…/shp/`; the screen previews fake its store (`tools/ui-preview/…/FakeShp.kt`, the `shp-*` scenes).
 
 ## Layout
 

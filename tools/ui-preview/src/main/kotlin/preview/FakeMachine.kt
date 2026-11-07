@@ -58,6 +58,8 @@ class FakeMachine(
     var activity: Map<String, String> = emptyMap(),
     /** Shepherdr 3's service there (reached with curl), or null where it doesn't run. */
     var shepherdr: FakeShepherdr? = null,
+    /** simple-herdr-projects' store there (`shp` and `hc`), or null where shp isn't installed. */
+    var shp: FakeShp? = null,
     /** Integration metadata per workspace (`workspace.get`'s tokens). */
     var workspaceTokens: Map<String, Map<String, String>> = emptyMap(),
     var version: String = "0.9.0",
@@ -108,6 +110,11 @@ class FakeMachine(
         // herdr-core's probe (HcDetection): its socket and core, or nothing where none runs.
         if ("core.lock" in command) return FakeCore.probe(core, coreSessions)
         shepherdr?.run(command, stdin)?.let { return it }
+        // The board look and the shp client: the app runs them in the machine's login shell.
+        val inner = Shell.words(command).let { if (it.size == 5 && it[0] == "sh" && it[1] == "-c" && it[3] == "sh") it[4] else command }
+        if (inner.contains("command -v shp")) return ok(if (shp != null) "/home/demo/.local/bin/shp\n" else "")
+        shp?.run(inner, stdin)?.let { return it }
+        shp?.hc(inner)?.let { return it }
         appBuild?.run(command)?.let { return it }
         Shell.words(command).let { w ->
             // Words in the chats (ChatSearch.command): the transcripts' lines that hold them, under each chat's mark.

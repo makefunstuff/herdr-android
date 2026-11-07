@@ -23,6 +23,9 @@ import java.io.IOException
 sealed interface BoardApi {
     /** Shepherdr 3: its service on the machine's 127.0.0.1:7788 ([com.makefunstuff.herdr.core.shepherdr.BoardDetection]). */
     data class V2(val version: String) : BoardApi
+
+    /** simple-herdr-projects: `shp` over SSH, with no service ([com.makefunstuff.herdr.core.shp.ShpBoard]). */
+    data object Shp : BoardApi
     data object None : BoardApi
 }
 
@@ -187,7 +190,7 @@ data class CoordinatorThread(
 
 /**
  * The work board on one machine: what the Board, task and Assistant screens use. `V2WorkBoard` is Shepherdr 3's
- * service.
+ * service; `ShpBoard` is simple-herdr-projects over SSH.
  */
 interface WorkBoard {
     val api: BoardApi

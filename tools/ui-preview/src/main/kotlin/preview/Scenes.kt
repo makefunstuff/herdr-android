@@ -66,6 +66,16 @@ private fun SceneData.shepherdr() {
     host(DEVBOX).shepherdr = DemoV2.board()
 }
 
+/** devbox on simple-herdr-projects (`shp` over SSH): no service, and its tasks' worker terminals. */
+private fun SceneData.shp() {
+    host(DEVBOX).shp = DemoShp.board()
+}
+
+/** simple-herdr-projects with no space yet: the board's empty state. */
+private fun SceneData.shpEmpty() {
+    host(DEVBOX).shp = FakeShp(emptyMap())
+}
+
 /** A long talk in website's Assistant chat on Shepherdr 3, longer than the screen. */
 private fun SceneData.longWebsiteChat() {
     val v2 = host(DEVBOX).shepherdr!!
@@ -323,6 +333,19 @@ fun scenes(): List<Scene> = listOf(
     Scene("chat-tab-terminal-menu", route = Routes.CHAT, heightDp = 1900, setup = { shepherdr3Terminals() }, actions = { tapLabel("Tabs and new") }),
     Scene("assistant-terminal-open", route = Routes.CHAT, setup = { shepherdr3Terminals() }, actions = { tapLabel("Tabs and new"); tapExact("Terminal") }),
     Scene("new-terminal", route = Routes.CHAT, heightDp = 1900, setup = { shepherdr3Terminals() }, actions = { tapLabel("Tabs and new"); tapLastExact("Terminal"); waitThenOpen() }),
+    // simple-herdr-projects: the same board, read over SSH with shp; a worker's chat with hc read and shp say; the ask
+    // it waits on; and Accept, which is shp accept --yes after the app's own confirmation.
+    Scene("shp-board", route = Routes.board(DEVBOX), setup = { shp() }),
+    Scene("shp-task", route = Routes.board(DEVBOX, "APP-5"), setup = { shp() }),
+    Scene("shp-ask", route = Routes.board(DEVBOX, "APP-1"), setup = { shp() }),
+    Scene("shp-accept", route = Routes.board(DEVBOX, "APP-2"), setup = { shp() }, actions = { tapText("Accept") }),
+    Scene("shp-accept-refused", route = Routes.board(DEVBOX, "APP-2"), setup = {
+        shp(); host(DEVBOX).shp!!.refuseAccept = "APP-2 has changes not committed; commit them and ready it again"
+    }, actions = { tapText("Accept"); settle(); tapLowestExact("Accept") }),
+    Scene("shp-board-empty", route = Routes.board(DEVBOX), setup = { shpEmpty() }),
+    Scene("shp-drawer", setup = { shp() }, actions = { tapLabel("Spaces") }),
+    Scene("shp-tasks-tab", route = Routes.TASKS, heightDp = 1700, setup = { home(); shp() }),
+    Scene("shp-source", route = Routes.edit(DEVBOX), heightDp = 1500, setup = { shp() }),
     Scene("task-shepherdr3", route = Routes.board(DEVBOX, "AND-19"), setup = { shepherdr3() }),
     // Its chat not read yet (or not readable): the composer is whole and writable all the same; and attaching a file.
     Scene("task-shepherdr3-unread", route = Routes.board(DEVBOX, "AND-19"), setup = { shepherdr3(); host(DEVBOX).shepherdr?.chatRefused = "Couldn't read the chat" }),
