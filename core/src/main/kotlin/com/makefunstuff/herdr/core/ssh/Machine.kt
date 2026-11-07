@@ -154,6 +154,13 @@ object HerdrCommands {
     fun resolveSshAlias(alias: String) = "ssh -G ${quote(alias)}"
 
     fun quote(s: String): String = "'" + s.replace("'", "'\\''") + "'"
+
+    /**
+     * Runs [command] in the machine's login shell: tools the person installed (`shp`, `hc`, `gh`) often live in
+     * `~/.local/bin` or Homebrew's folder, which an SSH exec's PATH lacks.
+     */
+    fun login(command: String): String =
+        "sh -c " + quote("exec \"\${SHELL:-/bin/sh}\" -lc \"\$1\" </dev/null") + " sh " + quote(command)
 }
 
 /** One herdr executable found on a machine by [HerdrCommands.probe]. */
