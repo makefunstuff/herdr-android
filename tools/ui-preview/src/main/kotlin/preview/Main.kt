@@ -334,6 +334,13 @@ fun ComposeUiTest.tapExact(text: String) { tap(node(hasText(text, substring = fa
 /** Taps the last element showing exactly [text] (a menu's lower row of the same words). */
 fun ComposeUiTest.tapLastExact(text: String) { tap(onAllNodes(hasText(text, substring = false), useUnmergedTree = true).onLast()) }
 
+/** Taps the lowest element on screen showing exactly [text] (a sheet's button over the screen's own of the same words). */
+fun ComposeUiTest.tapLowestExact(text: String) {
+    val all = onAllNodes(hasText(text, substring = false), useUnmergedTree = true)
+    val i = all.fetchSemanticsNodes().withIndex().maxBy { it.value.boundsInWindow.bottom }.index
+    tap(all[i])
+}
+
 /** Taps the first element whose content description (an icon button's label) is [label]. */
 fun ComposeUiTest.tapLabel(label: String) { tap(node(hasContentDescription(label))) }
 

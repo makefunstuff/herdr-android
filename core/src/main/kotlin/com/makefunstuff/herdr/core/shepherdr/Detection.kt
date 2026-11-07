@@ -1,6 +1,7 @@
 package com.makefunstuff.herdr.core.shepherdr
 
 import com.makefunstuff.herdr.core.board.BoardApi
+import com.makefunstuff.herdr.core.ssh.Machine
 import com.makefunstuff.herdr.core.ssh.MachineConnection
 import com.makefunstuff.herdr.core.ssh.PortForward
 import kotlinx.coroutines.CancellationException
@@ -24,8 +25,8 @@ object BoardDetection {
      * else simple-herdr-projects where [shp] is on the machine, and Shepherdr 3 where its service answers.
      */
     fun decide(v3: V2Version?, shp: Boolean = false, choice: String? = null): BoardApi = when (choice) {
-        "shp" -> if (shp) BoardApi.Shp else BoardApi.None
-        "shepherdr" -> shepherdr(v3)
+        Machine.TASK_SHP -> if (shp) BoardApi.Shp else BoardApi.None
+        Machine.TASK_SHEPHERDR -> shepherdr(v3)
         else -> if (shp) BoardApi.Shp else shepherdr(v3)
     }
 

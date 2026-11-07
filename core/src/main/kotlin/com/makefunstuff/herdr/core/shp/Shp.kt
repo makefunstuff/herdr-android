@@ -19,37 +19,54 @@ import java.io.IOException
  * an ask, and `hc read`/`hc send` (through `shp say`) for a task's chat.
  */
 object ShpCommands {
-    /** Prints the path of shp where the machine has it, nothing where it doesn't. */
-    const val PRESENT = "command -v shp 2>/dev/null || true"
-
-    /** Where the app pushes a marker between a space's name and its tasks. */
+    /** A space's name, before its tasks in [list]'s output. */
     const val SPACE_MARK = "@@shp-space "
 
+    /** A task's space and id, before the list: the store's files say where each task is. */
+    const val TASK_MARK = "@@shp-task "
+
+    /** Where [list]'s `shp list --json` starts. */
+    const val LIST_MARK = "@@shp-list"
+
     /**
-     * Every space in shp's store, each followed by its `shp list --json`. The store is plain files
-     * (`~/.herdr/simple/spaces/<name>.md`), so the names come from there; a list without a space
-     * wouldn't say which space a task is in.
+     * Runs [command] in the machine's login shell: `shp` and `hc` live in `~/.local/bin` on many
+     * machines, which an SSH exec's PATH often lacks (as herdr and herdr-core are found the same way).
      */
-    const val LIST =
+    private fun login(command: String) =
+        "sh -c " + quote("exec \"\${SHELL:-/bin/sh}\" -lc \"\$1\" </dev/null") + " sh " + quote(command)
+
+    /** Prints the path of shp where the machine has it, nothing where it doesn't. */
+    fun present(): String = login("command -v shp 2>/dev/null || true")
+
+    /**
+     * Every space in shp's store, each task's space, and all of them from one `shp list --json`.
+     * The store is plain files (`~/.herdr/simple/spaces/<name>.md`,
+     * `spaces/<name>/<ID>.md`), so where a task lives comes from its path; a `list` without a
+     * space wouldn't say which space a task is in.
+     */
+    fun list(): String = login(
         "for f in \"\$HOME/.herdr/simple/spaces\"/*.md; do [ -f \"\$f\" ] || continue; " +
-            "n=\"\${f##*/}\"; n=\"\${n%.md}\"; printf '$SPACE_MARK%s\\n' \"\$n\"; " +
-            "shp list --json --space \"\$n\"; done"
+            "n=\"\${f##*/}\"; n=\"\${n%.md}\"; printf '$SPACE_MARK%s\\n' \"\$n\"; done; " +
+            "for f in \"\$HOME/.herdr/simple/spaces\"/*/*.md; do [ -f \"\$f\" ] || continue; " +
+            "d=\"\${f%/*}\"; b=\"\${f##*/}\"; printf '$TASK_MARK%s %s\\n' \"\${d##*/}\" \"\${b%.md}\"; done; " +
+            "printf '$LIST_MARK\\n'; shp list --json",
+    )
 
     /** A task's header (`--json`) and then the whole file, whose body is its brief. */
-    fun show(id: String) = "shp show --json ${quote(id)}; printf '\\n@@shp-file@@\\n'; shp show ${quote(id)}"
+    fun show(id: String) = login("shp show --json ${quote(id)}; printf '\\n@@shp-file@@\\n'; shp show ${quote(id)}")
 
-    /** Accepts a ready task, which merges it (the app confirms first). */
-    fun accept(id: String) = "shp accept --yes ${quote(id)}"
+    /** Accepts a ready task, which merges it or opens/merges its pull request (the app confirms first). */
+    fun accept(id: String) = login("shp accept --yes ${quote(id)}")
 
     /** Sends a person's words to a task's worker; [ask] closes that ask on a confirmed send. */
     fun say(id: String, text: String, ask: String? = null) =
-        "shp say ${quote(id)} ${quote(text)}" + (ask?.let { " --ask ${quote(it)}" } ?: "")
+        login("shp say ${quote(id)} ${quote(text)}" + (ask?.let { " --ask ${quote(it)}" } ?: ""))
 
     /** The task's live worker terminal, by the labels shp puts on it. */
-    fun worker(id: String) = "hc ls --json --label herdr.role=worker --label herdr.task=${quote(id)}"
+    fun worker(id: String) = login("hc ls --json --label herdr.role=worker --label herdr.task=${quote(id)}")
 
     /** The worker's screen and history, as text. */
-    fun transcript(terminal: String, lines: Int = 200) = "hc read --json --lines $lines ${quote(terminal)}"
+    fun transcript(terminal: String, lines: Int = 200) = login("hc read --json --lines $lines ${quote(terminal)}")
 }
 
 /** Runs one of [ShpCommands] on the machine; the app's is its SSH connection, tests give their own. */
@@ -102,27 +119,30 @@ class ShpClient(private val runner: ShpRunner) {
 
     private val json = Json { ignoreUnknownKeys = true }
 
-    /** Every space with its tasks, read in one command: `shp list --json` for each space. */
+    /**
+     * Every space with its tasks, from one `shp list --json` and the store's own paths. A task whose file
+     * went between the two reads is left out; a bad file is named by shp on stderr and the rest still read.
+     */
     suspend fun spaces(): List<Pair<String, List<ShpTask>>> {
-        val text = ok(runner.run(ShpCommands.LIST, null, 45))
-        val out = mutableListOf<Pair<String, List<ShpTask>>>()
-        var name: String? = null
-        val body = StringBuilder()
-        fun flush() {
-            val space = name ?: return
-            out += space to parseList(body.toString().trim())
-            body.clear()
-        }
+        val text = ok(runner.run(ShpCommands.list(), null, 45))
+        val names = mutableListOf<String>()
+        val places = mutableMapOf<String, String>()
+        val list = StringBuilder()
+        var listing = false
         for (line in text.lines()) {
-            if (line.startsWith(ShpCommands.SPACE_MARK)) {
-                flush()
-                name = line.removePrefix(ShpCommands.SPACE_MARK).trim()
-            } else if (name != null) {
-                body.append(line).append('\n')
+            when {
+                line.startsWith(ShpCommands.LIST_MARK) -> listing = true
+                listing -> list.append(line).append('\n')
+                line.startsWith(ShpCommands.SPACE_MARK) ->
+                    names += line.removePrefix(ShpCommands.SPACE_MARK).trim().takeIf { it.isNotEmpty() }.orEmpty()
+                line.startsWith(ShpCommands.TASK_MARK) -> {
+                    val (space, id) = line.removePrefix(ShpCommands.TASK_MARK).trim().split(' ', limit = 2).let { it.firstOrNull().orEmpty() to it.getOrNull(1).orEmpty() }
+                    if (space.isNotEmpty() && id.isNotEmpty()) places[id] = space
+                }
             }
         }
-        flush()
-        return out
+        val tasks = parseList(list.toString().trim())
+        return names.filter { it.isNotEmpty() }.distinct().map { name -> name to tasks.filter { places[it.id] == name } }
     }
 
     /** A task's header and brief; shp's refusal where it has no task. */
@@ -205,6 +225,6 @@ class ShpClient(private val runner: ShpRunner) {
 
         /** Whether shp is on the machine. */
         suspend fun present(conn: MachineConnection): Boolean =
-            runCatching { conn.run(ShpCommands.PRESENT, 15).stdout.trim().isNotEmpty() }.getOrDefault(false)
+            runCatching { conn.run(ShpCommands.present(), 15).stdout.trim().isNotEmpty() }.getOrDefault(false)
     }
 }

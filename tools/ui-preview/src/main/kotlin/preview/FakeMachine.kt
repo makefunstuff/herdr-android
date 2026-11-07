@@ -110,10 +110,11 @@ class FakeMachine(
         // herdr-core's probe (HcDetection): its socket and core, or nothing where none runs.
         if ("core.lock" in command) return FakeCore.probe(core, coreSessions)
         shepherdr?.run(command, stdin)?.let { return it }
-        // The board look: `command -v shp` (BoardDetection), then the commands the shp client runs.
-        if (command.contains("command -v shp")) return ok(if (shp != null) "/home/demo/.local/bin/shp\n" else "")
-        shp?.run(command, stdin)?.let { return it }
-        shp?.hc(command)?.let { return it }
+        // The board look and the shp client: the app runs them in the machine's login shell.
+        val inner = Shell.words(command).let { if (it.size == 5 && it[0] == "sh" && it[1] == "-c" && it[3] == "sh") it[4] else command }
+        if (inner.contains("command -v shp")) return ok(if (shp != null) "/home/demo/.local/bin/shp\n" else "")
+        shp?.run(inner, stdin)?.let { return it }
+        shp?.hc(inner)?.let { return it }
         appBuild?.run(command)?.let { return it }
         Shell.words(command).let { w ->
             // Words in the chats (ChatSearch.command): the transcripts' lines that hold them, under each chat's mark.

@@ -12,9 +12,6 @@ import com.makefunstuff.herdr.core.board.WorkStatus
 import com.makefunstuff.herdr.core.board.WorkTask
 import com.makefunstuff.herdr.core.board.WorkTaskDetails
 import com.makefunstuff.herdr.core.board.WorkTasks
-import com.makefunstuff.herdr.core.shepherdr.V2Checks
-import com.makefunstuff.herdr.core.shepherdr.V2Evidence
-import com.makefunstuff.herdr.core.shepherdr.V2EvidenceBody
 import com.makefunstuff.herdr.core.shepherdr.V2Question
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -67,18 +64,6 @@ class ShpBoard(private val client: ShpClient, private val machineId: String, pri
 
     override suspend fun approve(task: WorkTask): String = client.accept(task.id)
 
-    /** The Accept card Shepherdr shows; here the task's summary and no checks, proof or commit list. */
-    override suspend fun evidence(task: WorkTask): V2Evidence {
-        val head = client.show(task.id).head
-        return V2Evidence(
-            ref = head.id.ifEmpty { task.id },
-            title = head.title,
-            state = head.status,
-            status_text = status(head.status).label,
-            evidence = V2EvidenceBody(summary = head.summary, checks = V2Checks("none", "No GitHub checks here")),
-        )
-    }
-
     /** Answers an ask with `shp say`: shp closes it only once hc confirms the send. */
     override suspend fun answer(answer: CardAnswer): String {
         val card = answer.card
@@ -117,9 +102,6 @@ class ShpBoard(private val client: ShpClient, private val machineId: String, pri
     override suspend fun close(task: WorkTask): String =
         throw IOException("simple-herdr-projects can't close a task from the phone")
 
-    override suspend fun folder(task: WorkTask): com.makefunstuff.herdr.core.shepherdr.TaskFolder =
-        throw IOException("simple-herdr-projects doesn't say where a task works")
-
     /** Its header's facts, as the task view shows them. */
     private fun facts(head: ShpTask): String = listOfNotNull(
         head.review?.let { "Review $it" },
@@ -129,6 +111,7 @@ class ShpBoard(private val client: ShpClient, private val machineId: String, pri
 
     private fun ShpTask.toTask(space: String): WorkTask {
         val state = status(status)
+        val known = status in STATUS_WORDS
         return WorkTask(
             id = id,
             name = id,
@@ -136,6 +119,7 @@ class ShpBoard(private val client: ShpClient, private val machineId: String, pri
             space = space,
             status = state,
             line = when {
+                !known -> "shp says it is $status"
                 askList.isNotEmpty() -> askList.joinToString(" · ") { it.text }
                 !step.isNullOrBlank() -> step
                 state == WorkStatus.Ready -> summary.orEmpty()
@@ -151,6 +135,8 @@ class ShpBoard(private val client: ShpClient, private val machineId: String, pri
     }
 
     companion object {
+        private val STATUS_WORDS = setOf("todo", "queued", "working", "needs", "ready", "merging", "done")
+
         /** shp's status words (docs/design.md §2) as the board's; an unknown one stays to do, saying which. */
         fun status(word: String): WorkStatus = when (word) {
             "todo" -> WorkStatus.Todo

@@ -47,19 +47,20 @@ class ShpCard(
 }
 
 /** A machine's `~/.herdr/simple`: spaces of tasks, answered as shp answers them. */
-class FakeShp(spaces: Map<String, List<ShpCard>>) {
+class FakeShp(spaces: Map<String, List<ShpCard>>, var refuseAccept: String? = null) {
     val spaces: MutableMap<String, List<ShpCard>> = spaces.toMutableMap()
 
     /** The task [id] in any space. */
     fun card(id: String): ShpCard? = spaces.values.flatten().firstOrNull { it.id == id }
 
     fun run(command: String, stdin: String): CommandResult? {
-        if (command == ShpCommands.LIST) {
+        // The login shell is already unwrapped (FakeMachine): the list is its own loop and one `shp list --json`.
+        if (command.endsWith("shp list --json")) {
             val out = StringBuilder()
-            spaces.forEach { (name, cards) ->
-                out.append(ShpCommands.SPACE_MARK).append(name).append('\n')
-                out.append(JsonArray(cards.map { it.head() })).append('\n')
-            }
+            spaces.forEach { (name, cards) -> out.append(ShpCommands.SPACE_MARK).append(name).append('\n') }
+            spaces.forEach { (name, cards) -> cards.forEach { out.append(ShpCommands.TASK_MARK).append(name).append(' ').append(it.id).append('\n') } }
+            out.append(ShpCommands.LIST_MARK).append('\n')
+            out.append(JsonArray(spaces.values.flatten().map { it.head() }))
             return CommandResult(0, out.toString(), "")
         }
         val id = Regex("""^shp (?:show --json|accept --yes) '([^']*)'""").find(command)?.groupValues?.get(1)
@@ -69,6 +70,7 @@ class FakeShp(spaces: Map<String, List<ShpCard>>) {
         }
         if (command.startsWith("shp accept --yes ") && id != null) {
             val c = card(id) ?: return CommandResult(1, "", "there is no task $id")
+            refuseAccept?.let { return CommandResult(1, "", it) }
             if (c.status != "ready") return CommandResult(1, "", "$id is ${c.status}; only a ready task accepts")
             c.status = "done"
             c.transcript = null

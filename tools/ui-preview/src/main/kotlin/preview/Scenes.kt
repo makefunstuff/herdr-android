@@ -71,6 +71,11 @@ private fun SceneData.shp() {
     host(DEVBOX).shp = DemoShp.board()
 }
 
+/** simple-herdr-projects with no space yet: the board's empty state. */
+private fun SceneData.shpEmpty() {
+    host(DEVBOX).shp = FakeShp(emptyMap())
+}
+
 /** A long talk in website's Assistant chat on Shepherdr 3, longer than the screen. */
 private fun SceneData.longWebsiteChat() {
     val v2 = host(DEVBOX).shepherdr!!
@@ -334,6 +339,11 @@ fun scenes(): List<Scene> = listOf(
     Scene("shp-task", route = Routes.board(DEVBOX, "APP-5"), setup = { shp() }),
     Scene("shp-ask", route = Routes.board(DEVBOX, "APP-1"), setup = { shp() }),
     Scene("shp-accept", route = Routes.board(DEVBOX, "APP-2"), setup = { shp() }, actions = { tapText("Accept") }),
+    Scene("shp-accept-refused", route = Routes.board(DEVBOX, "APP-2"), setup = {
+        shp(); host(DEVBOX).shp!!.refuseAccept = "APP-2 has changes not committed; commit them and ready it again"
+    }, actions = { tapText("Accept"); settle(); tapLowestExact("Accept") }),
+    Scene("shp-board-empty", route = Routes.board(DEVBOX), setup = { shpEmpty() }),
+    Scene("shp-drawer", setup = { shp() }, actions = { tapLabel("Spaces") }),
     Scene("shp-tasks-tab", route = Routes.TASKS, heightDp = 1700, setup = { home(); shp() }),
     Scene("shp-source", route = Routes.edit(DEVBOX), heightDp = 1500, setup = { shp() }),
     Scene("task-shepherdr3", route = Routes.board(DEVBOX, "AND-19"), setup = { shepherdr3() }),

@@ -237,6 +237,8 @@ class HostSession(
     /** How Shepherdr's service is reached on this connection (its port forward), once found; closed with the connection. */
     @Volatile private var shepherdr: ShepherdrTransport? = null
     private val shepherdrLock = Mutex()
+    /** One board look at a time: a switch's look must not be overwritten by one that started before it. */
+    private val boardLock = Mutex()
     @Volatile private var api: HerdrApi? = null
     /**
      * herdr-core's `hc connect`s on this connection, one a session that runs (null: the default
@@ -349,11 +351,12 @@ class HostSession(
     }
 
     /** Looks for the machine's board again: simple-herdr-projects where shp is there, and Shepherdr 3 where it may be. */
-    suspend fun checkBoard() {
-        val conn = connection ?: return
+    suspend fun checkBoard() = boardLock.withLock {
+        val conn = connection ?: return@withLock
+        val choice = machine.taskSource
         val shp = ShpClient.present(conn)
         // The service is only probed where it can be the board: forced, or auto with no shp to prefer.
-        val wantShepherdr = when (machine.taskSource) {
+        val wantShepherdr = when (choice) {
             Machine.TASK_SHP -> false
             Machine.TASK_SHEPHERDR -> true
             else -> !shp
@@ -364,6 +367,8 @@ class HostSession(
             closeShepherdr()
             null
         }
+        // The person switched while this looked: its own look is waiting and gives the answer.
+        if (machine.taskSource != choice) return@withLock
         _state.update { it.copy(shpPresent = shp, shepherdrVersion = v2?.version, boardChecked = true) }
     }
 

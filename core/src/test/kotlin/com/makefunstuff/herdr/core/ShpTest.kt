@@ -33,8 +33,13 @@ class ShpTest {
     private val webList = "[${head("WEB-1", "working", title = "Fix it")}]"
 
     private fun listOutput() = buildString {
-        append("${ShpCommands.SPACE_MARK}app\n").append(appList).append('\n')
-        append("${ShpCommands.SPACE_MARK}web\n").append(webList).append('\n')
+        append("${ShpCommands.SPACE_MARK}app\n")
+        append("${ShpCommands.SPACE_MARK}web\n")
+        append("${ShpCommands.TASK_MARK}app APP-1\n")
+        append("${ShpCommands.TASK_MARK}app APP-2\n")
+        append("${ShpCommands.TASK_MARK}web WEB-1\n")
+        append("${ShpCommands.LIST_MARK}\n")
+        append("[${appList.trim('[', ']')},${webList.trim('[', ']')}]")
     }
 
     private val taskFile = "---\nid: APP-1\nstatus: needs\n---\n\nDo it carefully.\n"
@@ -53,7 +58,7 @@ class ShpTest {
 
     /** A board whose list comes from [listOutput], with [rest] answering its other commands. */
     private fun board(rest: (String) -> Ran = { Ran(exit = 2, err = "unexpected") }): Pair<ShpBoard, Fake> {
-        val fake = Fake { command -> if (command == ShpCommands.LIST) Ran(listOutput()) else rest(command) }
+        val fake = Fake { command -> if (command == ShpCommands.list()) Ran(listOutput()) else rest(command) }
         return ShpBoard(ShpClient(fake), "devbox", "devbox") to fake
     }
 
@@ -76,7 +81,7 @@ class ShpTest {
     @Test
     fun `show gives the brief and the ask as a card`() = runTest {
         val (board, fake) = board { command ->
-            if (command.startsWith("shp show --json")) Ran(head("APP-1", "needs", asks) + "\n@@shp-file@@\n" + taskFile)
+            if (command.contains("shp show --json")) Ran(head("APP-1", "needs", asks) + "\n@@shp-file@@\n" + taskFile)
             else Ran(exit = 2, err = "unexpected")
         }
         val t = board.overview().tasks.first()
@@ -87,7 +92,7 @@ class ShpTest {
         assertEquals("a1", d.cards.single().question.id)
         assertEquals("Which branch?", d.cards.single().question.title)
         assertEquals("a1", d.cards.single().replyTo)
-        assertTrue(fake.commands.any { it.startsWith("shp show --json ") })
+        assertTrue(fake.commands.any { it.contains("shp show --json") && it.contains("APP-1") })
     }
 
     @Test
@@ -97,50 +102,55 @@ class ShpTest {
         }
         val t = board.overview().tasks.first { it.id == "APP-2" }
         assertEquals("APP-2 accepted", board.approve(t))
-        assertEquals("shp accept --yes 'APP-2'", fake.commands.last())
+        assertTrue(fake.commands.last().contains("shp accept --yes") && fake.commands.last().contains("APP-2"))
     }
 
     @Test
     fun `an ask is answered with shp say, and stays when the send is refused`() = runTest {
         val (board, fake) = board { command ->
-            if (command.startsWith("shp say ")) Ran(exit = 1, err = "the message did not go in: no live worker; APP-1 still needs you")
+            if (command.contains("shp say ")) Ran(exit = 1, err = "the message did not go in: no live worker; APP-1 still needs you")
             else Ran(exit = 2, err = "unexpected")
         }
         val card = WorkCard(chat = "APP-1", question = V2Question(id = "a1", title = "Which branch?"), task = "APP-1", replyTo = "a1")
         val e = assertFailsWith<IOException> { board.answer(CardAnswer(card, -1, other = "main")) }
         assertTrue(e.message!!.contains("still needs you"))
-        assertEquals("shp say 'APP-1' 'main' --ask 'a1'", fake.commands.last())
+        val sent = fake.commands.last()
+        assertTrue(sent.contains("shp say") && sent.contains("APP-1") && sent.contains("main") && sent.contains("--ask"))
     }
 
     @Test
     fun `a chat is its live worker's terminal, read with hc`() = runTest {
         val (board, fake) = board { command ->
             when {
-                command.startsWith("hc ls ") -> Ran("""{"terminals":[{"address":"t7","state":"live","labels":{"herdr.task":"APP-1"}}]}""")
-                command.startsWith("hc read ") -> Ran("""{"text":"I am writing it.\nOne more line.\n"}""")
+                command.contains("hc ls ") -> Ran("""{"terminals":[{"address":"t7","state":"live","labels":{"herdr.task":"APP-1"}}]}""")
+                command.contains("hc read ") -> Ran("""{"text":"I am writing it.\nOne more line.\n"}""")
                 else -> Ran(exit = 2, err = "unexpected")
             }
         }
         val task = board.overview().tasks.first()
         val thread = board.taskThreads(task, everyMs = 60_000).first()
         assertEquals(listOf("I am writing it.", "One more line."), thread.lines.map { it.text })
-        assertTrue(fake.commands.any { it.startsWith("hc read --json") && it.contains("'t7'") })
+        assertTrue(fake.commands.any { it.contains("hc read --json") && it.contains("t7") })
     }
 
     @Test
     fun `a task with no live worker has no chat and no transcript command`() = runTest {
-        val fake = Fake { command -> if (command.startsWith("hc ls ")) Ran("""{"terminals":[]}""") else Ran(exit = 2, err = "unexpected") }
+        val fake = Fake { command -> if (command.contains("hc ls ")) Ran("""{"terminals":[]}""") else Ran(exit = 2, err = "unexpected") }
         assertEquals(emptyList<String>(), ShpClient(fake).chatLines("APP-1"))
-        assertTrue(fake.commands.none { it.startsWith("hc read") })
+        assertTrue(fake.commands.none { it.contains("hc read") })
     }
 
     @Test
     fun `the commands are shp's own`() {
-        assertTrue(ShpCommands.LIST.contains("shp list --json --space"))
-        assertTrue(ShpCommands.show("APP-1").startsWith("shp show --json 'APP-1'"))
-        assertEquals("shp accept --yes 'APP-2'", ShpCommands.accept("APP-2"))
-        assertEquals("shp say 'APP-1' 'main' --ask 'a1'", ShpCommands.say("APP-1", "main", "a1"))
-        assertEquals("hc ls --json --label herdr.role=worker --label herdr.task='APP-1'", ShpCommands.worker("APP-1"))
+        assertTrue(ShpCommands.list().contains("shp list --json"))
+        assertTrue(ShpCommands.show("APP-1").contains("shp show --json") && ShpCommands.show("APP-1").contains("APP-1"))
+        assertTrue(ShpCommands.accept("APP-2").contains("shp accept --yes") && ShpCommands.accept("APP-2").contains("APP-2"))
+        assertTrue(ShpCommands.say("APP-1", "main", "a1").contains("shp say") && ShpCommands.say("APP-1", "main", "a1").contains("--ask"))
+        assertTrue(ShpCommands.worker("APP-1").contains("hc ls --json --label herdr.role=worker") && ShpCommands.worker("APP-1").contains("herdr.task="))
+        // Every command goes through the machine's login shell: sshd's PATH lacks ~/.local/bin.
+        assertTrue(ShpCommands.present().startsWith("sh -c "))
+        assertTrue(ShpCommands.present().contains("-lc"))
+        assertTrue(ShpCommands.transcript("t7").contains("hc read --json --lines 200") && ShpCommands.transcript("t7").contains("t7"))
     }
 
     @Test

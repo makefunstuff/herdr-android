@@ -32,8 +32,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -62,7 +60,6 @@ import com.makefunstuff.herdr.ui.design.ChatComposer
 import com.makefunstuff.herdr.ui.design.ChatSurface
 import com.makefunstuff.herdr.ui.design.HerdrIcons
 import com.makefunstuff.herdr.ui.design.HerdrTopBar
-import com.makefunstuff.herdr.ui.design.Led
 import com.makefunstuff.herdr.ui.design.InfoLine
 import com.makefunstuff.herdr.ui.design.LoadingState
 import com.makefunstuff.herdr.ui.design.MenuRow
@@ -74,8 +71,10 @@ import com.makefunstuff.herdr.ui.theme.CodeStyle
 import com.makefunstuff.herdr.ui.theme.Herdr
 import com.makefunstuff.herdr.ui.theme.Space
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** What the simple-herdr-projects task's ⋯ shows over it. */
 private enum class ShpSheet { Menu, Said, Brief, Facts }
@@ -158,14 +157,16 @@ internal fun ShpTaskScreen(
         container.scope.launch {
             try {
                 session.awaitWorkBoard().tell(t, text)
-                draft = DraftStore.afterSend(draft, text)
+                withContext(Dispatchers.Main) { draft = DraftStore.afterSend(draft, text) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Throwable) {
-                draft = if (draft.isBlank()) text else text + "\n" + draft
-                context.toast(e.message ?: "Couldn't send")
+                withContext(Dispatchers.Main) {
+                    draft = if (draft.isBlank()) text else text + "\n" + draft
+                    context.toast(e.message ?: "Couldn't send")
+                }
             }
-            sending = false
+            withContext(Dispatchers.Main) { sending = false }
         }
     }
 
@@ -183,7 +184,7 @@ internal fun ShpTaskScreen(
             },
         ) { padding ->
             Column(Modifier.padding(padding).fillMaxSize().imePadding().navigationBarsPadding()) {
-                ShpStrip(t, d, busy, onMerge)
+                ShpStrip(t, busy, onMerge)
                 ChatSurface(
                     Modifier.weight(1f).fillMaxWidth(),
                     composer = {
@@ -253,7 +254,7 @@ internal fun ShpTaskScreen(
                         ) {
                             item(key = "foot") {
                                 Column(verticalArrangement = Arrangement.spacedBy(Space.s)) {
-                                    if (th.working) Working(t.name, t.line.takeIf { it.isNotBlank() })
+                                    if (th.working) Working(t.name)
                                     problem?.let { Notice(it, color = c.red) }
                                 }
                             }
@@ -305,7 +306,7 @@ internal fun ShpTaskScreen(
 
 /** Under the bar: where it stands, how far along, how long is left, and Accept on a ready one. */
 @Composable
-private fun ShpStrip(t: WorkTask, d: WorkTaskDetails?, busy: String?, onMerge: () -> Unit) {
+private fun ShpStrip(t: WorkTask, busy: String?, onMerge: () -> Unit) {
     val c = Herdr.colors
     val p = t.progress?.takeIf { t.status == WorkStatus.Work }
     Column(Modifier.fillMaxWidth().background(c.panel)) {
@@ -313,15 +314,12 @@ private fun ShpStrip(t: WorkTask, d: WorkTaskDetails?, busy: String?, onMerge: (
             Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(horizontal = Space.screen, vertical = Space.xs),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // A Ready task says it with its Accept button, as the board's rule has it: only its light here.
-            if (t.status == WorkStatus.Ready) Led(
-                t.status.color(), Modifier.semantics { contentDescription = "Ready" },
-            ) else StatusBadge(t.status.label, t.status.color())
+            StatusBadge(t.status.label, t.status.color())
             Column(Modifier.weight(1f).padding(start = Space.s)) {
                 if (t.line.isNotEmpty()) Text(t.line, style = MaterialTheme.typography.bodyMedium, color = c.text, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 if (p != null || t.left != null) Row(verticalAlignment = Alignment.CenterVertically) {
                     if (p != null) Progress(p, t.status.color(), Modifier.width(72.dp))
-                    if (t.left != null) Text(t.left, style = MaterialTheme.typography.labelSmall, color = c.working, modifier = Modifier.padding(start = Space.s))
+                    t.left?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = c.working, modifier = Modifier.padding(start = Space.s)) }
                 }
             }
             if (t.status == WorkStatus.Ready) PrimaryButton(onClick = onMerge, enabled = busy == null) {
@@ -380,7 +378,7 @@ fun ShpAcceptSheet(
                 Text(task.title, style = MaterialTheme.typography.bodySmall, color = c.muted, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
             if (task.line.isNotEmpty()) MarkdownText(task.line, style = MaterialTheme.typography.bodyLarge)
-            Notice("Accepting merges this task into its space's base branch. simple-herdr-projects runs the checks and the merge on the machine.")
+            Notice("Accepting runs the space's checks, then merges the task or opens and merges its pull request, as the space is set up. simple-herdr-projects does it on the machine.")
             error?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = c.red) }
             Row(Modifier.fillMaxWidth().padding(top = Space.s, bottom = Space.m), horizontalArrangement = Arrangement.spacedBy(Space.s, Alignment.End)) {
                 SecondaryButton(Accept.CANCEL, onClick = onDismiss)
