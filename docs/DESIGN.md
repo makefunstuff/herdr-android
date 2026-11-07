@@ -45,7 +45,7 @@ Near-black panels, amber frames, status lights. Flat and minimal: frames and fla
 ## Layout (Shepherdr 3.1's phone)
 
 - **Bottom bar**: **Chat** (the shown space), **Tasks** (owns the Needs you count, the only badge),
-  **Artifacts** (the shown space's). Each a glyph over its name in mono capitals; the chosen one amber,
+  **Artifacts** (the shown space's; where its machine has no Shepherdr, the machine's herdr.doc docs). Each a glyph over its name in mono capitals; the chosen one amber,
   with a 2dp amber bar along its top edge.
 - **Drawer of spaces** (`ui/spaces/Spaces.kt`), the desktop workbench's sidebar: the brand row (the
   HERDR chip, *HERDR*, an amber-framed *WORKBENCH* tag, search), *SPACES*, then each machine as a

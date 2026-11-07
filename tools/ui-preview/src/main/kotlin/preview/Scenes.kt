@@ -182,6 +182,11 @@ private fun SceneData.home() {
     host(GPU).snapshot = Demo.gpu(home = true)
 }
 
+/** devbox's ~/.herdr/docs: an investigation under way, a runbook, a report, an incident and a half-written file. */
+private fun SceneData.docs() {
+    host(DEVBOX).docs = DemoDocs.docs()
+}
+
 /** Shepherdr 3 on devbox: its board, its spaces and their Assistants. */
 private fun SceneData.v2() {
     host(DEVBOX).shepherdr = DemoV2.board()
@@ -300,6 +305,17 @@ fun scenes(): List<Scene> = listOf(
     Scene("chat-tab-menu", route = Routes.CHAT, setup = { home() }, actions = { tapLabel("Tabs and new") }),
     Scene("artifacts-tab", route = Routes.ARTIFACTS_TAB, setup = { shepherdr() }),
     Scene("artifacts-tab-none", route = Routes.ARTIFACTS_TAB, setup = { home() }),
+    // herdr.doc/2 documents (the desktop's Docs panel), read over SSH from ~/.herdr/docs: in the Artifacts tab where
+    // the space's machine has no Shepherdr, from a machine's menu, and one open full screen as the desktop draws it.
+    Scene("docs-tab", route = Routes.ARTIFACTS_TAB, setup = { home(); docs() }),
+    Scene("docs", route = Routes.docs(DEVBOX), setup = { docs() }),
+    Scene("docs-error", route = Routes.docs(DEVBOX), setup = { host(DEVBOX).docs = FakeDocs(emptyMap(), refuse = "ls: cannot open directory '.': Permission denied") }),
+    Scene("doc", route = Routes.doc(DEVBOX, "${DemoDocs.DIR}/${DemoDocs.UPLOAD}"), heightDp = 3000, setup = { docs() }),
+    Scene("doc-runbook", route = Routes.doc(DEVBOX, "${DemoDocs.DIR}/${DemoDocs.RUNBOOK}"), heightDp = 1500, setup = { docs() }),
+    Scene("doc-report", route = Routes.doc(DEVBOX, "${DemoDocs.DIR}/${DemoDocs.REPORT}"), setup = { docs() }),
+    Scene("doc-broken", route = Routes.doc(DEVBOX, "${DemoDocs.DIR}/half-written.hdoc.json"), setup = { docs() }),
+    Scene("doc-from-list", route = Routes.docs(DEVBOX), setup = { docs() }, actions = { settle(); tapText("Pages after the 19:00 deploy") }),
+    Scene("machine-menu-docs", route = Routes.machine(DEVBOX), setup = { docs() }, actions = { settle(); tapLabel("More") }),
     // A task's chat takes voice messages too (kept by Shepherdr's service, then the chat as its file), as the Assistant's.
     Scene("task-v2-voice-sent", route = Routes.board(DEVBOX, "AND-19"), setup = { shepherdr3() }, actions = {
         recordVoice()

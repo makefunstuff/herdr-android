@@ -543,7 +543,7 @@ private fun SpaceMenu(nav: NavController, slot: SpaceSlot, host: HostState, tabM
 
 /**
  * The Artifacts tab: the shown space's artifacts, as 3.1's phone's third tab. Artifacts are
- * Shepherdr's: a space on a machine without it says so.
+ * Shepherdr's: a space on a machine without it shows the machine's docs (herdr.doc) instead.
  */
 @Composable
 fun ArtifactsTab(nav: NavController) {
@@ -556,6 +556,12 @@ fun ArtifactsTab(nav: NavController) {
         }
         return
     }
+    // No Shepherdr to keep artifacts: the machine's docs are its write-ups (herdr.doc, the desktop's Docs panel).
+    // Not before the board look answers, so a Shepherdr machine doesn't show its docs for a moment first.
+    if (slot != null && host != null && (host.boardChecked || !host.online)) {
+        androidx.compose.runtime.key(slot.machineId) { com.makefunstuff.herdr.ui.docs.DocsScreen(nav, slot.machineId, inTab = true) }
+        return
+    }
     Column(Modifier.fillMaxSize()) {
         HerdrTopBar("Artifacts")
         Box(Modifier.weight(1f)) {
@@ -563,7 +569,7 @@ fun ArtifactsTab(nav: NavController) {
             EmptyState(
                 "No artifacts here",
                 if (slot == null) "Pick a space in the drawer: its artifacts show here."
-                else "Artifacts are kept by Shepherdr, which ${host?.machine?.label ?: "this machine"} doesn't run.",
+                else "Looking for Shepherdr on ${host?.machine?.label ?: "this machine"}…",
                 icon = HerdrIcons.LayoutDashboard,
             )
         }
