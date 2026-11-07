@@ -55,6 +55,7 @@ import com.makefunstuff.herdr.ui.common.rememberDraft
 import com.makefunstuff.herdr.ui.common.toast
 import com.makefunstuff.herdr.ui.coordinator.ChatEmpty
 import com.makefunstuff.herdr.ui.coordinator.Working
+import com.makefunstuff.herdr.ui.design.ViewTabs
 import com.makefunstuff.herdr.ui.design.BarIcon
 import com.makefunstuff.herdr.ui.design.ChatComposer
 import com.makefunstuff.herdr.ui.design.ChatSurface
@@ -106,6 +107,8 @@ internal fun ShpTaskScreen(
     var thread by remember(t.id) { mutableStateOf<CoordinatorThread?>(null) }
     var problem by remember(t.id) { mutableStateOf<String?>(null) }
     var sheet by remember(t.id) { mutableStateOf<ShpSheet?>(null) }
+    // Its chat, or (once shp names one) its pull request to review.
+    var onPr by remember(t.id) { mutableStateOf(false) }
     var sending by remember(t.id) { mutableStateOf(false) }
     var draft by rememberDraft(DraftStore.task(machineId, t.id))
 
@@ -185,7 +188,9 @@ internal fun ShpTaskScreen(
         ) { padding ->
             Column(Modifier.padding(padding).fillMaxSize().imePadding().navigationBarsPadding()) {
                 ShpStrip(t, busy, onMerge)
-                ChatSurface(
+                if (t.pr.isNotEmpty()) ViewTabs(listOf(TaskView.Chat.label, TaskView.PullRequest.label), if (onPr) 1 else 0, onSelect = { onPr = it == 1 })
+                if (onPr && t.pr.isNotEmpty()) Box(Modifier.weight(1f).fillMaxWidth()) { TaskPullRequest(session, t) }
+                else ChatSurface(
                     Modifier.weight(1f).fillMaxWidth(),
                     composer = {
                         Column {

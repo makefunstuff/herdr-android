@@ -25,6 +25,7 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onLast
@@ -327,6 +328,13 @@ private fun ComposeUiTest.node(matcher: SemanticsMatcher) = onAllNodes(matcher, 
 
 /** Taps the first element showing [text] (exactly, or as its start when it is longer). */
 fun ComposeUiTest.tapText(text: String) { tap(node(hasText(text, substring = true))) }
+
+/** Scrolls [text] into view in its list or strip (a tab off the strip's edge), then taps it. */
+fun ComposeUiTest.scrollToText(text: String) {
+    runOnUiThread { node(hasText(text, substring = true)).performScrollTo() }
+    settle()
+    tapText(text)
+}
 
 /** Taps the first element showing exactly [text] (a button, where a longer line also starts with its words). */
 fun ComposeUiTest.tapExact(text: String) { tap(node(hasText(text, substring = false))) }
