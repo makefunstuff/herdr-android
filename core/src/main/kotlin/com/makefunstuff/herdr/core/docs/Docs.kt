@@ -181,6 +181,18 @@ object HerdrDocs {
         else -> null
     }
 
+    /**
+     * A unique name for each of a document's top-level blocks, which keys what the phone remembers of it (a section's
+     * fold): a section by its title and how many before it share it, so it keeps its name when a block is written above
+     * it; any other block by its place.
+     */
+    fun names(blocks: List<DocBlock>): List<String> {
+        val seen = HashMap<String, Int>()
+        return blocks.mapIndexed { i, b ->
+            if (b is DocBlock.Section) "s${seen.merge(b.title, 1, Int::plus)}-${b.title}" else "b$i"
+        }
+    }
+
     /** Links open in the browser or the mail app only: an agent's document never opens an intent, a file or a content URI. */
     fun opens(url: String): Boolean = url.substringBefore(':', "").lowercase() in setOf("http", "https", "mailto")
 

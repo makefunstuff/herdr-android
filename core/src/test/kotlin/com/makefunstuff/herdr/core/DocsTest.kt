@@ -123,6 +123,21 @@ class DocsTest {
     }
 
     @Test
+    fun aSectionKeepsItsNameWhenABlockIsWrittenAboveIt() {
+        fun section(title: String) = DocBlock.Section(title, emptyList(), false, null)
+        val before = listOf(DocBlock.Md("x"), section("Logs"), section("Notes"), section("Logs"))
+        val after = listOf(DocBlock.Heading("new", 2)) + before
+        val a = HerdrDocs.names(before)
+        val b = HerdrDocs.names(after)
+        assertEquals(a.size, a.toSet().size)
+        assertEquals(b.size, b.toSet().size)
+        assertEquals(a.drop(1), b.drop(2))
+        assertTrue(a[1] != a[3])
+        // A name that looks like a place never meets one: sections start with "s", the rest with "b".
+        assertEquals(listOf("b0", "s1-Logs", "s1-Notes", "s2-Logs"), a)
+    }
+
+    @Test
     fun linksOpenOnlyTheWebAndMail() {
         val doc = HerdrDocs.parse(
             """{"blocks":[{"type":"links","items":[{"label":"PR","url":"https://x/pr/1"},{"url":"mailto:a@b"},

@@ -32,6 +32,7 @@ import com.makefunstuff.herdr.Routes
 import com.makefunstuff.herdr.core.docs.DocEntry
 import com.makefunstuff.herdr.core.docs.DocsClient
 import com.makefunstuff.herdr.core.docs.HerdrDoc
+import com.makefunstuff.herdr.core.docs.HerdrDocs
 import com.makefunstuff.herdr.core.host.HostSession
 import com.makefunstuff.herdr.ui.code.ago
 import com.makefunstuff.herdr.ui.common.LocalContainer
@@ -222,25 +223,14 @@ fun DocScreen(nav: NavController, machineId: String, path: String) {
                         if (d.blocks.isEmpty()) item(key = "empty") {
                             Text("Nothing written yet.", style = MaterialTheme.typography.bodyMedium, color = c.muted)
                         }
-                        // A section's fold is kept under its title and how many before it share it, not its place: an agent writing
-                        // a block above it doesn't reset it.
-                        val names = blockNames(d.blocks)
-                        itemsIndexed(d.blocks, key = { i, _ -> "b$i" }) { i, b -> DocBlockView(b, names[i], machineId) }
+                        // Each item keyed by its name, a section by its title and how many before it share it: a section's
+                        // fold (its saved state) stays with it when an agent writes a block above it.
+                        val names = HerdrDocs.names(d.blocks)
+                        itemsIndexed(d.blocks, key = { i, _ -> names[i] }) { i, b -> DocBlockView(b, names[i], machineId) }
                     }
                 }
             }
         }
-    }
-}
-
-/** Each top-level block's name for what it remembers: a section by its title and occurrence, the rest by place. */
-internal fun blockNames(blocks: List<com.makefunstuff.herdr.core.docs.DocBlock>): List<String> {
-    val seen = HashMap<String, Int>()
-    return blocks.mapIndexed { i, b ->
-        if (b is com.makefunstuff.herdr.core.docs.DocBlock.Section) {
-            val n = seen.merge(b.title, 1, Int::plus)!!
-            "s-${b.title}-$n"
-        } else "b$i"
     }
 }
 
