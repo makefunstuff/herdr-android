@@ -187,6 +187,17 @@ private fun SceneData.v2() {
     host(DEVBOX).shepherdr = DemoV2.board()
 }
 
+/** Task [id] runs on [machine], as 3.1's service says it of another machine's task: its Browser can't be watched here. */
+private fun SceneData.elsewhere(id: String, machine: String) {
+    val sh = host(DEVBOX).shepherdr!!
+    val hint = "This task runs on $machine. Its browser can be watched only from that machine's Herdr for now."
+    val tasks = (sh.snapshot["tasks"] as JsonArray).map { t ->
+        val o = t.jsonObject
+        if (o["id"]?.jsonPrimitive?.content != id) o else JsonObject(o + ("browser" to obj("ready" to false, "hint" to hint)))
+    }
+    sh.snapshot = JsonObject(sh.snapshot + ("tasks" to JsonArray(tasks)))
+}
+
 /** The person's own work shape (Real): one machine, eleven spaces, thirteen tasks, an Assistant chat with long turns. */
 private fun SceneData.real() {
     machines = machines.filter { it.id == DEVBOX }
@@ -736,6 +747,12 @@ fun scenes(): List<Scene> = listOf(
     Scene("task-v2-files", route = Routes.board(DEVBOX, "AND-20"), setup = { v2() }, actions = { tapText("FILES") }),
     Scene("task-v2-changes", route = Routes.board(DEVBOX, "AND-20"), setup = { v2() }, actions = { tapText("CHANGES") }),
     Scene("task-v2-pr", route = Routes.board(DEVBOX, "AND-20"), setup = { v2() }, actions = { tapText("PULL REQUEST") }),
+    // Its Browser (3.1's, through the service's relay): AND-19's agent checking its dev server, live; a touch takes it
+    // over; AND-20's not open now, with Open browser; and a task on another machine, which can't be watched from here.
+    Scene("task-v2-browser", route = Routes.board(DEVBOX, "AND-19"), setup = { v2() }, actions = { tapText("BROWSER") }),
+    Scene("task-v2-browser-driving", route = Routes.board(DEVBOX, "AND-19"), setup = { v2() }, actions = { tapText("BROWSER"); drag("The task's browser", 0.5f to 0.5f) }),
+    Scene("task-v2-browser-closed", route = Routes.board(DEVBOX, "AND-20"), setup = { v2() }, actions = { tapText("BROWSER") }),
+    Scene("task-v2-browser-elsewhere", route = Routes.board(DEVBOX, "AND-18"), setup = { v2(); elsewhere("AND-18", "vm") }, actions = { tapText("BROWSER") }),
     Scene(
         "task-v2-comment", route = Routes.codeFile(CodeSpot(DEVBOX, FakeCode.TASK, task = "AND-20", taskName = "AND-20"), CARD, line = 33), setup = { v2() },
         actions = { tapLabel("line 37"); tapLabel("line 38"); tapText("Comment"); type("Say when it was last answered, not when it was read.") },

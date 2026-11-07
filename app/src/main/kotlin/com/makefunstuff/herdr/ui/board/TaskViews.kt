@@ -69,11 +69,20 @@ import com.makefunstuff.herdr.ui.theme.Space
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 
-/** A task view's tabs, as 3.1's: its chat, then its folder's Files and Changes, then its Pull request. */
-internal enum class TaskView(val label: String) { Chat("Chat"), Files("Files"), Changes("Changes"), PullRequest("Pull request") }
+/** A task view's tabs, as 3.1's: its chat, then its folder's Files and Changes, its Pull request, its Browser. */
+internal enum class TaskView(val label: String) { Chat("Chat"), Files("Files"), Changes("Changes"), PullRequest("Pull request"), Browser("Browser") }
 
-/** The tabs [t] has now: Pull request only once it has one, as 3.1's (`itemsFor`). */
-internal fun taskViews(t: WorkTask): List<TaskView> = TaskView.entries.filter { it != TaskView.PullRequest || t.pr.isNotEmpty() }
+/**
+ * The tabs [t] has now, as 3.1's (`itemsFor`): Pull request only once it has one, Browser where its machine's service
+ * has one (the Browser add-on).
+ */
+internal fun taskViews(t: WorkTask): List<TaskView> = TaskView.entries.filter {
+    when (it) {
+        TaskView.PullRequest -> t.pr.isNotEmpty()
+        TaskView.Browser -> t.browser != null
+        else -> true
+    }
+}
 
 /**
  * The task view's tab strip, under its bar: Chat, its agent's Terminal (as 3.1's task view has it),
@@ -280,7 +289,7 @@ private fun prColor(state: String): Color = Herdr.colors.let { c ->
 
 /** What a task view says when it has nothing to show, and why; with Retry where reading again may help. */
 @Composable
-private fun TaskViewNote(icon: ImageVector, title: String, text: String, error: Boolean = false, onRetry: (() -> Unit)? = null) {
+internal fun TaskViewNote(icon: ImageVector, title: String, text: String, error: Boolean = false, onRetry: (() -> Unit)? = null) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         StateBlock(
             icon, title, text, iconTint = if (error) Herdr.colors.red else null,

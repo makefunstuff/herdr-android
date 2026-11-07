@@ -371,6 +371,9 @@ class ShepherdrClient(private val transport: ShepherdrTransport) {
      */
     suspend fun voice(chat: String): VoiceCall = VoiceCall(transport.webSocket("/api/voice?" + query("chat" to chat)))
 
+    /** [task]'s browser, live (`/api/browser`, this machine's tasks only): [TaskBrowser]. */
+    suspend fun browser(task: String): TaskBrowser = TaskBrowser(transport.browser(TaskBrowser.path(task)))
+
     private fun artifactPath(id: String, part: String, query: String) =
         "/api/artifacts/" + enc(id) + part + query.takeIf { it.isNotEmpty() }?.let { "?$it" }.orEmpty()
 
