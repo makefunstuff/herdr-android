@@ -548,7 +548,8 @@ private fun Links(block: DocBlock.Links, modifier: Modifier) {
 @Composable
 private fun Section(block: DocBlock.Section, key: String, machineId: String, modifier: Modifier) {
     val c = Herdr.colors
-    var open by rememberSaveable(key) { mutableStateOf(!block.collapsed) }
+    // By its title too: a block written above it moves its index, and the fold should stay with the section.
+    var open by rememberSaveable("$key-${block.title}") { mutableStateOf(!block.collapsed) }
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(Space.m)) {
         Row(
             Modifier.fillMaxWidth().heightIn(min = 48.dp)

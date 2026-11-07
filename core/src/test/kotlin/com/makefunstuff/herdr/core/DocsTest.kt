@@ -1,6 +1,7 @@
 package com.makefunstuff.herdr.core
 
 import com.makefunstuff.herdr.core.docs.DocBlock
+import com.makefunstuff.herdr.core.docs.DocUnreadable
 import com.makefunstuff.herdr.core.docs.DocsClient
 import com.makefunstuff.herdr.core.docs.DocsCommands
 import com.makefunstuff.herdr.core.docs.DocsRunner
@@ -100,15 +101,34 @@ class DocsTest {
         val client = DocsClient(
             DocsRunner { command, _ ->
                 commands += command
-                CommandResult(0, "${DocsCommands.MARK}$mtime 30 /d/a.hdoc.json\n" + if ("'100'" in command && mtime == 100L) "" else """{"title":"A"}""", "")
+                // A login script that prints something before the mark: the document starts after the mark's line.
+                CommandResult(0, "welcome back\n${DocsCommands.MARK}$mtime 13 /d/a.hdoc.json\n" + if ("'100 13'" in command && mtime == 100L) "" else """{"title":"A"}""", "")
             },
         )
         val first = client.read("/d/a.hdoc.json")
         assertEquals("A", first.doc?.title)
-        assertNull(client.read("/d/a.hdoc.json", since = 100).doc)
+        assertEquals("100 13", first.stamp)
+        assertNull(client.read("/d/a.hdoc.json", since = first.stamp).doc)
         mtime = 101
-        assertEquals("A", client.read("/d/a.hdoc.json", since = 100).doc?.title)
+        assertEquals("A", client.read("/d/a.hdoc.json", since = first.stamp).doc?.title)
         assertTrue(commands.all { "'/d/a.hdoc.json'" in it })
+    }
+
+    @Test
+    fun aFileThatCannotBeShownSaysWhichVersion() = runTest {
+        val big = DocsClient(DocsRunner { _, _ -> CommandResult(0, "${DocsCommands.MARK}5 ${DocsCommands.MAX_BYTES + 1} /d/big.hdoc.json\n", "") })
+        assertEquals("5 ${DocsCommands.MAX_BYTES + 1}", assertFailsWith<DocUnreadable> { big.read("/d/big.hdoc.json") }.stamp)
+        val half = DocsClient(DocsRunner { _, _ -> CommandResult(0, "${DocsCommands.MARK}6 9 /d/half.hdoc.json\n{\"title", "") })
+        assertEquals("6 9", assertFailsWith<DocUnreadable> { half.read("/d/half.hdoc.json") }.stamp)
+    }
+
+    @Test
+    fun linksOpenOnlyTheWebAndMail() {
+        val doc = HerdrDocs.parse(
+            """{"blocks":[{"type":"links","items":[{"label":"PR","url":"https://x/pr/1"},{"url":"mailto:a@b"},
+              {"label":"bad","url":"intent://evil#Intent;end"},{"label":"file","url":"file:///etc/passwd"},{"label":"none"}]}]}""",
+        )
+        assertEquals(listOf("https://x/pr/1", "mailto:a@b"), (doc.blocks.single() as DocBlock.Links).items.map { it.url })
     }
 
     @Test
@@ -139,17 +159,30 @@ class DocsTest {
             File(dir, "new one.hdoc.json").apply { writeText("""{"title":"Runbook: rotate keys","kind":"runbook","status":"ready","blocks":[]}"""); setLastModified(1_700_000_500_000) }
             File(dir, "broken.hdoc.json").apply { writeText("{\"title\": \"Half"); setLastModified(1_700_000_100_000) }
             File(dir, "notes.md").writeText("# not a doc")
+            File(dir, "-n.hdoc.json").apply { writeText("""{"title":"Dash"}"""); setLastModified(1_699_000_000_000) }
             val list = client.list()
             // The cut-off one keeps its place, under its file's name.
-            assertEquals(listOf("Runbook: rotate keys", "broken", "Pod scheduling failures in shop-prod"), list.map { it.title })
+            // A name that starts with a dash is a name, not an option.
+            assertEquals(listOf("Runbook: rotate keys", "broken", "Pod scheduling failures in shop-prod", "Dash"), list.map { it.title })
+            assertEquals(1_699_000_000, list[3].mtime)
             assertEquals(1_700_000_500, list[0].mtime)
             assertEquals("${dir.path}/new one.hdoc.json", list[0].path)
             val read = client.read(list[2].path)
             assertEquals(1_700_000_000, read.mtime)
             assertEquals(9, read.doc!!.blocks.size)
-            assertNull(client.read(list[2].path, since = read.mtime).doc)
+            assertNull(client.read(list[2].path, since = read.stamp).doc)
             assertEquals("No such document", assertFailsWith<IOException> { client.read("${dir.path}/gone.hdoc.json") }.message)
-            assertFailsWith<IOException> { client.read(list[1].path) }
+            assertFailsWith<DocUnreadable> { client.read(list[1].path) }
+            // Rewritten within the same second, longer: still read again.
+            val old = File(list[2].path)
+            old.writeText(example.replace("\"status\": \"work\"", "\"status\": \"ready\""))
+            old.setLastModified(1_700_000_000_000)
+            assertEquals("ready", client.read(list[2].path, since = read.stamp).doc?.status)
+            // Too large: the shell doesn't send it at all.
+            val big = File(dir, "big.hdoc.json").apply { writeText("{\"title\":\"" + "x".repeat(DocsCommands.MAX_BYTES) + "\"}") }
+            val raw = sh(home, DocsCommands.read(big.path))
+            assertTrue(raw.stdout.length < 200)
+            assertFailsWith<DocUnreadable> { client.read(big.path) }
         } finally {
             home.deleteRecursively()
         }

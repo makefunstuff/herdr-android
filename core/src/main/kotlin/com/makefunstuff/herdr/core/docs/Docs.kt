@@ -175,11 +175,14 @@ object HerdrDocs {
         "progress" -> DocBlock.Progress(b.text("label"), b.num("value") ?: 0.0, b.num("max")?.takeIf { it > 0 } ?: 1.0, b.str("tone"))
         "code" -> DocBlock.Code(b.text("text"), b.str("lang"), b.str("file"))
         "diff" -> DocBlock.Diff(b.text("text"), b.str("file"))
-        "links" -> DocBlock.Links(b.objs("items").map { Link(it.text("label").ifEmpty { it.text("url") }, it.text("url")) }.filter { it.url.isNotBlank() })
+        "links" -> DocBlock.Links(b.objs("items").map { Link(it.text("label").ifEmpty { it.text("url") }, it.text("url").trim()) }.filter { opens(it.url) })
         "image" -> b.str("path")?.takeIf { it.isNotBlank() }?.let { DocBlock.Image(it, b.str("caption")) }
         "divider" -> DocBlock.Divider
         else -> null
     }
+
+    /** Links open in the browser or the mail app only: an agent's document never opens an intent, a file or a content URI. */
+    fun opens(url: String): Boolean = url.substringBefore(':', "").lowercase() in setOf("http", "https", "mailto")
 
     /** A number written as a number or as text ("42", "3.5"). */
     private fun JsonObject.num(key: String): Double? = (this[key] as? JsonPrimitive)?.let { it.doubleOrNull ?: it.contentOrNull?.trim()?.toDoubleOrNull() }
@@ -270,28 +273,35 @@ object DocsCommands {
     /** At most this many documents in the list, the newest. */
     const val MAX_LIST = 60
 
-    /** A file's change time in seconds, with GNU's stat or the BSDs' and macOS's. */
-    private const val MTIME = "{ stat -c %Y \"\$f\" 2>/dev/null || stat -f %m \"\$f\" 2>/dev/null || echo 0; }"
+    /** The change time in seconds of [file] (a shell word), with GNU's stat or the BSDs' and macOS's. */
+    private fun mtime(file: String) = "{ stat -c %Y $file 2>/dev/null || stat -f %m $file 2>/dev/null || echo 0; }"
 
-    /** The folder's documents, newest first: for each its mark, then its head. No folder is no documents. */
+    /** The folder's documents, newest first, each name as `./name` so one that starts with `-` stays a name. */
     fun list(): String =
         "d=\"\$HOME/.herdr/docs\"; [ -d \"\$d\" ] || exit 0; cd \"\$d\" || exit 0; " +
             "ls -1t 2>/dev/null | grep '\\.hdoc\\.json\$' | head -n $MAX_LIST | while IFS= read -r f; do " +
-            "[ -f \"\$f\" ] || continue; m=\$($MTIME); s=\$(wc -c < \"\$f\" | tr -d ' '); " +
-            "printf '\\n$MARK%s %s %s/%s\\n' \"\$m\" \"\$s\" \"\$d\" \"\$f\"; head -c $HEAD_BYTES \"\$f\"; done"
+            "[ -f \"./\$f\" ] || continue; m=\$(${mtime("\"./\$f\"")}); s=\$(wc -c < \"./\$f\" | tr -d ' '); " +
+            "printf '\\n$MARK%s %s %s/%s\\n' \"\$m\" \"\$s\" \"\$d\" \"\$f\"; head -c $HEAD_BYTES \"./\$f\"; done"
 
     /**
-     * One document: its mark, then the file, unless it hasn't changed since [since] (its mtime when last read), so a
-     * document open on the phone is re-read only when its writer changes it.
+     * One document: its mark, then the file, unless it is still the one read at [since] (its [DocRead.stamp]: mtime and
+     * size, so two writes in one second still differ) or larger than [MAX_BYTES]. A document open on the phone is sent
+     * again only when its writer changes it.
      */
-    fun read(path: String, since: Long? = null): String =
-        "f=${quote(path)}; [ -f \"\$f\" ] || { echo \"No such document\" >&2; exit 2; }; m=\$($MTIME); s=\$(wc -c < \"\$f\" | tr -d ' '); " +
+    fun read(path: String, since: String? = null): String =
+        "f=${quote(path)}; [ -f \"\$f\" ] || { echo \"No such document\" >&2; exit 2; }; m=\$(${mtime("\"\$f\"")}); s=\$(wc -c < \"\$f\" | tr -d ' '); " +
             "printf '$MARK%s %s %s\\n' \"\$m\" \"\$s\" \"\$f\"; " +
-            "[ \"\$m\" = ${quote((since ?: -1L).toString())} ] || head -c $MAX_BYTES \"\$f\""
+            "[ \"\$m \$s\" = ${quote(since ?: "-")} ] || [ \"\$s\" -gt $MAX_BYTES ] || head -c $MAX_BYTES \"\$f\""
 }
 
-/** One read of a document: its file's [mtime], and the document where it changed since the time asked about. */
-data class DocRead(val mtime: Long, val doc: HerdrDoc?)
+/**
+ * One read of a document: its file's [mtime], its [stamp] (mtime and size) to ask with next time, and the document where
+ * it changed since the stamp asked with.
+ */
+data class DocRead(val mtime: Long, val stamp: String, val doc: HerdrDoc?)
+
+/** The file is there but can't be shown (too large, not a herdr.doc); [stamp] says which version, so it is read again only once it changes. */
+class DocUnreadable(val stamp: String, message: String) : IOException(message)
 
 /** Runs one of [DocsCommands] on the machine; the app's is its SSH connection, tests give their own. */
 fun interface DocsRunner {
@@ -311,17 +321,29 @@ class DocsClient(private val runner: DocsRunner) {
         return parseList(r.stdout)
     }
 
-    /** The document at [path], or only its mtime where it is still the one read at [since]. */
-    suspend fun read(path: String, since: Long? = null): DocRead {
+    /**
+     * The document at [path], or only its stamp where it is still the one read at [since]. A file that is there but
+     * can't be shown is a [DocUnreadable] with its stamp.
+     */
+    suspend fun read(path: String, since: String? = null): DocRead {
         val r = runner.run(DocsCommands.read(path, since), 60)
         if (r.exitStatus == null && r.stdout.isEmpty()) throw IOException("The machine took too long to answer")
-        val head = r.stdout.lineSequence().firstOrNull { it.startsWith(DocsCommands.MARK) }
+        // From the mark on: a login script may have printed something before it.
+        val at = r.stdout.indexOf(DocsCommands.MARK).takeIf { it == 0 || it > 0 && r.stdout[it - 1] == '\n' }
             ?: throw IOException(reason(r, "Couldn't read ${path.substringAfterLast('/')}"))
-        val mtime = head.removePrefix(DocsCommands.MARK).substringBefore(' ').toLongOrNull() ?: 0
-        if (since != null && mtime == since) return DocRead(mtime, null)
-        val size = head.removePrefix(DocsCommands.MARK).split(' ').getOrNull(1)?.toLongOrNull() ?: 0
-        if (size > DocsCommands.MAX_BYTES) throw IOException("It is ${size / (1024 * 1024)} MB, too large to read on the phone")
-        return DocRead(mtime, HerdrDocs.parse(r.stdout.substringAfter('\n', "")))
+        val text = r.stdout.substring(at)
+        val words = text.substringBefore('\n').removePrefix(DocsCommands.MARK).split(' ')
+        val mtime = words.getOrNull(0)?.toLongOrNull() ?: 0
+        val size = words.getOrNull(1)?.toLongOrNull() ?: 0
+        val stamp = "$mtime $size"
+        if (stamp == since) return DocRead(mtime, stamp, null)
+        if (size > DocsCommands.MAX_BYTES) throw DocUnreadable(stamp, "It is ${size / (1024 * 1024)} MB, too large to read on the phone")
+        val doc = try {
+            HerdrDocs.parse(text.substringAfter('\n', ""))
+        } catch (e: IOException) {
+            throw DocUnreadable(stamp, e.message ?: "It isn't a herdr.doc")
+        }
+        return DocRead(mtime, stamp, doc)
     }
 
     companion object {

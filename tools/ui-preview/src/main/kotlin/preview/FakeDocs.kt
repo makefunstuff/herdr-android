@@ -33,8 +33,8 @@ class FakeDocs(
         val path = Shell.words(command.substringBefore(";")).first().removePrefix("f=")
         val f = files[path.removePrefix("$dir/")] ?: return CommandResult(2, "", "No such document\n")
         val m = mtime(f.second)
-        val since = Regex("""\[ "\$m" = '(-?\d+)' ]""").find(command)?.groupValues?.get(1)?.toLongOrNull()
-        return CommandResult(0, "${DocsCommands.MARK}$m ${f.first.length} $path\n" + if (since == m) "" else f.first, "")
+        val since = Regex("""\[ "\${'$'}m \${'$'}s" = '([^']*)' ]""").find(command)?.groupValues?.get(1)
+        return CommandResult(0, "${DocsCommands.MARK}$m ${f.first.length} $path\n" + if (since == "$m ${f.first.length}") "" else f.first, "")
     }
 }
 

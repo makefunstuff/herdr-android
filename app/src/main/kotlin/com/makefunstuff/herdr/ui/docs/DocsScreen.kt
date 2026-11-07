@@ -48,6 +48,10 @@ import com.makefunstuff.herdr.ui.images.ChatImages
 import com.makefunstuff.herdr.ui.images.LocalChatImages
 import com.makefunstuff.herdr.ui.theme.Herdr
 import com.makefunstuff.herdr.ui.theme.Space
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
+import com.makefunstuff.herdr.core.docs.DocUnreadable
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 
@@ -77,19 +81,23 @@ fun DocsScreen(nav: NavController, machineId: String, inTab: Boolean = false) {
     val state by session.state.collectAsStateWithLifecycle()
     var list by remember(session) { mutableStateOf<List<DocEntry>?>(null) }
     var problem by remember(session) { mutableStateOf<String?>(null) }
+    val owner = LocalLifecycleOwner.current
     LaunchedEffect(session, state.online) {
         if (!state.online) return@LaunchedEffect
         val client = session.docs()
-        while (true) {
-            try {
-                list = client.list()
-                problem = null
-            } catch (e: CancellationException) {
-                throw e
-            } catch (t: Throwable) {
-                problem = t.message ?: "Couldn't read the docs"
+        // Only while the app is in front: no SSH commands from a screen nobody sees.
+        owner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            while (true) {
+                try {
+                    list = client.list()
+                    problem = null
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (t: Throwable) {
+                    problem = t.message ?: "Couldn't read the docs"
+                }
+                delay(LIST_EVERY_MS)
             }
-            delay(LIST_EVERY_MS)
         }
     }
     var query by remember { mutableStateOf("") }
@@ -159,21 +167,34 @@ fun DocScreen(nav: NavController, machineId: String, path: String) {
     var doc by remember(session, path) { mutableStateOf<HerdrDoc?>(null) }
     var mtime by remember(session, path) { mutableStateOf<Long?>(null) }
     var problem by remember(session, path) { mutableStateOf<String?>(null) }
+    val owner = LocalLifecycleOwner.current
     LaunchedEffect(session, path, state.online) {
         if (!state.online) return@LaunchedEffect
         val client = session.docs()
-        while (true) {
-            try {
-                val read = client.read(path, since = mtime.takeIf { doc != null })
-                read.doc?.let { doc = it }
-                mtime = read.mtime
-                problem = null
-            } catch (e: CancellationException) {
-                throw e
-            } catch (t: Throwable) {
-                problem = t.message ?: "Couldn't read it"
+        // The version last seen, shown or not: a file that can't be shown (too large, half-written) isn't fetched
+        // again until it changes, and an unchanged one keeps what it showed.
+        var seen: String? = null
+        // The version seen can't be shown: its reason stays until the file changes; a failed look clears on the next.
+        var unreadable = false
+        owner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            while (true) {
+                try {
+                    val read = client.read(path, since = seen)
+                    seen = read.stamp
+                    mtime = read.mtime
+                    read.doc?.let { doc = it; unreadable = false }
+                    if (!unreadable) problem = null
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: DocUnreadable) {
+                    seen = e.stamp
+                    unreadable = true
+                    problem = e.message
+                } catch (t: Throwable) {
+                    problem = t.message ?: "Couldn't read it"
+                }
+                delay(DOC_EVERY_MS)
             }
-            delay(DOC_EVERY_MS)
         }
     }
     val c = Herdr.colors
