@@ -174,21 +174,21 @@ fun DocScreen(nav: NavController, machineId: String, path: String) {
         // The version last seen, shown or not: a file that can't be shown (too large, half-written) isn't fetched
         // again until it changes, and an unchanged one keeps what it showed.
         var seen: String? = null
-        // The version seen can't be shown: its reason stays until the file changes; a failed look clears on the next.
-        var unreadable = false
+        // Why the version seen can't be shown: it stays until the file changes; a failed look clears on the next.
+        var unreadable: String? = null
         owner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             while (true) {
                 try {
                     val read = client.read(path, since = seen)
                     seen = read.stamp
                     mtime = read.mtime
-                    read.doc?.let { doc = it; unreadable = false }
-                    if (!unreadable) problem = null
+                    read.doc?.let { doc = it; unreadable = null }
+                    problem = unreadable
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: DocUnreadable) {
                     seen = e.stamp
-                    unreadable = true
+                    unreadable = e.message
                     problem = e.message
                 } catch (t: Throwable) {
                     problem = t.message ?: "Couldn't read it"
@@ -222,11 +222,25 @@ fun DocScreen(nav: NavController, machineId: String, path: String) {
                         if (d.blocks.isEmpty()) item(key = "empty") {
                             Text("Nothing written yet.", style = MaterialTheme.typography.bodyMedium, color = c.muted)
                         }
-                        itemsIndexed(d.blocks, key = { i, _ -> "b$i" }) { i, b -> DocBlockView(b, "b$i", machineId) }
+                        // A section's fold is kept under its title and how many before it share it, not its place: an agent writing
+                        // a block above it doesn't reset it.
+                        val names = blockNames(d.blocks)
+                        itemsIndexed(d.blocks, key = { i, _ -> "b$i" }) { i, b -> DocBlockView(b, names[i], machineId) }
                     }
                 }
             }
         }
+    }
+}
+
+/** Each top-level block's name for what it remembers: a section by its title and occurrence, the rest by place. */
+internal fun blockNames(blocks: List<com.makefunstuff.herdr.core.docs.DocBlock>): List<String> {
+    val seen = HashMap<String, Int>()
+    return blocks.mapIndexed { i, b ->
+        if (b is com.makefunstuff.herdr.core.docs.DocBlock.Section) {
+            val n = seen.merge(b.title, 1, Int::plus)!!
+            "s-${b.title}-$n"
+        } else "b$i"
     }
 }
 

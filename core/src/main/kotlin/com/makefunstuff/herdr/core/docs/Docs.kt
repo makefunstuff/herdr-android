@@ -265,7 +265,7 @@ object DocsCommands {
     const val MARK = "@@hdoc "
 
     /** How much of each file the list reads: its head, where the title, kind and status are. */
-    const val HEAD_BYTES = 16384
+    const val HEAD_BYTES = 4096
 
     /** The largest document the phone reads: the format asks for under 2 MB. */
     const val MAX_BYTES = 4 * 1024 * 1024
