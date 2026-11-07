@@ -19,8 +19,19 @@ object BoardDetection {
      */
     const val TOKEN_COMMAND = "cat \"\${SHEPHERDR_DATA:-\$HOME/.herdr/shepherdr}/token\" 2>/dev/null; true"
 
+    /**
+     * The board a machine shows: its [choice] ([com.makefunstuff.herdr.core.ssh.Machine.taskSource]), where one is set;
+     * else simple-herdr-projects where [shp] is on the machine, and Shepherdr 3 where its service answers.
+     */
+    fun decide(v3: V2Version?, shp: Boolean = false, choice: String? = null): BoardApi = when (choice) {
+        "shp" -> if (shp) BoardApi.Shp else BoardApi.None
+        "shepherdr" -> shepherdr(v3)
+        else -> if (shp) BoardApi.Shp else shepherdr(v3)
+    }
+
     /** Shepherdr 3 where its service answers, else none. */
-    fun decide(v3: V2Version?): BoardApi = if (v3 != null && v3.major >= MIN_MAJOR) BoardApi.V2(v3.version) else BoardApi.None
+    private fun shepherdr(v3: V2Version?): BoardApi =
+        if (v3 != null && v3.major >= MIN_MAJOR) BoardApi.V2(v3.version) else BoardApi.None
 
     /** What answers on [transport] (`/api/health`), or null when nothing (or not Shepherdr 3) does. */
     suspend fun probe(transport: ShepherdrTransport): V2Version? = try {

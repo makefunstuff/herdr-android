@@ -249,7 +249,7 @@ fun TasksScreen(
 
     /** A Ready task whose Accept card is up, and its machine. */
     var acceptFor by remember { mutableStateOf<Pair<Waiting.Task, WorkTask>?>(null) }
-    // Shepherdr's Accept: its card first, which says what you approve.
+    // The Accept card first, which says what you approve (shp's own, as it has no evidence to read).
     fun merge(w: Waiting.Task, t: WorkTask) {
         acceptFor = w to t
     }
@@ -542,7 +542,12 @@ fun TasksScreen(
         val board by androidx.compose.runtime.produceState<com.makefunstuff.herdr.core.board.WorkBoard?>(null, w.machineId) {
             value = runCatching { container.hosts.session(w.machineId)?.awaitWorkBoard() }.getOrNull()
         }
-        com.makefunstuff.herdr.ui.board.AcceptSheet(
+        val shp = container.hosts.session(w.machineId)?.state?.value?.boardApi is com.makefunstuff.herdr.core.board.BoardApi.Shp
+        if (shp) com.makefunstuff.herdr.ui.board.ShpAcceptSheet(
+            board, t, onDismiss = { acceptFor = null },
+            onAccepted = { context.toast(it); readNow.trySend(Unit) },
+            confirm = { run -> guard.run(Guarded.Merge, "Accept ${t.name}?", t.title) { view.confirmTap(); run() } },
+        ) else com.makefunstuff.herdr.ui.board.AcceptSheet(
             board, t, onDismiss = { acceptFor = null },
             onProof = { id -> nav.navigate(com.makefunstuff.herdr.Routes.artifact(w.machineId, id, null)) },
             onAccepted = {
