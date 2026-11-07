@@ -25,6 +25,8 @@ class ShpCard(
     /** Its worker's terminal transcript, for `hc read`; null where it has no live worker. */
     var transcript: String? = null,
     val brief: String = "",
+    /** Its pull request's link, once it has one. */
+    val pr: String? = null,
 ) {
     fun head(): JsonObject = buildJsonObject {
         put("id", JsonPrimitive(id))
@@ -43,6 +45,7 @@ class ShpCard(
         left?.let { put("left", JsonPrimitive(it)) }
         progress?.let { put("progress", JsonPrimitive(it)) }
         summary?.let { put("summary", JsonPrimitive(it)) }
+        pr?.let { put("pr", JsonPrimitive(it)) }
     }
 }
 
@@ -132,7 +135,7 @@ object DemoShp {
                     id = "APP-2", title = "Ship the smaller board rows", status = "ready",
                     summary = "The rows are compact now, and the empty state fits on one screen.",
                     brief = "Make each board row two lines at most, and keep the status word once.",
-                    progress = null,
+                    progress = null, pr = "https://github.com/demo/app/pull/57",
                 ),
                 ShpCard(
                     id = "APP-5", title = "Split the settings card", status = "working",

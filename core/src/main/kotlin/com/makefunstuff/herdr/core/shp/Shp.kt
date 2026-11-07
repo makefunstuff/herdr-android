@@ -1,6 +1,7 @@
 package com.makefunstuff.herdr.core.shp
 
 import com.makefunstuff.herdr.core.ssh.CommandResult
+import com.makefunstuff.herdr.core.ssh.HerdrCommands
 import com.makefunstuff.herdr.core.ssh.HerdrCommands.quote
 import com.makefunstuff.herdr.core.ssh.MachineConnection
 import kotlinx.serialization.SerialName
@@ -28,12 +29,8 @@ object ShpCommands {
     /** Where [list]'s `shp list --json` starts. */
     const val LIST_MARK = "@@shp-list"
 
-    /**
-     * Runs [command] in the machine's login shell: `shp` and `hc` live in `~/.local/bin` on many
-     * machines, which an SSH exec's PATH often lacks (as herdr and herdr-core are found the same way).
-     */
-    private fun login(command: String) =
-        "sh -c " + quote("exec \"\${SHELL:-/bin/sh}\" -lc \"\$1\" </dev/null") + " sh " + quote(command)
+    /** Runs [command] in the machine's login shell, where `shp` and `hc` are on the PATH. */
+    private fun login(command: String) = HerdrCommands.login(command)
 
     /** Prints the path of shp where the machine has it, nothing where it doesn't. */
     fun present(): String = login("command -v shp 2>/dev/null || true")

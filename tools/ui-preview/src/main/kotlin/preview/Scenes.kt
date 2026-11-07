@@ -71,6 +71,11 @@ private fun SceneData.shp() {
     host(DEVBOX).shp = DemoShp.board()
 }
 
+/** gh on devbox, signed in as sam, with the demo's pull requests. */
+private fun SceneData.github() {
+    host(DEVBOX).github = DemoGitHub.board()
+}
+
 /** simple-herdr-projects with no space yet: the board's empty state. */
 private fun SceneData.shpEmpty() {
     host(DEVBOX).shp = FakeShp(emptyMap())
@@ -751,7 +756,32 @@ fun scenes(): List<Scene> = listOf(
     // the task's agent), its pull request with its checks, and a task whose folder is gone.
     Scene("task-v2-files", route = Routes.board(DEVBOX, "AND-20"), setup = { v2() }, actions = { tapText("FILES") }),
     Scene("task-v2-changes", route = Routes.board(DEVBOX, "AND-20"), setup = { v2() }, actions = { tapText("CHANGES") }),
-    Scene("task-v2-pr", route = Routes.board(DEVBOX, "AND-20"), setup = { v2() }, actions = { tapText("PULL REQUEST") }),
+    // Its pull request to review, read with gh on devbox: Approve, Request changes, Comment, checks, threads, the conversation.
+    Scene("task-v2-pr", route = Routes.board(DEVBOX, "AND-20"), setup = { v2(); github() }, actions = { tapText("PULL REQUEST") }),
+    Scene("task-v2-pr-all", route = Routes.board(DEVBOX, "AND-20"), heightDp = 2000, setup = { v2(); github() }, actions = { tapText("PULL REQUEST") }),
+    Scene("task-v2-pr-resolved", route = Routes.board(DEVBOX, "AND-20"), heightDp = 2000, setup = { v2(); github() }, actions = {
+        tapText("PULL REQUEST"); settle(); tapText("limit_test.go:12")
+    }),
+    Scene("task-v2-pr-approve", route = Routes.board(DEVBOX, "AND-20"), setup = { v2(); github() }, actions = { tapText("PULL REQUEST"); settle(); tapExact("Approve") }),
+    Scene("task-v2-pr-changes", route = Routes.board(DEVBOX, "AND-20"), setup = { v2(); github() }, actions = {
+        tapText("PULL REQUEST"); settle(); tapExact("Request changes"); type("Round Retry-After up to whole seconds.")
+    }),
+    Scene("task-v2-pr-reply", route = Routes.board(DEVBOX, "AND-20"), heightDp = 1700, setup = { v2(); github() }, actions = {
+        tapText("PULL REQUEST"); settle(); tapLabel("Reply to limit.go:41"); type("Per instance is fine for now; note it in the setting's help.")
+    }),
+    // Posted: the reply shows in its thread on the next read.
+    Scene("task-v2-pr-replied", route = Routes.board(DEVBOX, "AND-20"), heightDp = 1700, setup = { v2(); github() }, actions = {
+        tapText("PULL REQUEST"); settle(); tapLabel("Reply to limit.go:41"); type("Per instance is fine for now."); tapExact("Post reply"); settle()
+    }),
+    // GitHub refuses it (its own pull request, a protected branch): the sheet stays, with what was written.
+    Scene("task-v2-pr-refused", route = Routes.board(DEVBOX, "AND-20"), setup = { v2(); github(); host(DEVBOX).github?.refuseReview = "Can not approve your own pull request" }, actions = {
+        tapText("PULL REQUEST"); settle(); tapExact("Approve"); tapLastExact("Approve"); settle()
+    }),
+    // The person's own pull request: GitHub takes comments only, so there's no Approve.
+    Scene("task-v2-pr-own", route = Routes.board(DEVBOX, "AND-20"), setup = { v2(); host(DEVBOX).github = DemoGitHub.board(viewer = "herdr-bot") }, actions = { tapText("PULL REQUEST") }),
+    // No gh on the machine: the board's own answer, and why there's no review.
+    Scene("task-v2-pr-no-gh", route = Routes.board(DEVBOX, "AND-20"), setup = { v2() }, actions = { tapText("PULL REQUEST") }),
+    Scene("shp-task-pr", route = Routes.board(DEVBOX, "APP-2"), setup = { shp(); github() }, actions = { tapText("PULL REQUEST") }),
     Scene(
         "task-v2-comment", route = Routes.codeFile(CodeSpot(DEVBOX, FakeCode.TASK, task = "AND-20", taskName = "AND-20"), CARD, line = 33), setup = { v2() },
         actions = { tapLabel("line 37"); tapLabel("line 38"); tapText("Comment"); type("Say when it was last answered, not when it was read.") },
