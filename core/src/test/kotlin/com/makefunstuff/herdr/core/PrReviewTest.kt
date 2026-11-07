@@ -112,7 +112,20 @@ class PrReviewTest {
         )
         assertEquals("Not Found", why(CommandResult(1, """{"message":"Not Found"}""", "gh: Not Found (HTTP 404)")))
         assertEquals("Bad credentials (HTTP 401)", why(CommandResult(1, "", "gh: Bad credentials (HTTP 401)")))
-        assertEquals("Could not resolve", assertFailsWith<IOException> { Reviews.check("""{"errors":[{"message":"Could not resolve"}]}""") }.message)
+        assertEquals("Could not resolve", assertFailsWith<IOException> { Reviews.data("""{"errors":[{"message":"Could not resolve"}]}""") }.message)
+    }
+
+    @Test
+    fun theLoginShellPassesTheBodyOnToGh() {
+        // gh reads its request from standard input; the login shell must not swap it for /dev/null.
+        fun shell(command: String): String {
+            val p = ProcessBuilder("sh", "-c", command).redirectErrorStream(true).start()
+            p.outputStream.use { it.write("""{"body":"hi"}""".toByteArray()) }
+            return p.inputStream.bufferedReader().readText().also { p.waitFor() }
+        }
+        assertEquals("""{"body":"hi"}""", shell(com.makefunstuff.herdr.core.ssh.HerdrCommands.login("cat -", input = true)))
+        assertEquals("", shell(com.makefunstuff.herdr.core.ssh.HerdrCommands.login("cat -")))
+        assertTrue(GhCommands.graphql().contains("-lc \"\$1\"' sh"), GhCommands.graphql())
     }
 
     @Test

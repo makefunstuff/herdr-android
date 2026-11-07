@@ -21,7 +21,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -58,6 +58,8 @@ import com.makefunstuff.herdr.ui.theme.caps
 import com.makefunstuff.herdr.ui.theme.CodeStyle
 import com.makefunstuff.herdr.ui.theme.Herdr
 import com.makefunstuff.herdr.ui.theme.Space
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
 /** gh on the task's machine, with the person's own login there: what reviews its pull request. */
@@ -77,7 +79,13 @@ internal sealed interface ReviewWrite {
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun ReviewBody(r: PrReview, onWrite: (ReviewWrite) -> Unit, onResolve: (PrThread) -> Unit, note: String? = null) {
+internal fun ReviewBody(
+    r: PrReview,
+    onWrite: (ReviewWrite) -> Unit,
+    onResolve: (PrThread) -> Unit,
+    resolving: Set<String> = emptySet(),
+    note: String? = null,
+) {
     val c = Herdr.colors
     val now = LocalContainer.current.code.now()
     var opened by rememberSaveable(r.ref.toString()) { mutableStateOf(setOf<String>()) }
@@ -132,7 +140,7 @@ internal fun ReviewBody(r: PrReview, onWrite: (ReviewWrite) -> Unit, onResolve: 
         )
         if (open.isEmpty()) Text(if (r.threads.isEmpty()) Reviews.NO_THREADS else Reviews.ALL_RESOLVED, style = MaterialTheme.typography.bodyMedium, color = c.muted)
         open.forEach { th ->
-            QuietCard { ThreadBody(th, now, r.open, onWrite, onResolve) }
+            QuietCard { ThreadBody(th, now, r.open, onWrite, onResolve, busy = th.id in resolving) }
         }
         if (done.isNotEmpty()) {
             SectionHeading(Reviews.RESOLVED, top = Space.s, trailing = { Text("${done.size}", style = MaterialTheme.typography.labelMedium, color = c.muted) })
@@ -149,7 +157,7 @@ internal fun ReviewBody(r: PrReview, onWrite: (ReviewWrite) -> Unit, onResolve: 
                         onClickLabel = if (shown) "Fold it" else "Show the thread",
                         onClick = { opened = if (shown) opened - th.id else opened + th.id },
                     )
-                    if (shown) ThreadBody(th, now, r.open, onWrite, onResolve, head = false)
+                    if (shown) ThreadBody(th, now, r.open, onWrite, onResolve, head = false, busy = th.id in resolving)
                 }
             }
         }
@@ -170,7 +178,15 @@ internal fun ReviewBody(r: PrReview, onWrite: (ReviewWrite) -> Unit, onResolve: 
 
 /** A thread's place, the last lines of the code it is on, its comments, then Reply and Resolve (or Reopen). */
 @Composable
-private fun ThreadBody(th: PrThread, now: Long, open: Boolean, onWrite: (ReviewWrite) -> Unit, onResolve: (PrThread) -> Unit, head: Boolean = true) {
+private fun ThreadBody(
+    th: PrThread,
+    now: Long,
+    open: Boolean,
+    onWrite: (ReviewWrite) -> Unit,
+    onResolve: (PrThread) -> Unit,
+    head: Boolean = true,
+    busy: Boolean = false,
+) {
     val c = Herdr.colors
     if (head) Row(Modifier.fillMaxWidth().padding(horizontal = Space.m).padding(top = Space.m), verticalAlignment = Alignment.CenterVertically) {
         val dir = th.path.substringBeforeLast('/', "")
@@ -192,13 +208,15 @@ private fun ThreadBody(th: PrThread, now: Long, open: Boolean, onWrite: (ReviewW
         }
     }
     if (open) Row(Modifier.padding(horizontal = Space.xs), horizontalArrangement = Arrangement.spacedBy(Space.xs)) {
-        QuietButton(onClick = { onWrite(ReviewWrite.Reply(th)) }, Modifier.semantics { contentDescription = "Reply to ${th.place}" }) {
+        // A reply goes under the thread's first comment, by its id; without one there is nowhere to post it.
+        if (th.comments.first().id != 0L) QuietButton(onClick = { onWrite(ReviewWrite.Reply(th)) }, Modifier.semantics { contentDescription = "Reply to ${th.place}" }) {
             Icon(HerdrIcons.Reply, null, Modifier.size(16.dp))
             Text(Reviews.REPLY)
         }
         if (th.id.isNotEmpty()) QuietButton(
             onClick = { onResolve(th) },
-            Modifier.semantics { contentDescription = "${if (th.resolved) Reviews.REOPEN else Reviews.RESOLVE} ${th.place}" },
+            modifier = Modifier.semantics { contentDescription = "${if (th.resolved) Reviews.REOPEN else Reviews.RESOLVE} ${th.place}" },
+            enabled = !busy,
         ) {
             Icon(if (th.resolved) HerdrIcons.RotateCcw else HerdrIcons.Check, null, Modifier.size(16.dp))
             Text(if (th.resolved) Reviews.REOPEN else Reviews.RESOLVE)
@@ -275,10 +293,17 @@ private fun decisionColor(state: String?): Color = Herdr.colors.let { c ->
  * verdict. Posted as the machine's gh login only on its button; what was written stays if it fails.
  */
 @Composable
-internal fun ReviewSheet(r: PrReview, write: ReviewWrite, client: ReviewClient, onDismiss: () -> Unit, onDone: () -> Unit) {
+internal fun ReviewSheet(r: PrReview, write: ReviewWrite, client: ReviewClient, scope: CoroutineScope, onDismiss: () -> Unit, onDone: () -> Unit) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var text by rememberSaveable(write.toString()) { mutableStateOf("") }
+    val key = when (write) {
+        is ReviewWrite.Reply -> "reply:${write.thread.id}:${write.thread.comments.first().id}"
+        ReviewWrite.Comment -> "comment"
+        is ReviewWrite.Verdict -> write.verdict.name
+    }
+    var text by rememberSaveable(key) { mutableStateOf("") }
+    // Whether the sheet is still up: a post outlives it (it runs in the screen's [scope]) and then says how it went in a toast.
+    val up = remember { java.util.concurrent.atomic.AtomicBoolean(true) }
+    DisposableEffect(Unit) { onDispose { up.set(false) } }
     var sending by remember { mutableStateOf(false) }
     // Why GitHub refused it, shown in the sheet with what was written kept.
     var refused by remember(write) { mutableStateOf<String?>(null) }
@@ -321,13 +346,12 @@ internal fun ReviewSheet(r: PrReview, write: ReviewWrite, client: ReviewClient, 
                     sending = true
                     refused = null
                     scope.launch {
-                        runCatching {
+                        try {
                             when (write) {
                                 is ReviewWrite.Reply -> client.reply(r.ref, write.thread.comments.first().id, text)
                                 ReviewWrite.Comment -> client.comment(r.ref, text)
                                 is ReviewWrite.Verdict -> client.review(r.ref, write.verdict, text, r.headOid)
                             }
-                        }.onSuccess {
                             context.toast(
                                 when (write) {
                                     is ReviewWrite.Reply -> "Reply posted"
@@ -336,7 +360,12 @@ internal fun ReviewSheet(r: PrReview, write: ReviewWrite, client: ReviewClient, 
                                 },
                             )
                             onDone()
-                        }.onFailure { refused = it.message ?: "GitHub didn't take it" }
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Throwable) {
+                            val why = e.message ?: "GitHub didn't take it"
+                            if (up.get()) refused = why else context.toast("Not posted: $why")
+                        }
                         sending = false
                     }
                 }

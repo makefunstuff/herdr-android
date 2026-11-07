@@ -166,13 +166,15 @@ internal fun TaskPullRequest(session: HostSession, t: WorkTask) {
     val scope = rememberCoroutineScope()
     val ref = remember(t.pr) { PrRef.parse(t.pr) }
     val client = remember(session) { session.github() }
-    var review by remember(t.id) { mutableStateOf<PrReview?>(null) }
-    var why by remember(t.id) { mutableStateOf<String?>(null) }
+    var review by remember(t.id, ref) { mutableStateOf<PrReview?>(null) }
+    var why by remember(t.id, ref) { mutableStateOf<String?>(null) }
+    // The threads being resolved or reopened now: their button waits for GitHub.
+    var resolving by remember(t.id) { mutableStateOf(setOf<String>()) }
     var answer by remember(t.id) { mutableStateOf<V2PrAnswer?>(null) }
     var problem by remember(t.id) { mutableStateOf<String?>(null) }
     var write by remember(t.id) { mutableStateOf<ReviewWrite?>(null) }
     var again by remember(t.id) { mutableIntStateOf(0) }
-    LaunchedEffect(t.id, again) {
+    LaunchedEffect(t.id, ref, again) {
         owner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             while (true) {
                 if (ref != null) {
@@ -205,12 +207,26 @@ internal fun TaskPullRequest(session: HostSession, t: WorkTask) {
         r != null -> ReviewBody(
             r, onWrite = { write = it },
             onResolve = { th ->
-                scope.launch {
-                    runCatching { client.resolve(th.id, !th.resolved) }
-                        .onSuccess { context.toast(if (th.resolved) "Thread reopened" else "Thread resolved"); again++ }
-                        .onFailure { context.toast(it.message ?: "GitHub didn't take it") }
+                if (th.id !in resolving) {
+                    resolving = resolving + th.id
+                    scope.launch {
+                        try {
+                            client.resolve(th.id, !th.resolved)
+                            context.toast(if (th.resolved) "Thread reopened" else "Thread resolved")
+                            again++
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Throwable) {
+                            context.toast(e.message ?: "GitHub didn't take it")
+                        } finally {
+                            resolving = resolving - th.id
+                        }
+                    }
                 }
             },
+            resolving = resolving,
+            // Read before, and the latest read failed: what shows may be old.
+            note = why?.let { "Couldn't read it again: $it" },
         )
         pr != null -> PullRequestBody(pr, why?.let { "Can't review it from the phone: $it" })
         why == null && answer == null && problem == null -> Box(Modifier.fillMaxSize()) { LoadingState(Worktree.ASKING_GITHUB, Modifier.align(Alignment.Center)) }
@@ -221,7 +237,7 @@ internal fun TaskPullRequest(session: HostSession, t: WorkTask) {
         }
     }
     val w = write
-    if (r != null && w != null) ReviewSheet(r, w, client, onDismiss = { write = null }, onDone = { write = null; again++ })
+    if (r != null && w != null) ReviewSheet(r, w, client, scope, onDismiss = { write = null }, onDone = { write = null; again++ })
 }
 
 /** The pull request's page from the board's answer alone: its head, links and checks, and [note] (why there's no review). */

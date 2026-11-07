@@ -157,10 +157,11 @@ object HerdrCommands {
 
     /**
      * Runs [command] in the machine's login shell: tools the person installed (`shp`, `hc`, `gh`) often live in
-     * `~/.local/bin` or Homebrew's folder, which an SSH exec's PATH lacks.
+     * `~/.local/bin` or Homebrew's folder, which an SSH exec's PATH lacks. Its standard input is empty unless
+     * [input]: a command that reads what the app sends (`gh api --input -`) keeps it.
      */
-    fun login(command: String): String =
-        "sh -c " + quote("exec \"\${SHELL:-/bin/sh}\" -lc \"\$1\" </dev/null") + " sh " + quote(command)
+    fun login(command: String, input: Boolean = false): String =
+        "sh -c " + quote("exec \"\${SHELL:-/bin/sh}\" -lc \"\$1\"" + if (input) "" else " </dev/null") + " sh " + quote(command)
 }
 
 /** One herdr executable found on a machine by [HerdrCommands.probe]. */

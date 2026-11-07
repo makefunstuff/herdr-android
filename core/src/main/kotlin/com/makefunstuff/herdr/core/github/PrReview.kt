@@ -93,7 +93,7 @@ object GhCommands {
     private const val ENV = "GH_PROMPT_DISABLED=1 GH_NO_UPDATE_NOTIFIER=1 GH_PAGER=cat NO_COLOR=1"
 
     /** `gh api <args> --input -`. */
-    fun api(vararg args: String): String = HerdrCommands.login("env $ENV gh api " + args.joinToString(" ") { quote(it) } + " --input -")
+    fun api(vararg args: String): String = HerdrCommands.login("env $ENV gh api " + args.joinToString(" ") { quote(it) } + " --input -", input = true)
 
     /** A GraphQL query or mutation; its body is `{"query": …, "variables": …}`. */
     fun graphql(): String = api("graphql")
@@ -159,7 +159,7 @@ class ReviewClient(private val runner: GhRunner) {
             put("query", "mutation(\$id:ID!){$mutation(input:{threadId:\$id}){thread{isResolved}}}")
             putJsonObject("variables") { put("id", id) }
         }
-        Reviews.check(call(GhCommands.graphql(), body.toString()))
+        Reviews.data(call(GhCommands.graphql(), body.toString()))
     }
 
     private fun words(text: String): String {
@@ -172,15 +172,18 @@ class ReviewClient(private val runner: GhRunner) {
     companion object {
         const val TIMEOUT = 40L
 
-        /** The desktop panel's query (`mods/px-pr`), less reactions: the PR, its checks, threads, reviews and comments. */
+        /**
+         * The desktop panel's query (`mods/px-pr`), less reactions: the PR, its checks, threads, reviews and comments
+         * (the latest hundred of each, on a busy one).
+         */
         val QUERY = """
             query(${'$'}o:String!,${'$'}n:String!,${'$'}num:Int!){viewer{login} repository(owner:${'$'}o,name:${'$'}n){pullRequest(number:${'$'}num){
             number title state isDraft url headRefName baseRefName headRefOid body reviewDecision additions deletions changedFiles author{login}
             commits(last:1){nodes{commit{statusCheckRollup{state contexts(first:100){nodes{__typename
             ... on CheckRun{name conclusion status detailsUrl checkSuite{workflowRun{workflow{name}}}} ... on StatusContext{context state targetUrl}}}}}}}
             reviewThreads(first:100){nodes{id isResolved isOutdated path line originalLine comments(first:60){nodes{databaseId body createdAt url author{login} diffHunk}}}}
-            comments(first:100){nodes{databaseId body createdAt url author{login}}}
-            reviews(first:100){nodes{databaseId state body submittedAt url author{login}}}}}}
+            comments(last:100){nodes{databaseId body createdAt url author{login}}}
+            reviews(last:100){nodes{databaseId state body submittedAt url author{login}}}}}}
         """.trimIndent().replace("\n", " ")
     }
 }
@@ -249,7 +252,7 @@ object Reviews {
     }
 
     /** A GraphQL answer's data, or its first error. */
-    fun check(text: String): JsonObject {
+    fun data(text: String): JsonObject {
         val o = runCatching { json.parseToJsonElement(text).jsonObject }.getOrElse { throw IOException("GitHub's answer wasn't readable") }
         githubSays(text)?.takeIf { o["errors"] != null }?.let { throw IOException(it) }
         return o["data"] as? JsonObject ?: throw IOException("GitHub's answer had no data")
@@ -257,10 +260,10 @@ object Reviews {
 
     /** The query's answer as a [PrReview]. */
     fun parse(ref: PrRef, text: String): PrReview {
-        val data = check(text)
+        val data = data(text)
         val p = data.obj("repository")?.obj("pullRequest") ?: throw IOException("No pull request #${ref.number} in ${ref.repo}")
         val rollup = p.obj("commits")?.list("nodes")?.firstOrNull()?.jsonObject?.obj("commit")?.obj("statusCheckRollup")
-        val checks = rollup?.obj("contexts")?.list("nodes").orEmpty().mapNotNull { (it as? JsonObject)?.let(::check) }
+        val checks = rollup?.obj("contexts")?.list("nodes").orEmpty().mapNotNull { (it as? JsonObject)?.let(::prCheck) }
             .sortedWith(compareBy({ ORDER.indexOf(it.state) }, { it.name.lowercase() }))
         val draft = p.bool("isDraft")
         val pr = V2PullRequest(
@@ -322,7 +325,7 @@ object Reviews {
     private val FAILED = setOf("FAILURE", "ERROR", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED", "STARTUP_FAILURE")
 
     /** A check run or a status, as Shepherdr sorts them: `fail`, `pending`, `pass` or `skip`. */
-    private fun check(c: JsonObject): V2PrCheck {
+    private fun prCheck(c: JsonObject): V2PrCheck {
         val run = c.str("__typename") == "CheckRun"
         val v = (c.str("conclusion") ?: c.str("state")).orEmpty().uppercase()
         val state = when {
