@@ -92,7 +92,7 @@ Ranked by value to a phone user of 3.1. Size: S (a day or less), M (a few days),
 | A10 | **Needs you widget with buttons** (rows with Accept / Yes / No), beside today's count and Ask widgets | Answering without opening the app. | M | A1 | **Done** in HERD-23: the Needs you widget, with each notification's Accept, Approve and Deny |
 | A11 | **Pull request review from the phone**: threads, comment, approve, request changes, checks (the desktop's PR and Reviews panels) | Reviewing on the go; the desktop has it, 3.1 shows only the PR's state. | L | A2 | **Done** in HERD-24: the task's Pull request tab reads the review with gh on its machine (`core/github`), scenes `task-v2-pr*`, `shp-task-pr`; the Reviews inbox stays the desktop's |
 | A12 | **Live browser** of a task (3.1's Browser tab) | Seeing what the agent sees in its browser. | L | HERD-8; the 3.1 service's relay | **Own task**, later |
-| A13 | **Docs viewer** for `herdr.doc/2` (the desktop's Docs panel: investigations, runbooks) | Reading an agent's write-up on the phone. | M | none (files over SSH) | **Own task**, later |
+| A13 | **Docs viewer** for `herdr.doc/2` (the desktop's Docs panel: investigations, runbooks) | Reading an agent's write-up on the phone. | M | none (files over SSH) | **Done** in HERD-26: Docs list and document over SSH, in the Artifacts tab without Shepherdr and a machine's menu |
 
 ## For HERD-9, in short
 

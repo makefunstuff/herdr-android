@@ -60,6 +60,8 @@ class FakeMachine(
     var shepherdr: FakeShepherdr? = null,
     /** simple-herdr-projects' store there (`shp` and `hc`), or null where shp isn't installed. */
     var shp: FakeShp? = null,
+    /** Its `~/.herdr/docs` (herdr.doc documents); null answers the list as an empty folder. */
+    var docs: FakeDocs? = null,
     /** GitHub as gh answers it there (signed in), or null where gh isn't installed. */
     var github: FakeGitHub? = null,
     /** Integration metadata per workspace (`workspace.get`'s tokens). */
@@ -119,6 +121,7 @@ class FakeMachine(
         shp?.run(inner, stdin)?.let { return it }
         shp?.hc(inner)?.let { return it }
         appBuild?.run(command)?.let { return it }
+        docs?.run(command)?.let { return it }
         Shell.words(command).let { w ->
             // Words in the chats (ChatSearch.command): the transcripts' lines that hold them, under each chat's mark.
             val chat = w.indexOf("herdr-chat-search")

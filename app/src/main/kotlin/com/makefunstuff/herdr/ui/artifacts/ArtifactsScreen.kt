@@ -29,6 +29,7 @@ import com.makefunstuff.herdr.core.board.WorkSpace
 import com.makefunstuff.herdr.core.shepherdr.Artifacts
 import com.makefunstuff.herdr.ui.common.LocalContainer
 import com.makefunstuff.herdr.ui.coordinator.ChatEmpty
+import com.makefunstuff.herdr.ui.design.BarIcon
 import com.makefunstuff.herdr.ui.design.HerdrField
 import com.makefunstuff.herdr.ui.design.HerdrIcons
 import com.makefunstuff.herdr.ui.design.HerdrTopBar
@@ -71,7 +72,9 @@ fun ArtifactsScreen(nav: NavController, machineId: String, space: String?, inTab
                 "Artifacts",
                 subtitle = listOfNotNull(spaceName, session.machine.label).joinToString(" · "),
                 onBack = if (inTab) null else ({ nav.popBackStack() }),
-            )
+            ) {
+                BarIcon(HerdrIcons.FileText, "Docs on ${session.machine.label}", { nav.navigate(Routes.docs(machineId)) })
+            }
         },
     ) { padding ->
         Box(Modifier.padding(top = padding.calculateTopPadding()).fillMaxSize().navigationBarsPadding()) {
