@@ -176,13 +176,13 @@ class ChatSearchTest {
 
     private fun search(dir: java.nio.file.Path) {
         val file = dir.resolve("api.jsonl").toFile().apply { writeText(transcript + "\n") }
-        val command = ChatSearch.command(
+        val command = ChatSearch.commands(
             "JOBS",
             listOf(
                 ChatSearch.Chat("w2:p1", AgentSessionRef(agent = "claude", kind = "path", value = file.path)),
                 ChatSearch.Chat("w9:p1", AgentSessionRef(agent = "claude", kind = "path", value = dir.resolve("gone.jsonl").toString())),
             ),
-        )!!
+        ).single()
         val p = ProcessBuilder("sh", "-c", command).redirectErrorStream(true).start()
         val out = p.inputStream.bufferedReader().readText()
         assertTrue(p.waitFor(10, TimeUnit.SECONDS))
@@ -206,7 +206,7 @@ class ChatSearchTest {
                 )
             }
             fun hits(q: String): List<ChatSearch.Hit> {
-                val command = ChatSearch.command(q, listOf(ChatSearch.Chat("w1:p1", AgentSessionRef(agent = "claude", kind = "path", value = file.path))))!!
+                val command = ChatSearch.commands(q, listOf(ChatSearch.Chat("w1:p1", AgentSessionRef(agent = "claude", kind = "path", value = file.path)))).single()
                 val p = ProcessBuilder("sh", "-c", command).redirectErrorStream(true).start()
                 val out = p.inputStream.bufferedReader().readText()
                 assertTrue(p.waitFor(10, TimeUnit.SECONDS))
@@ -224,9 +224,9 @@ class ChatSearchTest {
     @Test
     fun aShortQueryOrAChatItCantReadAsksNothing() {
         val chat = ChatSearch.Chat("w1:p1", AgentSessionRef(agent = "claude", kind = "id", value = "abc"))
-        assertNull(ChatSearch.command("jo", listOf(chat)))
-        assertNull(ChatSearch.command("jobs", listOf(chat.copy(session = chat.session.copy(agent = "gemini")))))
-        assertNull(ChatSearch.command("jobs", emptyList()))
+        assertTrue(ChatSearch.commands("jo", listOf(chat)).isEmpty())
+        assertTrue(ChatSearch.commands("jobs", listOf(chat.copy(session = chat.session.copy(agent = "gemini")))).isEmpty())
+        assertTrue(ChatSearch.commands("jobs", emptyList()).isEmpty())
     }
 
     @Test

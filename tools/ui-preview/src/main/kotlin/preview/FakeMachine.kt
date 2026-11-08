@@ -123,7 +123,7 @@ class FakeMachine(
         appBuild?.run(command)?.let { return it }
         docs?.run(command)?.let { return it }
         Shell.words(command).let { w ->
-            // Words in the chats (ChatSearch.command): the transcripts' lines that hold them, under each chat's mark.
+            // Words in the chats (ChatSearch.commands): the transcripts' lines that hold them, under each chat's mark.
             val chat = w.indexOf("herdr-chat-search")
             if (chat >= 0) {
                 val q = w[chat + 1]
