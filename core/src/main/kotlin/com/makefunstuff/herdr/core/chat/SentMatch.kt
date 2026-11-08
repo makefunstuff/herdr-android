@@ -25,9 +25,10 @@ object SentMatch {
         // them as its own attachments instead (Claude Code's `[Image #1]`, Codex's and pi's image blocks
         // next to the words), so it is the same message when the words are.
         val pictures = Images.split(sent)
-        if (pictures.paths.isEmpty()) return false
-        val words = withoutPictures(sent)
         val seenWords = withoutPictures(seen)
+        // Both ways: words sent alone are those of a message the agent shows with pictures, as they count up together.
+        if (pictures.paths.isEmpty()) return seenWords != seen.trim() && sameText(sent, seenWords)
+        val words = withoutPictures(sent)
         if (words.isBlank()) return seenWords.isBlank() || pictures.paths.any { it in seen }
         return sameText(words, seenWords)
     }
@@ -37,8 +38,11 @@ object SentMatch {
     private val spaces = Regex("[ \\t]{2,}")
 
     /** [text] without the agent's own marks for its pictures, and nothing else changed: for showing it. */
-    fun withoutMarks(text: String): String = text.replace(markWithSpace, "").trim()
-    private val markWithSpace = Regex("(?:${placeholder.pattern}) ?")
+    fun withoutMarks(text: String): String {
+        val rest = text.replace(markWithSpace, "")
+        return if (rest == text) text else rest.trimEnd()
+    }
+    private val markWithSpace = Regex("(?:${placeholder.pattern})(?: |\\r?\\n)?")
 
     /** [text]'s words, without the pictures it names (`@path`) or the agent's own marks for them. */
     fun withoutPictures(text: String): String =
@@ -107,8 +111,10 @@ object SentMatch {
     fun unconfirmed(pending: List<Pending>, counted: (Pending) -> Int): List<Pending> {
         val nth = HashMap<String, Int>()
         return pending.filter { p ->
-            // Picture messages are matched by their words, so they count up together by them: the n-th needs the n-th match.
-            val key = if (Images.split(p.text).paths.isEmpty()) normalize(p.text).take(HEAD) else "\u0000pictures\u0000" + normalize(withoutPictures(p.text)).take(HEAD)
+            // Picture messages are matched by their words, so they count up with the messages of those words
+            // (pictures alone, with each other): the n-th needs the n-th match.
+            val key = if (Images.split(p.text).paths.isEmpty()) normalize(p.text).take(HEAD)
+            else normalize(withoutPictures(p.text)).take(HEAD).ifEmpty { "\u0000pictures" }
             val k = (nth[key] ?: 0) + 1
             nth[key] = k
             counted(p) < p.baseline + k

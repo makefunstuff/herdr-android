@@ -123,8 +123,8 @@ class SentMatchTest {
         assertFalse(SentMatch.same(sent, "[Image #1] something else entirely"))
         assertFalse(SentMatch.same(sent, "[Image #1]"))
         assertFalse(SentMatch.same("@$up/one.png", "a message without pictures"))
-        // Without pictures nothing changes: a bracketed word is not a picture.
-        assertFalse(SentMatch.same("look", "[Image #1] look"))
+        // A bracketed word is not a picture.
+        assertFalse(SentMatch.same("look", "[note] look"))
     }
 
     @Test fun pictureMessageOnScreen() {
@@ -175,5 +175,17 @@ class SentMatchTest {
     @Test fun marksLeaveTheRestAsWritten() {
         assertEquals("look:\n    at(Foo.kt:12)\n  indented", SentMatch.withoutMarks("[Image #1] look:\n    at(Foo.kt:12)\n  indented"))
         assertEquals("before after", SentMatch.withoutMarks("before [Image #2] after"))
+    }
+
+    @Test fun pictureAndPlainMessageOfTheSameWordsNeedTwoMatches() {
+        val pictures = Pending("@$up/a.png yes", 0)
+        val plain = Pending("yes", 0)
+        assertEquals(1, open(listOf(pictures, plain), listOf("yes")).size)
+        assertEquals(0, open(listOf(pictures, plain), listOf("[Image #1] yes", "yes")).size)
+    }
+
+    @Test fun marksKeepTheFirstLinesIndentation() {
+        assertEquals("    at(Foo.kt:12)", SentMatch.withoutMarks("[Image #1]\n    at(Foo.kt:12)"))
+        assertEquals("  indented, no mark", SentMatch.withoutMarks("  indented, no mark"))
     }
 }
