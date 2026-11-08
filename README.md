@@ -69,6 +69,7 @@ Without these secrets, and for local builds, the APK is signed with the normal d
    curl -fsSLO https://raw.githubusercontent.com/makefunstuff/herdr-android/HEAD/host/herdr-push/herdr-push
    python3 herdr-push pair
    ```
+   (On Windows the interpreter is usually `python`, see below.)
    It shows a QR code with where the machine is (its Tailscale name and address, its address on the local network), its user, its SSH host key's fingerprint and a one-time code, valid five minutes.
 2. In **Machines**, tap **Add machine**, then **Scan the code**. The phone's own code scanner reads it (Google Play services': the app asks for no camera permission). Without one, **Paste the link** takes the link printed under the code.
 3. The app finds the machine at the first address that answers with that host key and shows what it found. **Pair and add** logs in with the one-time code, which can do nothing but hand over this phone's public key: it goes into `~/.ssh/authorized_keys` there, the code is spent, and the app pins the host key and opens the machine.
@@ -80,6 +81,14 @@ How it works and what it touches: [`host/herdr-push/README.md`](host/herdr-push/
 1. Open **Settings** (the gear in the Machines bar) and copy the app's public key.
 2. Add it to `~/.ssh/authorized_keys` on the machine running herdr.
 3. In **Machines**, tap **Add machine**, then **Type the address instead**, and enter `user@host[:port]`. The app pins the host key on first connect.
+
+**A Windows machine** works with the Herdr desktop app's herdr-core: its agents and their terminals. Classic herdr, Shepherdr and App change need Linux or macOS. It needs OpenSSH Server running with [Git for Windows](https://gitforwindows.org)' Bash as its shell, once, in a PowerShell opened as administrator:
+
+```powershell
+New-ItemProperty -Path HKLM:\SOFTWARE\OpenSSH -Name DefaultShell -Value 'C:\Program Files\Git\bin\bash.exe' -PropertyType String -Force
+```
+
+Then pair as above with `python herdr-push pair`. For a user in Administrators, Windows' sshd reads keys from `C:\ProgramData\ssh\administrators_authorized_keys`, so run `pair` in a terminal opened as administrator too (or add the key there by hand).
 
 Machines reachable only through another one can use it as a jump host ("Connect through"). For zero-touch or read-only machines, **Allow host scripts** (on by default) can be turned off so the app skips copying its helper scripts (`herdr-usage`, `herdr-logins`, `herdr-push`) there. From a machine's menu, **Import herdr machines** adds the machines its herdr already knows (`herdr machine list`).
 

@@ -237,7 +237,8 @@ private fun HowTo() {
             MonoBlock(PAIR_COMMAND)
             Text(
                 "It shows a code for five minutes. Scanning it adds this phone's key there and checks the machine's " +
-                    "host key, so there's nothing to copy or type. Where herdr-push isn't yet, or doesn't know pair:",
+                    "host key, so there's nothing to copy or type. On Windows, use python in place of python3. " +
+                    "Where herdr-push isn't yet, or doesn't know pair:",
                 style = MaterialTheme.typography.bodyMedium,
                 color = Herdr.colors.muted,
             )
