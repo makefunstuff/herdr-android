@@ -188,6 +188,10 @@ object Routes {
     const val ARTIFACTS = "artifacts/{mid}?space={space}"
     /** One artifact full screen, at its latest or at version [v]. */
     const val ARTIFACT = "artifact/{mid}/{id}?v={v}"
+    /** A machine's herdr.doc documents (`~/.herdr/docs`), newest first. */
+    const val DOCS = "docs/{mid}"
+    /** One document full screen ([path], its file on the machine). */
+    const val DOC = "doc/{mid}?path={path}"
 
     fun machine(id: String) = "machine/$id"
     fun edit(id: String? = null) = if (id == null) "edit" else "edit?id=$id"
@@ -197,6 +201,8 @@ object Routes {
     fun ask(to: String) = "ask/$to"
     fun artifacts(mid: String, space: String? = null) = "artifacts/$mid" + (space?.let { "?space=" + Uri.encode(it) } ?: "")
     fun artifact(mid: String, id: String, v: Int? = null) = "artifact/$mid/${Uri.encode(id)}" + (v?.let { "?v=$it" } ?: "")
+    fun docs(mid: String) = "docs/$mid"
+    fun doc(mid: String, path: String) = "doc/$mid?path=" + Uri.encode(path)
     fun board(mid: String, task: String? = null, alone: Boolean = false, accept: Boolean = false) =
         if (task == null) "board/$mid" else "board/$mid?task=${Uri.encode(task)}" + (if (alone) "&alone=1" else "") + if (accept) "&accept=1" else ""
     fun health(mid: String) = "health/$mid"
@@ -385,6 +391,10 @@ internal fun NavGraphBuilder.screens(nav: NavHostController, tasks: @Composable 
     }
     composable(Routes.COORDINATOR) {
         CoordinatorScreen(nav, it.arguments?.getString("mid").orEmpty(), it.arguments?.getString("space")?.let(Uri::decode)?.ifEmpty { null })
+    }
+    composable(Routes.DOCS) { com.makefunstuff.herdr.ui.docs.DocsScreen(nav, it.arguments?.getString("mid").orEmpty()) }
+    composable(Routes.DOC) {
+        com.makefunstuff.herdr.ui.docs.DocScreen(nav, it.arguments?.getString("mid").orEmpty(), it.arguments?.getString("path")?.let(Uri::decode).orEmpty())
     }
     composable(Routes.ARTIFACTS) {
         com.makefunstuff.herdr.ui.artifacts.ArtifactsScreen(nav, it.arguments?.getString("mid").orEmpty(), it.arguments?.getString("space")?.let(Uri::decode)?.ifEmpty { null })

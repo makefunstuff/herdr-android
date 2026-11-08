@@ -350,9 +350,13 @@ On a machine with [simple-herdr-projects](https://github.com/makefunstuff/simple
 
 Choose the task source per machine in **Edit machine → Tasks**: **Detect** (the default) picks simple-herdr-projects where `shp` is on the machine and Shepherdr 3 otherwise; **Shepherdr 3** or **simple-herdr-projects** pins one. The code is `core/…/shp/`; the screen previews fake its store (`tools/ui-preview/…/FakeShp.kt`, the `shp-*` scenes).
 
+## Docs
+
+The desktop's Docs panel on the phone: the herdr.doc/2 documents (the desktop's `mods/px-doc/SPEC.md`) agents write with `herdr-doc` (investigations, incident notes, runbooks, reports), read from a machine's `~/.herdr/docs` over its SSH connection with plain `ls`, `stat` and `head`, nothing to install. The list reads only each file's head (title, kind, status), newest first; one opens full screen with every block the format has (callouts, numbers, key/value lists, timelines, findings with their evidence, checks, steps, to-dos, tables, bars, code, diffs, links, pictures, folding sections), drawn in the app's look, and is read again whenever its file changes, so a draft fills in while you read it. Read only. They are in the **Artifacts** tab where the space's machine has no Shepherdr, behind the docs icon on Shepherdr's Artifacts list, and in a machine's **⋯ → Docs**. The code is `core/…/docs/` and `app/…/ui/docs/`; the previews fake the folder (`FakeDocs.kt`, the `doc*` scenes).
+
 ## Layout
 
-- `core/`: pure Kotlin/JVM: SSH, herdr API, herdr-core's API (`core/hc`, [`docs/HERDR_CORE.md`](docs/HERDR_CORE.md)), host sessions, terminal emulator and its key bar (`core/terminal`), reading code (`core/code`), port forwarding (`core/ssh/PortForward.kt`, for Shepherdr's service and voice). `./gradlew -p core test`.
+- `core/`: pure Kotlin/JVM: SSH, herdr API, herdr-core's API (`core/hc`, [`docs/HERDR_CORE.md`](docs/HERDR_CORE.md)), host sessions, terminal emulator and its key bar (`core/terminal`), reading code (`core/code`), herdr.doc documents (`core/docs`), port forwarding (`core/ssh/PortForward.kt`, for Shepherdr's service and voice). `./gradlew -p core test`.
 - `app/`: the Android app. `ui/theme` and `ui/design` hold its look and shared components ([`docs/DESIGN.md`](docs/DESIGN.md)).
 - `tools/ui-preview/`: the screen previews. `./gradlew -p tools/ui-preview render`.
 - `host/herdr-push/`: the watcher that runs on a machine and pushes to the phone (Python 3; core carries it as a resource, and its tests run it).

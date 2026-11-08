@@ -128,6 +128,7 @@ fun MachineScreen(nav: NavController, machineId: String) {
                 BarIcon(HerdrIcons.Search, "Search ${state.machine.label}", { nav.navigate(Routes.search(machineId)) })
                 BarIcon(HerdrIcons.Ellipsis, "More", { menu = true })
                 HerdrMenu(expanded = menu, onDismissRequest = { menu = false }, title = state.machine.label) {
+                    MenuRow("Docs", HerdrIcons.FileText, { menu = false; nav.navigate(Routes.docs(machineId)) })
                     MenuRow("Edit machine", HerdrIcons.Pencil, { menu = false; nav.navigate(Routes.edit(machineId)) })
                     ChangeScreenRow { menu = false }
                 }
