@@ -198,6 +198,8 @@ class FakeMachine(
         }
         // A sign-in (herdr-logins run): what it says until the person has something to do; what they type is taken.
         logins?.events(command)?.let { events -> return stream { _, out -> events.forEach { out.println(it) }; out.flush() } }
+        // A task's browser through the relay (CurlTransport.browser), where Shepherdr runs.
+        if (DemoBrowser.isRelay(command)) shepherdr?.let { sh -> return stream { input, out -> DemoBrowser.relay(DemoBrowser.taskOf(command) in sh.browsers, input, out) } }
         return when {
             "@@missing" in command -> stream { _, out ->
                 // TranscriptFollower: kind, value, agent, bytes after "follow".

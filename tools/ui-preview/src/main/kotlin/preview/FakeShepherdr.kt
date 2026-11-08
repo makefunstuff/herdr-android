@@ -22,8 +22,11 @@ class FakeShepherdr(
     var chats: Map<String, JsonObject> = DemoV2.chats(),
 ) {
     init {
-        snapshot = DemoV2.withAutopilot(snapshot)
+        snapshot = DemoV2.withBrowsers(DemoV2.withAutopilot(snapshot))
     }
+
+    /** The tasks whose browser is open now (its agent checked a page): AND-19's, on its dev server. */
+    var browsers: Set<String> = setOf("AND-19")
 
     /** When set, reading any chat fails with these words (Shepherdr down, or the chat's file unreadable). */
     var chatRefused: String? = null
@@ -319,6 +322,18 @@ object DemoV2 {
         )
         val withPage: JsonElement = if (settings.any { it.jsonObject["name"]?.jsonPrimitive?.content == "Autopilot" }) JsonArray(settings) else JsonArray(settings + page)
         return JsonObject(s + mapOf<String, JsonElement>("places" to JsonArray(places), "settings" to withPage))
+    }
+
+    /**
+     * [s] with each task's Browser as 3.1's service sends it for this machine's tasks (`service/compat.ts`): ready. A
+     * task that has one is kept.
+     */
+    fun withBrowsers(s: JsonObject): JsonObject {
+        val tasks = (s["tasks"] as? JsonArray ?: return s).map { t ->
+            val o = t.jsonObject
+            if ("browser" in o) o else JsonObject(o + ("browser" to Json.parseToJsonElement("""{"ready":true}""")))
+        }
+        return JsonObject(s + ("tasks" to JsonArray(tasks)))
     }
 
     /** A space's `pilot`: [on], its next wake 40 minutes on, woken by Ready and Failed; [blank]: the heartbeat unwritten. */
