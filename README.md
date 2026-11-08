@@ -113,7 +113,7 @@ Swipe an agent left for **Pin** (it stays on top, under Needs you, in the order 
 
 The search icon on **Agents**, **Board** and a machine (or **Ctrl+K** with a hardware keyboard, from anywhere) opens one box for the agents, the boards' tasks, the machines, their workspaces and the words in the recent chats. Chips above the results filter them to what **Needs you**, what is **Working** and what is **Done**, each with its count. From a machine it searches only that machine, until its chip is taken off. Every word typed has to be in a result, and a word at the start of a name counts most; with nothing typed it lists the agents, the tasks waiting for you and **Start work…**.
 
-Words in the chats are looked for on the machines themselves: each running agent's own transcript (Claude Code, codex, pi and omp) is searched where it is, a moment after you stop typing (three letters at the least), and what was said around the words shows with who said it and when; tool calls and their output don't count. Under the results, **New task about "…"** starts work about the words, and **Open a terminal in …** opens a shell in the workspace found (each workspace row has the same terminal button). Enter opens the first result, Esc goes back.
+Words in the chats are looked for on the machines themselves: each running agent's own transcript (Claude Code, codex, pi and omp) is searched where it is, a moment after you stop typing (three letters at the least), and what was said around the words shows with who said it and when; tool calls and their output don't count. Under the results, **New task about "…"** starts work about the words, and **Open a terminal in …** opens a shell in the workspace found (each workspace row of classic herdr has the same terminal button; herdr-core's workspaces open no terminal from the phone). Enter opens the first result, Esc goes back.
 
 ## Start work
 
@@ -190,7 +190,7 @@ A machine's screen has a **Health** tile (the busiest of RAM, CPU and its fulles
 - **Stop Gradle daemons**: every Gradle and Kotlin daemon of yours; the next build starts one again.
 - **A warning** when RAM or a disk runs low: under 10% of RAM available, or a disk with less than a tenth free (at most 20 GB, so a big disk isn't "low" with 50 GB left). It names what uses the most memory, on the screen and as a notification through herdr-push (and the app's own looks while closed), which comes down once there is room again (15% of RAM, one and a half times the disk's mark). It needs you, so it comes through quiet hours; a tap opens the machine's health.
 
-The full readings and process labels are Linux's (`/proc`); on macOS the screen shows memory, load, disks and the processes from `ps`, without whose they are.
+The full readings and process labels are Linux's (`/proc`); on macOS the screen shows memory, load, disks and the processes from `ps`, without whose they are. On Windows the disks are the fixed drives (as `/c`, `/d`), the processes with their CPU and memory come from `Win32_Process` through PowerShell, a process is yours when it runs in one of your logon sessions, and **Stop process** uses `taskkill` (asking first, then `taskkill /F` for one that refuses or still runs after 5 seconds); there is no working folder or herdr pane for a process there.
 
 ## Usage and limits
 
@@ -216,7 +216,7 @@ Each machine also has an **Agent logins** line under Usage (or **⋯ → Agent l
 Two ways in, both on every machine the app knows:
 
 - **Pushes**, within seconds. Each machine runs [herdr-push](host/herdr-push/README.md), a small Python 3 watcher that the app sets up over SSH as the machine connects. It sends to the phone's [UnifiedPush](https://unifiedpush.org) address, which a push app such as [ntfy](https://ntfy.sh) gives (no library, no Google services), sealed with a key only that machine and the phone know. How to check it, run it by hand or use your own push server: [`host/herdr-push/README.md`](host/herdr-push/README.md).
-- **The app's own looks**: an exact alarm every 15 minutes (or hourly, or never) connects to each machine and notices what changed, for a machine without python3 or a push that got lost.
+- **The app's own looks**: an exact alarm every 15 minutes (or hourly, or never) connects to each machine and notices what changed, for a machine without Python 3 or a push that got lost.
 
 Each state is shown once, however it arrives, and comes down again when it is over (answered on the desktop, the agent back at work). The switch next to a machine in Settings leaves it out.
 
@@ -276,7 +276,7 @@ The **Board** tab shows every machine's task board in one list, grouped by machi
 - **Filters and failures.** Chips keep messages, commands, edits, tests or failures only, with how many there are; **Jump to a failure** (and the alert icon above) goes from one failed step to the next, opening its turn.
 - **Live.** While the agent works the timeline grows as it takes each step (**Live** in the bar).
 
-It is built from what the agents' harnesses record, read over SSH: Claude Code's sessions (`~/.claude/projects`), codex's (`~/.codex/sessions`) and pi's or omp's (`~/.pi/agent/sessions`), each step with its times, exit status and diff. Nothing there is changed. Sessions are pruned on the machine before they are sent (with `python3` where there is one: the copies of API requests and whole files Claude Code keeps beside an edit go, long outputs are cut), so a 20 MB session comes as a megabyte or two; of a very long one only the newest part is read, and the timeline says so.
+It is built from what the agents' harnesses record, read over SSH: Claude Code's sessions (`~/.claude/projects`), codex's (`~/.codex/sessions`) and pi's or omp's (`~/.pi/agent/sessions`), each step with its times, exit status and diff. Nothing there is changed. Sessions are pruned on the machine before they are sent (with Python 3 where there is one: the copies of API requests and whole files Claude Code keeps beside an edit go, long outputs are cut), so a 20 MB session comes as a megabyte or two; of a very long one only the newest part is read, and the timeline says so.
 
 ## Photos and screenshots
 
@@ -328,7 +328,7 @@ The app changes itself the way Herdr desktop's mods change Herdr, with all the w
 The machine needs:
 
 - **A herdr-android checkout** with `origin` on GitHub: the herdr-android space's folder on Shepherdr, else `~/herdr-android`, `~/src/herdr-android` or `~/Work/herdr-android`.
-- **The Android SDK** (`ANDROID_HOME`, or `sdk.dir` in the checkout's `local.properties`) and **a JDK 17 or newer** (`JAVA_HOME`, or `java` on the PATH), as a login shell there sets them; and python3 and git.
+- **The Android SDK** (`ANDROID_HOME`, or `sdk.dir` in the checkout's `local.properties`) and **a JDK 17 or newer** (`JAVA_HOME`, or `java` on the PATH), as a login shell there sets them; and Python 3 and git.
 - **Shepherdr 3** with a space named **herdr-android** (or working in that checkout): its Assistant takes the changes.
 - **The release key, as secrets** (optional): Android installs an update only when it is signed with the same key as the app. Keep `HERDR_KEYSTORE_FILE` (the keystore's path on that machine), `HERDR_KEYSTORE_PASSWORD` and `HERDR_KEY_ALIAS` in herdr-secret (Settings › Secrets in Herdr, or `herdr-secret set NAME`); the Assistant builds with `herdr-secret run …`, so the values reach only Gradle and never a log, a chat or git. Without them, each update is the release CI publishes for that merge, downloaded there and offered the same way.
 

@@ -135,8 +135,8 @@ private enum class TaskSheet { Menu, Said, Brief, Plan, Facts }
  * A Shepherdr 3 task as its agent's chat, as Shepherdr's own web UI has it: the task's chat live (its
  * agent's words, each turn's steps folded to a line, its question cards answered here), a strip under
  * the bar with where it stands, its pull request and the one thing it waits for (Merge), and a composer
- * to its agent. Under the strip, 3.1's task view tabs: Chat, then its folder's Files and Changes and its
- * Pull request with its checks ([TaskView]), each in the chat's place. What it did, its brief, plan and
+ * to its agent. Under the strip, 3.1's task view tabs: Chat, then its folder's Files and Changes, its
+ * Pull request with its checks and its live Browser ([TaskView]), each in the chat's place. What it did, its brief, plan and
  * facts, and Close, are in ⋯.
  */
 @Composable
@@ -352,9 +352,10 @@ internal fun TaskChatScreen(
                 }
             },
         ) { padding ->
-            if (view != TaskView.Chat) Box(Modifier.padding(top = padding.calculateTopPadding()).fillMaxSize().navigationBarsPadding()) {
+            if (view != TaskView.Chat) Box(Modifier.padding(top = padding.calculateTopPadding()).fillMaxSize().imePadding().navigationBarsPadding()) {
                 when (view) {
                     TaskView.Files, TaskView.Changes -> TaskCode(nav, session, machineId, t, view)
+                    TaskView.Browser -> TaskBrowserView(session, t)
                     else -> TaskPullRequest(session, t)
                 }
             } else Column(Modifier.padding(top = padding.calculateTopPadding()).fillMaxSize().imePadding().navigationBarsPadding()) {

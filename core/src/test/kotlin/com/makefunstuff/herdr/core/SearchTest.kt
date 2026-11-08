@@ -15,6 +15,7 @@ import com.makefunstuff.herdr.core.board.WorkStatus
 import com.makefunstuff.herdr.core.board.WorkTask
 import com.makefunstuff.herdr.core.chat.ChatSearch
 import com.makefunstuff.herdr.core.home.HomeBoard
+import com.makefunstuff.herdr.core.host.HerdrCoreState
 import com.makefunstuff.herdr.core.host.HostState
 import com.makefunstuff.herdr.core.host.HostStatus
 import com.makefunstuff.herdr.core.search.Search
@@ -31,6 +32,7 @@ import java.nio.file.Files
 import java.util.concurrent.TimeUnit
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -102,6 +104,26 @@ class SearchTest {
         assertEquals(listOf("herdr-android"), Search.of("last-answered", listOf(devbox), boards).workspaces.map { it.name })
         assertEquals("/home/demo/src/herdr-android", Search.of("herdr-android", listOf(devbox), boards).workspaces.single().folder)
         assertEquals(listOf("ci"), Search.of("ci-run", listOf(devbox, ci), boards).machines.map { it.machineId })
+    }
+
+    @Test
+    fun findsWorkspacesOfHerdrCoreToo() {
+        val core = HerdrCoreState(
+            "0.1.14", "devbox", "/home/dev/.local/bin/herdr-core",
+            SessionSnapshot(workspaces = listOf(WorkspaceInfo("hc:w1", label = "docs-site")), panes = listOf(PaneInfo("hc:t1", workspaceId = "hc:w1", tabId = "hc:w1:t1", cwd = "/home/dev/docs-site"))),
+        )
+        val both = devbox.copy(herdrCore = core)
+        val hit = Search.of("docs-site", listOf(both), boards).workspaces.single()
+        assertEquals("/home/dev/docs-site", hit.folder)
+        // herdr-core opens no terminal from the phone, so its row offers none.
+        assertFalse(hit.opensTerminal)
+        // Online for herdr-core alone: only its workspaces.
+        val alone = devbox.copy(snapshot = null, herdrCore = core)
+        assertEquals(listOf("docs-site"), Search.of("docs", listOf(alone), boards).workspaces.map { it.name })
+        // Classic herdr's still show next to them.
+        val classic = Search.of("herdr-android", listOf(both), boards).workspaces
+        assertEquals(listOf("herdr-android"), classic.map { it.name })
+        assertTrue(classic.single().opensTerminal)
     }
 
     @Test
