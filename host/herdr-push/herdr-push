@@ -1792,8 +1792,9 @@ def cmd_pair(rest):
     port = opts["port"] or ssh_port()
     fingerprints = host_key_fingerprints(port)
     if not fingerprints:
-        print("Couldn't read this machine's SSH host keys (/etc/ssh/ssh_host_*_key.pub), and no SSH server answered "
-              "on port %d. Is sshd running? (--port N for another port)" % port, file=sys.stderr)
+        print("Couldn't read this machine's SSH host keys (%s), and no SSH server answered "
+              "on port %d. Is sshd running? (--port N for another port)" % (os.path.join(SSHD_DIR, "ssh_host_*_key.pub"), port),
+              file=sys.stderr)
         return 1
     addresses = opts["host"] + [a for a in pair_addresses() if a not in opts["host"]]
     if not addresses:
