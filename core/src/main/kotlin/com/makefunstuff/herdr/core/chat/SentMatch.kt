@@ -1,5 +1,7 @@
 package com.makefunstuff.herdr.core.chat
 
+import com.makefunstuff.herdr.core.host.Images
+
 /**
  * Matching a message the app sent to the copy the transcript, screen or board shows later.
  * Matching is per message: a sent message is confirmed by the n-th matching message beyond those
@@ -18,6 +20,25 @@ object SentMatch {
      * the other (the board appends lines, a channel truncates).
      */
     fun same(sent: String, seen: String): Boolean {
+        if (sameText(sent, seen)) return true
+        // A message with pictures goes as `@path` mentions in front of the words; the agent may record
+        // them as its own attachments instead (Claude Code's `[Image #1]`, Codex's and pi's image blocks
+        // next to the words), so it is the same message when the words are.
+        val pictures = Images.split(sent)
+        if (pictures.paths.isEmpty()) return false
+        val words = withoutPictures(seen)
+        if (pictures.text.isBlank()) return words.isBlank() || pictures.paths.any { it in seen }
+        return sameText(pictures.text, words)
+    }
+
+    // Claude Code's `[Image #1]`; Codex's `[image 1 1024x768 PNG]`.
+    private val placeholder = Regex("\\[image\\b[^\\]\\n]*]", RegexOption.IGNORE_CASE)
+
+    /** [text]'s words, without the pictures it names (`@path`) or the agent's own marks for them. */
+    fun withoutPictures(text: String): String =
+        Images.split(text).text.replace(placeholder, " ").lines().joinToString("\n") { it.replace(Regex("[ \\t]{2,}"), " ").trim() }.trim()
+
+    private fun sameText(sent: String, seen: String): Boolean {
         val a = normalize(sent)
         val b = normalize(seen)
         if (a.isEmpty() || b.isEmpty()) return false
@@ -34,8 +55,10 @@ object SentMatch {
 
     /** Occurrences of the start of [sent] in a screen's text. */
     fun countOnScreen(sent: String, screen: String): Int {
+        // A message with pictures is found by its words: the agent may show its pictures its own way.
+        val words = Images.split(sent).takeIf { it.paths.isNotEmpty() }?.text?.takeIf { it.isNotBlank() } ?: sent
         // A terminal can wrap in the middle of a word: compare without any whitespace.
-        val head = normalize(sent).filterNot { it.isWhitespace() }.take(40)
+        val head = normalize(words).filterNot { it.isWhitespace() }.take(40)
         if (head.isEmpty()) return 0
         val text = screen.filterNot { it.isWhitespace() || it in "*_`>" }
         var n = 0

@@ -172,6 +172,36 @@ private fun SceneData.replies() {
     composer = (composer ?: com.makefunstuff.herdr.data.ComposerStore.State()).copy(replies = com.makefunstuff.herdr.core.chat.QuickReplies(on = true))
 }
 
+/**
+ * devbox's app agent, at rest, takes what is sent to it as Claude Code does when it attaches the pictures
+ * itself: `[Image #1] [Image #2]` and the words, the pictures as image blocks (issue #100).
+ */
+private fun SceneData.takesPicturesAsClaude() {
+    appDone()
+    val machine = host(DEVBOX)
+    val took = { p: kotlinx.serialization.json.JsonObject ->
+        val text = p["text"]?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }.orEmpty()
+        val words = com.makefunstuff.herdr.core.host.Images.split(text).text
+        val line = obj(
+            "type" to "user", "uuid" to "00000000-0000-4000-8000-000000000050", "timestamp" to "2026-10-17T07:44:00.000Z",
+            "message" to obj(
+                "role" to "user",
+                "content" to kotlinx.serialization.json.JsonArray(
+                    listOf(
+                        obj("type" to "text", "text" to "[Image #1] [Image #2] $words"),
+                        obj("type" to "image", "source" to obj("type" to "base64", "media_type" to "image/png", "data" to "")),
+                        obj("type" to "image", "source" to obj("type" to "base64", "media_type" to "image/png", "data" to "")),
+                    ),
+                ),
+            ),
+        )
+        machine.append(Demo.APP_SESSION, line.toString())
+        obj()
+    }
+    machine.on("agent.prompt", took)
+    machine.on("pane.send_text", took)
+}
+
 /** The app agent's conversation after two screenshots were sent to it, which devbox still has. */
 private fun SceneData.sentPictures() {
     host(DEVBOX).transcripts = host(DEVBOX).transcripts + (Demo.APP_SESSION to Demo.appTranscriptWithPictures())
@@ -584,6 +614,11 @@ fun scenes(): List<Scene> = listOf(
         drag("The picture", 0.5f to 0.99f, 0.5f to 0.55f, within = ::screenshotIn)
     }),
     Scene("chat-sent-pictures", route = Routes.agent(DEVBOX, APP_AGENT), setup = { sentPictures() }),
+    // Sent, and its agent recorded the pictures its own way (Claude Code's `[Image #1]`): it shows as sent, not "Sending…".
+    Scene("chat-pictures-sent", route = Routes.agent(DEVBOX, APP_AGENT), setup = { pictures(); takesPicturesAsClaude() }, actions = {
+        tapLabel("Send")
+        settle()
+    }),
     Scene("picture-view", route = Routes.agent(DEVBOX, APP_AGENT), setup = { sentPictures() }, actions = {
         tapLabel("Picture 2 of 2, Screenshot_20261018_101230.png")
     }),

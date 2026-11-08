@@ -76,4 +76,58 @@ class SentMatchTest {
         assertEquals(0, SentMatch.unconfirmed(listOf(p)) { SentMatch.slid(it, 3, 40_000) }.size)
         assertEquals(1, SentMatch.unconfirmed(listOf(p)) { SentMatch.slid(it, 3, 2_000) }.size)
     }
+
+    // Issue #100: a message with pictures stayed on "Sending…" when the agent recorded its pictures its own way.
+    private val up = "/home/demo/.cache/herdr-android/uploads/20261108-101204-a1b2"
+    private val words = "The Board card jumps when a machine reconnects. Keep it where it was?"
+
+    @Test fun pictureMessageAsTheMentionsSent() {
+        val sent = "@$up/shot.png $words"
+        assertEquals(0, open(listOf(Pending(sent, 0)), listOf("hi", sent)).size)
+    }
+
+    @Test fun pictureMessageAsClaudeCodesImagePlaceholders() {
+        val sent = "@$up/one.png @$up/two.png $words"
+        assertTrue(SentMatch.same(sent, "[Image #1] [Image #2] $words"))
+        assertTrue(SentMatch.same(sent, "$words [Image #3]"))
+        assertEquals(0, open(listOf(Pending(sent, 0)), listOf("[Image #1] [Image #2] $words")).size)
+    }
+
+    @Test fun pictureMessageAsWordsBesideImageBlocks() {
+        // Codex and pi keep the pictures as image blocks: the transcript's text is only the words.
+        val sent = "@$up/one.png $words"
+        assertTrue(SentMatch.same(sent, words))
+        assertEquals(0, open(listOf(Pending(sent, 0)), listOf(words)).size)
+        assertTrue(SentMatch.same(sent, "[image 1 1024x768 PNG] $words"))
+    }
+
+    @Test fun picturesOnly() {
+        val sent = "@$up/one.png @$up/two.png"
+        assertTrue(SentMatch.same(sent, "[Image #1] [Image #2]"))
+        assertTrue(SentMatch.same(sent, ""))
+        assertTrue(SentMatch.same(sent, sent))
+        // Said before: a picture message already there doesn't confirm a new one, a second one does.
+        assertEquals(1, open(listOf(Pending(sent, 1)), listOf("[Image #1]")).size)
+        assertEquals(0, open(listOf(Pending(sent, 1)), listOf("[Image #1]", "[Image #2]")).size)
+    }
+
+    @Test fun picturesAfterACommand() {
+        val sent = "/review @$up/one.png look at this"
+        assertTrue(SentMatch.same(sent, "/review [Image #1] look at this"))
+    }
+
+    @Test fun otherWordsWithPicturesDontMatch() {
+        val sent = "@$up/one.png $words"
+        assertFalse(SentMatch.same(sent, "[Image #1] something else entirely"))
+        assertFalse(SentMatch.same(sent, "[Image #1]"))
+        assertFalse(SentMatch.same("@$up/one.png", "a message without pictures"))
+        // Without pictures nothing changes: a bracketed word is not a picture.
+        assertFalse(SentMatch.same("look", "[Image #1] look"))
+    }
+
+    @Test fun pictureMessageOnScreen() {
+        val sent = "@$up/one.png $words"
+        assertEquals(1, SentMatch.countOnScreen(sent, "> [Image #1] $words\n\n● Looking."))
+        assertEquals(1, SentMatch.countOnScreen(sent, "> $sent"))
+    }
 }
