@@ -905,6 +905,11 @@ fun scenes(): List<Scene> = listOf(
     Scene("wide-empty", widthDp = 1280, heightDp = 800, setup = { home() }),
     Scene("wide", widthDp = 1280, heightDp = 800, setup = { home() }, actions = { tapText("Speed up /jobs") }),
     Scene("wide-terminal", route = Routes.terminal(DEVBOX, APP_SHELL), widthDp = 840, heightDp = 940),
+    // A space tapped in the sidebar shows in the Chat tab, also from a screen the tab had open (issue #101: the
+    // terminal opened from herdr-android's chat stayed, though website was marked as picked).
+    Scene("wide-pick", widthDp = 1280, heightDp = 800, setup = { home() }, actions = {
+        tapLabel("Chat"); tapText("Terminal"); tapText("website"); expectText("Rewrite the install page"); expectNoText("146×42")
+    }),
     Scene("wide-machines", widthDp = 1280, heightDp = 800, setup = { home() }, actions = { tapLabel("Chat") }),
     // Rotating across the line keeps what is open as it was: a chat with its key row shown, turned from a phone
     // to a tablet's width and from the tablet back to the phone.
