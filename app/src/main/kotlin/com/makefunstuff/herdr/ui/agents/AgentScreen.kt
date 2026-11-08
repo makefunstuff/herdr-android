@@ -415,14 +415,16 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
     /** A held message, now: sent as typed then (Claude Code and Codex take words mid-turn as their next). */
     fun sendHeld(m: HeldMessage) {
         if (heldSending || sending || !Held.canSend(status, false)) return
+        // Claimed first: Start work's first message on herdr-core may be going by itself at this moment.
+        val claimed = container.composer.take(chatKey, m.id) ?: return
         heldSending = true
         awayHidden = true
         chat.addPending(m.text)
         stick.sent()
         scope.launch {
             runCatching { AgentInput.send(session.awaitAgent(paneId), paneId, m.text, named = agent != null, blocked = false) }
-                .onSuccess { container.composer.drop(chatKey, m.id) }
                 .onFailure {
+                    container.composer.restore(chatKey, claimed)
                     chat.dropPending(m.text)
                     context.toast(it.message ?: "Couldn't send")
                 }
@@ -654,6 +656,8 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
             paneLabel = pane?.displayName ?: paneId,
             onDismiss = { menu = false },
             screenMenu = true,
+            // Back from the chat, unless the person has gone elsewhere while it closed.
+            onClosed = if (inBubble) null else nav.currentBackStackEntry.let { entry -> { if (nav.currentBackStackEntry == entry) nav.popBackStack() } },
             tabRows = tab?.takeIf { !inBubble }?.let { (space, t) ->
                 {
                     TabMenuRows(tabMenu, machineId, space, t, onPicked = { menu = false }) { label, icon, destructive, onClick ->
