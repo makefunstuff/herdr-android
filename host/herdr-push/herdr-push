@@ -195,7 +195,15 @@ def write_json(path, value, private=False):
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600 if private else 0o644)
     with os.fdopen(fd, "w") as f:
         json.dump(value, f, indent=1)
-    os.replace(tmp, path)
+    for attempt in range(5):
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError:
+            # Windows refuses the swap while another process has the target open that instant: try again shortly.
+            if not WINDOWS or attempt == 4:
+                raise
+            time.sleep(0.05)
 
 
 def subscribers():
@@ -2464,7 +2472,13 @@ def start_background():
 def cmd_ensure():
     if WINDOWS:
         # Never a child of this (SSH) session: the task starts it in the signed-in user's own session.
-        if running_pid() is None and windows_interactive() and (windows_task("/query")[0] or windows_task_create()[0]):
+        if running_pid() is None and windows_interactive():
+            # Make the task (and the Run value, if sign-in autostart is installed) again from this script: after a
+            # Python upgrade or a move they point at a program that is gone, and /run would start nothing. An
+            # `uninstall`ed machine gets no Run value back, as Linux's ensure leaves no unit or cron line.
+            windows_task_create()
+            if autostart() == "windows-run":
+                windows_run_value()
             windows_task("/run")
             wait_for_watcher(5)
         return cmd_status()
@@ -2562,23 +2576,33 @@ def windows_task_create():
             f.write(TASK_XML % (escape(py), escape(args)))
         return windows_task("/create", "/xml", path, "/f")
     finally:
-        os.remove(path)
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+
+
+def windows_run_value():
+    """Writes the Run value that starts the watcher at sign-in."""
+    import winreg
+    with winreg.CreateKey(winreg.HKEY_CURRENT_USER, RUN_KEY) as key:
+        winreg.SetValueEx(key, NAME, 0, winreg.REG_SZ, '"%s" %s' % windows_command())
 
 
 def windows_install():
-    import winreg
+    windows_run_value()  # first: sign-in autostart doesn't depend on the task
     ok, err = windows_task_create()
-    if not ok:
-        out({"ok": False, "msg": "couldn't create the task: " + err, "autostart": autostart(), "pid": running_pid(), "version": VERSION})
-        return 1
-    with winreg.CreateKey(winreg.HKEY_CURRENT_USER, RUN_KEY) as key:
-        winreg.SetValueEx(key, NAME, 0, winreg.REG_SZ, '"%s" %s' % windows_command())
     note = ""
-    if windows_interactive():
+    if not ok:
+        note = "couldn't create the task (%s): it starts with the next sign-in" % " ".join(err.split())
+    elif windows_interactive():
         if running_pid() is not None:
             stop()  # one of an older install: the task starts the one that is here now
         windows_task("/run")
-        wait_for_watcher(5)
+        if not wait_for_watcher(5):
+            # The task may still count the watcher just stopped as running, and then ignores this start: once more.
+            windows_task("/run")
+            wait_for_watcher(5)
     else:
         note = "no one is signed in at the PC: it starts with the next sign-in"
     pid = running_pid()

@@ -47,6 +47,8 @@ It starts without administrator rights, in two ways:
 
 `uninstall` removes both. `status` says `"autostart": "windows-run"` and `"interactive": true` when the watcher can run in a signed-in session, `false` when nobody is signed in: the PC has to be awake and signed in for pushes to come.
 
+`presence` run over SSH on Windows reads as away and locked (an SSH session has no input desktop); the watcher, running in the signed-in session, sends the real value.
+
 What works there: agents in herdr-core (read through `herdr-core connect`, only where `herdr-core server status` says a core runs; classic herdr is not on Windows), RAM, CPU, each fixed drive (as `/c`, `/d`…) and the top processes, and presence: how long ago the PC had keyboard or mouse input, and whether the session is locked. Shepherdr and App change are not there.
 
 ## What it puts on the machine

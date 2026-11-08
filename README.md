@@ -220,7 +220,7 @@ Two ways in, both on every machine the app knows:
 
 Each state is shown once, however it arrives, and comes down again when it is over (answered on the desktop, the agent back at work). The switch next to a machine in Settings leaves it out.
 
-**On a Windows PC** the app sets herdr-push up the same way, with no administrator rights: a `Run` entry under your user starts it when you sign in, and a scheduled task of yours starts it right away in your desktop session. It reads the Herdr desktop app's herdr-core (where one runs), RAM, CPU, drives and the biggest processes, and tells the phone how long ago you last used the keyboard or mouse and whether the session is locked. The PC has to be awake and signed in: with nobody signed in, Settings says it can't watch. The phone needs ntfy (or another UnifiedPush app), as for any machine. Classic herdr, Shepherdr and App change are not there.
+**On a Windows PC** the app sets herdr-push up the same way, with no administrator rights: a `Run` entry under your user starts it when you sign in, and a scheduled task of yours starts it right away in your desktop session. It reads the Herdr desktop app's herdr-core (where one runs), RAM, CPU, drives and the biggest processes, and tells the phone how long ago you last used the keyboard or mouse and whether the session is locked. The PC has to be awake and signed in: with nobody signed in, herdr-push's install says so (and its `status` shows `interactive: false`), and it starts with the next sign-in. The phone needs ntfy (or another UnifiedPush app), as for any machine. Classic herdr, Shepherdr and App change are not there.
 
 ### What reaches the phone
 
