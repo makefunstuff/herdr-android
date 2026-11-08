@@ -114,6 +114,8 @@ To pick one yourself: **Edit machine → Tasks**.
 - **Board task**: your sentence goes to the space's Assistant, which makes the task.
 - **Agent now**: an agent starts in the folder you pick, with your sentence as its first message. It offers the agents installed on that machine.
 
+On a machine that runs only the Herdr desktop app, the agent starts as a new tab in the space for that folder, or under **Other terminals**. Its chat opens at once, with your sentence held over the box. The sentence goes in once the agent is ready. If the agent asks something first, or never says it is ready, the sentence stays held for you to send.
+
 Folders you used before come first. **Browse…** walks the machine's folders. The phone never starts an agent in a mode that skips its permission prompts.
 
 ## The terminal
@@ -165,7 +167,13 @@ Each card shows which tasks and agents used it most. You get notifications at 80
 
 **Logins.** Which agent CLIs are signed in (Claude Code, Codex, pi, opencode, Gemini CLI) and when each login runs out. Sign in again, paste a key, or sign out from the phone. A key found in a shell profile gets a warning.
 
-**Spaces and panes.** Each space lists its panes: an agent and its state, or a shell and its folder. Tap a pane to open its chat or terminal. On classic herdr, a long press renames, moves, swaps, zooms or closes panes, tabs and workspaces. herdr-core's spaces open their panes only.
+**Spaces and panes.** Each space lists its panes: an agent and its state, or a shell and its folder. Tap a pane to open its chat or terminal. On classic herdr, a long press renames, moves, swaps, zooms or closes panes, tabs and workspaces.
+
+On the Herdr desktop app's spaces (herdr-core), you can start and close terminals but not change layouts:
+
+- **⋯ → New → Terminal** on a space opens a shell in the space's folder, as a new tab.
+- **Close terminal** (in an agent's or terminal's **⋯**, or a long press on a terminal on the machine screen) ends it, after asking.
+- Spaces that belong to Shepherdr close the way Shepherdr closes them.
 
 **Edit machine** (in **⋯**) changes its name, address, jump host, herdr session, board and **Allow host scripts**. Turn that off for a machine where the app should copy no helper scripts.
 

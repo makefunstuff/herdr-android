@@ -60,7 +60,7 @@ A machine you reach only through another one can use it as a jump host (**Connec
 
 ### Windows
 
-A Windows PC works with the Herdr desktop app's herdr-core: its agents, their chats and terminals, notifications and health. Shepherdr, simple-herdr-projects and changing the app need Linux or macOS.
+A Windows PC works with the Herdr desktop app's herdr-core: its agents, their chats and terminals (started and closed from the phone too), notifications and health. Shepherdr, simple-herdr-projects and changing the app need Linux or macOS.
 
 Install OpenSSH Server, then make [Git for Windows](https://gitforwindows.org)' Bash its shell, in a PowerShell opened as administrator:
 

@@ -338,6 +338,22 @@ fun scenes(): List<Scene> = listOf(
     Scene("terminal-desktop", route = Routes.terminal(DEVBOX, DemoCore.SHELL), setup = { desktopApp() }),
     // Its history is the phone's own (filled from terminal.read), found in as classic herdr's scrollback is: the match marked and scrolled to.
     Scene("terminal-desktop-find", route = Routes.terminal(DEVBOX, DemoCore.SHELL), setup = { desktopApp() }, actions = { tapLabel("Find"); type("failed"); repeat(4) { tapLabel("Older") } }),
+    // Starting and closing on herdr-core alone (mac-mini, issue #99): the space's ⋯ offers a new Terminal (`hc run`), Start
+    // work an agent there, and an agent's ⋯ (or a long press on the machine screen) closes its terminal (`hc kill`), asked first.
+    Scene("chat-tab-menu-desktop-only", route = Routes.CHAT, setup = { desktopApp() }, space = "${Demo.MINI}/website", actions = { tapLabel("Tabs and new") }),
+    Scene("start-desktop-only", route = Routes.start(Demo.MINI, "Check every link on the website and fix the broken ones"), setup = { desktopApp() }, actions = { tapExact("Agent now") }),
+    // Just started from Start work: the chat opens at once, the sentence held above its box until the agent says it waits.
+    Scene("chat-desktop-started", route = Routes.agent(Demo.MINI, "hc:t1"), setup = {
+        desktopApp()
+        val key = com.makefunstuff.herdr.data.DraftStore.agent(Demo.MINI, "hc:t1")
+        composer = com.makefunstuff.herdr.data.ComposerStore.State(held = mapOf(key to listOf(
+            com.makefunstuff.herdr.core.chat.HeldMessage("start-1", "Check every link on the website and fix the broken ones", Demo.NOW - 5_000),
+        )))
+    }),
+    Scene("chat-desktop-more", route = Routes.agent(Demo.MINI, "hc:t2"), setup = { desktopApp() }, actions = { tapLabel("More") }),
+    Scene("chat-desktop-close", route = Routes.agent(Demo.MINI, "hc:t2"), setup = { desktopApp() }, actions = { tapLabel("More"); tapExact("Close terminal") }),
+    Scene("terminal-desktop-menu", route = Routes.terminal(DEVBOX, DemoCore.SHELL), setup = { desktopApp() }, actions = { tapLabel("More") }),
+    Scene("machine-desktop-only-close", route = Routes.machine(Demo.MINI), setup = { desktopApp() }, actions = { settle(); tapText("blog"); longPressText("codex") }),
     // Shepherdr 3 on devbox: its agents run in herdr-core beside classic herdr, called by their task or space (from
     // Shepherdr's labels); on the Agents list with the rest (tapping one opens its task's chat), and on the machine screen.
     Scene("agents-shepherdr3", heightDp = 1700, setup = { home(); shepherdr3() }),
