@@ -301,6 +301,14 @@ fun scenes(): List<Scene> = listOf(
     // work an agent there, and an agent's ⋯ (or a long press on the machine screen) closes its terminal (`hc kill`), asked first.
     Scene("chat-tab-menu-desktop-only", route = Routes.CHAT, setup = { desktopApp() }, space = "${Demo.MINI}/website", actions = { tapLabel("Tabs and new") }),
     Scene("start-desktop-only", route = Routes.start(Demo.MINI, "Check every link on the website and fix the broken ones"), setup = { desktopApp() }, actions = { tapExact("Agent now") }),
+    // Just started from Start work: the chat opens at once, the sentence held above its box until the agent says it waits.
+    Scene("chat-desktop-started", route = Routes.agent(Demo.MINI, "hc:t1"), setup = {
+        desktopApp()
+        val key = com.makefunstuff.herdr.data.DraftStore.agent(Demo.MINI, "hc:t1")
+        composer = com.makefunstuff.herdr.data.ComposerStore.State(held = mapOf(key to listOf(
+            com.makefunstuff.herdr.core.chat.HeldMessage("start-1", "Check every link on the website and fix the broken ones", Demo.NOW - 5_000),
+        )))
+    }),
     Scene("chat-desktop-more", route = Routes.agent(Demo.MINI, "hc:t2"), setup = { desktopApp() }, actions = { tapLabel("More") }),
     Scene("chat-desktop-close", route = Routes.agent(Demo.MINI, "hc:t2"), setup = { desktopApp() }, actions = { tapLabel("More"); tapExact("Close terminal") }),
     Scene("terminal-desktop-menu", route = Routes.terminal(DEVBOX, DemoCore.SHELL), setup = { desktopApp() }, actions = { tapLabel("More") }),

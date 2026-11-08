@@ -81,12 +81,6 @@ object HcStart {
         return HcMapping.paneId(t.address, place.session)
     }
 
-    /** Starts [program] as [name] in [folder] in [place], then gives it [text] ([launch], then [deliver]). */
-    suspend fun agent(client: HcClient, place: Place, folder: String, program: String, name: String, text: String, readyMs: Long = 20_000): Started {
-        val pane = launch(client, place, folder, program, name)
-        return Started(pane, if (text.isBlank()) null else deliver(client, pane, text, readyMs))
-    }
-
     /** Starts [program] as [name] in [folder] in [place]: its pane id, as soon as it runs. */
     suspend fun launch(client: HcClient, place: Place, folder: String, program: String, name: String): String {
         val line = programLine(program)
@@ -104,9 +98,11 @@ object HcStart {
      * Gives the agent in [paneId] [text] once it reports that it waits (OSC 7501 `idle` or `done`). Nothing is typed
      * blind: an agent that says nothing within [readyMs] (most kinds don't report), asks something first (`blocked`,
      * such as whether to trust the folder), reports an error or ends gets no Enter it could take as an answer.
-     * Returns why the words didn't go in, null when they did.
+     * [wanted] says whether the words are still to go (the person may have sent them, or others, or discarded them
+     * meanwhile): it is asked while waiting and again just before sending. Returns why the words didn't go in, null
+     * when they did or are no longer wanted.
      */
-    suspend fun deliver(client: HcClient, paneId: String, text: String, readyMs: Long = 20_000): String? {
+    suspend fun deliver(client: HcClient, paneId: String, text: String, readyMs: Long = 20_000, wanted: suspend () -> Boolean = { true }): String? {
         val address = HcMapping.address(paneId) ?: return "it isn't herdr-core's"
         // Why not to type now, or READY.
         val wait: String = withTimeoutOrNull(readyMs) {
@@ -114,6 +110,7 @@ object HcStart {
             while (answer == null) {
                 val now = try { client.get(address) } catch (e: java.io.IOException) { null }
                 answer = when {
+                    !wanted() -> TAKEN
                     now != null && !now.live -> "it ended"
                     now?.status?.state in setOf("idle", "done") -> READY
                     now?.status?.state == "blocked" -> "it asks something first"
@@ -124,12 +121,10 @@ object HcStart {
             }
             answer
         } ?: "it didn't say it was ready"
+        if (wait == TAKEN || (wait == READY && !wanted())) return null
         if (wait != READY) return wait
         return try { client.send(address, text.trim()); null } catch (e: java.io.IOException) { e.message ?: "it didn't take them" }
     }
-
-    /** An agent started: its [paneId]; [unsent] why what was said didn't go in, null when it did (or nothing was said). */
-    data class Started(val paneId: String, val unsent: String?)
 
     /**
      * The terminal the program is told it runs in: hc's core may have no `TERM` of its own (a desktop app's), and
@@ -138,6 +133,7 @@ object HcStart {
     val ENV = mapOf("TERM" to "xterm-256color", "COLORTERM" to "truecolor")
 
     private const val READY = "ready"
+    private const val TAKEN = "taken"
     private const val OTHER = "!other"
     private const val WHERE = "where:"
 }

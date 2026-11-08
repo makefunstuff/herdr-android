@@ -153,13 +153,18 @@ fun StartWorkScreen(nav: NavController, machineId: String? = null, text: String 
                     val place = ws?.let { HcStart.place(it, space?.label.orEmpty(), name) } ?: HcStart.Place(null, null, emptyMap())
                     val client = s.awaitHerdrCore(10_000, ws)
                     val pane = HcStart.launch(client, place, dir, StartWork.STARTABLE[k] ?: k, name)
-                    // The chat opens now; the sentence goes in once the agent says it waits, on the app's scope so leaving
-                    // the chat doesn't lose it. Where it can't go in, it waits in the chat's box.
-                    if (said.isNotBlank()) container.scope.launch {
-                        HcStart.deliver(client, pane, said)?.let { why ->
-                            container.drafts.add(com.makefunstuff.herdr.data.DraftStore.agent(m, pane), said)
-                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                                com.makefunstuff.herdr.ui.design.Toasts.show("What you said didn't go in to $k ($why): it waits in its chat's box")
+                    container.starts.started(m, dir, board = false, startNow = starts.startNow, kind = k)
+                    // The chat opens now, the sentence held above its box (to send or discard by hand meanwhile). It goes
+                    // in once the agent says it waits, on the app's scope so leaving the chat doesn't lose it, and only
+                    // while it is still held there; else it stays held, and a toast says why.
+                    if (said.isNotBlank()) {
+                        val key = com.makefunstuff.herdr.data.DraftStore.agent(m, pane)
+                        val held = container.composer.hold(key, said, container.clock())
+                        container.scope.launch {
+                            val why = HcStart.deliver(client, pane, said) { container.composer.held(key).any { it.id == held.id } }
+                            if (why == null) container.composer.drop(key, held.id)
+                            else kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                com.makefunstuff.herdr.ui.design.Toasts.show("What you said didn't go in to $k ($why): it waits above its chat's box")
                             }
                         }
                     }
@@ -168,7 +173,8 @@ fun StartWorkScreen(nav: NavController, machineId: String? = null, text: String 
                 }
             }
                 .onSuccess { pane ->
-                    container.starts.started(m, dir, board = false, startNow = starts.startNow, kind = k)
+                    // herdr-core's start was recorded as soon as it ran.
+                    if (classic) container.starts.started(m, dir, board = false, startNow = starts.startNow, kind = k)
                     nav.popBackStack()
                     panes.open(nav, Routes.agent(m, pane))
                 }

@@ -610,6 +610,7 @@ fun AgentActionsSheet(
     var details by remember { mutableStateOf(false) }
     var explain by remember { mutableStateOf(false) }
     var confirmClose by remember { mutableStateOf(false) }
+    val hostState by session.state.collectAsStateWithLifecycle()
 
     val (title, subtitle) = agentTitle(agent, paneLabel, task)
     ManageSheet(title, subtitle, onDismiss) {
@@ -647,7 +648,7 @@ fun AgentActionsSheet(
         }
         // herdr-core's terminal closes with `hc kill`; classic herdr's panes close from the machine screen. Shepherdr's own
         // agents (a task's worker, a space's Assistant) close as Shepherdr closes them, in its tab menu.
-        val shepherdrs = tabRows != null || agent?.shepherdrTask != null || agent?.shepherdrSpace != null || session.state.value.view.shepherdrsPane(target ?: "")
+        val shepherdrs = tabRows != null || agent?.shepherdrTask != null || agent?.shepherdrSpace != null || hostState.view.shepherdrsPane(target ?: "")
         if (target != null && HcMapping.address(target) != null && !shepherdrs) {
             ManageHeading("Danger")
             ManageRow("Close terminal", detail = "End the agent and its terminal", icon = HerdrIcons.Trash2, destructive = true) { confirmClose = true }

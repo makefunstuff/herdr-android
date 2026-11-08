@@ -109,68 +109,87 @@ class HcStartTest {
         assertEquals("sp1", params["labels"]!!.jsonObject["herdr.space"]!!.jsonPrimitive.content)
     }
 
+    private val nowhere = HcStart.Place(null, null, emptyMap())
+
     @Test
-    fun anAgentGetsWhatWasSaidOnceItReports() = runBlocking {
+    fun anAgentRunsThroughTheLoginShellUnderItsName() = runBlocking {
+        val core = Core { method, _ -> if (method == "terminal.run") terminal("t9") else JsonObject(emptyMap()) }
+        assertEquals("hc:t9", HcStart.launch(HcClient(core), nowhere, "/src", "claude", "Fix the login"))
+        val run = core.calls.single().second
+        assertEquals("fix-the-login", run["name"]!!.jsonPrimitive.content)
+        assertEquals("/src", run["cwd"]!!.jsonPrimitive.content)
+        assertEquals(HcStart.programLine("claude"), run["line"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun aTakenNameStartsItWithoutOne() = runBlocking {
+        val core = Core { method, params ->
+            when {
+                method == "terminal.run" && params["name"] != null -> throw HcException("name_taken", "name taken")
+                else -> terminal("t9")
+            }
+        }
+        assertEquals("hc:t9", HcStart.launch(HcClient(core), nowhere, "/src", "codex", "fix"))
+        assertEquals(listOf(true, false), core.calls.map { it.second["name"] != null })
+    }
+
+    @Test
+    fun theWordsGoInOnceItSaysItWaits() = runBlocking {
         var gets = 0
         val core = Core { method, _ ->
             when (method) {
-                "terminal.run" -> terminal("t9")
                 "terminal.get" -> terminal("t9", status = when (++gets) { 1 -> null; 2 -> "working"; else -> "idle" })
-                "terminal.send" -> JsonObject(mapOf("sent" to JsonPrimitive(true)))
-                else -> JsonObject(emptyMap())
+                else -> JsonObject(mapOf("sent" to JsonPrimitive(true)))
             }
         }
-        val started = HcStart.agent(HcClient(core), HcStart.Place(null, null, emptyMap()), "/src", "claude", "Fix the login", "fix the login")
-        assertEquals(HcStart.Started("hc:t9", null), started)
-        assertEquals(listOf("terminal.run", "terminal.get", "terminal.get", "terminal.get", "terminal.send"), core.calls.map { it.first })
-        val run = core.calls.first().second
-        assertEquals("fix-the-login", run["name"]!!.jsonPrimitive.content)
-        assertEquals(HcStart.programLine("claude"), run["line"]!!.jsonPrimitive.content)
+        assertNull(HcStart.deliver(HcClient(core), "hc:t9", " fix the login "))
+        assertEquals(listOf("terminal.get", "terminal.get", "terminal.get", "terminal.send"), core.calls.map { it.first })
         assertEquals("fix the login", core.calls.last().second["text"]!!.jsonPrimitive.content)
     }
 
     @Test
-    fun aTakenNameStartsItWithoutOneAndAQuestionGetsNoEnter() = runBlocking {
-        val core = Core { method, params ->
-            when {
-                method == "terminal.run" && params["name"] != null -> throw HcException("name_taken", "name taken")
-                method == "terminal.run" -> terminal("t9")
-                method == "terminal.get" -> terminal("t9", status = "blocked")
-                else -> JsonObject(emptyMap())
-            }
-        }
-        val started = HcStart.agent(HcClient(core), HcStart.Place(null, null, emptyMap()), "/src", "codex", "fix", "fix it")
-        assertEquals(HcStart.Started("hc:t9", "it asks something first"), started)
-        assertEquals(2, core.calls.count { it.first == "terminal.run" })
+    fun aQuestionGetsNoEnter() = runBlocking {
+        val core = Core { _, _ -> terminal("t9", status = "blocked") }
+        assertEquals("it asks something first", HcStart.deliver(HcClient(core), "hc:t9", "fix it"))
         assertTrue(core.calls.none { it.first == "terminal.send" }, "an Enter could answer its question")
     }
 
     @Test
     fun anAgentThatNeverSaysItIsReadyIsTypedNothing() = runBlocking {
-        val core = Core { method, _ -> if (method == "terminal.run" || method == "terminal.get") terminal("t9") else JsonObject(emptyMap()) }
-        val started = HcStart.agent(HcClient(core), HcStart.Place(null, null, emptyMap()), "/src", "pi", "fix", "fix it", readyMs = 1_200)
-        assertEquals(HcStart.Started("hc:t9", "it didn't say it was ready"), started)
+        val core = Core { _, _ -> terminal("t9") }
+        assertEquals("it didn't say it was ready", HcStart.deliver(HcClient(core), "hc:t9", "fix it", readyMs = 1_200))
         assertTrue(core.calls.none { it.first == "terminal.send" })
     }
 
     @Test
     fun anErrorIsSaidAsOne() = runBlocking {
-        val core = Core { method, _ -> if (method == "terminal.run" || method == "terminal.get") terminal("t9", status = if (method == "terminal.get") "error" else null) else JsonObject(emptyMap()) }
+        val core = Core { _, _ -> terminal("t9", status = "error") }
         assertEquals("it reports an error", HcStart.deliver(HcClient(core), "hc:t9", "fix it"))
         assertTrue(core.calls.none { it.first == "terminal.send" })
+    }
+
+    @Test
+    fun wordsThePersonTookOverAreNotSent() = runBlocking {
+        // Ready, but the person sent (or discarded) the held words meanwhile: nothing goes twice.
+        val ready = Core { _, _ -> terminal("t9", status = "idle") }
+        assertNull(HcStart.deliver(HcClient(ready), "hc:t9", "fix it", wanted = { false }))
+        assertTrue(ready.calls.none { it.first == "terminal.send" })
+        // Taken over while it still starts: the wait ends there, with nothing to say.
+        var asks = 0
+        val starting = Core { _, _ -> terminal("t9") }
+        assertNull(HcStart.deliver(HcClient(starting), "hc:t9", "fix it", readyMs = 10_000, wanted = { ++asks < 3 }))
+        assertTrue(starting.calls.none { it.first == "terminal.send" })
     }
 
     @Test
     fun aRefusedSendIsSaid() = runBlocking {
         val core = Core { method, _ ->
             when (method) {
-                "terminal.run" -> terminal("t9")
-                "terminal.get" -> terminal("t9", status = "idle")
                 "terminal.send" -> throw HcException("blocked", "it waits for an answer")
-                else -> JsonObject(emptyMap())
+                else -> terminal("t9", status = "idle")
             }
         }
-        assertEquals("It waits for an answer.", HcStart.agent(HcClient(core), HcStart.Place(null, null, emptyMap()), "/src", "claude", "fix", "fix it").unsent)
+        assertEquals("It waits for an answer.", HcStart.deliver(HcClient(core), "hc:t9", "fix it"))
     }
 
     @Test
