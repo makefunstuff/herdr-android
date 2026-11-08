@@ -33,7 +33,7 @@ that wasn't sealed with it. Python 3 alone, no packages.
   herdr-push test [<id>]         send a test notification now
   herdr-push status              how it stands, as JSON
   herdr-push ensure              start the watcher when it isn't running
-  herdr-push install             start it now and with the machine (systemd, launchd or cron)
+  herdr-push install             start it now and with the machine (systemd, launchd, cron or, on Windows, your sign-in)
   herdr-push uninstall [--purge] stop it and remove the start-up entry (--purge: and its settings)
   herdr-push once [--dry-run]    one look, printing what it would send
   herdr-push journal [--session NAME] [--since SECONDS]
@@ -42,7 +42,9 @@ that wasn't sealed with it. Python 3 alone, no packages.
   herdr-push pair [--host NAME[,NAME…]] [--port N] [--session NAME] [--name NAME]
                                  show a QR code a phone scans to add this machine (one-time, 5 minutes)
 
-On Windows (OpenSSH with Git Bash as its shell) only `pair` runs: notifications need Linux or macOS.
+On Windows (OpenSSH with Git Bash as its shell) it runs in your own desktop session, started when you sign in (a
+Run entry) and, from `install` or `ensure`, through a scheduled task of yours: never as a child of the SSH session.
+No elevation is asked.
 
 See host/herdr-push/README.md in the herdr-android repo.
 """
@@ -69,7 +71,7 @@ import zlib
 
 try:
     import fcntl
-except ImportError:  # Windows: only `pair` runs there
+except ImportError:  # Windows: msvcrt's locks stand in for it
     fcntl = None
 
 VERSION = "13"
@@ -87,6 +89,10 @@ LOG = os.path.join(STATE_DIR, NAME + ".log")
 # Touched by anything that knows you are here (a shell prompt, an editor hook): counts as typing in herdr.
 PRESENT = os.path.join(STATE_DIR, "present")
 WINDOWS = os.name == "nt"
+NO_WINDOW = 0x08000000 if WINDOWS else 0  # CREATE_NO_WINDOW for the commands run: a watcher without a console opens none
+# The one byte of the lock file that a running watcher locks. Windows locks are mandatory, so it is not one that holds the pid.
+LOCK_BYTE = 1 << 20
+RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"  # where Windows starts a user's programs at sign-in
 _KERNEL32 = None  # kernel32 once loaded, see kernel32()
 _USER32 = None  # user32 once loaded, see user32()
 # Where sshd keeps its config and host keys: Win32-OpenSSH's under ProgramData.
@@ -234,7 +240,7 @@ class Source:
 
     def run(self, args, timeout=20):
         r = subprocess.run(args, env=self.env(), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                           stderr=subprocess.PIPE, timeout=timeout)
+                           stderr=subprocess.PIPE, timeout=timeout, creationflags=NO_WINDOW)
         if r.returncode != 0:
             raise RuntimeError((r.stderr.decode(errors="replace").strip().splitlines() or ["exit %d" % r.returncode])[-1])
         return r.stdout.decode(errors="replace")
@@ -974,7 +980,7 @@ def usage_look(st, now):
     st["at"] = now
     try:
         r = subprocess.run([sys.executable, USAGE_SCRIPT, "limits"], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                           stderr=subprocess.DEVNULL, timeout=120)
+                           stderr=subprocess.DEVNULL, timeout=120, creationflags=NO_WINDOW)
         lines = [l for l in r.stdout.decode("utf-8", "replace").splitlines() if l.strip().startswith("{")]
         out = json.loads(lines[-1]) if lines else {}
     except Exception as e:  # noqa: BLE001
@@ -1173,9 +1179,10 @@ def screen_unlocked():
     return desktop
 
 
-def windows_lock_screen():
-    """Windows: whether LogonUI.exe, the lock screen, runs in this session. It runs once per session, so the lock screen of
-    another signed-in user doesn't count. Walks the process list with Toolhelp (a few milliseconds, no process spawned)."""
+def windows_sessions(exe):
+    """Windows: the session id of each running process whose image is called [exe] (lower case), and of this one:
+    ([ids], mine), mine None if it can't tell. Walks the process list with Toolhelp (a few milliseconds, no process
+    spawned). None instead if the list can't be read."""
     import ctypes
     from ctypes import wintypes
 
@@ -1187,24 +1194,40 @@ def windows_lock_screen():
 
     k = kernel32()
     mine = wintypes.DWORD()
-    if not k.ProcessIdToSessionId(k.GetCurrentProcessId(), ctypes.byref(mine)):
-        mine = None
+    mine = mine.value if k.ProcessIdToSessionId(k.GetCurrentProcessId(), ctypes.byref(mine)) else None
     snap = k.CreateToolhelp32Snapshot(0x2, 0)  # TH32CS_SNAPPROCESS
     if snap is None or snap == ctypes.c_void_p(-1).value:  # INVALID_HANDLE_VALUE
-        return False
+        return None
+    ids = []
     try:
         entry = PROCESSENTRY32W()
         entry.dwSize = ctypes.sizeof(entry)
         ok = k.Process32FirstW(snap, ctypes.byref(entry))
         while ok:
-            if entry.szExeFile.lower() == "logonui.exe":
+            if entry.szExeFile.lower() == exe:
                 theirs = wintypes.DWORD()
-                if mine is None or (k.ProcessIdToSessionId(entry.th32ProcessID, ctypes.byref(theirs)) and theirs.value == mine.value):
-                    return True
+                ids.append(theirs.value if k.ProcessIdToSessionId(entry.th32ProcessID, ctypes.byref(theirs)) else None)
             ok = k.Process32NextW(snap, ctypes.byref(entry))
     finally:
         k.CloseHandle(snap)
-    return False
+    return ids, mine
+
+
+def windows_lock_screen():
+    """Windows: whether LogonUI.exe, the lock screen, runs in this session. It runs once per session, so the lock screen of
+    another signed-in user doesn't count."""
+    found = windows_sessions("logonui.exe")
+    if found is None:
+        return False
+    ids, mine = found
+    return any(mine is None or i == mine for i in ids)
+
+
+def windows_interactive():
+    """Windows: whether someone is signed in at the PC, which is when explorer.exe runs in a session other than 0 (services
+    and SSH sessions live in session 0, a desktop session never does)."""
+    found = windows_sessions("explorer.exe")
+    return found is not None and any(i is not None and i != 0 for i in found[0])
 
 
 def windows_unlocked():
@@ -1412,88 +1435,91 @@ def tick(state, n, dry_run=False, now=None):
         return seen_here[0]
 
     srcs = sources(subs)
-    for key, (src, group) in srcs.items():
-        st = state.setdefault("sessions", {}).setdefault(key, {})
-        live = any(s.get("live") for s in group)
-        watch_panes = watched(group, "watch_panes")
-        events = []
-        agents = None
-        # What the journal saw last; its first look only learns how things stand.
-        jst = st.setdefault("journal", {})
-        noted = []
-        core = core_look(src, st, now) if src.session == "default" else None
-        # herdr-core's agents last told, on a machine without classic herdr: they go when the core does.
-        told_core = any(p.startswith(HC_PREFIX) for p in st.get("agents") or {})
-        if src.herdr or core is not None or told_core:
+    try:
+        for key, (src, group) in srcs.items():
+            st = state.setdefault("sessions", {}).setdefault(key, {})
+            live = any(s.get("live") for s in group)
+            watch_panes = watched(group, "watch_panes")
+            events = []
+            agents = None
+            # What the journal saw last; its first look only learns how things stand.
+            jst = st.setdefault("journal", {})
+            noted = []
+            core = core_look(src, st, now) if src.session == "default" else None
+            # herdr-core's agents last told, on a machine without classic herdr: they go when the core does.
+            told_core = any(p.startswith(HC_PREFIX) for p in st.get("agents") or {})
+            if src.herdr or core is not None or told_core:
+                try:
+                    snap = {"workspaces": [], "tabs": [], "agents": []}
+                    if src.herdr:
+                        try:
+                            snap = src.snapshot()
+                            _classic_last[key] = snap
+                            st.pop("classic_problem", None)
+                        except Exception:  # noqa: BLE001 - herdr-core's agents are still told, classic herdr's kept as they were
+                            # Without classic herdr's last snapshot, one that had agents keeps them by not looking now.
+                            told_classic = any(not p.startswith(HC_PREFIX) for p in st.get("agents") or {})
+                            if key not in _classic_last and (told_classic or (core is None and not told_core)):
+                                raise
+                            log_once(st, "classic_problem", "herdr session %s:" % key, sys.exc_info()[1])
+                            snap = _classic_last.get(key, snap)
+                    if core is not None:
+                        snap = merged(snap, core)
+                        # A core seen for the first time (herdr-push updated to read it): its agents
+                        # as they stand are learnt, not told, as on a first look.
+                        if not st.get("core_known"):
+                            for a in core.get("agents") or []:
+                                if "agents" in st:
+                                    st["agents"].setdefault(a["pane_id"], a.get("agent_status", "unknown"))
+                                if "agents" in jst:
+                                    jst["agents"].setdefault(a["pane_id"], "%s#%s" % (a.get("agent_status", "unknown"), a.get("state_change_seq", "")))
+                        st["core_known"] = True
+                    first = "agents" not in st
+                    told = agent_events(src, snap, st.setdefault("agents", {}), first)
+                    events += told
+                    events += watch_agent_events(snap, st.setdefault("watch_agents", {}), watch_panes,
+                                                 {e["agent"].get("pane_id") for e in told})
+                    learn = "agents" not in jst or first
+                    noted += journal_agents(snap, jst.setdefault("agents", {}), learn, now)
+                    if live:
+                        agents = live_agents(snap, st, now)
+                    st.pop("problem", None)
+                except Exception as e:  # noqa: BLE001
+                    if st.get("problem") != str(e):
+                        log("herdr session %s:" % key, e)
+                    st["problem"] = str(e)
             try:
-                snap = {"workspaces": [], "tabs": [], "agents": []}
-                if src.herdr:
-                    try:
-                        snap = src.snapshot()
-                        _classic_last[key] = snap
-                        st.pop("classic_problem", None)
-                    except Exception:  # noqa: BLE001 - herdr-core's agents are still told, classic herdr's kept as they were
-                        # Without classic herdr's last snapshot, one that had agents keeps them by not looking now.
-                        told_classic = any(not p.startswith(HC_PREFIX) for p in st.get("agents") or {})
-                        if key not in _classic_last and (told_classic or (core is None and not told_core)):
-                            raise
-                        log_once(st, "classic_problem", "herdr session %s:" % key, sys.exc_info()[1])
-                        snap = _classic_last.get(key, snap)
-                if core is not None:
-                    snap = merged(snap, core)
-                    # A core seen for the first time (herdr-push updated to read it): its agents
-                    # as they stand are learnt, not told, as on a first look.
-                    if not st.get("core_known"):
-                        for a in core.get("agents") or []:
-                            if "agents" in st:
-                                st["agents"].setdefault(a["pane_id"], a.get("agent_status", "unknown"))
-                            if "agents" in jst:
-                                jst["agents"].setdefault(a["pane_id"], "%s#%s" % (a.get("agent_status", "unknown"), a.get("state_change_seq", "")))
-                    st["core_known"] = True
-                first = "agents" not in st
-                told = agent_events(src, snap, st.setdefault("agents", {}), first)
-                events += told
-                events += watch_agent_events(snap, st.setdefault("watch_agents", {}), watch_panes,
-                                             {e["agent"].get("pane_id") for e in told})
-                learn = "agents" not in jst or first
-                noted += journal_agents(snap, jst.setdefault("agents", {}), learn, now)
-                if live:
-                    agents = live_agents(snap, st, now)
-                st.pop("problem", None)
-            except Exception as e:  # noqa: BLE001
-                if st.get("problem") != str(e):
-                    log("herdr session %s:" % key, e)
-                st["problem"] = str(e)
-        try:
-            if noted:
-                journal_add(key, noted, now)
-            elif "at" not in jst:
-                journal_start(key, now)
-            # Up to when the journal is complete (the watcher may be stopped for a while).
-            jst["at"] = int(now)
-        except Exception as e:  # noqa: BLE001 - the journal is a nicety next to the pushes
-            log("journal:", e)
-        if live:
-            ev = live_event(st, agents, now, first="live_sent" not in st)
-            if ev is not None:
-                events.append(ev)
-        else:
-            for k in ("live_sent", "live_agents", "live_agents_since"):
-                st.pop(k, None)
-        if not events:
-            continue
-        sent[key] = events
-        for sub in group:
-            record = state.setdefault("phones", {}).setdefault(sub["id"], {})
-            if gone(record, sub):
+                if noted:
+                    journal_add(key, noted, now)
+                elif "at" not in jst:
+                    journal_start(key, now)
+                # Up to when the journal is complete (the watcher may be stopped for a while).
+                jst["at"] = int(now)
+            except Exception as e:  # noqa: BLE001 - the journal is a nicety next to the pushes
+                log("journal:", e)
+            if live:
+                ev = live_event(st, agents, now, first="live_sent" not in st)
+                if ev is not None:
+                    events.append(ev)
+            else:
+                for k in ("live_sent", "live_agents", "live_agents_since"):
+                    st.pop(k, None)
+            if not events:
                 continue
-            mine = [e for e in events if (e.get("type") != "live" or sub.get("live")) and sub["id"] in e.get("for", [sub["id"]])]
-            if dry_run or not mine:
-                continue
-            send(sub, mine, record, here)
-    for src, _ in srcs.values():
-        if src.core:
-            src.core.close()
+            sent[key] = events
+            for sub in group:
+                record = state.setdefault("phones", {}).setdefault(sub["id"], {})
+                if gone(record, sub):
+                    continue
+                mine = [e for e in events if (e.get("type") != "live" or sub.get("live")) and sub["id"] in e.get("for", [sub["id"]])]
+                if dry_run or not mine:
+                    continue
+                send(sub, mine, record, here)
+    finally:
+        # Also when a look fails: a herdr-core connection that stays open is a process (Windows) that stays on.
+        for src, _ in srcs.values():
+            if src.core:
+                src.core.close()
     if subs:
         ev = health_look(state.setdefault("health", {}), now)
         if ev is not None:
@@ -1516,12 +1542,27 @@ def tick(state, n, dry_run=False, now=None):
     return sent
 
 
+def lock_byte(f, mode):
+    """Windows: locks or unlocks (msvcrt.LK_NBLCK, LK_UNLCK) the byte of [f] that tells a watcher runs. It is far past the
+    pid, which the locked byte would hide from the other processes. Raises OSError when another process holds it."""
+    import msvcrt
+    f.seek(LOCK_BYTE)
+    msvcrt.locking(f.fileno(), mode, 1)
+
+
 def run():
     os.makedirs(STATE_DIR, exist_ok=True)
+    if WINDOWS and sys.stderr is None:
+        # pythonw.exe has no console, so no stderr either: what log() says goes to the log file.
+        sys.stdout = sys.stderr = open(LOG, "a", buffering=1, encoding="utf-8")
     # Not "w": that would wipe the running watcher's pid before finding out it runs.
     lock = open(LOCK, "a+")
     try:
-        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        if WINDOWS:
+            import msvcrt
+            lock_byte(lock, msvcrt.LK_NBLCK)
+        else:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except OSError:
         log("already running")
         return 0
@@ -1556,12 +1597,19 @@ def running_pid():
         return None
     with f:
         try:
-            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            if WINDOWS:
+                import msvcrt
+                lock_byte(f, msvcrt.LK_NBLCK)
+            else:
+                fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except OSError:
             f.seek(0)
             pid = f.read().strip()
             return int(pid) if pid.isdigit() else -1
-        fcntl.flock(f, fcntl.LOCK_UN)
+        if WINDOWS:
+            lock_byte(f, msvcrt.LK_UNLCK)
+        else:
+            fcntl.flock(f, fcntl.LOCK_UN)
         return None
 
 
@@ -2362,6 +2410,14 @@ def cmd_test(pid=None):
 
 
 def autostart():
+    if WINDOWS:
+        import winreg
+        try:
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY) as key:
+                winreg.QueryValueEx(key, NAME)
+            return "windows-run"
+        except OSError:
+            return "none"
     if sys.platform == "darwin":
         return "launchd" if os.path.exists(launchd_plist()) else "none"
     if os.path.exists(systemd_unit()):
@@ -2384,8 +2440,11 @@ def cmd_status():
                        "ok": r.get("ok"), "error": r.get("error"), "gone": gone(r, s)})
     problems = {k: v["problem"] for k, v in state.get("sessions", {}).items() if v.get("problem")}
     pid = running_pid()
-    out({"ok": True, "version": VERSION, "running": pid is not None, "pid": pid, "autostart": autostart(),
-         "phones": phones, "problems": problems, "path": os.path.abspath(__file__)})
+    info = {"ok": True, "version": VERSION, "running": pid is not None, "pid": pid, "autostart": autostart(),
+            "phones": phones, "problems": problems, "path": os.path.abspath(__file__)}
+    if WINDOWS:
+        info["interactive"] = windows_interactive()  # false: no one is signed in, so there is nowhere to run it
+    out(info)
     return 0
 
 
@@ -2402,6 +2461,12 @@ def start_background():
 
 
 def cmd_ensure():
+    if WINDOWS:
+        # Never a child of this (SSH) session: the task starts it in the signed-in user's own session.
+        if running_pid() is None and windows_interactive() and (windows_task("/query")[0] or windows_task_create()[0]):
+            windows_task("/run")
+            wait_for_watcher(5)
+        return cmd_status()
     if running_pid() is None:
         kind = autostart()
         if kind == "systemd":
@@ -2429,7 +2494,64 @@ def has_systemd():
         return False
 
 
+def wait_for_watcher(seconds):
+    """Waits up to [seconds] for the watcher to hold the lock; whether it does."""
+    for _ in range(int(seconds * 10)):
+        if running_pid() is not None:
+            return True
+        time.sleep(0.1)
+    return running_pid() is not None
+
+
+def windows_command():
+    """What starts the watcher on Windows: pythonw.exe, which opens no console window, next to this Python."""
+    py = os.path.join(os.path.dirname(sys.executable), "pythonw.exe")
+    if not os.path.exists(py):
+        py = sys.executable
+    return '"%s" "%s" run' % (py, os.path.abspath(__file__))
+
+
+def windows_task(*args):
+    """Runs schtasks on this user's task of the watcher: (whether it worked, what it said)."""
+    try:
+        r = subprocess.run(["schtasks"] + list(args) + ["/tn", NAME], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                           stderr=subprocess.STDOUT, timeout=30, creationflags=NO_WINDOW)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return False, str(e)
+    return r.returncode == 0, r.stdout.decode(errors="replace").strip()
+
+
+def windows_task_create():
+    """The task that starts the watcher in the user's interactive session (/it: only while they are signed in, no
+    password, no elevation). It is what `schtasks /run` starts from an SSH session, which can't open a window there."""
+    return windows_task("/create", "/sc", "once", "/st", "00:00", "/it", "/f", "/tr", windows_command())
+
+
+def windows_install():
+    import winreg
+    ok, err = windows_task_create()
+    if not ok:
+        out({"ok": False, "msg": "couldn't create the task: " + err, "autostart": autostart(), "pid": running_pid(), "version": VERSION})
+        return 1
+    with winreg.CreateKey(winreg.HKEY_CURRENT_USER, RUN_KEY) as key:
+        winreg.SetValueEx(key, NAME, 0, winreg.REG_SZ, windows_command())
+    note = ""
+    if windows_interactive():
+        if running_pid() is not None:
+            stop()  # one of an older install: the task starts the one that is here now
+        windows_task("/run")
+        wait_for_watcher(5)
+    else:
+        note = "no one is signed in at the PC: it starts with the next sign-in"
+    pid = running_pid()
+    out({"ok": pid is not None or bool(note), "msg": note or ("running" if pid is not None else "the task didn't start it"),
+         "autostart": autostart(), "pid": pid, "version": VERSION})
+    return 0 if pid is not None or note else 1
+
+
 def cmd_install():
+    if WINDOWS:
+        return windows_install()
     me = os.path.abspath(__file__)
     note = ""
     if sys.platform == "darwin":
@@ -2494,7 +2616,25 @@ def stop():
             time.sleep(0.1)
 
 
+def windows_uninstall():
+    import winreg
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY, 0, winreg.KEY_SET_VALUE) as key:
+            winreg.DeleteValue(key, NAME)
+    except OSError:
+        pass
+    windows_task("/delete", "/f")
+
+
 def cmd_uninstall(purge):
+    if WINDOWS:
+        windows_uninstall()
+        stop()
+        if purge:
+            shutil.rmtree(CONFIG_DIR, ignore_errors=True)
+            shutil.rmtree(STATE_DIR, ignore_errors=True)
+        out({"ok": True, "msg": "removed"})
+        return 0
     if sys.platform == "darwin" and os.path.exists(launchd_plist()):
         subprocess.run(["launchctl", "unload", "-w", launchd_plist()], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         os.remove(launchd_plist())
@@ -2572,9 +2712,6 @@ LAUNCHD = """<?xml version="1.0" encoding="UTF-8"?>
 def main(argv):
     cmd = argv[1] if len(argv) > 1 else "help"
     rest = argv[2:]
-    if WINDOWS and cmd not in ("pair", "pair-accept", "once", "presence", "version", "_qr", "_seal", "help", "-h", "--help"):
-        print("herdr-push %s: on Windows only `herdr-push pair`, `once` and `presence` run so far." % cmd, file=sys.stderr)
-        return 2
     if WINDOWS and hasattr(sys.stdout, "reconfigure"):
         # A pipe there is in the ANSI code page, which has no block characters for the QR code.
         sys.stdout.reconfigure(encoding="utf-8")
