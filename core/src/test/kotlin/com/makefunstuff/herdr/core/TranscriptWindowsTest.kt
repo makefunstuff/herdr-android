@@ -3,6 +3,7 @@ package com.makefunstuff.herdr.core
 import com.makefunstuff.herdr.core.api.AgentSessionRef
 import com.makefunstuff.herdr.core.chat.ChatSearch
 import com.makefunstuff.herdr.core.chat.TranscriptFollower
+import com.makefunstuff.herdr.core.ssh.HerdrCommands
 import java.io.File
 import java.nio.file.Files
 import java.util.concurrent.TimeUnit
@@ -33,7 +34,7 @@ class TranscriptWindowsTest {
             // The real one prints CRLF line endings, and reads nothing from its stdin.
             val eol = if (crlf) "\r\n" else "\n"
             val rows = table.trim().lines().joinToString("") { "$it$eol" }
-            File(bin, "powershell.exe").apply { writeText("#!/bin/sh\nprintf '$rows'\n"); setExecutable(true) }
+            File(bin, "powershell.exe").apply { writeText("#!/bin/sh\necho x >> \"\$HOME/powershell.calls\"\nprintf '$rows'\n"); setExecutable(true) }
             File(home, ".claude/projects/C--Users-dev-proj").apply { mkdirs() }.resolve("$session.jsonl").writeText(jsonl + "\n")
             File(home, ".claude/sessions").mkdirs()
             if (sessionPid != null) File(home, ".claude/sessions/$sessionPid.json").writeText("""{"pid":$sessionPid,"sessionId":"$session"}""")
@@ -133,6 +134,30 @@ class TranscriptWindowsTest {
     fun searchUsesTheGrepOfTheMachine() {
         // With a grep that works the words are found by it, and the fallback isn't needed.
         assertFlaky(search("flaky"))
+    }
+
+    @Test
+    fun aSearchReadsTheProcessTableOnceForAllItsChats() {
+        // Three chats, each with its own pane pid: one powershell for the machine, not one per chat.
+        val table = "16744 900\n27492 16744\n17000 900\n17001 17000\n18000 900\n18001 18000\n"
+        onWindows(table, sessionPid = "27492", jsonl = said) { home, bin ->
+            for (pid in listOf("17001", "18001")) File(home, ".claude/sessions/$pid.json").writeText("""{"pid":$pid,"sessionId":"$session"}""")
+            val chats = listOf("16744" to "p1", "17000" to "p2", "18000" to "p3").map { (pid, pane) ->
+                ChatSearch.Chat(pane, AgentSessionRef(kind = "pid", value = pid, agent = "claude"))
+            }
+            val stdout = sh(home, bin, ChatSearch.command("flaky", chats)!!)
+            assertEquals(listOf("p1", "p2", "p3"), ChatSearch.parse(stdout, "flaky", chats.associate { it.paneId to "claude" }).map { it.paneId })
+            assertEquals(1, File(home, "powershell.calls").readLines().size)
+        }
+    }
+
+    @Test
+    fun theSearchFitsTheWindowsCommandLine() {
+        // Git Bash gets the command as `bash.exe -c "<command>"` with each quote written \" and the line is cut at 8191 characters.
+        val chats = (1..12).map { ChatSearch.Chat("p$it", AgentSessionRef(kind = "pid", value = "${16000 + it}", agent = "claude")) }
+        val line = HerdrCommands.login(ChatSearch.command("flaky", chats)!!).replace("\"", "\\\"")
+        val room = 8191 - "\"C:\\Program Files\\Git\\bin\\bash.exe\" -c \"".length - 1
+        assertTrue(line.length <= room, "the search is ${line.length} characters, the room is $room")
     }
 
     @Test
