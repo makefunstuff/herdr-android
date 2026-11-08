@@ -345,7 +345,7 @@ private fun WorkspaceRow(w: WorkspaceHit, showMachine: Boolean, opening: Boolean
         leading = { IconTile(if (w.workspace.worktree != null) HerdrIcons.FolderGit2 else HerdrIcons.Folder, size = 36.dp) },
         trailing = {
             if (opening) Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) { Spinner(size = 20.dp) }
-            else BarIcon(HerdrIcons.SquareTerminal, "Open a terminal in ${w.name}", onTerminal)
+            else if (w.opensTerminal) BarIcon(HerdrIcons.SquareTerminal, "Open a terminal in ${w.name}", onTerminal)
         },
         onClickLabel = "Open its machine",
         onClick = onOpen,

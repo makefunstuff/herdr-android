@@ -4,6 +4,7 @@ import com.makefunstuff.herdr.core.api.AgentStatus
 import com.makefunstuff.herdr.core.api.WorkspaceInfo
 import com.makefunstuff.herdr.core.board.WorkStatus
 import com.makefunstuff.herdr.core.board.WorkTask
+import com.makefunstuff.herdr.core.hc.HcMapping
 import com.makefunstuff.herdr.core.home.Home
 import com.makefunstuff.herdr.core.home.HomeAgent
 import com.makefunstuff.herdr.core.home.HomeBoard
@@ -55,6 +56,9 @@ data class WorkspaceHit(
     val branch: String? = null,
 ) {
     val name: String get() = workspace.label.ifBlank { workspace.workspaceId }
+
+    /** Whether the phone can open a terminal in it: only classic herdr opens one, herdr-core doesn't. */
+    val opensTerminal: Boolean get() = !workspace.workspaceId.startsWith(HcMapping.PREFIX)
 }
 
 /** What one query found across the machines, best first in each kind. */

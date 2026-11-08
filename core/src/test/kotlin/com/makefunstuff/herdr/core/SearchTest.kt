@@ -32,6 +32,7 @@ import java.nio.file.Files
 import java.util.concurrent.TimeUnit
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -114,11 +115,15 @@ class SearchTest {
         val both = devbox.copy(herdrCore = core)
         val hit = Search.of("docs-site", listOf(both), boards).workspaces.single()
         assertEquals("/home/dev/docs-site", hit.folder)
+        // herdr-core opens no terminal from the phone, so its row offers none.
+        assertFalse(hit.opensTerminal)
         // Online for herdr-core alone: only its workspaces.
         val alone = devbox.copy(snapshot = null, herdrCore = core)
         assertEquals(listOf("docs-site"), Search.of("docs", listOf(alone), boards).workspaces.map { it.name })
         // Classic herdr's still show next to them.
-        assertEquals(listOf("herdr-android"), Search.of("herdr-android", listOf(both), boards).workspaces.map { it.name })
+        val classic = Search.of("herdr-android", listOf(both), boards).workspaces
+        assertEquals(listOf("herdr-android"), classic.map { it.name })
+        assertTrue(classic.single().opensTerminal)
     }
 
     @Test
