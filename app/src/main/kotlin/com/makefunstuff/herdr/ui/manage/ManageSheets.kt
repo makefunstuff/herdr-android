@@ -96,6 +96,37 @@ fun manage(
     }
 }
 
+/**
+ * Ends a herdr-core terminal ([paneId], `hc:t7`) as `hc kill` does: hangup, then terminate, then kill. Its core
+ * then drops it from the lists; a refusal is said in a toast.
+ */
+fun closeHcTerminal(context: Context, scope: CoroutineScope, session: HostSession, paneId: String, onDone: () -> Unit) {
+    val address = HcMapping.address(paneId) ?: return
+    scope.launch {
+        runCatching { session.awaitHerdrCore(10_000, paneId).kill(address) }
+            .onFailure { context.toast(it.message ?: "herdr-core didn't answer") }
+        onDone()
+    }
+}
+
+/**
+ * Asks before a herdr-core terminal is closed, as the classic Close pane does. [scope] is the screen's or sheet's,
+ * which outlives the dialog.
+ */
+@Composable
+fun CloseHcTerminalDialog(session: HostSession, scope: CoroutineScope, paneId: String, label: String, onDismiss: () -> Unit, onDone: () -> Unit = {}) {
+    val context = LocalContext.current
+    ConfirmDialog(
+        "Close $label?",
+        "Its program ends and the terminal closes, on the desktop too.",
+        "Close terminal",
+        onDismiss = onDismiss,
+    ) {
+        onDismiss()
+        closeHcTerminal(context, scope, session, paneId, onDone)
+    }
+}
+
 /** The shell every management sheet sits in: a title, a one-line subtitle, and a scrolling list. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -558,6 +589,7 @@ fun AgentActionsSheet(
     var rename by remember { mutableStateOf(false) }
     var details by remember { mutableStateOf(false) }
     var explain by remember { mutableStateOf(false) }
+    var confirmClose by remember { mutableStateOf(false) }
 
     val (title, subtitle) = agentTitle(agent, paneLabel, task)
     ManageSheet(title, subtitle, onDismiss) {
@@ -593,6 +625,17 @@ fun AgentActionsSheet(
                 }
             }
         }
+        // herdr-core's terminal closes with `hc kill`; classic herdr's panes close from the machine screen. Shepherdr's own
+        // agents (a task's worker, a space's Assistant) close as Shepherdr closes them, in its tab menu.
+        val shepherdrs = tabRows != null || agent?.shepherdrTask != null || agent?.shepherdrSpace != null
+        if (target != null && HcMapping.address(target) != null && !shepherdrs) {
+            ManageHeading("Danger")
+            ManageRow("Close terminal", detail = "End the agent and its terminal", icon = HerdrIcons.Trash2, destructive = true) { confirmClose = true }
+        }
+    }
+
+    if (confirmClose && target != null) {
+        CloseHcTerminalDialog(session, scope, target, title, onDismiss = { confirmClose = false }, onDone = onDismiss)
     }
 
     if (rename && target != null) {

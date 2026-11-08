@@ -61,6 +61,7 @@ import com.makefunstuff.herdr.core.board.WorkOverview
 import com.makefunstuff.herdr.core.board.WorkSpace
 import com.makefunstuff.herdr.core.board.WorkTab
 import com.makefunstuff.herdr.core.hc.HcMapping
+import com.makefunstuff.herdr.core.hc.HcStart
 import com.makefunstuff.herdr.core.host.HostState
 import com.makefunstuff.herdr.core.push.Notify
 import com.makefunstuff.herdr.core.usage.UsageRules
@@ -444,7 +445,8 @@ fun SpaceSlot.shownTerminal(host: HostState): String? =
 
 /**
  * The + menu's Terminal: a shell as a new tab of a space, then its terminal. Shepherdr opens it in the space's folder
- * (`tab-new`); on classic herdr it is a new tab of the space's workspace. herdr-core alone opens no terminal for the phone.
+ * (`tab-new`); on classic herdr it is a new tab of the space's workspace; on herdr-core (the desktop app) a new terminal
+ * (`hc run`) in the space's folder, labelled into the space as a tab of its own.
  */
 @Stable
 class NewTerminal internal constructor(
@@ -460,7 +462,10 @@ class NewTerminal internal constructor(
     /** The space's workspace classic herdr has, where a new tab can open; null on herdr-core alone. */
     private fun SpaceSlot.classic(): WorkspaceInfo? = workspaces.firstOrNull { !it.workspaceId.startsWith(HcMapping.PREFIX) }
 
-    fun can(slot: SpaceSlot, host: HostState): Boolean = (slot.board != null && host.onShepherdr) || slot.classic() != null
+    /** The space's herdr-core space, where `hc run` can start a terminal; null where it has none. */
+    private fun SpaceSlot.core(): WorkspaceInfo? = workspaces.firstOrNull { it.workspaceId.startsWith(HcMapping.PREFIX) }
+
+    fun can(slot: SpaceSlot, host: HostState): Boolean = (slot.board != null && host.onShepherdr) || slot.classic() != null || slot.core() != null
 
     fun open(slot: SpaceSlot, host: HostState) {
         if (opening) return
@@ -477,9 +482,17 @@ class NewTerminal internal constructor(
                     withTimeoutOrNull(10_000) {
                         session.state.map { s -> TabMenus.newShell(before, s.view, slot.name) ?: TabMenus.newShell(before, s.view, board.name) }.filterNotNull().first()
                     }
-                } else {
-                    val ws = slot.classic() ?: error("herdr-core opens no terminal from the phone")
+                } else if (slot.classic() != null) {
+                    val ws = slot.classic()!!
                     session.awaitApi(10_000).openShell(ws.workspaceId, "shell", slot.panes.firstOrNull()?.cwd).also { session.refresh() }
+                } else {
+                    // herdr-core alone: a shell in the space's folder, as a tab of its own; it shows once its core says so.
+                    val ws = slot.core() ?: error("This space has nowhere to open a terminal")
+                    val place = HcStart.place(ws.workspaceId, ws.label.ifBlank { slot.name }, "Terminal") ?: error("This space has nowhere to open a terminal")
+                    val cwd = slot.panes.firstOrNull { it.workspaceId == ws.workspaceId }?.cwd
+                    val pane = HcStart.shell(session.awaitHerdrCore(10_000, ws.workspaceId), place, cwd)
+                    withTimeoutOrNull(10_000) { session.state.map { s -> s.view?.panes?.any { it.paneId == pane } }.first { it == true } }
+                    pane
                 }
             }.onSuccess { pane ->
                 if (pane != null) opened = slot.machineId to pane else Toasts.show("A terminal opened in ${slot.name}")

@@ -110,6 +110,7 @@ fun MachineScreen(nav: NavController, machineId: String) {
     var workspaceMenu by remember { mutableStateOf<WorkspaceInfo?>(null) }
     var tabMenu by remember { mutableStateOf<TabInfo?>(null) }
     var paneMenu by remember { mutableStateOf<PaneInfo?>(null) }
+    var coreClose by remember { mutableStateOf<PaneInfo?>(null) }
     val selectedTab = remember { mutableStateMapOf<String, String>() }
 
     fun openPane(pane: PaneInfo) {
@@ -181,7 +182,7 @@ fun MachineScreen(nav: NavController, machineId: String) {
                     onTabMenu = { tabMenu = it },
                     onPaneMenu = { paneMenu = it },
                 ) else WorkspaceCard(
-                    // herdr-core has no layouts or actions on its spaces: the panes open, nothing more.
+                    // herdr-core has no layouts or actions on its spaces: the panes open, and close (`hc kill`) on a long press.
                     ws,
                     from,
                     meta = emptyMap(),
@@ -190,11 +191,16 @@ fun MachineScreen(nav: NavController, machineId: String) {
                     onOpenPane = ::openPane,
                     onTerminal = { nav.navigate(Routes.terminal(machineId, it.paneId)) },
                     backend = if (both) "herdr-core ${core?.version.orEmpty()}".trim() else null,
+                    // Shepherdr's own agents close as Shepherdr closes them, not here.
+                    onPaneMenu = { p -> if (core?.snapshot?.agents?.any { it.paneId == p.paneId && (it.shepherdrTask != null || it.shepherdrSpace != null) } != true) coreClose = p },
                 )
             }
         }
     }
 
+    coreClose?.let { pane ->
+        com.makefunstuff.herdr.ui.manage.CloseHcTerminalDialog(session, scope, pane.paneId, pane.displayName, onDismiss = { coreClose = null })
+    }
     snap?.let { s ->
         workspaceMenu?.let { ws ->
             val folder = ws.worktree?.checkoutPath?.ifBlank { null } ?: s.workspaceFolder(ws.workspaceId)

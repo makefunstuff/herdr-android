@@ -92,7 +92,8 @@ object StartWork {
      * [KINDS] when neither can be read.
      */
     suspend fun installedOn(session: HostSession): List<String> {
-        val integrations = runCatching { session.awaitApi(10_000).integrations() }.getOrNull()
+        // herdr-core alone has no integrations to ask: the machine's programs say it.
+        val integrations = if (session.state.value.classicMissing != null) null else runCatching { session.awaitApi(10_000).integrations() }.getOrNull()
         val probed = runCatching { probed(session.awaitConnection(10_000).run(probeCommand(), timeoutSeconds = 15).stdout) }.getOrNull()
         if (integrations == null && probed == null) return KINDS
         return installed(integrations.orEmpty(), probed.orEmpty()).ifEmpty { KINDS }
