@@ -14,6 +14,21 @@ Needs JDK 17 and, the first time, network for Gradle to fetch Compose Desktop. E
 
 In CI the Android workflow's four `render (k/4)` jobs each render a quarter of the scenes (`-Pshard=k/4`), about 10 minutes apiece, and the `screens` job puts their shots together as the `herdr-screens-<run>` artifact; it fails when any of them did. Each job stops after 25 minutes at most.
 
+## The README's screenshots
+
+The README's gallery is these scenes, made smaller as WebP:
+
+```sh
+./gradlew -p tools/ui-preview render -Ponly=agents-v2,chat-tab,chat,chat-blocked,task-v2-ready,task-v2-pr,task-v2-browser,doc,machines,machine,terminal
+cd tools/ui-preview/build/shots
+# the tall ones, cut to their first screen first
+for s in agents-v2 agents-v2-light doc; do magick $s.png -gravity north -crop 824x1784+0+0 +repage $s.png; done
+shot() { magick "$1.png" -strip -resize 540x -quality 82 "../../../../docs/screenshots/$2.webp"; }
+shot agents-v2 tasks; shot agents-v2-light tasks-light; shot chat-tab assistant; shot chat chat
+shot chat-blocked blocked; shot task-v2-ready task; shot task-v2-pr pull-request; shot task-v2-browser browser
+shot doc doc; shot machines spaces; shot machine machine; shot terminal terminal
+```
+
 ## How it works
 
 - `build.gradle.kts` compiles `app/src/main/kotlin` and `core/src/main/kotlin` as they are, for Compose Multiplatform on the desktop. The androidx libraries the app uses (navigation, lifecycle) have desktop builds under the same package names.
