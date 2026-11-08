@@ -66,7 +66,7 @@ object HerdrUsage {
                 r = run(command(*args.toTypedArray()), timeout)
             }
             if (r.exitStatus == NO_PYTHON_EXIT && UsageReader.answer(r.stdout) == null) {
-                throw IOException("Reading usage needs python3 on $label, and it isn't installed")
+                throw IOException("Reading usage needs Python 3 on $label, and it isn't installed")
             }
             if (r.exitStatus == null && UsageReader.answer(r.stdout) == null) throw IOException("Reading $label's usage took too long")
             if (UsageReader.answer(r.stdout) == null) throw IOException(problem(r.stderr, "herdr-usage gave no answer on $label"))

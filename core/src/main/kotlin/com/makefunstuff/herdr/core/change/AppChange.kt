@@ -243,7 +243,7 @@ object HerdrAppBuild {
                 if (i.exitStatus != 0) throw IOException(problem(i.stderr, "Couldn't copy herdr-app-build to $label"))
                 r = run(command(*args.toTypedArray()), 60)
             }
-            if (r.exitStatus == NO_PYTHON_EXIT) throw IOException("Building the app needs python3 on $label, and it isn't installed")
+            if (r.exitStatus == NO_PYTHON_EXIT) throw IOException("Building the app needs Python 3 on $label, and it isn't installed")
             return answer(r.stdout) ?: throw IOException(problem(r.stderr, "herdr-app-build gave no answer on $label"))
         }
 

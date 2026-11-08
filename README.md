@@ -205,7 +205,7 @@ Each machine also has an **Agent logins** line under Usage (or **⋯ → Agent l
 Two ways in, both on every machine the app knows:
 
 - **Pushes**, within seconds. Each machine runs [herdr-push](host/herdr-push/README.md), a small Python 3 watcher that the app sets up over SSH as the machine connects. It sends to the phone's [UnifiedPush](https://unifiedpush.org) address, which a push app such as [ntfy](https://ntfy.sh) gives (no library, no Google services), sealed with a key only that machine and the phone know. How to check it, run it by hand or use your own push server: [`host/herdr-push/README.md`](host/herdr-push/README.md).
-- **The app's own looks**: an exact alarm every 15 minutes (or hourly, or never) connects to each machine and notices what changed, for a machine without python3 or a push that got lost.
+- **The app's own looks**: an exact alarm every 15 minutes (or hourly, or never) connects to each machine and notices what changed, for a machine without Python 3 or a push that got lost.
 
 Each state is shown once, however it arrives, and comes down again when it is over (answered on the desktop, the agent back at work). The switch next to a machine in Settings leaves it out.
 
@@ -263,7 +263,7 @@ The **Board** tab shows every machine's task board in one list, grouped by machi
 - **Filters and failures.** Chips keep messages, commands, edits, tests or failures only, with how many there are; **Jump to a failure** (and the alert icon above) goes from one failed step to the next, opening its turn.
 - **Live.** While the agent works the timeline grows as it takes each step (**Live** in the bar).
 
-It is built from what the agents' harnesses record, read over SSH: Claude Code's sessions (`~/.claude/projects`), codex's (`~/.codex/sessions`) and pi's or omp's (`~/.pi/agent/sessions`), each step with its times, exit status and diff. Nothing there is changed. Sessions are pruned on the machine before they are sent (with `python3` where there is one: the copies of API requests and whole files Claude Code keeps beside an edit go, long outputs are cut), so a 20 MB session comes as a megabyte or two; of a very long one only the newest part is read, and the timeline says so.
+It is built from what the agents' harnesses record, read over SSH: Claude Code's sessions (`~/.claude/projects`), codex's (`~/.codex/sessions`) and pi's or omp's (`~/.pi/agent/sessions`), each step with its times, exit status and diff. Nothing there is changed. Sessions are pruned on the machine before they are sent (with Python 3 where there is one: the copies of API requests and whole files Claude Code keeps beside an edit go, long outputs are cut), so a 20 MB session comes as a megabyte or two; of a very long one only the newest part is read, and the timeline says so.
 
 ## Photos and screenshots
 
@@ -315,7 +315,7 @@ The app changes itself the way Herdr desktop's mods change Herdr, with all the w
 The machine needs:
 
 - **A herdr-android checkout** with `origin` on GitHub: the herdr-android space's folder on Shepherdr, else `~/herdr-android`, `~/src/herdr-android` or `~/Work/herdr-android`.
-- **The Android SDK** (`ANDROID_HOME`, or `sdk.dir` in the checkout's `local.properties`) and **a JDK 17 or newer** (`JAVA_HOME`, or `java` on the PATH), as a login shell there sets them; and python3 and git.
+- **The Android SDK** (`ANDROID_HOME`, or `sdk.dir` in the checkout's `local.properties`) and **a JDK 17 or newer** (`JAVA_HOME`, or `java` on the PATH), as a login shell there sets them; and Python 3 and git.
 - **Shepherdr 3** with a space named **herdr-android** (or working in that checkout): its Assistant takes the changes.
 - **The release key, as secrets** (optional): Android installs an update only when it is signed with the same key as the app. Keep `HERDR_KEYSTORE_FILE` (the keystore's path on that machine), `HERDR_KEYSTORE_PASSWORD` and `HERDR_KEY_ALIAS` in herdr-secret (Settings › Secrets in Herdr, or `herdr-secret set NAME`); the Assistant builds with `herdr-secret run …`, so the values reach only Gradle and never a log, a chat or git. Without them, each update is the release CI publishes for that merge, downloaded there and offered the same way.
 

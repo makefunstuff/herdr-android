@@ -65,7 +65,7 @@ object HerdrLogins {
                 install()
                 r = run(command("status"), 90)
             }
-            if (r.exitStatus == NO_PYTHON_EXIT) throw IOException("Reading the logins needs python3 on $label, and it isn't installed")
+            if (r.exitStatus == NO_PYTHON_EXIT) throw IOException("Reading the logins needs Python 3 on $label, and it isn't installed")
             if (r.exitStatus == null && LoginsReader.answer(r.stdout) == null) throw IOException("Reading $label's logins took too long")
             if (LoginsReader.answer(r.stdout) == null) throw IOException(problem(r.stderr, "herdr-logins gave no answer on $label"))
             return LoginsReader.parse(r.stdout)

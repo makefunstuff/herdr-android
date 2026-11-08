@@ -127,7 +127,7 @@ object HerdrPush {
             else conn.run(command(*args), timeoutSeconds)
             if (r.exitStatus == MISSING_EXIT) throw MissingException()
             if (r.exitStatus == NO_PYTHON_EXIT && answer(r.stdout) == null) {
-                throw IOException("herdr-push needs python3 on $label, and it isn't installed")
+                throw IOException("herdr-push needs Python 3 on $label, and it isn't installed")
             }
             val o = answer(r.stdout) ?: throw IOException(problem(r.stderr, "herdr-push gave no answer on $label"))
             if ((o["ok"] as? JsonPrimitive)?.booleanOrNull != true) throw IOException(o.str("msg").ifEmpty { "herdr-push refused on $label" })

@@ -403,14 +403,14 @@ fun scenes(): List<Scene> = listOf(
     Scene("usage-reset-chip", setup = { host(DEVBOX).usage!!.apply { claudeSession = 98.0; claudeResetHour = 7 } }),
     // Reading failed and nothing kept: why, with a retry.
     Scene("usage-error", route = Routes.usage(DEVBOX), setup = {
-        host(DEVBOX).usage!!.refuse = "Reading usage needs python3 on devbox, and it isn't installed"
+        host(DEVBOX).usage!!.refuse = "Reading usage needs Python 3 on devbox, and it isn't installed"
     }),
 
     // A machine's agent logins: each CLI signed in or not, how and until when, and the keys in ~/.bashrc.
     Scene("logins", route = Routes.logins(DEVBOX)),
     // Claude's login ran out two days ago: red, with Sign in.
     Scene("logins-expired", route = Routes.logins(DEVBOX), setup = { host(DEVBOX).logins!!.claudeDays = -2 }),
-    Scene("logins-error", route = Routes.logins(DEVBOX), setup = { host(DEVBOX).logins!!.refuse = "Reading the logins needs python3 on devbox, and it isn't installed" }),
+    Scene("logins-error", route = Routes.logins(DEVBOX), setup = { host(DEVBOX).logins!!.refuse = "Reading the logins needs Python 3 on devbox, and it isn't installed" }),
     // A CLI's actions; signing Codex in again with its device code (the code to type on the phone); Claude's browser
     // code pasted back; a key for a pi provider with none yet; how to move the keys out of ~/.bashrc.
     Scene("logins-menu", route = Routes.logins(DEVBOX), actions = { tapExact("Codex") }),
