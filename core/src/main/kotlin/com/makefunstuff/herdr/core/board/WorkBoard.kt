@@ -2,8 +2,10 @@ package com.makefunstuff.herdr.core.board
 
 import com.makefunstuff.herdr.core.shepherdr.AutopilotSettings
 import com.makefunstuff.herdr.core.shepherdr.Recipe
+import com.makefunstuff.herdr.core.shepherdr.TaskBrowser
 import com.makefunstuff.herdr.core.shepherdr.TaskFolder
 import com.makefunstuff.herdr.core.shepherdr.V2Artifact
+import com.makefunstuff.herdr.core.shepherdr.V2Browser
 import com.makefunstuff.herdr.core.shepherdr.V2Chat
 import com.makefunstuff.herdr.core.shepherdr.V2Evidence
 import com.makefunstuff.herdr.core.shepherdr.V2ModelMenu
@@ -115,6 +117,10 @@ data class WorkTask(
     /** Its agent's CLI as the board names it ("Claude Code"); none before its agent starts. */
     val agent: String = "",
     val pinned: Boolean = false,
+    /** Its agent's process is up. */
+    val running: Boolean = false,
+    /** Shepherdr 3.1's live view of its browser ([V2Browser]); none where its board has none. */
+    val browser: V2Browser? = null,
 )
 
 /**
@@ -219,6 +225,9 @@ interface WorkBoard {
 
     /** [task]'s pull request with its checks, as GitHub says it now (the task view's Pull request). */
     suspend fun pullRequest(task: WorkTask): V2PrAnswer = throw IOException("This board doesn't read pull requests")
+
+    /** [task]'s browser, live, as 3.1's Browser tab. */
+    suspend fun browser(task: WorkTask): TaskBrowser = throw IOException("This board has no browser to watch")
 
     /** Marks [task] done with nothing merged; refused while it holds work main lacks. */
     suspend fun close(task: WorkTask): String

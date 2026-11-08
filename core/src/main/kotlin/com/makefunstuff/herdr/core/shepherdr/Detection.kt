@@ -66,7 +66,7 @@ object BoardDetection {
             version?.let { return forward to it }
             forward.close()
         }
-        val curl = CurlTransport { command, stdin, seconds -> conn.runWithInput(command, CurlTransport.stdin(stdin), seconds) }
+        val curl = CurlTransport(start = { conn.start(it) }) { command, stdin, seconds -> conn.runWithInput(command, CurlTransport.stdin(stdin), seconds) }
         return probe(curl)?.let { curl to it }
     }
 }
