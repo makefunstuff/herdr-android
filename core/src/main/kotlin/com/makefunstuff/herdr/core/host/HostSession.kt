@@ -141,6 +141,15 @@ data class HostState(
     val herdrMachine: Machine get() = herdr?.let { machine.copy(herdrPath = it.binary.path) } ?: machine
 
     val online: Boolean get() = status == HostStatus.Online
+
+    /**
+     * Whether its look at the machine is over, for a read that runs once: online for classic herdr, or
+     * for herdr-core alone once every session of it was looked at ([herdrCoreLooked]); or needing the
+     * person, which waiting won't change. Not while herdr-core was found beside missing classic herdr and
+     * has yet to answer: the status says Attention until it does.
+     */
+    val settled: Boolean get() =
+        (online && (classicMissing == null || herdrCoreLooked)) || (status is HostStatus.Attention && classicMissing == null)
 }
 
 /**
