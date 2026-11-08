@@ -4,7 +4,7 @@ import com.makefunstuff.herdr.core.ssh.HerdrCommands.quote
 
 /**
  * The shell commands behind a machine's health screen, run over the app's SSH connection. POSIX sh,
- * awk and the usual tools only: nothing is installed on the machine.
+ * awk and the usual tools only (and on Windows the PowerShell it comes with): nothing is installed on the machine.
  */
 object HealthCommands {
     const val MARK = "@@herdr-health"
@@ -204,7 +204,7 @@ object HealthCommands {
         jp=${quote(JOIN)}
         if [ "${'$'}win" = 1 ]; then
           # One PowerShell look: it says when each of its two looks is taken, and /proc/stat (in ticks of CLK_TCK) is read then.
-          # If it is cut short (20 s) the CPU is still measured over a second of its own, only the processes are missing.
+          # If it gives nothing (cut at 20 s), the CPU is still measured over a second of its own, only the processes are missing.
           HERDR_HZ="$(getconf CLK_TCK 2>/dev/null || echo 100)"; HERDR_UID="$(id -u)"; export HERDR_HZ HERDR_UID
           lim 20 powershell.exe -NoProfile -NonInteractive -Command "$WIN_PROCS" </dev/null 2>/dev/null | {
             read -r m; read -r c1 < /proc/stat

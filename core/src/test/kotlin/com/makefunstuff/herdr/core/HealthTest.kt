@@ -206,7 +206,7 @@ class HealthTest {
 
     /**
      * What Git Bash on Windows looks like to the scripts: `uname` says MINGW64, `powershell.exe` answers by
-     * the script it is given (it arrives as `-EncodedCommand`, so the fake decodes it) and `tasklist` and
+     * the script it is given (it arrives packed, gzip and Base64, so the fake unpacks it) and `tasklist` and
      * `taskkill` work on the files in `procs/`, one per running pid holding its image name.
      */
     private fun windowsBin(disks: String = "", procs: String = ""): File {
