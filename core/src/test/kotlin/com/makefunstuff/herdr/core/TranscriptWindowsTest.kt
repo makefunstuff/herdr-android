@@ -12,14 +12,20 @@ import kotlin.test.assertTrue
 
 /** Finding a transcript from a pane's pid on a Windows machine, where `pgrep` doesn't exist. */
 class TranscriptWindowsTest {
-    private val session = "3c2c5876-a786-4c23-8ac5-471296257bc4"
+    private val session = "00000000-0000-4000-8000-000000000001"
 
     /**
      * Sets up a Windows machine in a temp home: Git Bash's `uname`, a `powershell.exe` that prints
      * [table], the transcript with [jsonl] in it, and [sessionPid]'s Claude session file, if any. Runs
      * [block] with the home and its `bin` (first on the PATH), then removes the home.
      */
-    private fun <T> onWindows(table: String, sessionPid: String?, crlf: Boolean = false, jsonl: String = "{\"a\":1}", block: (File, File) -> T): T {
+    private fun <T> onWindows(
+        table: String,
+        sessionPid: String?,
+        crlf: Boolean = false,
+        jsonl: String = "{\"a\":1}",
+        block: (File, File) -> T,
+    ): T {
         val home = Files.createTempDirectory("transcript-win").toFile()
         try {
             val bin = File(home, "bin").apply { mkdirs() }
