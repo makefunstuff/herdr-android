@@ -68,7 +68,7 @@ object HcStart {
      * ([com.makefunstuff.herdr.core.start.StartWork.probeCommand]): a desktop app's core may have a
      * shorter `PATH` than the person's shell. `exec` leaves the agent itself in the terminal.
      */
-    // POSIX only: hc runs a line with cmd.exe on Windows (the Windows-over-herdr-core PRs #108-#115 would need argv there).
+    // POSIX only: hc runs a line with cmd.exe on Windows, so [launch] gives the program as argv there.
     fun programLine(program: String): String = "exec \"\${SHELL:-/bin/sh}\" -lc " + quote("exec " + quote(program))
 
     /** A name hc takes (1-32 of a-z 0-9 - _), or null. */
@@ -81,18 +81,26 @@ object HcStart {
         return HcMapping.paneId(t.address, place.session)
     }
 
-    /** Starts [program] as [name] in [folder] in [place]: its pane id, as soon as it runs. */
-    suspend fun launch(client: HcClient, place: Place, folder: String, program: String, name: String): String {
-        val line = programLine(program)
+    /**
+     * Starts [program] as [name] in [folder] in [place]: its pane id, as soon as it runs. Through the login shell
+     * ([programLine]), except on a [windows] machine (Git Bash's), where hc runs a line with cmd.exe: there the
+     * program itself (`argv`), as the core's `PATH` finds it.
+     */
+    suspend fun launch(client: HcClient, place: Place, folder: String, program: String, name: String, windows: Boolean = false): String {
+        val line = programLine(program).takeIf { !windows }
+        val argv = if (windows) listOf(program) else emptyList()
         val t = try {
-            client.run(line, folder, place.labels, hcName(name), place.machine, ENV)
+            client.run(line, folder, place.labels, hcName(name), place.machine, ENV, argv)
         } catch (e: HcException) {
             // Another live terminal has the name: hc numbers none for us, so it goes without one.
             if (e.kind != "name_taken") throw e
-            client.run(line, folder, place.labels, null, place.machine, ENV)
+            client.run(line, folder, place.labels, null, place.machine, ENV, argv)
         }
         return HcMapping.paneId(t.address, place.session)
     }
+
+    /** `uname -s` names a Windows machine (Git Bash, MSYS, Cygwin), as the health page reads it. */
+    fun windows(uname: String): Boolean = listOf("MINGW", "MSYS", "CYGWIN").any { uname.trim().startsWith(it) }
 
     /**
      * Gives the agent in [paneId] [text] once it reports that it waits (OSC 7501 `idle` or `done`). Nothing is typed

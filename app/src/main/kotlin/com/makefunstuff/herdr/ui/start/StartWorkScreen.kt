@@ -152,7 +152,9 @@ fun StartWorkScreen(nav: NavController, machineId: String? = null, text: String 
                     val space = ws?.let { id -> snapshot?.workspaces?.firstOrNull { it.workspaceId == id } }
                     val place = ws?.let { HcStart.place(it, space?.label.orEmpty(), name) } ?: HcStart.Place(null, null, emptyMap())
                     val client = s.awaitHerdrCore(10_000, ws)
-                    val pane = HcStart.launch(client, place, dir, StartWork.STARTABLE[k] ?: k, name)
+                    // A Windows machine (Git Bash) runs hc's lines with cmd.exe: asked once, as the health page asks.
+                    val windows = runCatching { HcStart.windows(s.awaitConnection(10_000).run("uname -s", timeoutSeconds = 10).stdout) }.getOrDefault(false)
+                    val pane = HcStart.launch(client, place, dir, StartWork.STARTABLE[k] ?: k, name, windows)
                     container.starts.started(m, dir, board = false, startNow = starts.startNow, kind = k)
                     // The chat opens now, the sentence held above its box (to send or discard by hand meanwhile). It goes
                     // in once the agent says it waits, on the app's scope so leaving the chat doesn't lose it, and only

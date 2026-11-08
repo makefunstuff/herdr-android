@@ -172,6 +172,36 @@ private fun SceneData.replies() {
     composer = (composer ?: com.makefunstuff.herdr.data.ComposerStore.State()).copy(replies = com.makefunstuff.herdr.core.chat.QuickReplies(on = true))
 }
 
+/**
+ * devbox's app agent, at rest, takes what is sent to it as Claude Code does when it attaches the pictures
+ * itself: `[Image #1] [Image #2]` and the words, the pictures as image blocks (issue #100).
+ */
+private fun SceneData.takesPicturesAsClaude() {
+    appDone()
+    val machine = host(DEVBOX)
+    val took = { p: kotlinx.serialization.json.JsonObject ->
+        val text = p["text"]?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }.orEmpty()
+        val words = com.makefunstuff.herdr.core.host.Images.split(text).text
+        val line = obj(
+            "type" to "user", "uuid" to "00000000-0000-4000-8000-000000000050", "timestamp" to "2026-10-17T07:44:00.000Z",
+            "message" to obj(
+                "role" to "user",
+                "content" to kotlinx.serialization.json.JsonArray(
+                    listOf(
+                        obj("type" to "text", "text" to "[Image #1] [Image #2] $words"),
+                        obj("type" to "image", "source" to obj("type" to "base64", "media_type" to "image/png", "data" to "")),
+                        obj("type" to "image", "source" to obj("type" to "base64", "media_type" to "image/png", "data" to "")),
+                    ),
+                ),
+            ),
+        )
+        machine.append(Demo.APP_SESSION, line.toString())
+        obj()
+    }
+    machine.on("agent.prompt", took)
+    machine.on("pane.send_text", took)
+}
+
 /** The app agent's conversation after two screenshots were sent to it, which devbox still has. */
 private fun SceneData.sentPictures() {
     host(DEVBOX).transcripts = host(DEVBOX).transcripts + (Demo.APP_SESSION to Demo.appTranscriptWithPictures())
@@ -195,6 +225,17 @@ private fun SceneData.docs() {
 /** Shepherdr 3 on devbox: its board, its spaces and their Assistants. */
 private fun SceneData.v2() {
     host(DEVBOX).shepherdr = DemoV2.board()
+}
+
+/** Task [id] runs on [machine], as 3.1's service says it of another machine's task: its Browser can't be watched here. */
+private fun SceneData.elsewhere(id: String, machine: String) {
+    val sh = host(DEVBOX).shepherdr!!
+    val hint = "This task runs on $machine. Its browser can be watched only from that machine's Herdr for now."
+    val tasks = (sh.snapshot["tasks"] as JsonArray).map { t ->
+        val o = t.jsonObject
+        if (o["id"]?.jsonPrimitive?.content != id) o else JsonObject(o + ("browser" to obj("ready" to false, "hint" to hint)))
+    }
+    sh.snapshot = JsonObject(sh.snapshot + ("tasks" to JsonArray(tasks)))
 }
 
 /** The person's own work shape (Real): one machine, eleven spaces, thirteen tasks, an Assistant chat with long turns. */
@@ -407,6 +448,7 @@ fun scenes(): List<Scene> = listOf(
     // Low on memory: the warning names what uses the most.
     Scene("health-low", route = Routes.health(DEVBOX), setup = { host(DEVBOX).health.availKb = 3_600_000 }),
     Scene("health-process", route = Routes.health(DEVBOX), actions = { tapText("Android emulator · Pixel_8") }),
+    Scene("health-stop", route = Routes.health(DEVBOX), actions = { tapText("Android emulator · Pixel_8"); tapText("Stop process") }),
 
     // A machine's AI providers: Claude Code near its 5-hour limit, Codex, the API accounts, a local model;
     // each with its 7-day chart and the tasks and agents that used it most. Taller, to show every card.
@@ -419,14 +461,14 @@ fun scenes(): List<Scene> = listOf(
     Scene("usage-reset-chip", setup = { host(DEVBOX).usage!!.apply { claudeSession = 98.0; claudeResetHour = 7 } }),
     // Reading failed and nothing kept: why, with a retry.
     Scene("usage-error", route = Routes.usage(DEVBOX), setup = {
-        host(DEVBOX).usage!!.refuse = "Reading usage needs python3 on devbox, and it isn't installed"
+        host(DEVBOX).usage!!.refuse = "Reading usage needs Python 3 on devbox, and it isn't installed"
     }),
 
     // A machine's agent logins: each CLI signed in or not, how and until when, and the keys in ~/.bashrc.
     Scene("logins", route = Routes.logins(DEVBOX)),
     // Claude's login ran out two days ago: red, with Sign in.
     Scene("logins-expired", route = Routes.logins(DEVBOX), setup = { host(DEVBOX).logins!!.claudeDays = -2 }),
-    Scene("logins-error", route = Routes.logins(DEVBOX), setup = { host(DEVBOX).logins!!.refuse = "Reading the logins needs python3 on devbox, and it isn't installed" }),
+    Scene("logins-error", route = Routes.logins(DEVBOX), setup = { host(DEVBOX).logins!!.refuse = "Reading the logins needs Python 3 on devbox, and it isn't installed" }),
     // A CLI's actions; signing Codex in again with its device code (the code to type on the phone); Claude's browser
     // code pasted back; a key for a pi provider with none yet; how to move the keys out of ~/.bashrc.
     Scene("logins-menu", route = Routes.logins(DEVBOX), actions = { tapExact("Codex") }),
@@ -600,6 +642,11 @@ fun scenes(): List<Scene> = listOf(
         drag("The picture", 0.5f to 0.99f, 0.5f to 0.55f, within = ::screenshotIn)
     }),
     Scene("chat-sent-pictures", route = Routes.agent(DEVBOX, APP_AGENT), setup = { sentPictures() }),
+    // Sent, and its agent recorded the pictures its own way (Claude Code's `[Image #1]`): it shows as sent, not "Sending…".
+    Scene("chat-pictures-sent", route = Routes.agent(DEVBOX, APP_AGENT), setup = { pictures(); takesPicturesAsClaude() }, actions = {
+        tapLabel("Send")
+        settle()
+    }),
     Scene("picture-view", route = Routes.agent(DEVBOX, APP_AGENT), setup = { sentPictures() }, actions = {
         tapLabel("Picture 2 of 2, Screenshot_20261018_101230.png")
     }),
@@ -613,6 +660,8 @@ fun scenes(): List<Scene> = listOf(
     // Shepherdr's tasks are found too, and open as their agents' chats.
     Scene("search-v2", route = Routes.search(q = "export"), setup = { home(); v2() }, actions = { settle() }),
     Scene("search-v2-open", route = Routes.search(q = "export"), setup = { home(); v2() }, actions = { settle(); tapText("Rate-limit the export endpoint") }),
+    // A word only in a herdr-core agent's chat (its Claude Code's transcript, found from its process): "In chats" finds it too.
+    Scene("search-core", route = Routes.search(q = "sequential"), setup = { home(); shepherdr3() }, actions = { settle() }),
     Scene("search-needs", route = Routes.search(q = "jobs"), setup = { home() }, actions = { settle(); tapText("Needs you") }),
 
     // Start work from a sentence: as a board task on devbox; as an agent now (its folders and the agents
@@ -798,6 +847,12 @@ fun scenes(): List<Scene> = listOf(
     // No gh on the machine: the board's own answer, and why there's no review.
     Scene("task-v2-pr-no-gh", route = Routes.board(DEVBOX, "AND-20"), setup = { v2() }, actions = { tapText("PULL REQUEST") }),
     Scene("shp-task-pr", route = Routes.board(DEVBOX, "APP-2"), setup = { shp(); github() }, actions = { tapText("PULL REQUEST") }),
+    // Its Browser (3.1's, through the service's relay): AND-19's agent checking its dev server, live; a touch takes it
+    // over (a touch on the page, at the top of the tab); AND-20's not open now, with Open browser; and a task on another machine, which can't be watched from here.
+    Scene("task-v2-browser", route = Routes.board(DEVBOX, "AND-19"), setup = { v2() }, actions = { tapText("BROWSER") }),
+    Scene("task-v2-browser-driving", route = Routes.board(DEVBOX, "AND-19"), setup = { v2() }, actions = { tapText("BROWSER"); drag("The task's browser", 0.5f to 0.1f) }),
+    Scene("task-v2-browser-closed", route = Routes.board(DEVBOX, "AND-20"), setup = { v2() }, actions = { tapText("BROWSER") }),
+    Scene("task-v2-browser-elsewhere", route = Routes.board(DEVBOX, "AND-18"), setup = { v2(); elsewhere("AND-18", "vm") }, actions = { tapText("BROWSER") }),
     Scene(
         "task-v2-comment", route = Routes.codeFile(CodeSpot(DEVBOX, FakeCode.TASK, task = "AND-20", taskName = "AND-20"), CARD, line = 33), setup = { v2() },
         actions = { tapLabel("line 37"); tapLabel("line 38"); tapText("Comment"); type("Say when it was last answered, not when it was read.") },
@@ -901,6 +956,11 @@ fun scenes(): List<Scene> = listOf(
     Scene("wide-empty", widthDp = 1280, heightDp = 800, setup = { home() }),
     Scene("wide", widthDp = 1280, heightDp = 800, setup = { home() }, actions = { tapText("Speed up /jobs") }),
     Scene("wide-terminal", route = Routes.terminal(DEVBOX, APP_SHELL), widthDp = 840, heightDp = 940),
+    // A space tapped in the sidebar shows in the Chat tab, also from a screen the tab had open (issue #101: the
+    // terminal opened from herdr-android's chat stayed, though website was marked as picked).
+    Scene("wide-pick", widthDp = 1280, heightDp = 800, setup = { home() }, actions = {
+        tapLabel("Chat"); tapText("Terminal"); tapText("website"); expectText("Rewrite the install page"); expectNoText("146×42")
+    }),
     Scene("wide-machines", widthDp = 1280, heightDp = 800, setup = { home() }, actions = { tapLabel("Chat") }),
     // Rotating across the line keeps what is open as it was: a chat with its key row shown, turned from a phone
     // to a tablet's width and from the tablet back to the phone.

@@ -13,6 +13,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.encodeToJsonElement
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
@@ -119,6 +120,18 @@ class HcStartTest {
         assertEquals("fix-the-login", run["name"]!!.jsonPrimitive.content)
         assertEquals("/src", run["cwd"]!!.jsonPrimitive.content)
         assertEquals(HcStart.programLine("claude"), run["line"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun onWindowsTheProgramRunsAsArgv() = runBlocking {
+        // hc runs a line with cmd.exe there: no POSIX login shell, the program itself.
+        val core = Core { _, _ -> terminal("t9") }
+        HcStart.launch(HcClient(core), nowhere, "/c/src", "claude", "fix", windows = true)
+        val run = core.calls.single().second
+        assertNull(run["line"])
+        assertEquals("claude", run["argv"]!!.jsonArray.single().jsonPrimitive.content)
+        assertTrue(HcStart.windows("MINGW64_NT-10.0-26100\n"))
+        assertTrue(!HcStart.windows("Linux"))
     }
 
     @Test
