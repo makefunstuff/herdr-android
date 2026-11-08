@@ -18,7 +18,59 @@ What the owner's machine runs today (read on this machine): herdr-core and the d
 Shepherdr 3.1 service, and still a classic `herdr server` holding one idle workspace; herdr-projects is
 installed, but its data folder was last written on 2026-11-01.
 
-## How the app is laid out now
+## Where it stands (2026-11-08, HERD-33)
+
+The audit below is kept as written on 2026-11-04; this is what became of each item, checked against
+`main` at `8916b0f`. The layout it called "now" is gone: the app is 3.1's phone layout (drawer of
+spaces, Chat · Tasks · Artifacts), README "Needs you, first".
+
+| Item | Now |
+| --- | --- |
+| R1 herdr-projects 1.x board | **Done**, HERD-11 (its board, reviews, Routines and Coordinator removed) |
+| R2 three ways into a Coordinator | **Done**, HERD-9: the tile, widgets and shortcut open the Chat tab's Assistant; `AskScreen` stays for shares only |
+| R3 places twice on a machine | **Done**, HERD-9: one row of tiles (Health, Usage, Logins); the ⋯ menu is Docs, Edit machine, Change this screen |
+| R4 classic herdr's admin | **Done**, HERD-9 (`ui/admin`, Import herdr machines removed) |
+| R5 the machine's Refresh | **Done**, HERD-9 |
+| R6 Keep screen on twice | **Done**: a ⋯ row only |
+| R7 the brief's bar button | **Done**, HERD-9: the brief is in Settings › Brief and its notification; the brief itself kept |
+| R8 classic workspace tools | **Done**, HERD-12 |
+| R9 machine-wide code browser | **Done**, HERD-16 |
+| F1 two Needs you badges | **Done**, HERD-9: only Tasks has the badge, and since HERD-31 it leaves Ready tasks out |
+| F2 status said twice on cards | **Done**, HERD-9; HERD-31 made each a one-line `WaitingRow` |
+| F3 one task twice | **Done**, HERD-9 with HERD-8's task↔agent link: one row per task |
+| F4 navigation unlike 3.1 | **Done**, HERD-9, reworked in HERD-31 |
+| F5 the same project twice on a machine | **Done**, HERD-9: one Spaces list, the backend in a detail line |
+| F6 six blocks before the workspaces | **Done**, HERD-9 |
+| F7 13-row machine menu | **Done**: three rows |
+| F8 Online twice, Settings behind a tab | **Done**, HERD-9: the Machines tab is gone; machines are buses in the drawer, Settings at its foot |
+| F9 Start work behind a long press | **Done**, HERD-9: the Tasks tab's + |
+| F10 nine-row agent sheet | **Done**, HERD-13 |
+| F11 four controls in the bar | **Done**, HERD-9: search only; usage is the drawer's meter |
+| F12 "Not connected yet" on launch | **Done**, HERD-9: *Connecting to N machines* |
+| F13 herdr-core chat is its screen | **Done**, HERD-14, and HERD-30 for the right conversation |
+| F14 herdr-core terminal without Find | **Done**, HERD-15 |
+| F15 a space's dot vs. its row | HERD-9's layout; not checked again here |
+| F16 "Working" three times | **Done**, HERD-9: one working line |
+| F17 placeholders differ | **Done**, HERD-9: "Message <agent>", "Message the Assistant" |
+| A1 task alerts | **Done**, HERD-21 |
+| A2 Files, Changes, Pull request tabs | **Done**, HERD-16 |
+| A3 dictation | **Done**, HERD-17 |
+| A4 spaces drawer | **Done** in part, HERD-9: machines as buses with a meter, Settings at the foot, Notify per space (HERD-13). Not done: Pinned, sections, unread spaces in bold |
+| A5 Tasks list as 3.1's | **Done** in part, HERD-9 and HERD-31: filter field and status chips. Not done: Group by, Archived, Automations |
+| A6 secret asks | **Done**, HERD-18 |
+| A7 Autopilot switch | **Done**, HERD-19 |
+| A8 tab menu | **Done**, HERD-20 |
+| A9 chat parity | **Done**, HERD-22 |
+| A10 Needs you widget | **Done**, HERD-23 |
+| A11 pull request review | **Done**, HERD-24 |
+| A12 live browser | **Done**, HERD-25 |
+| A13 docs viewer | **Done**, HERD-26 |
+
+Since then, outside this list: changing the app from the phone (HERD-27), the terminal reachable
+again (HERD-29), simple-herdr-projects as a board (HERD-32), Windows machines over Git Bash, and
+the wide window's sidebar (HERD-35).
+
+## How the app is laid out now (2026-11-04)
 
 - Bottom bar (`AppNav.kt` `AppNavBar`): **Agents**, **Board**, **Machines**. Settings sits behind a gear in
   the Machines bar (`ui/machines/MachinesScreen.kt:64`); the code browser behind `<>` beside it.
