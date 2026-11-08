@@ -35,8 +35,10 @@ import kotlin.test.fail
 class HealthTest {
     private val linux = File("/proc/meminfo").canRead()
 
+    // The command goes through a file, as SSH hands it to a login shell: on Windows Java mangles the quotes of `sh -c`.
     private fun sh(command: String, home: File? = null, dir: File? = null, path: File? = null): CommandResult {
-        val pb = ProcessBuilder("sh", "-c", command)
+        val script = File.createTempFile("health-sh", ".sh").apply { deleteOnExit(); writeText(command + "\n") }
+        val pb = ProcessBuilder("sh", script.path)
         if (home != null) pb.environment()["HOME"] = home.path
         if (path != null) pb.environment()["PATH"] = path.path + File.pathSeparator + pb.environment()["PATH"]
         if (dir != null) pb.directory(dir)
@@ -48,6 +50,7 @@ class HealthTest {
         val out = p.inputStream.readBytes().toString(Charsets.UTF_8)
         assertTrue(p.waitFor(60, TimeUnit.SECONDS))
         val err = errFile.readText().also { errFile.delete() }
+        script.delete()
         return CommandResult(p.exitValue(), out, err)
     }
 
@@ -196,6 +199,186 @@ class HealthTest {
             assertTrue(p.waitFor(5, TimeUnit.SECONDS))
         } finally {
             p.destroyForcibly()
+        }
+    }
+
+    // ---- Windows (Git Bash), faked so they run anywhere ---------------------------------------------
+
+    /**
+     * What Git Bash on Windows looks like to the scripts: `uname` says MINGW64, `powershell.exe` answers by
+     * the script it is given (it arrives as `-EncodedCommand`, so the fake decodes it) and `tasklist` and
+     * `taskkill` work on the files in `procs/`, one per running pid holding its image name.
+     */
+    private fun windowsBin(disks: String = "", procs: String = ""): File {
+        val bin = Files.createTempDirectory("win").toFile()
+        File(bin, "disks.txt").writeText(disks)
+        File(bin, "procs.txt").writeText(procs)
+        File(bin, "procs").mkdirs()
+        fun tool(name: String, body: String) = File(bin, name).apply { writeText("#!/bin/sh\nd=\"\$(dirname \"\$0\")\"\n$body\n"); setExecutable(true) }
+        tool("uname", "echo MINGW64_NT-10.0-26100")
+        tool(
+            "powershell.exe",
+            """
+            echo "${'$'}HERDR_UID ${'$'}HERDR_HZ" > "${'$'}d/env.log"
+            while [ ${'$'}# -gt 1 ]; do [ "${'$'}1" = -EncodedCommand ] && break; shift; done
+            script="${'$'}(printf %s "${'$'}2" | base64 -d | tr -d '\000')"
+            case "${'$'}script" in
+              *Win32_LogicalDisk*) cat "${'$'}d/disks.txt" ;;
+              *Win32_Process*) echo M1; sleep 1; echo M2; sed "s/@UID@/${'$'}HERDR_UID/" "${'$'}d/procs.txt" ;;
+            esac
+            """.trimIndent(),
+        )
+        // The image name of a pid as tasklist's CSV shows it; "INFO: No tasks" when there is none.
+        tool(
+            "tasklist",
+            """
+            echo "tasklist ${'$'}MSYS2_ARG_CONV_EXCL ${'$'}*" >> "${'$'}d/calls.log"
+            p="${'$'}{2#PID eq }"
+            if [ -f "${'$'}d/procs/${'$'}p" ]; then echo "\"${'$'}(cat "${'$'}d/procs/${'$'}p")\",\"${'$'}p\",\"Console\",\"1\",\"9,000 K\""; else echo "INFO: No tasks are running which match the specified criteria."; fi
+            """.trimIndent(),
+        )
+        // A pid ending with 9 is a console process: only /F ends it. A pid ending with 8 ignores the polite request.
+        tool(
+            "taskkill",
+            """
+            echo "taskkill ${'$'}MSYS2_ARG_CONV_EXCL ${'$'}*" >> "${'$'}d/calls.log"
+            if [ "${'$'}1" = /F ]; then p="${'$'}3"; force=1; else p="${'$'}2"; force=0; fi
+            case "${'$'}p" in
+              *9) [ ${'$'}force = 1 ] || exit 1 ;;
+              *8) [ ${'$'}force = 1 ] || exit 0 ;;
+            esac
+            rm -f "${'$'}d/procs/${'$'}p"
+            """.trimIndent(),
+        )
+        return bin
+    }
+
+    private fun windowsSample(bin: File, keep: List<String> = emptyList()): HealthSample =
+        HealthReader.sample(sh(HealthCommands.probe(keep), path = bin).also { assertEquals(0, it.exitStatus, it.stderr.take(2000)) }.stdout)
+
+    private fun kb(n: Long) = n * 1024
+
+    @Test
+    fun windowsDisksAreEachDrive() {
+        val bin = windowsBin(disks = "C:\tNTFS\t${kb(1_952_568_336)}\t${kb(448_932_764)}\r\nD:\tNTFS\t${kb(488_378_644)}\t${kb(120_000_000)}\r\n")
+        try {
+            val s = HealthReader.sample(sh(HealthCommands.quick(), path = bin).stdout)
+            assertEquals("MINGW64_NT-10.0-26100", s.os)
+            assertEquals(
+                listOf(
+                    Disk("/c", "C:", "NTFS", 1_952_568_336, 1_952_568_336 - 448_932_764, 448_932_764),
+                    Disk("/d", "D:", "NTFS", 488_378_644, 488_378_644 - 120_000_000, 120_000_000),
+                ),
+                s.disks,
+            )
+        } finally {
+            bin.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun windowsSkipsDrivesWithoutSize() {
+        // An empty card reader has no size (or 0); the next drive is still read.
+        val bin = windowsBin(disks = "C:\tNTFS\t${kb(1_000_000)}\t${kb(400_000)}\nE:\t\t\t\nF:\tNTFS\t0\t0\nD:\tNTFS\t${kb(500_000)}\t${kb(100_000)}\n")
+        try {
+            val s = HealthReader.sample(sh(HealthCommands.probe(), path = bin).stdout)
+            assertEquals(listOf("/c", "/d"), s.disks.map { it.mount })
+            assertEquals(500_000L, s.disks.last().totalKb)
+        } finally {
+            bin.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun windowsProcessesAreListed() {
+        val procs = listOf(
+            // What the PowerShell look prints: ticks of the first look (A), of the second (T), and the rows (P).
+            "A\t4100\t10", "A\t5200\t500", "A\t6300\t0", "A\t7400\t90",
+            "T\t4100\t10\tclaude", "T\t5200\t500\texplorer", "T\t6300\t1000000\tbuild", "T\t7400\t90\tsvchost",
+            "P\t4100 900 @UID@ 614400 3600 C:\\Users\\dev\\AppData\\Local\\claude\\claude.exe --dangerously-skip-permissions",
+            "P\t5200 1 0 204800 90000 C:\\WINDOWS\\Explorer.EXE",
+            "P\t6300 4100 @UID@ 30720 60 C:\\Tools\\build.exe --watch",
+            "P\t7400 1 0 12288 90000 C:\\WINDOWS\\system32\\svchost.exe -k netsvcs",
+        ).joinToString("\n", postfix = "\n")
+        val bin = windowsBin(procs = procs)
+        try {
+            val s = windowsSample(bin)
+            val (uid, hz) = File(bin, "env.log").readText().trim().split(' ')
+            // The probe tells the script who the account is and how long a tick is, so it can mark and measure.
+            assertEquals(s.uid.toString(), uid)
+            assertTrue(hz.toInt() > 0, hz)
+            // The small quiet process isn't worth showing.
+            assertEquals(setOf(4100, 5200, 6300), s.procs.map { it.pid }.toSet())
+            val labeled = ProcLabels.label(s, null).sortedByDescending { it.proc.rssKb }
+            val first = labeled.first()
+            assertEquals(4100, first.proc.pid)
+            assertEquals(ProcKind.Agent to "claude", first.kind to first.name)
+            assertEquals(614400L, first.proc.rssKb)
+            assertEquals(3600L, first.proc.ageSeconds)
+            assertEquals("claude", first.proc.comm)
+            assertEquals("C:\\Users\\dev\\AppData\\Local\\claude\\claude.exe --dangerously-skip-permissions", first.proc.args)
+            // The account's own processes carry its uid; every other one has the neutral 0.
+            assertEquals(0, labeled[1].proc.uid)
+            if (s.uid != 0) assertEquals(listOf(true, false, true), labeled.map { it.own })
+            assertEquals("", first.proc.cwd)
+            // The busy one is found by its ticks over the look, which /proc/stat measures where there is one.
+            if (File("/proc/stat").canRead()) {
+                assertNotNull(s.cpuBusy)
+                assertTrue(labeled.first { it.proc.pid == 6300 }.proc.cpu > 100, "$labeled")
+                assertEquals(0.0, labeled.first { it.proc.pid == 4100 }.proc.cpu)
+            }
+        } finally {
+            bin.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun windowsKillStopsOnlyTheSameProgram() {
+        val bin = windowsBin()
+        try {
+            val running = mapOf(4100 to "claude.exe", 4101 to "notepad.exe", 4109 to "node.exe", 4108 to "sleeper.exe", 4110 to "Adobe Crash Processor.exe")
+            running.forEach { (pid, name) -> File(bin, "procs/$pid").writeText(name) }
+            val r = sh(
+                HealthCommands.kill(
+                    listOf(
+                        HealthCommands.Target(4100, "claude"), HealthCommands.Target(4101, "claude"), HealthCommands.Target(4109, "node"),
+                        HealthCommands.Target(4110, "Adobe Crash Processor"), HealthCommands.Target(4999, "claude"),
+                    ),
+                ),
+                path = bin,
+            )
+            assertEquals(0, r.exitStatus, r.stderr)
+            val done = HealthReader.killed(r.stdout)
+            // Stopped; a pid that is another program now, or none, is left alone; a console process is ended by force.
+            assertEquals(listOf(4100, 4109, 4110), done.stopped)
+            assertEquals(listOf(4101, 4999), done.gone)
+            assertEquals(listOf(4109), done.forced)
+            assertTrue(done.failed.isEmpty())
+            assertTrue(File(bin, "procs/4101").exists(), "a pid that is now another program is left alone")
+            assertFalse(File(bin, "procs/4100").exists())
+            val calls = File(bin, "calls.log").readLines()
+            // Git Bash must not turn /PID into a path, so every call says it was told not to.
+            assertTrue(calls.all { it.split(' ')[1] == "*" }, calls.toString())
+            assertEquals(listOf("taskkill * /PID 4100", "taskkill * /PID 4109", "taskkill * /F /PID 4109", "taskkill * /PID 4110"), calls.filter { it.startsWith("taskkill") })
+        } finally {
+            bin.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun windowsKillForcesWhatIgnoresTheRequest() {
+        val bin = windowsBin()
+        try {
+            File(bin, "procs/4108").writeText("sleeper.exe")
+            val started = System.currentTimeMillis()
+            val done = HealthReader.killed(sh(HealthCommands.kill(listOf(HealthCommands.Target(4108, "sleeper"))), path = bin).stdout)
+            assertEquals(listOf(4108), done.stopped)
+            assertEquals(listOf(4108), done.forced)
+            assertFalse(File(bin, "procs/4108").exists())
+            // It gave it the polite 5 seconds first.
+            assertTrue(System.currentTimeMillis() - started >= 4_500)
+        } finally {
+            bin.deleteRecursively()
         }
     }
 

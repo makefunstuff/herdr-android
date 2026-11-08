@@ -16,6 +16,11 @@ object HealthCommands {
      * one of [keep] (the worktrees of finished tasks, as `<repo>/<folder>` or the start of one, such as
      * `herdr-android/work-22-`) is listed however small. Everything is joined
      * on the machine, so only those processes travel, not the whole process table.
+     *
+     * On Windows (Git Bash) the disks are every local fixed drive, as `/c`, `/d`, … and the processes come
+     * from `Win32_Process` through one PowerShell look, in the same rows. A process is the account's own
+     * (its uid is `id -u`) when it runs in one of the logon sessions the SSH user has; all others have the
+     * neutral uid 0. Windows has no working folder, `PWD` or herdr pane to read for a process, so those stay empty.
      */
     fun probe(keep: List<String> = emptyList()): String =
         "sh -c ${quote(PROBE)} herdr-health ${quote(keep.joinToString("\t"))}"
@@ -23,11 +28,70 @@ object HealthCommands {
     /** Memory, load and disks only: the quick look of a machine's card and of the app's own looks while closed. */
     fun quick(): String = "sh -c ${quote(QUICK)} herdr-health"
 
+    /**
+     * A PowerShell script as `powershell.exe` takes it with `-EncodedCommand` (Base64 of UTF-16LE), so no
+     * quoting of its own travels through the shell and Windows' command line. It is written with `~` for
+     * PowerShell's `$`, which Kotlin would read as its own.
+     */
+    private fun encoded(script: String): String =
+        java.util.Base64.getEncoder().encodeToString(script.trimIndent().replace('~', '$').toByteArray(Charsets.UTF_16LE))
+
+    /** The local fixed drives (`DriveType=3`; a network drive that is down is never asked): `C:<TAB>NTFS<TAB>bytes<TAB>free bytes`. */
+    private val WIN_DISKS = encoded(
+        """
+        ~ErrorActionPreference = "SilentlyContinue"
+        ~ProgressPreference = "SilentlyContinue"
+        Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" | ForEach-Object { ~_.DeviceID + "`t" + ~_.FileSystem + "`t" + ~_.Size + "`t" + ~_.FreeSpace }
+        """,
+    )
+
+    /**
+     * Two looks at every process a second apart, printed as the rows [JOIN] reads: `M1` and `M2` as
+     * each look is taken (the shell reads /proc/stat then, so both measure the same second), `A` and `T`
+     * with each pid's CPU ticks (`Win32_Process` counts 100 ns; a tick is 1/`HERDR_HZ` s, what /proc/stat
+     * counts in) and `P` with the pid, parent, uid (`HERDR_UID` for a process of the SSH user's logon
+     * sessions, else 0), RAM in KiB, age in seconds and the command line (the name when it has none).
+     * A name loses its `.exe`. The System Idle Process (pid 0) is the idle time of every core, not a program.
+     */
+    private val WIN_PROCS = encoded(
+        """
+        ~ErrorActionPreference = "SilentlyContinue"
+        ~ProgressPreference = "SilentlyContinue"
+        [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding ~false
+        ~o = [Console]::Out
+        ~unit = 1e7 / [double]~env:HERDR_HZ
+        function Ticks(~p) { [long](([double]~p.KernelModeTime + [double]~p.UserModeTime) / ~unit) }
+        function Flat(~s) { ~s -replace "[`t`r`n]", " " }
+        ~first = Get-CimInstance Win32_Process
+        ~o.Write("M1`n")
+        ~clock = [Diagnostics.Stopwatch]::StartNew()
+        ~sessions = @(Get-CimInstance Win32_LoggedOnUser | Where-Object { ~_.Antecedent.Name -eq ~env:USERNAME -and ~_.Antecedent.Domain -eq ~env:USERDOMAIN } | ForEach-Object { ~_.Dependent.LogonId })
+        ~mine = @{}
+        Get-CimInstance Win32_SessionProcess | Where-Object { ~sessions -contains ~_.Antecedent.LogonId } | ForEach-Object { ~mine[[string]~_.Dependent.Handle] = 1 }
+        if (~clock.ElapsedMilliseconds -lt 1000) { Start-Sleep -Milliseconds (1000 - ~clock.ElapsedMilliseconds) }
+        ~second = Get-CimInstance Win32_Process
+        ~o.Write("M2`n")
+        ~now = Get-Date
+        foreach (~p in ~first) { if (~p.ProcessId -ne 0) { ~o.Write("A`t" + ~p.ProcessId + "`t" + (Ticks ~p) + "`n") } }
+        foreach (~p in ~second) {
+          if (~p.ProcessId -eq 0) { continue }
+          ~name = Flat (~p.Name -replace "\.exe~", "")
+          ~cmd = if (~p.CommandLine) { ~p.CommandLine } else { ~p.Name }
+          ~age = if (~p.CreationDate) { [long](~now - ~p.CreationDate).TotalSeconds } else { 0 }
+          ~uid = if (~mine.ContainsKey([string]~p.ProcessId)) { ~env:HERDR_UID } else { "0" }
+          ~o.Write("T`t" + ~p.ProcessId + "`t" + (Ticks ~p) + "`t" + ~name + "`n")
+          ~o.Write("P`t" + ~p.ProcessId + " " + ~p.ParentProcessId + " " + ~uid + " " + [long](~p.WorkingSetSize / 1024) + " " + ~age + " " + (Flat ~cmd) + "`n")
+        }
+        """,
+    )
+
     // Written without shell variables ($name would be Kotlin's): positional parameters hold what it keeps.
     private val HEAD = """
         LC_ALL=C; export LC_ALL
         echo "$MARK 1"
-        echo "@os $(uname -s)"
+        os="$(uname -s)"
+        case "${'$'}os" in MINGW*|MSYS*|CYGWIN*) win=1 ;; *) win=0 ;; esac
+        echo "@os ${'$'}os"
         echo "@now $(date +%s)"
         echo "@uid $(id -u)"
         echo "@home $(cd && pwd)"
@@ -42,7 +106,14 @@ object HealthCommands {
           echo "@loadavg $(sysctl -n vm.loadavg 2>/dev/null | tr -d '{}')"
           echo @vmstat; vm_stat 2>/dev/null
         fi
-        echo @df; df -kPT 2>/dev/null || df -kP 2>/dev/null
+        if [ "${'$'}win" = 1 ]; then
+          # df shows only the folder Git Bash lives in: every local drive comes from Windows, as df rows (a drive without size is skipped).
+          echo @df; echo "Filesystem Type 1024-blocks Used Available Capacity Mounted on"
+          MSYS2_ARG_CONV_EXCL='*' powershell.exe -NoProfile -NonInteractive -EncodedCommand $WIN_DISKS </dev/null 2>/dev/null | tr -d '\r' |
+            awk -F'\t' '$3 + 0 > 0 { t = $3 / 1024; f = $4 / 1024; printf "%s %s %.0f %.0f %.0f %d%% /%s\n", $1, ($2 == "" ? "unknown" : $2), t, t - f, f, 100 * (t - f) / t + 0.5, tolower(substr($1, 1, 1)) }'
+        else
+          echo @df; df -kPT 2>/dev/null || df -kP 2>/dev/null
+        fi
         echo @end-df
     """.trimIndent()
 
@@ -110,7 +181,15 @@ object HealthCommands {
     """.trimIndent()
 
     private val PROBE = "$HEAD\n$TICKS\n" + """
-        if [ -r /proc/stat ]; then
+        if [ "${'$'}win" = 1 ]; then
+          # One PowerShell look: it says when each of its two looks is taken, and /proc/stat (in ticks of CLK_TCK) is read then.
+          MSYS2_ARG_CONV_EXCL='*' HERDR_HZ="$(getconf CLK_TCK 2>/dev/null || echo 100)" HERDR_UID="$(id -u)" powershell.exe -NoProfile -NonInteractive -EncodedCommand $WIN_PROCS </dev/null 2>/dev/null | {
+            read -r m; read -r c1 < /proc/stat
+            read -r m; read -r c2 < /proc/stat
+            echo "C1 ${'$'}c1"; echo "C2 ${'$'}c2"
+            cat
+          } | awk -v keep="$1" -v me="$(id -u)" -v cores="$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)" ${quote(JOIN)}
+        elif [ -r /proc/stat ]; then
           set -- "$1" "$(head -n 1 /proc/stat)" "$(t)"; sleep 1
           {
             echo "C1 $2"; echo "C2 $(head -n 1 /proc/stat)"
@@ -147,8 +226,8 @@ object HealthCommands {
 
     /**
      * Stops processes: each one only while it is still the program it was ([Target.comm]), so a pid
-     * reused since the look is left alone. SIGTERM first; what still runs after 5 seconds gets SIGKILL.
-     * Prints `sent|gone|fail|forced <pid>` per process.
+     * reused since the look is left alone. SIGTERM first; what still runs after 5 seconds gets SIGKILL
+     * (on Windows `taskkill`, then `taskkill /F`). Prints `sent|gone|fail|forced <pid>` per process.
      */
     fun kill(targets: List<Target>): String {
         val args = targets.joinToString(" ") { quote("${it.pid}\t${it.comm}") }
@@ -157,7 +236,37 @@ object HealthCommands {
 
     data class Target(val pid: Int, val comm: String)
 
-    private val KILL = """
+    /**
+     * [KILL] on Windows: the pid's image name (`tasklist`) must still be the target's. `taskkill` asks
+     * politely first; a console process has no window to ask, so when that is refused it is ended at
+     * once (`sent` and then `forced`). Git Bash must not turn `/PID` into a path, hence the exclusion.
+     */
+    private val WIN_KILL = """
+        case "$(uname -s 2>/dev/null)" in MINGW*|MSYS*|CYGWIN*)
+        LC_ALL=C; export LC_ALL
+        MSYS2_ARG_CONV_EXCL='*'; export MSYS2_ARG_CONV_EXCL
+        name() { tasklist /FI "PID eq ${'$'}1" /NH /FO CSV 2>/dev/null | sed -n 's/^"\([^"]*\)".*/\1/p' | sed 's/\.[eE][xX][eE]${'$'}//'; }
+        tab="$(printf '\t')"; sent=""
+        for x in "$@"; do
+          p="${'$'}{x%%"${'$'}tab"*}"; c="${'$'}{x#*"${'$'}tab"}"
+          if [ "$(name "${'$'}p")" = "${'$'}c" ]; then
+            if taskkill /PID "${'$'}p" >/dev/null 2>&1; then sent="${'$'}sent ${'$'}p"; echo "sent ${'$'}p"
+            elif taskkill /F /PID "${'$'}p" >/dev/null 2>&1; then echo "sent ${'$'}p"; echo "forced ${'$'}p"
+            else echo "fail ${'$'}p"; fi
+          else echo "gone ${'$'}p"; fi
+        done
+        i=0
+        while [ -n "${'$'}sent" ] && [ ${'$'}i -lt 5 ]; do
+          sleep 1; i=${'$'}((i + 1)); left=""
+          for p in ${'$'}sent; do [ -n "$(name "${'$'}p")" ] && left="${'$'}left ${'$'}p"; done
+          sent="${'$'}left"
+        done
+        for p in ${'$'}sent; do taskkill /F /PID "${'$'}p" >/dev/null 2>&1 && echo "forced ${'$'}p"; done
+        exit 0 ;;
+        esac
+    """.trimIndent()
+
+    private val KILL = "$WIN_KILL\n" + """
         LC_ALL=C; export LC_ALL
         sent=""
         for x in "$@"; do
