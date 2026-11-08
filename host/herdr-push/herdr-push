@@ -1570,6 +1570,20 @@ def ssh_answers(port):
         return False
 
 
+def tailscale_cli():
+    """Tailscale's command line: the one on the PATH, else, on Windows, where its installer puts it. The
+    installer adds that folder to the PATH, but only programs started afterwards see it: sshd, and every
+    shell open at the time, keep the old one until restarted."""
+    found = shutil.which("tailscale")
+    if found or not WINDOWS:
+        return found or "tailscale"
+    for root in (os.environ.get("ProgramFiles"), os.environ.get("ProgramW6432"), "C:\\Program Files"):
+        exe = os.path.join(root, "Tailscale", "tailscale.exe") if root else None
+        if exe and os.path.isfile(exe):
+            return exe
+    return "tailscale"
+
+
 def pair_addresses():
     """Where a phone may reach this machine, best first: its Tailscale name and address, then the
     address of its default route (the local network)."""
@@ -1579,7 +1593,7 @@ def pair_addresses():
         if address and address not in found and not address.startswith("127."):
             found.append(address)
 
-    status = _out(["tailscale", "status", "--json"], timeout=5)
+    status = _out([tailscale_cli(), "status", "--json"], timeout=5)
     if status:
         try:
             me = json.loads(status).get("Self") or {}
