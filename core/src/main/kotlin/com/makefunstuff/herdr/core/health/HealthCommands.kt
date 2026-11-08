@@ -57,20 +57,19 @@ object HealthCommands {
         """
         ~ErrorActionPreference = "SilentlyContinue"
         ~ProgressPreference = "SilentlyContinue"
-        [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding ~false
-        ~o = [Console]::Out
+        ~o = New-Object IO.StreamWriter([Console]::OpenStandardOutput(), (New-Object Text.UTF8Encoding ~false))
         ~unit = 1e7 / [double]~env:HERDR_HZ
         function Ticks(~p) { [long](([double]~p.KernelModeTime + [double]~p.UserModeTime) / ~unit) }
         function Flat(~s) { ~s -replace "[`t`r`n]", " " }
         ~first = Get-CimInstance Win32_Process
-        ~o.Write("M1`n")
+        ~o.Write("M1`n"); ~o.Flush()
         ~clock = [Diagnostics.Stopwatch]::StartNew()
         ~sessions = @(Get-CimInstance Win32_LoggedOnUser | Where-Object { ~_.Antecedent.Name -eq ~env:USERNAME -and ~_.Antecedent.Domain -eq ~env:USERDOMAIN } | ForEach-Object { ~_.Dependent.LogonId })
         ~mine = @{}
         Get-CimInstance Win32_SessionProcess | Where-Object { ~sessions -contains ~_.Antecedent.LogonId } | ForEach-Object { ~mine[[string]~_.Dependent.Handle] = 1 }
         if (~clock.ElapsedMilliseconds -lt 1000) { Start-Sleep -Milliseconds (1000 - ~clock.ElapsedMilliseconds) }
         ~second = Get-CimInstance Win32_Process
-        ~o.Write("M2`n")
+        ~o.Write("M2`n"); ~o.Flush()
         ~now = Get-Date
         foreach (~p in ~first) { if (~p.ProcessId -ne 0) { ~o.Write("A`t" + ~p.ProcessId + "`t" + (Ticks ~p) + "`n") } }
         foreach (~p in ~second) {
@@ -82,8 +81,17 @@ object HealthCommands {
           ~o.Write("T`t" + ~p.ProcessId + "`t" + (Ticks ~p) + "`t" + ~name + "`n")
           ~o.Write("P`t" + ~p.ProcessId + " " + ~p.ParentProcessId + " " + ~uid + " " + [long](~p.WorkingSetSize / 1024) + " " + ~age + " " + (Flat ~cmd) + "`n")
         }
+        ~o.Flush()
         """,
     )
+
+    /**
+     * `lim <seconds> <command…>` for the Windows tools: coreutils' `timeout` where it is (Windows has a
+     * `timeout.exe` that only waits, and `timeout 0 true` tells them apart), else the command unbounded.
+     * One line, so the scripts it joins keep their indentation.
+     */
+    private val LIM = "if timeout 0 true >/dev/null 2>&1; then tmo=timeout; else tmo=; fi; " +
+        "lim() { n=\"\$1\"; shift; if [ -n \"\$tmo\" ]; then timeout \"\$n\" \"\$@\"; else \"\$@\"; fi; }"
 
     // Written without shell variables ($name would be Kotlin's): positional parameters hold what it keeps.
     private val HEAD = """
@@ -108,9 +116,12 @@ object HealthCommands {
         fi
         if [ "${'$'}win" = 1 ]; then
           # df shows only the folder Git Bash lives in: every local drive comes from Windows, as df rows (a drive without size is skipped).
+          # Each Windows tool runs under lim: a PowerShell or WMI that hangs ends the look of its part, not the whole look.
+          $LIM
+          MSYS2_ARG_CONV_EXCL='*'; export MSYS2_ARG_CONV_EXCL
           echo @df; echo "Filesystem Type 1024-blocks Used Available Capacity Mounted on"
-          MSYS2_ARG_CONV_EXCL='*' powershell.exe -NoProfile -NonInteractive -EncodedCommand $WIN_DISKS </dev/null 2>/dev/null | tr -d '\r' |
-            awk -F'\t' '$3 + 0 > 0 { t = $3 / 1024; f = $4 / 1024; printf "%s %s %.0f %.0f %.0f %d%% /%s\n", $1, ($2 == "" ? "unknown" : $2), t, t - f, f, 100 * (t - f) / t + 0.5, tolower(substr($1, 1, 1)) }'
+          lim 10 powershell.exe -NoProfile -NonInteractive -EncodedCommand $WIN_DISKS </dev/null 2>/dev/null | tr -d '\r' |
+            awk -F'\t' '$3 + 0 > 0 && $4 != "" { t = $3 / 1024; f = $4 / 1024; printf "%s %s %.0f %.0f %.0f %d%% /%s\n", $1, ($2 == "" ? "unknown" : $2), t, t - f, f, 100 * (t - f) / t + 0.5, tolower(substr($1, 1, 1)) }'
         else
           echo @df; df -kPT 2>/dev/null || df -kP 2>/dev/null
         fi
@@ -183,9 +194,11 @@ object HealthCommands {
     private val PROBE = "$HEAD\n$TICKS\n" + """
         if [ "${'$'}win" = 1 ]; then
           # One PowerShell look: it says when each of its two looks is taken, and /proc/stat (in ticks of CLK_TCK) is read then.
-          MSYS2_ARG_CONV_EXCL='*' HERDR_HZ="$(getconf CLK_TCK 2>/dev/null || echo 100)" HERDR_UID="$(id -u)" powershell.exe -NoProfile -NonInteractive -EncodedCommand $WIN_PROCS </dev/null 2>/dev/null | {
+          # If it is cut short (20 s) the CPU is still measured over a second of its own, only the processes are missing.
+          HERDR_HZ="$(getconf CLK_TCK 2>/dev/null || echo 100)"; HERDR_UID="$(id -u)"; export HERDR_HZ HERDR_UID
+          lim 20 powershell.exe -NoProfile -NonInteractive -EncodedCommand $WIN_PROCS </dev/null 2>/dev/null | {
             read -r m; read -r c1 < /proc/stat
-            read -r m; read -r c2 < /proc/stat
+            read -r m || sleep 1; read -r c2 < /proc/stat
             echo "C1 ${'$'}c1"; echo "C2 ${'$'}c2"
             cat
           } | awk -v keep="$1" -v me="$(id -u)" -v cores="$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)" ${quote(JOIN)}
@@ -245,14 +258,15 @@ object HealthCommands {
         case "$(uname -s 2>/dev/null)" in MINGW*|MSYS*|CYGWIN*)
         LC_ALL=C; export LC_ALL
         MSYS2_ARG_CONV_EXCL='*'; export MSYS2_ARG_CONV_EXCL
-        name() { tasklist /FI "PID eq ${'$'}1" /NH /FO CSV 2>/dev/null | sed -n 's/^"\([^"]*\)".*/\1/p' | sed 's/\.[eE][xX][eE]${'$'}//'; }
+        $LIM
+        name() { lim 10 tasklist /FI "PID eq ${'$'}1" /NH /FO CSV 2>/dev/null | sed -n 's/^"\([^"]*\)".*/\1/p' | sed 's/\.[eE][xX][eE]${'$'}//'; }
         tab="$(printf '\t')"; sent=""
         for x in "$@"; do
           p="${'$'}{x%%"${'$'}tab"*}"; c="${'$'}{x#*"${'$'}tab"}"
           if [ "$(name "${'$'}p")" = "${'$'}c" ]; then
-            if taskkill /PID "${'$'}p" >/dev/null 2>&1; then sent="${'$'}sent ${'$'}p"; echo "sent ${'$'}p"
-            elif taskkill /F /PID "${'$'}p" >/dev/null 2>&1; then echo "sent ${'$'}p"; echo "forced ${'$'}p"
-            else echo "fail ${'$'}p"; fi
+            if lim 10 taskkill /PID "${'$'}p" >/dev/null 2>&1; then sent="${'$'}sent ${'$'}p"; echo "sent ${'$'}p"
+            elif lim 10 taskkill /F /PID "${'$'}p" >/dev/null 2>&1; then echo "sent ${'$'}p"; echo "forced ${'$'}p"
+            elif [ "$(name "${'$'}p")" = "${'$'}c" ]; then echo "fail ${'$'}p"; else echo "gone ${'$'}p"; fi
           else echo "gone ${'$'}p"; fi
         done
         i=0
@@ -261,7 +275,7 @@ object HealthCommands {
           for p in ${'$'}sent; do [ -n "$(name "${'$'}p")" ] && left="${'$'}left ${'$'}p"; done
           sent="${'$'}left"
         done
-        for p in ${'$'}sent; do taskkill /F /PID "${'$'}p" >/dev/null 2>&1 && echo "forced ${'$'}p"; done
+        for p in ${'$'}sent; do lim 10 taskkill /F /PID "${'$'}p" >/dev/null 2>&1 && echo "forced ${'$'}p"; done
         exit 0 ;;
         esac
     """.trimIndent()

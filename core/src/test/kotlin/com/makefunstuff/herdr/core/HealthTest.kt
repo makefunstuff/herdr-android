@@ -216,10 +216,20 @@ class HealthTest {
         File(bin, "procs").mkdirs()
         fun tool(name: String, body: String) = File(bin, name).apply { writeText("#!/bin/sh\nd=\"\$(dirname \"\$0\")\"\n$body\n"); setExecutable(true) }
         tool("uname", "echo MINGW64_NT-10.0-26100")
+        // Coreutils timeout, logging the limit it was given; with a file `hang` in bin/ every limit is 1 second.
+        tool(
+            "timeout",
+            """
+            echo "timeout ${'$'}1" >> "${'$'}d/calls.log"
+            n="${'$'}1"; shift; [ -f "${'$'}d/hang" ] && [ "${'$'}n" != 0 ] && n=1
+            exec /usr/bin/timeout "${'$'}n" "${'$'}@"
+            """.trimIndent(),
+        )
         tool(
             "powershell.exe",
             """
             echo "${'$'}HERDR_UID ${'$'}HERDR_HZ" > "${'$'}d/env.log"
+            [ -f "${'$'}d/hang" ] && exec sleep 30
             while [ ${'$'}# -gt 1 ]; do [ "${'$'}1" = -EncodedCommand ] && break; shift; done
             script="${'$'}(printf %s "${'$'}2" | base64 -d | tr -d '\000')"
             case "${'$'}script" in
@@ -237,7 +247,7 @@ class HealthTest {
             if [ -f "${'$'}d/procs/${'$'}p" ]; then echo "\"${'$'}(cat "${'$'}d/procs/${'$'}p")\",\"${'$'}p\",\"Console\",\"1\",\"9,000 K\""; else echo "INFO: No tasks are running which match the specified criteria."; fi
             """.trimIndent(),
         )
-        // A pid ending with 9 is a console process: only /F ends it. A pid ending with 8 ignores the polite request.
+        // A pid ending with 9 is a console process: only /F ends it. 8 ignores the polite request. 7 is gone when taskkill runs; 6 cannot be stopped.
         tool(
             "taskkill",
             """
@@ -245,6 +255,8 @@ class HealthTest {
             if [ "${'$'}1" = /F ]; then p="${'$'}3"; force=1; else p="${'$'}2"; force=0; fi
             case "${'$'}p" in
               *9) [ ${'$'}force = 1 ] || exit 1 ;;
+              *7) rm -f "${'$'}d/procs/${'$'}p"; exit 1 ;;
+              *6) exit 1 ;;
               *8) [ ${'$'}force = 1 ] || exit 0 ;;
             esac
             rm -f "${'$'}d/procs/${'$'}p"
@@ -278,8 +290,8 @@ class HealthTest {
 
     @Test
     fun windowsSkipsDrivesWithoutSize() {
-        // An empty card reader has no size (or 0); the next drive is still read.
-        val bin = windowsBin(disks = "C:\tNTFS\t${kb(1_000_000)}\t${kb(400_000)}\nE:\t\t\t\nF:\tNTFS\t0\t0\nD:\tNTFS\t${kb(500_000)}\t${kb(100_000)}\n")
+        // An empty card reader has no size (or 0), and a drive that gives no free space can not be told from a full one: the others are still read.
+        val bin = windowsBin(disks = "C:\tNTFS\t${kb(1_000_000)}\t${kb(400_000)}\nE:\t\t\t\nF:\tNTFS\t0\t0\nG:\tNTFS\t${kb(300_000)}\t\nD:\tNTFS\t${kb(500_000)}\t${kb(100_000)}\n")
         try {
             val s = HealthReader.sample(sh(HealthCommands.probe(), path = bin).stdout)
             assertEquals(listOf("/c", "/d"), s.disks.map { it.mount })
@@ -358,8 +370,11 @@ class HealthTest {
             assertFalse(File(bin, "procs/4100").exists())
             val calls = File(bin, "calls.log").readLines()
             // Git Bash must not turn /PID into a path, so every call says it was told not to.
-            assertTrue(calls.all { it.split(' ')[1] == "*" }, calls.toString())
-            assertEquals(listOf("taskkill * /PID 4100", "taskkill * /PID 4109", "taskkill * /F /PID 4109", "taskkill * /PID 4110"), calls.filter { it.startsWith("taskkill") })
+            val tools = calls.filter { it.startsWith("tasklist") || it.startsWith("taskkill") }
+            assertTrue(tools.isNotEmpty() && tools.all { it.split(' ')[1] == "*" }, calls.toString())
+            // Every one is bounded, so a wedged tasklist or taskkill ends at 10 seconds.
+            assertEquals(listOf("timeout 0") + List(tools.size) { "timeout 10" }, calls.filter { it.startsWith("timeout") })
+            assertEquals(listOf("taskkill * /PID 4100", "taskkill * /PID 4109", "taskkill * /F /PID 4109", "taskkill * /PID 4110"), tools.filter { it.startsWith("taskkill") })
         } finally {
             bin.deleteRecursively()
         }
@@ -377,6 +392,46 @@ class HealthTest {
             assertFalse(File(bin, "procs/4108").exists())
             // It gave it the polite 5 seconds first.
             assertTrue(System.currentTimeMillis() - started >= 4_500)
+        } finally {
+            bin.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun windowsKillSaysGoneWhenTheProcessEndedMeanwhile() {
+        val bin = windowsBin()
+        try {
+            // 4107 ends just as taskkill runs (both calls fail, the pid is no more); 4106 can not be stopped.
+            File(bin, "procs/4107").writeText("claude.exe")
+            File(bin, "procs/4106").writeText("claude.exe")
+            val targets = listOf(HealthCommands.Target(4107, "claude"), HealthCommands.Target(4106, "claude"))
+            val done = HealthReader.killed(sh(HealthCommands.kill(targets), path = bin).stdout)
+            assertEquals(listOf(4107), done.gone)
+            assertEquals(listOf(4106), done.failed)
+            assertTrue(done.stopped.isEmpty() && done.forced.isEmpty())
+        } finally {
+            bin.deleteRecursively()
+        }
+    }
+
+    /** A PowerShell or WMI that hangs costs its own part of the look, not the memory, the CPU or the time of the rest. */
+    @Test
+    fun windowsLooksAreBounded() {
+        val bin = windowsBin(disks = "C:\tNTFS\t${kb(1_000_000)}\t${kb(400_000)}\n", procs = "A\t1\t0\nT\t1\t0\tx\nP\t1 0 0 900000 5 x\n")
+        try {
+            // Their limits: 10 seconds for the drives, 20 for the processes.
+            windowsSample(bin)
+            val limits = File(bin, "calls.log").readLines().filter { it.startsWith("timeout") && it != "timeout 0" }
+            assertEquals(listOf("timeout 10", "timeout 20"), limits)
+            // With both hanging (the test's timeout cuts them at 1 second) the rest is still read.
+            File(bin, "hang").writeText("")
+            val started = System.currentTimeMillis()
+            val s = windowsSample(bin)
+            assertTrue(System.currentTimeMillis() - started < 20_000)
+            assertNotNull(s.memory)
+            assertTrue(s.disks.isEmpty())
+            assertTrue(s.procs.isEmpty())
+            if (File("/proc/stat").canRead()) assertNotNull(s.cpuBusy)
         } finally {
             bin.deleteRecursively()
         }
