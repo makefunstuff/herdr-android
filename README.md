@@ -90,6 +90,8 @@ New-ItemProperty -Path HKLM:\SOFTWARE\OpenSSH -Name DefaultShell -Value 'C:\Prog
 
 Then pair as above with `python herdr-push pair`. For a user in Administrators, Windows' sshd reads keys from `C:\ProgramData\ssh\administrators_authorized_keys`, so run `pair` in a terminal opened as administrator too (or add the key there by hand).
 
+For notifications, the PC has to be awake and signed in: the watcher runs in your signed-in session, and herdr-push needs a Python 3 there (the app finds `python3`, `python` or `py -3`, and skips the Microsoft Store's stand-in). See [Notifications while the app is closed](#notifications-while-the-app-is-closed).
+
 Machines reachable only through another one can use it as a jump host ("Connect through"). For zero-touch or read-only machines, **Allow host scripts** (on by default) can be turned off so the app skips copying its helper scripts (`herdr-usage`, `herdr-logins`, `herdr-push`) there. From a machine's menu, **Import herdr machines** adds the machines its herdr already knows (`herdr machine list`).
 
 ## How it talks to herdr
@@ -217,6 +219,8 @@ Two ways in, both on every machine the app knows:
 - **The app's own looks**: an exact alarm every 15 minutes (or hourly, or never) connects to each machine and notices what changed, for a machine without python3 or a push that got lost.
 
 Each state is shown once, however it arrives, and comes down again when it is over (answered on the desktop, the agent back at work). The switch next to a machine in Settings leaves it out.
+
+**On a Windows PC** the app sets herdr-push up the same way, with no administrator rights: a `Run` entry under your user starts it when you sign in, and a scheduled task of yours starts it right away in your desktop session. It reads the Herdr desktop app's herdr-core (where one runs), RAM, CPU, drives and the biggest processes, and tells the phone how long ago you last used the keyboard or mouse and whether the session is locked. The PC has to be awake and signed in: with nobody signed in, Settings says it can't watch. The phone needs ntfy (or another UnifiedPush app), as for any machine. Classic herdr, Shepherdr and App change are not there.
 
 ### What reaches the phone
 
