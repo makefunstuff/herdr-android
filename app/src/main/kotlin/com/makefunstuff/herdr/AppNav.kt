@@ -274,10 +274,10 @@ private fun AppNav(nav: NavHostController, startSpace: String? = null) {
         val panes = remember(wide) { Panes(wide) }
         val current by rememberUpdatedState(panes)
         LaunchedEffect(nav) { Links.flow.collect { current.link(nav, it) } }
-        // A space picked in the drawer shows in the Chat tab.
+        // A space picked in the drawer (or the sidebar) shows in the Chat tab.
         fun pick(slot: SpaceSlot) {
             space.key = slot.key
-            nav.goTop(Routes.CHAT)
+            nav.showSpace()
         }
         val openDrawer: () -> Unit = { scope.launch { drawer.open() } }
         val lineColor = Herdr.colors.lineStrong
@@ -443,6 +443,22 @@ private fun AppNavBar(nav: NavHostController, needsYou: Int) {
 @Composable
 private fun PaneEdge() {
     Box(Modifier.width(1.dp).fillMaxHeight().background(Herdr.colors.line))
+}
+
+/**
+ * The Chat tab's own screen, for a space just picked: not what the tab had open over it (that was the last space's
+ * terminal or chat). A phone's drawer opens only over a tab's own screen; the sidebar is there over any (issue #101).
+ */
+private fun NavHostController.showSpace() {
+    if (currentDestination?.route == Routes.CHAT) return
+    val open = currentBackStack.value.any { it.destination.route == Routes.CHAT }
+    // Left for another tab, the Chat tab's screens were kept to come back to: they go.
+    if (!open) clearBackStack(Routes.CHAT)
+    navigate(Routes.CHAT) {
+        // Open, they go too; another tab's are kept, as a tab's switch keeps them.
+        popUpTo(graph.findStartDestination().id) { saveState = !open }
+        launchSingleTop = true
+    }
 }
 
 private fun NavHostController.goTop(route: String) {

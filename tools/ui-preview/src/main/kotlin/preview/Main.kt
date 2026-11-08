@@ -329,6 +329,11 @@ private fun ComposeUiTest.node(matcher: SemanticsMatcher) = onAllNodes(matcher, 
 /** Taps the first element showing [text] (exactly, or as its start when it is longer). */
 fun ComposeUiTest.tapText(text: String) { tap(node(hasText(text, substring = true))) }
 
+/** Fails the scene unless an element shows [text]: a scene that checks what a tap leads to. */
+fun ComposeUiTest.expectText(text: String) {
+    check(onAllNodes(hasText(text, substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()) { "\"$text\" isn't shown" }
+}
+
 /** Scrolls [text] into view in its list or strip (a tab off the strip's edge), then taps it. */
 fun ComposeUiTest.scrollToText(text: String) {
     runOnUiThread { node(hasText(text, substring = true)).performScrollTo() }
