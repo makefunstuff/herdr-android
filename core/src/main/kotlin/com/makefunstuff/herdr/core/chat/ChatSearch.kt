@@ -25,6 +25,7 @@ object ChatSearch {
     const val MIN_QUERY = 3
 
     // $1 the word looked for, then pane, kind, value and agent for each chat.
+    // Git Bash's grep aborts on -i with -F, so when grep fails (status above 1) awk matches the lines instead.
     private val SCRIPT = """
         q="${'$'}1"; shift
         while [ ${'$'}# -ge 4 ]; do
@@ -32,7 +33,7 @@ object ChatSearch {
     """.trimIndent() + "\n" + TranscriptFollower.FIND + "\n" + """
           if [ -n "${'$'}f" ] && [ -f "${'$'}f" ]; then
             echo "$MARK${'$'}pane"
-            grep -i -F -- "${'$'}q" "${'$'}f" 2>/dev/null | awk 'length(${'$'}0) < $MAX_LINE' | tail -n $LINES
+            { grep -i -F -- "${'$'}q" "${'$'}f" 2>/dev/null; [ ${'$'}? -le 1 ] || Q="${'$'}q" awk 'BEGIN { q = tolower(ENVIRON["Q"]) } index(tolower(${'$'}0), q)' "${'$'}f"; } | awk 'length(${'$'}0) < $MAX_LINE' | tail -n $LINES
           fi
         done
     """.trimIndent()
