@@ -83,7 +83,7 @@ class HostPythonTest {
     fun exitsWithTheCodeWhenNone() {
         val r = run(emptyMap(), 127)
         assertEquals(127, r.exit)
-        assertEquals("python3 is not installed", r.err)
+        assertEquals("Python 3.6 or newer is not installed", r.err)
         assertEquals("", r.out)
     }
 

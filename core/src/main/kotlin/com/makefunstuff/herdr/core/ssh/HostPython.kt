@@ -24,5 +24,5 @@ object HostPython {
             "else q=\$(\"\${SHELL:-/bin/sh}\" -lc \"command -v \$n\" </dev/null 2>/dev/null | tail -n 1); fi; " +
             "if [ -n \"\$q\" ] && \"\$q\" \$a -c '$CHECK' </dev/null >/dev/null 2>&1; then P=\$q; PA=\$a; break 2; fi; " +
             "done; done" +
-            (noPythonExit?.let { "; [ -n \"\$P\" ] || { echo 'python3 is not installed' >&2; exit $it; }" } ?: "")
+            (noPythonExit?.let { "; [ -n \"\$P\" ] || { echo 'Python 3.6 or newer is not installed' >&2; exit $it; }" } ?: "")
 }
