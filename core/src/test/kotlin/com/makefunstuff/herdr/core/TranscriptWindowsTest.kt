@@ -3,7 +3,6 @@ package com.makefunstuff.herdr.core
 import com.makefunstuff.herdr.core.api.AgentSessionRef
 import com.makefunstuff.herdr.core.chat.ChatSearch
 import com.makefunstuff.herdr.core.chat.TranscriptFollower
-import com.makefunstuff.herdr.core.ssh.HerdrCommands
 import java.io.File
 import java.nio.file.Files
 import java.util.concurrent.TimeUnit
@@ -115,7 +114,7 @@ class TranscriptWindowsTest {
         onWindows("16744 900\n27492 16744\n", sessionPid = "27492", jsonl = said) { home, bin ->
             setup(bin)
             val chat = ChatSearch.Chat("p1", AgentSessionRef(kind = "pid", value = "16744", agent = "claude"))
-            val stdout = sh(home, bin, ChatSearch.command(query, listOf(chat))!!)
+            val stdout = sh(home, bin, ChatSearch.commands(query, listOf(chat)).single())
             ChatSearch.parse(stdout, query, mapOf("p1" to "claude"))
         }
 
@@ -145,7 +144,7 @@ class TranscriptWindowsTest {
             val chats = listOf("16744" to "p1", "17000" to "p2", "18000" to "p3").map { (pid, pane) ->
                 ChatSearch.Chat(pane, AgentSessionRef(kind = "pid", value = pid, agent = "claude"))
             }
-            val stdout = sh(home, bin, ChatSearch.command("flaky", chats)!!)
+            val stdout = sh(home, bin, ChatSearch.commands("flaky", chats).single())
             assertEquals(listOf("p1", "p2", "p3"), ChatSearch.parse(stdout, "flaky", chats.associate { it.paneId to "claude" }).map { it.paneId })
             assertEquals(1, File(home, "powershell.calls").readLines().size)
         }
@@ -155,9 +154,24 @@ class TranscriptWindowsTest {
     fun theSearchFitsTheWindowsCommandLine() {
         // Git Bash gets the command as `bash.exe -c "<command>"` with each quote written \" and the line is cut at 8191 characters.
         val chats = (1..12).map { ChatSearch.Chat("p$it", AgentSessionRef(kind = "pid", value = "${16000 + it}", agent = "claude")) }
-        val line = HerdrCommands.login(ChatSearch.command("flaky", chats)!!).replace("\"", "\\\"")
+        val line = ChatSearch.commands("flaky", chats).single().replace("\"", "\\\"")
         val room = 8191 - "\"C:\\Program Files\\Git\\bin\\bash.exe\" -c \"".length - 1
         assertTrue(line.length <= room, "the search is ${line.length} characters, the room is $room")
+    }
+
+    @Test
+    fun aSearchOfManyChatsIsSplitToFitWindowsLine() {
+        // A machine with a few hundred agents: several commands, each on Windows' line, and every chat in one of them.
+        val chats = (1..300).map { ChatSearch.Chat("p$it", AgentSessionRef(kind = "path", value = "~/.claude/projects/C--Users-dev-proj/$session.jsonl", agent = "claude")) }
+        val commands = ChatSearch.commands("flaky", chats)
+        assertTrue(commands.size > 1, "${commands.size} commands")
+        val room = 8191 - "\"C:\\Program Files\\Git\\bin\\bash.exe\" -c \"".length - 1
+        for (command in commands) {
+            val line = command.replace("\"", "\\\"")
+            assertTrue(line.length <= room, "a command is ${line.length} characters, the room is $room")
+        }
+        val panes = commands.flatMap { c -> Regex("'(p\\d+)' 'path'").findAll(c).map { it.groupValues[1] }.toList() }
+        assertEquals(chats.map { it.paneId }, panes)
     }
 
     @Test

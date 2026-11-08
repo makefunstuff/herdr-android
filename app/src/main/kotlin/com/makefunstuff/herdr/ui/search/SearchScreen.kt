@@ -129,11 +129,14 @@ fun SearchScreen(nav: NavController, machineId: String? = null, initial: String 
             online.map { h ->
                 async {
                     val chats = h.view!!.agents.mapNotNull { a -> a.agentSession?.let { ChatSearch.Chat(a.paneId, it) } }
-                    val command = ChatSearch.command(q, chats) ?: return@async
+                    val commands = ChatSearch.commands(q, chats).ifEmpty { return@async }
                     looking++
                     try {
                         val session = container.hosts.session(h.machine.id) ?: return@async
-                        val out = runCatching { session.awaitConnection(10_000).run(command, timeoutSeconds = 15).stdout }.getOrNull() ?: return@async
+                        val out = runCatching {
+                            val conn = session.awaitConnection(10_000)
+                            buildString { for (c in commands) append(conn.run(c, timeoutSeconds = 15).stdout).append('\n') }
+                        }.getOrNull() ?: return@async
                         val kinds = h.view!!.agents.associate { it.paneId to (it.agentSession?.agent ?: it.agent.orEmpty()) }
                         chatHits[h.machine.id] = ChatSearch.parse(out, q, kinds)
                     } finally {

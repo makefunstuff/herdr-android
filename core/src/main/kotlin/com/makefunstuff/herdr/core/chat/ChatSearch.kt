@@ -7,7 +7,7 @@ import java.time.Instant
 
 /**
  * Words in the recent chats: the conversations of the agents running on a machine, searched where
- * they are. One command per machine finds each agent's transcript as the chat does
+ * they are. One command per machine (a few for many agents) finds each agent's transcript as the chat does
  * ([TranscriptFollower.FIND]) and prints its newest lines holding the words, which the agent's own
  * reader then turns into what was said. Only what was said counts, not tool calls or their output.
  * As in the rest of the search, every word has to be in it, anywhere: the machine looks for the
@@ -44,14 +44,41 @@ object ChatSearch {
     /** Something said in a chat that holds the words: a piece of it around them, and when, when the transcript says. */
     data class Hit(val paneId: String, val you: Boolean, val snippet: String, val at: Long?)
 
-    /** The command for [chats] on one machine; null when there is nothing to look in. */
-    fun command(query: String, chats: List<Chat>): String? {
-        val q = words(query).maxByOrNull { it.length } ?: return null
+    /**
+     * The longest command sent, counting each double quote twice: Windows hands it to Git's bash on a
+     * command line cut at 8191 characters, with every `"` written `\"`, and a cut command fails whole.
+     */
+    private const val MAX_COMMAND = 7_800
+
+    /**
+     * The commands for [chats] on one machine, run one after another; none when there is nothing to look
+     * in. Each stays within what Windows takes, so a machine with many agents gets more than one.
+     */
+    fun commands(query: String, chats: List<Chat>): List<String> {
+        val q = words(query).maxByOrNull { it.length } ?: return emptyList()
         val readable = chats.filter { Transcript.forAgent(it.session.agent) != null && it.session.value.isNotEmpty() }
-        if (query.trim().length < MIN_QUERY || readable.isEmpty()) return null
-        val args = readable.flatMap { listOf(it.paneId, it.session.kind, it.session.value, it.session.agent) }
-        return "sh -c ${quote(SCRIPT)} herdr-chat-search " + (listOf(q) + args).joinToString(" ") { quote(it) }
+        if (query.trim().length < MIN_QUERY || readable.isEmpty()) return emptyList()
+        val head = "sh -c ${quote(SCRIPT)} herdr-chat-search ${quote(q)}"
+        val out = ArrayList<String>()
+        val command = StringBuilder(head)
+        var length = windowsLength(head)
+        for (chat in readable) {
+            val part = listOf(chat.paneId, chat.session.kind, chat.session.value, chat.session.agent).joinToString("") { " " + quote(it) }
+            if (command.length > head.length && length + windowsLength(part) > MAX_COMMAND) {
+                out += command.toString()
+                command.setLength(0)
+                command.append(head)
+                length = windowsLength(head)
+            }
+            command.append(part)
+            length += windowsLength(part)
+        }
+        out += command.toString()
+        return out
     }
+
+    /** How long [s] is on a Windows command line, where each double quote is written `\"`. */
+    private fun windowsLength(s: CharSequence): Int = s.length + s.count { it == '"' }
 
     /**
      * The hits in what [command] printed: the newest first within each chat, at most [perChat] of

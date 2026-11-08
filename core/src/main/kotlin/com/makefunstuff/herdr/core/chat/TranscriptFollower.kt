@@ -42,9 +42,9 @@ object TranscriptFollower {
           case "${'$'}(uname -s 2>/dev/null)" in
             MINGW*|MSYS*|CYGWIN*)
               # Git Bash has no pgrep and can't see Windows processes. Read the table of every process and
-              # its parent (once for all the chats of a search: ptable stays set) and walk it down from the
-              # pid; a parent id can be stale (Windows reuses pids), so each pid is taken once.
-              [ -n "${'$'}ptable" ] || ptable=${'$'}(powershell.exe -NoProfile -Command 'Get-CimInstance Win32_Process | Format-Table -HideTableHeaders ProcessId,ParentProcessId' 2>/dev/null </dev/null | tr -d '\r')
+              # its parent (once for all the chats of a search, even when it comes back empty) and walk it
+              # down from the pid; a parent id can be stale (Windows reuses pids), so each pid is taken once.
+              [ -n "${'$'}ptried" ] || ptried=1 ptable=${'$'}(powershell.exe -NoProfile -Command 'Get-CimInstance Win32_Process | Format-Table -HideTableHeaders ProcessId,ParentProcessId' 2>/dev/null </dev/null | tr -d '\r')
               kids() {
                 printf '%s\n' "${'$'}ptable" | awk -v root="${'$'}1" '
                   ${'$'}1 ~ /^[0-9]+${'$'}/ && ${'$'}2 ~ /^[0-9]+${'$'}/ { n++; pid[n] = ${'$'}1; par[n] = ${'$'}2 }
