@@ -56,11 +56,19 @@ class PortForward(
             live -= client
             live -= channel
         }
+        // Taken here, not in the threads: a channel the machine closes at once (Windows' sshd to a
+        // port nothing listens on) closes the client before a thread would, and that would throw there.
+        val up = try {
+            client.getInputStream() to client.getOutputStream()
+        } catch (_: IOException) {
+            done()
+            return
+        }
         thread(name = "forward-$port-up", isDaemon = true) {
-            pump(client.getInputStream(), channel.output)
+            pump(up.first, channel.output)
             done()
         }
-        pump(channel.input, client.getOutputStream())
+        pump(channel.input, up.second)
         done()
     }
 
@@ -73,7 +81,8 @@ class PortForward(
                 to.write(buf, 0, n)
                 to.flush()
             }
-        } catch (_: IOException) {
+        } catch (_: Exception) {
+            // A dropped side (IOException, or the SSH library's own runtime errors): the forward ends, never the app.
         }
     }
 
