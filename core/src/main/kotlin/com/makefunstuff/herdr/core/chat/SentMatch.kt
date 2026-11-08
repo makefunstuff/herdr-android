@@ -36,6 +36,10 @@ object SentMatch {
     private val placeholder = Regex("\\[Image #\\d+]|\\[image (\\d+ )?\\d+x\\d+[^\\]\\n]*]")
     private val spaces = Regex("[ \\t]{2,}")
 
+    /** [text] without the agent's own marks for its pictures, and nothing else changed: for showing it. */
+    fun withoutMarks(text: String): String = text.replace(markWithSpace, "").trim()
+    private val markWithSpace = Regex("(?:${placeholder.pattern}) ?")
+
     /** [text]'s words, without the pictures it names (`@path`) or the agent's own marks for them. */
     fun withoutPictures(text: String): String =
         Images.split(text).text.replace(placeholder, " ").lines().joinToString("\n") { it.replace(spaces, " ").trim() }.trim()
@@ -60,6 +64,8 @@ object SentMatch {
         val pictures = Images.split(sent)
         val words = if (pictures.paths.isEmpty()) sent else withoutPictures(sent)
         // Pictures alone: the agent may show them as its own marks (Claude Code's `[Image #1]`) rather than their paths.
+        // Every mark counts, also one still in its input box or of a message with words; the baseline takes those
+        // already there at the send. Good enough for the screen, the fallback until the transcript is there.
         if (pictures.paths.isNotEmpty() && words.isBlank()) return occurrences(sent, screen) + occurrences("[Image #", screen)
         // A message with pictures is found by its words: the agent may show its pictures its own way.
         return occurrences(words, screen)
@@ -101,7 +107,8 @@ object SentMatch {
     fun unconfirmed(pending: List<Pending>, counted: (Pending) -> Int): List<Pending> {
         val nth = HashMap<String, Int>()
         return pending.filter { p ->
-            val key = normalize(p.text).take(HEAD)
+            // Picture messages are matched by their words, so they count up together by them: the n-th needs the n-th match.
+            val key = if (Images.split(p.text).paths.isEmpty()) normalize(p.text).take(HEAD) else "\u0000pictures\u0000" + normalize(withoutPictures(p.text)).take(HEAD)
             val k = (nth[key] ?: 0) + 1
             nth[key] = k
             counted(p) < p.baseline + k

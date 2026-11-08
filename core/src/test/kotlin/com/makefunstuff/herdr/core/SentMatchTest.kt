@@ -161,4 +161,19 @@ class SentMatchTest {
         assertEquals(2, after.last().images)
         assertEquals(0, SentMatch.unseen(listOf(p), after, now = 2_000).size)
     }
+
+    @Test fun twoPictureMessagesNeedTwoMatches() {
+        val one = Pending("@$up/one.png", 0)
+        val two = Pending("@$up/two.png", 0)
+        assertEquals(listOf(two), open(listOf(one, two), listOf("[Image #1]")))
+        assertEquals(0, open(listOf(one, two), listOf("[Image #1]", "[Image #2]")).size)
+        val yesA = Pending("@$up/a.png yes", 0)
+        val yesB = Pending("@$up/b.png yes", 0)
+        assertEquals(listOf(yesB), open(listOf(yesA, yesB), listOf("[Image #1] yes")))
+    }
+
+    @Test fun marksLeaveTheRestAsWritten() {
+        assertEquals("look:\n    at(Foo.kt:12)\n  indented", SentMatch.withoutMarks("[Image #1] look:\n    at(Foo.kt:12)\n  indented"))
+        assertEquals("before after", SentMatch.withoutMarks("before [Image #2] after"))
+    }
 }
