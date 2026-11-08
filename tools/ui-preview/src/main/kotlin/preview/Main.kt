@@ -334,6 +334,11 @@ fun ComposeUiTest.expectText(text: String) {
     check(onAllNodes(hasText(text, substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()) { "\"$text\" isn't shown" }
 }
 
+/** Fails the scene if an element shows [text]: a screen a tap should have taken away. */
+fun ComposeUiTest.expectNoText(text: String) {
+    check(onAllNodes(hasText(text, substring = true), useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) { "\"$text\" is still shown" }
+}
+
 /** Scrolls [text] into view in its list or strip (a tab off the strip's edge), then taps it. */
 fun ComposeUiTest.scrollToText(text: String) {
     runOnUiThread { node(hasText(text, substring = true)).performScrollTo() }

@@ -888,7 +888,7 @@ fun scenes(): List<Scene> = listOf(
     // A space tapped in the sidebar shows in the Chat tab, also from a screen the tab had open (issue #101: the
     // terminal opened from herdr-android's chat stayed, though website was marked as picked).
     Scene("wide-pick", widthDp = 1280, heightDp = 800, setup = { home() }, actions = {
-        tapLabel("Chat"); tapText("Terminal"); tapText("website"); expectText("Rewrite the install page")
+        tapLabel("Chat"); tapText("Terminal"); tapText("website"); expectText("Rewrite the install page"); expectNoText("146×42")
     }),
     Scene("wide-machines", widthDp = 1280, heightDp = 800, setup = { home() }, actions = { tapLabel("Chat") }),
     // Rotating across the line keeps what is open as it was: a chat with its key row shown, turned from a phone
