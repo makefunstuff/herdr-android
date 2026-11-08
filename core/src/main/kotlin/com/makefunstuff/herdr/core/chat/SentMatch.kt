@@ -26,17 +26,19 @@ object SentMatch {
         // next to the words), so it is the same message when the words are.
         val pictures = Images.split(sent)
         if (pictures.paths.isEmpty()) return false
-        val words = withoutPictures(seen)
-        if (pictures.text.isBlank()) return words.isBlank() || pictures.paths.any { it in seen }
-        return sameText(pictures.text, words)
+        val words = withoutPictures(sent)
+        val seenWords = withoutPictures(seen)
+        if (words.isBlank()) return seenWords.isBlank() || pictures.paths.any { it in seen }
+        return sameText(words, seenWords)
     }
 
-    // Claude Code's `[Image #1]`; Codex's `[image 1 1024x768 PNG]`.
-    private val placeholder = Regex("\\[image\\b[^\\]\\n]*]", RegexOption.IGNORE_CASE)
+    // Claude Code's `[Image #1]`; Codex's `[image 1024x768 PNG]`.
+    private val placeholder = Regex("\\[Image #\\d+]|\\[image (\\d+ )?\\d+x\\d+[^\\]\\n]*]")
+    private val spaces = Regex("[ \\t]{2,}")
 
     /** [text]'s words, without the pictures it names (`@path`) or the agent's own marks for them. */
     fun withoutPictures(text: String): String =
-        Images.split(text).text.replace(placeholder, " ").lines().joinToString("\n") { it.replace(Regex("[ \\t]{2,}"), " ").trim() }.trim()
+        Images.split(text).text.replace(placeholder, " ").lines().joinToString("\n") { it.replace(spaces, " ").trim() }.trim()
 
     private fun sameText(sent: String, seen: String): Boolean {
         val a = normalize(sent)
@@ -55,10 +57,17 @@ object SentMatch {
 
     /** Occurrences of the start of [sent] in a screen's text. */
     fun countOnScreen(sent: String, screen: String): Int {
+        val pictures = Images.split(sent)
+        val words = if (pictures.paths.isEmpty()) sent else withoutPictures(sent)
+        // Pictures alone: the agent may show them as its own marks (Claude Code's `[Image #1]`) rather than their paths.
+        if (pictures.paths.isNotEmpty() && words.isBlank()) return occurrences(sent, screen) + occurrences("[Image #", screen)
         // A message with pictures is found by its words: the agent may show its pictures its own way.
-        val words = Images.split(sent).takeIf { it.paths.isNotEmpty() }?.text?.takeIf { it.isNotBlank() } ?: sent
+        return occurrences(words, screen)
+    }
+
+    private fun occurrences(sent: String, screen: String): Int {
         // A terminal can wrap in the middle of a word: compare without any whitespace.
-        val head = normalize(words).filterNot { it.isWhitespace() }.take(40)
+        val head = normalize(sent).filterNot { it.isWhitespace() }.take(40)
         if (head.isEmpty()) return 0
         val text = screen.filterNot { it.isWhitespace() || it in "*_`>" }
         var n = 0
@@ -96,6 +105,20 @@ object SentMatch {
             val k = (nth[key] ?: 0) + 1
             nth[key] = k
             counted(p) < p.baseline + k
+        }
+    }
+
+    /**
+     * The pending messages the transcript's [users] messages don't show yet. A matching message that
+     * wasn't there at send time ([Pending.known]) is the new one, even when older copies slid out of a
+     * tail-only read; the count covers ids that repeat.
+     */
+    fun unseen(pending: List<Pending>, users: List<ChatItem.User>, now: Long): List<Pending> {
+        if (pending.isEmpty()) return pending
+        val texts = users.map { it.text }
+        return unconfirmed(pending) { p ->
+            val fresh = users.count { it.id !in p.known && same(p.text, it.text) }
+            maxOf(p.baseline + fresh, slid(p, count(p.text, texts), now))
         }
     }
 }

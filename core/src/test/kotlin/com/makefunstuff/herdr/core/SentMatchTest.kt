@@ -1,5 +1,7 @@
 package com.makefunstuff.herdr.core
 
+import com.makefunstuff.herdr.core.chat.ChatItem
+import com.makefunstuff.herdr.core.chat.ClaudeTranscript
 import com.makefunstuff.herdr.core.chat.SentMatch
 import com.makefunstuff.herdr.core.chat.SentMatch.Pending
 import kotlin.test.Test
@@ -129,5 +131,34 @@ class SentMatchTest {
         val sent = "@$up/one.png $words"
         assertEquals(1, SentMatch.countOnScreen(sent, "> [Image #1] $words\n\n● Looking."))
         assertEquals(1, SentMatch.countOnScreen(sent, "> $sent"))
+    }
+
+    @Test fun picturesOnlyOnScreen() {
+        val sent = "@$up/one.png"
+        assertEquals(1, SentMatch.countOnScreen(sent, "> [Image #1]\n\n● Looking."))
+        assertEquals(1, SentMatch.countOnScreen(sent, "> $sent"))
+        assertEquals(0, SentMatch.unconfirmed(listOf(Pending(sent, 0))) { SentMatch.countOnScreen(it.text, "> [Image #1]") }.size)
+    }
+
+    @Test fun ownBracketedWordsWithPictures() {
+        // The person's own `[image of …]` is words, not the agent's mark for a picture.
+        val sent = "@$up/one.png see [image of the card] above"
+        assertTrue(SentMatch.same(sent, "[Image #1] see [image of the card] above"))
+        assertEquals("see [image of the card] above", SentMatch.withoutPictures("[Image #1] see [image of the card] above"))
+    }
+
+    @Test fun claudeTranscriptConfirmsPendingPictures() {
+        // What Claude Code writes when it attaches the pictures itself: its marks and the words, then image blocks.
+        val sent = "@$up/one.png @$up/two.png $words"
+        val t = ClaudeTranscript()
+        t.feed("""{"type":"user","uuid":"u1","message":{"role":"user","content":"Nice. Also show when each machine last answered."}}""")
+        val before = t.items().filterIsInstance<ChatItem.User>()
+        val p = Pending(sent, SentMatch.count(sent, before.map { it.text }), before.map { it.id }.toSet(), sentAt = 1_000)
+        assertEquals(1, SentMatch.unseen(listOf(p), before, now = 2_000).size)
+        val image = """{"type":"image","source":{"type":"base64","media_type":"image/png","data":""}}"""
+        t.feed("""{"type":"user","uuid":"u2","message":{"role":"user","content":[{"type":"text","text":"[Image #1] [Image #2] $words"},$image,$image]}}""")
+        val after = t.items().filterIsInstance<ChatItem.User>()
+        assertEquals(2, after.last().images)
+        assertEquals(0, SentMatch.unseen(listOf(p), after, now = 2_000).size)
     }
 }
