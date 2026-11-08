@@ -62,6 +62,7 @@ import socket
 import struct
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import urllib.error
@@ -2504,11 +2505,11 @@ def wait_for_watcher(seconds):
 
 
 def windows_command():
-    """What starts the watcher on Windows: pythonw.exe, which opens no console window, next to this Python."""
+    """What starts the watcher on Windows: (pythonw.exe, which opens no console window, next to this Python; its arguments)."""
     py = os.path.join(os.path.dirname(sys.executable), "pythonw.exe")
     if not os.path.exists(py):
         py = sys.executable
-    return '"%s" "%s" run' % (py, os.path.abspath(__file__))
+    return py, '"%s" run' % os.path.abspath(__file__)
 
 
 def windows_task(*args):
@@ -2521,10 +2522,47 @@ def windows_task(*args):
     return r.returncode == 0, r.stdout.decode(errors="replace").strip()
 
 
+TASK_XML = """<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <Principals>
+    <Principal id="Author">
+      <LogonType>InteractiveToken</LogonType>
+      <RunLevel>LeastPrivilege</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <AllowStartOnDemand>true</AllowStartOnDemand>
+    <Enabled>true</Enabled>
+    <Hidden>false</Hidden>
+    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
+  </Settings>
+  <Actions Context="Author">
+    <Exec>
+      <Command>%s</Command>
+      <Arguments>%s</Arguments>
+    </Exec>
+  </Actions>
+</Task>
+"""
+
+
 def windows_task_create():
-    """The task that starts the watcher in the user's interactive session (/it: only while they are signed in, no
-    password, no elevation). It is what `schtasks /run` starts from an SSH session, which can't open a window there."""
-    return windows_task("/create", "/sc", "once", "/st", "00:00", "/it", "/f", "/tr", windows_command())
+    """The task that starts the watcher in the user's interactive session (InteractiveToken: only while they are signed
+    in, no password, no elevation). It is what `schtasks /run` starts from an SSH session, which can't open a window
+    there. No trigger (the Run value starts it at sign-in), and none of the limits a task has by default: it would stop
+    the watcher after 3 days, or on battery."""
+    from xml.sax.saxutils import escape
+    py, args = windows_command()
+    fd, path = tempfile.mkstemp(suffix=".xml")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-16") as f:  # schtasks reads a UTF-16 file
+            f.write(TASK_XML % (escape(py), escape(args)))
+        return windows_task("/create", "/xml", path, "/f")
+    finally:
+        os.remove(path)
 
 
 def windows_install():
@@ -2534,7 +2572,7 @@ def windows_install():
         out({"ok": False, "msg": "couldn't create the task: " + err, "autostart": autostart(), "pid": running_pid(), "version": VERSION})
         return 1
     with winreg.CreateKey(winreg.HKEY_CURRENT_USER, RUN_KEY) as key:
-        winreg.SetValueEx(key, NAME, 0, winreg.REG_SZ, windows_command())
+        winreg.SetValueEx(key, NAME, 0, winreg.REG_SZ, '"%s" %s' % windows_command())
     note = ""
     if windows_interactive():
         if running_pid() is not None:
