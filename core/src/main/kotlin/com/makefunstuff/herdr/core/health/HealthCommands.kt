@@ -49,9 +49,10 @@ object HealthCommands {
      * Two looks at every process a second apart, printed as the rows [JOIN] reads: `M1` and `M2` as
      * each look is taken (the shell reads /proc/stat then, so both measure the same second), `A` and `T`
      * with each pid's CPU ticks (`Win32_Process` counts 100 ns; a tick is 1/`HERDR_HZ` s, what /proc/stat
-     * counts in) and `P` with the pid, parent, uid (`HERDR_UID` for a process of the SSH user's logon
-     * sessions, else 0), RAM in KiB, age in seconds and the command line (the name when it has none).
-     * A name loses its `.exe`. The System Idle Process (pid 0) is the idle time of every core, not a program.
+     * counts in) and `P` with the pid, parent, uid (`HERDR_UID` for a process of the SSH user's logon sessions,
+     * else 0; the user is the one of the process token, as an SSH session has no `USERDOMAIN`), RAM in KiB, age in
+     * seconds and the command line (the name when it has none). A name loses its `.exe`. The System Idle Process
+     * (pid 0) is the idle time of every core, not a program.
      */
     private val WIN_PROCS = packed(
         """
@@ -64,7 +65,8 @@ object HealthCommands {
         ~first = Get-CimInstance Win32_Process
         ~o.Write("M1`n"); ~o.Flush()
         ~clock = [Diagnostics.Stopwatch]::StartNew()
-        ~sessions = @(Get-CimInstance Win32_LoggedOnUser | Where-Object { ~_.Antecedent.Name -eq ~env:USERNAME -and ~_.Antecedent.Domain -eq ~env:USERDOMAIN } | ForEach-Object { ~_.Dependent.LogonId })
+        ~who = [Security.Principal.WindowsIdentity]::GetCurrent().Name.Split([char]92)
+        ~sessions = @(Get-CimInstance Win32_LoggedOnUser | Where-Object { ~_.Antecedent.Domain -eq ~who[0] -and ~_.Antecedent.Name -eq ~who[1] } | ForEach-Object { ~_.Dependent.LogonId })
         ~mine = @{}
         Get-CimInstance Win32_SessionProcess | Where-Object { ~sessions -contains ~_.Antecedent.LogonId } | ForEach-Object { ~mine[[string]~_.Dependent.Handle] = 1 }
         if (~clock.ElapsedMilliseconds -lt 1000) { Start-Sleep -Milliseconds (1000 - ~clock.ElapsedMilliseconds) }

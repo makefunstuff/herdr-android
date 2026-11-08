@@ -471,7 +471,10 @@ class HealthTest {
         fun run(command: String): CommandResult {
             val err = File.createTempFile("health-bash", ".err").apply { deleteOnExit() }
             // Java passes an argument that is already in quotes as it is, so the line is the one SSH builds.
-            val p = ProcessBuilder(gitBash.path, "-c", "\"" + command.replace("\"", "\\\"") + "\"").redirectError(err).start()
+            // An SSH session has no USERDOMAIN (nor USERNAME): the account of a process comes from its token.
+            val pb = ProcessBuilder(gitBash.path, "-c", "\"" + command.replace("\"", "\\\"") + "\"").redirectError(err)
+            pb.environment().keys.removeAll { it.equals("USERDOMAIN", true) || it.equals("USERNAME", true) }
+            val p = pb.start()
             p.outputStream.close()
             val out = p.inputStream.readBytes().toString(Charsets.UTF_8)
             assertTrue(p.waitFor(60, TimeUnit.SECONDS))
@@ -484,7 +487,11 @@ class HealthTest {
             assertTrue(HealthCommands.MARK in r.stdout && "@end-df" in r.stdout, "$name: ${r.stdout.take(300)} / ${r.stderr.take(300)}")
             val s = HealthReader.sample(r.stdout)
             assertTrue(s.disks.isNotEmpty(), name)
-            if (name == "probe") assertTrue(s.procs.isNotEmpty(), "the processes of Windows are listed")
+            if (name == "probe") {
+                assertTrue(s.procs.isNotEmpty(), "the processes of Windows are listed")
+                // This test's own JVM runs under the account: it is listed and is the account's.
+                assertTrue(s.procs.any { s.own(it) }, "no process is the account's: ${s.procs.map { it.uid }.distinct()} against ${s.uid}")
+            }
         }
         // Pids that are not these programs: the stop command ran to its end.
         assertEquals("gone 40001", run(sent.getValue("kill")).stdout.lines().first().trim())
