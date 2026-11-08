@@ -124,7 +124,7 @@ private fun LiveBrowser(session: HostSession, t: WorkTask) {
                             while (isActive) when (val e = link.next() ?: break) {
                                 is TaskBrowser.Event.Frame -> ImageCodec.load(e.jpeg, 4096)?.let {
                                     picture = it
-                                    pageWidth = e.width.takeIf { w -> w > 0 } ?: it.width
+                                    pageWidth = e.width.takeIf { w -> w > 0 } ?: state?.width ?: it.width
                                 }
                                 is TaskBrowser.Event.State -> {
                                     state = e.state
@@ -182,6 +182,12 @@ private fun LiveBrowser(session: HostSession, t: WorkTask) {
     val keys = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
     var held by remember { mutableStateOf(TextFieldValue(HELD, TextRange(HELD.length))) }
+    // A word the keyboard is still composing goes where it was typed, before a touch or a button moves the page on.
+    fun settle() {
+        if (held.composition == null) return
+        held.text.removePrefix(HELD).takeIf { it.isNotEmpty() }?.let { w -> send(input = true) { it.text(w) } }
+        held = TextFieldValue(HELD, TextRange(HELD.length))
+    }
 
     Column(Modifier.fillMaxSize()) {
         var box by remember { mutableStateOf(IntSize.Zero) }
@@ -200,6 +206,7 @@ private fun LiveBrowser(session: HostSession, t: WorkTask) {
                         val down = awaitFirstDown()
                         val start = at(down.position) ?: return@awaitEachGesture
                         down.consume()
+                        settle()
                         send(input = true) { it.touch("touchStart", listOf(start)) }
                         var moved = 0L
                         while (true) {
@@ -268,10 +275,10 @@ private fun LiveBrowser(session: HostSession, t: WorkTask) {
                 if (live) BrowserView.shortUrl(st?.url.orEmpty()) else "", style = MaterialTheme.typography.bodySmall, color = c.muted,
                 maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).padding(horizontal = Space.s),
             )
-            if (live && driving) QuietButton(onClick = { send { it.handBack() } }) { Text(BrowserView.HAND_BACK) }
             if (live) {
-                BarIcon(HerdrIcons.ArrowLeft, BrowserView.BACK, { send(input = true) { it.back() } })
-                BarIcon(HerdrIcons.RotateCw, BrowserView.RELOAD, { send(input = true) { it.reload() } })
+                if (driving) BarIcon(HerdrIcons.Bot, BrowserView.HAND_BACK, { settle(); send { it.handBack() } })
+                BarIcon(HerdrIcons.ArrowLeft, BrowserView.BACK, { settle(); send(input = true) { it.back() } })
+                BarIcon(HerdrIcons.RotateCw, BrowserView.RELOAD, { settle(); send(input = true) { it.reload() } })
                 BarIcon(HerdrIcons.Keyboard, BrowserView.KEYBOARD, {
                     keys.requestFocus()
                     keyboard?.show()

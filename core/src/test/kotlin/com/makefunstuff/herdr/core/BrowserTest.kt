@@ -83,15 +83,19 @@ class BrowserTest {
             browser.key("Enter")
             browser.key("Shift")
             browser.handBack()
-            val sent = List(5) { ShepherdrJson.parseToJsonElement(up.poll(5, TimeUnit.SECONDS)!!).jsonObject }
+            val sent = List(8) { ShepherdrJson.parseToJsonElement(up.poll(5, TimeUnit.SECONDS)!!).jsonObject }
             assertEquals("input_touch", sent[0].type)
             assertEquals("""[{"x":640,"y":120,"id":0}]""", sent[0]["touchPoints"].toString())
-            assertEquals("text", sent[1].type)
+            // Text goes as keys that type themselves, a character each: the relay passes on only input.
+            val typed = sent.slice(1..4)
+            assertTrue(typed.all { it.type == "input_keyboard" && it["code"] == null && it["windowsVirtualKeyCode"] == null })
+            assertEquals(listOf("keyDown" to "h", "keyUp" to "h", "keyDown" to "i", "keyUp" to "i"), typed.map { it["eventType"]!!.jsonPrimitive.content to it["key"]!!.jsonPrimitive.content })
+            assertEquals(listOf("h", null, "i", null), typed.map { it["text"]?.jsonPrimitive?.content })
             // Enter types a new line on its way down, as a browser's own; a key it doesn't know goes nowhere.
-            assertEquals(listOf("keyDown", "keyUp"), sent.slice(2..3).map { it["eventType"]!!.jsonPrimitive.content })
-            assertEquals("\r", sent[2]["text"]!!.jsonPrimitive.content)
-            assertNull(sent[3]["text"])
-            assertEquals("handback", sent[4].type)
+            assertEquals(listOf("keyDown", "keyUp"), sent.slice(5..6).map { it["eventType"]!!.jsonPrimitive.content })
+            assertEquals("\r", sent[5]["text"]!!.jsonPrimitive.content)
+            assertNull(sent[6]["text"])
+            assertEquals("handback", sent[7].type)
             browser.close()
         }
     }

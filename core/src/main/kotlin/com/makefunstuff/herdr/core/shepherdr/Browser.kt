@@ -45,8 +45,23 @@ class TaskBrowser internal constructor(private val socket: LiveSocket) : Closeab
         },
     )
 
-    /** What the phone's keyboard typed, as text into the page. */
-    fun text(text: String) = say(buildJsonObject { put("type", "text"); put("text", text) })
+    /**
+     * What the phone's keyboard typed, into the page: each character a key that types itself, with no key code (as
+     * 3.1's `keyEvent`; the relay passes on only `input_*`, and a code would make "." act as Delete).
+     */
+    fun text(text: String) {
+        var i = 0
+        while (i < text.length) {
+            val ch = String(Character.toChars(text.codePointAt(i)))
+            i += ch.length
+            for (type in listOf("keyDown", "keyUp")) say(
+                buildJsonObject {
+                    put("type", "input_keyboard"); put("eventType", type); put("key", ch); put("modifiers", 0)
+                    if (type == "keyDown") put("text", ch)
+                },
+            )
+        }
+    }
 
     /** A key that types nothing ([KEYS]: Backspace, Enter…), pressed and let go. */
     fun key(key: String) {
