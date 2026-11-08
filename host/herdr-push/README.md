@@ -38,7 +38,7 @@ The app also **looks at its machines itself** while it is closed (every 15 minut
 
 ## On Windows
 
-herdr-push runs on a Windows PC with Git Bash under OpenSSH Server (see the README's "A Windows machine"), with Python 3.6 or newer. The app installs it as it does elsewhere; by hand, `python herdr-push install` does the same.
+herdr-push runs on a Windows PC with Git Bash under OpenSSH Server (see [Windows](../../README.md#windows) in the README), with Python 3.6 or newer. The app installs it as it does elsewhere; by hand, `python herdr-push install` does the same.
 
 It starts without administrator rights, in two ways:
 
@@ -99,7 +99,7 @@ curl -fsSLO https://raw.githubusercontent.com/makefunstuff/herdr-android/HEAD/ho
 python3 herdr-push pair
 ```
 
-It prints the code, what it names (the machine, its host key) and the link the code holds, to paste in the app when the phone can't scan. Then it waits until a phone paired, five minutes passed, or Ctrl-C. In the app: **Machines → Add machine → Scan the code**.
+It prints the code, what it names (the machine, its host key) and the link the code holds, to paste in the app when the phone can't scan. Then it waits until a phone paired, five minutes passed, or Ctrl-C. In the app: the spaces drawer's **Add machine → Scan the code**.
 
 | Option | |
 | --- | --- |
