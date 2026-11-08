@@ -96,6 +96,7 @@ LOCK_BYTE = 1 << 20
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"  # where Windows starts a user's programs at sign-in
 _KERNEL32 = None  # kernel32 once loaded, see kernel32()
 _USER32 = None  # user32 once loaded, see user32()
+_WTSAPI32 = None  # wtsapi32 once loaded, see wtsapi32()
 # Where sshd keeps its config and host keys: Win32-OpenSSH's under ProgramData.
 SSHD_DIR = os.path.join(os.environ.get("PROGRAMDATA") or "C:\\ProgramData", "ssh") if WINDOWS else "/etc/ssh"
 
@@ -664,14 +665,6 @@ def kernel32():
         k.GetCurrentProcessId.restype = wintypes.DWORD
         k.ProcessIdToSessionId.argtypes = [wintypes.DWORD, ctypes.POINTER(wintypes.DWORD)]
         k.ProcessIdToSessionId.restype = wintypes.BOOL
-        k.CreateToolhelp32Snapshot.argtypes = [wintypes.DWORD, wintypes.DWORD]
-        k.CreateToolhelp32Snapshot.restype = ctypes.c_void_p
-        k.Process32FirstW.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
-        k.Process32FirstW.restype = wintypes.BOOL
-        k.Process32NextW.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
-        k.Process32NextW.restype = wintypes.BOOL
-        k.CloseHandle.argtypes = [ctypes.c_void_p]
-        k.CloseHandle.restype = wintypes.BOOL
         _KERNEL32 = k
     return _KERNEL32
 
@@ -691,6 +684,25 @@ def user32():
         u.CloseDesktop.restype = wintypes.BOOL
         _USER32 = u
     return _USER32
+
+
+def wtsapi32():
+    """Windows: wtsapi32 with the signatures of the calls presence uses (64-bit safe), loaded once."""
+    global _WTSAPI32
+    if _WTSAPI32 is None:
+        import ctypes
+        from ctypes import wintypes
+        w = ctypes.WinDLL("wtsapi32", use_last_error=True)
+        w.WTSQuerySessionInformationW.argtypes = [ctypes.c_void_p, wintypes.DWORD, ctypes.c_int,
+                                                  ctypes.POINTER(ctypes.c_void_p), ctypes.POINTER(wintypes.DWORD)]
+        w.WTSQuerySessionInformationW.restype = wintypes.BOOL
+        w.WTSEnumerateProcessesW.argtypes = [ctypes.c_void_p, wintypes.DWORD, wintypes.DWORD,
+                                             ctypes.POINTER(ctypes.c_void_p), ctypes.POINTER(wintypes.DWORD)]
+        w.WTSEnumerateProcessesW.restype = wintypes.BOOL
+        w.WTSFreeMemory.argtypes = [ctypes.c_void_p]
+        w.WTSFreeMemory.restype = None
+        _WTSAPI32 = w
+    return _WTSAPI32
 
 
 def windows_swap():
@@ -1188,38 +1200,40 @@ def screen_unlocked():
     return desktop
 
 
-def windows_sessions(exe):
-    """Windows: the session id of each running process whose image is called [exe] (lower case), and of this one:
-    ([ids], mine), mine None if it can't tell. Walks the process list with Toolhelp (a few milliseconds, no process
-    spawned). None instead if the list can't be read."""
+def windows_session_id():
+    """Windows: the session id of this process, or None if it can't tell."""
     import ctypes
     from ctypes import wintypes
 
-    class PROCESSENTRY32W(ctypes.Structure):
-        _fields_ = [("dwSize", wintypes.DWORD), ("cntUsage", wintypes.DWORD), ("th32ProcessID", wintypes.DWORD),
-                    ("th32DefaultHeapID", ctypes.c_size_t), ("th32ModuleID", wintypes.DWORD), ("cntThreads", wintypes.DWORD),
-                    ("th32ParentProcessID", wintypes.DWORD), ("pcPriClassBase", wintypes.LONG), ("dwFlags", wintypes.DWORD),
-                    ("szExeFile", wintypes.WCHAR * 260)]
-
     k = kernel32()
     mine = wintypes.DWORD()
-    mine = mine.value if k.ProcessIdToSessionId(k.GetCurrentProcessId(), ctypes.byref(mine)) else None
-    snap = k.CreateToolhelp32Snapshot(0x2, 0)  # TH32CS_SNAPPROCESS
-    if snap is None or snap == ctypes.c_void_p(-1).value:  # INVALID_HANDLE_VALUE
+    return mine.value if k.ProcessIdToSessionId(k.GetCurrentProcessId(), ctypes.byref(mine)) else None
+
+
+def windows_sessions(exe):
+    """Windows: the session id of each running process whose image is called [exe] (lower case), and of this one:
+    ([ids], mine), mine None if it can't tell. Asks the terminal service for the process list, which gives every process
+    its session (ProcessIdToSessionId is refused for SYSTEM ones like LogonUI.exe), in a few milliseconds and with no
+    process spawned. None instead if the list can't be read."""
+    import ctypes
+    from ctypes import wintypes
+
+    class WTS_PROCESS_INFOW(ctypes.Structure):
+        _fields_ = [("SessionId", wintypes.DWORD), ("ProcessId", wintypes.DWORD), ("pProcessName", wintypes.LPWSTR),
+                    ("pUserSid", ctypes.c_void_p)]
+
+    w = wtsapi32()
+    first = ctypes.c_void_p()
+    count = wintypes.DWORD()
+    # Level 0 (WTS_PROCESS_INFOW), version 1, on this server (a null handle).
+    if not w.WTSEnumerateProcessesW(None, 0, 1, ctypes.byref(first), ctypes.byref(count)):
         return None
-    ids = []
     try:
-        entry = PROCESSENTRY32W()
-        entry.dwSize = ctypes.sizeof(entry)
-        ok = k.Process32FirstW(snap, ctypes.byref(entry))
-        while ok:
-            if entry.szExeFile.lower() == exe:
-                theirs = wintypes.DWORD()
-                ids.append(theirs.value if k.ProcessIdToSessionId(entry.th32ProcessID, ctypes.byref(theirs)) else None)
-            ok = k.Process32NextW(snap, ctypes.byref(entry))
+        rows = ctypes.cast(first, ctypes.POINTER(WTS_PROCESS_INFOW))
+        ids = [rows[i].SessionId for i in range(count.value) if (rows[i].pProcessName or "").lower() == exe]
     finally:
-        k.CloseHandle(snap)
-    return ids, mine
+        w.WTSFreeMemory(first)
+    return ids, windows_session_id()
 
 
 def windows_lock_screen():
@@ -1236,14 +1250,49 @@ def windows_interactive():
     """Windows: whether someone is signed in at the PC, which is when explorer.exe runs in a session other than 0 (services
     and SSH sessions live in session 0, a desktop session never does)."""
     found = windows_sessions("explorer.exe")
-    return found is not None and any(i is not None and i != 0 for i in found[0])
+    return found is not None and any(i != 0 for i in found[0])
+
+
+def windows_session_locked():
+    """Windows: whether the terminal service says this session is locked: True or False, or None if it doesn't say (the
+    call fails, the flag is unknown, or this is session 0, which has no desktop to lock)."""
+    import ctypes
+    from ctypes import wintypes
+
+    class LEVEL1(ctypes.Structure):  # the start of WTSINFOEX_LEVEL1_W, the part that is read
+        _fields_ = [("SessionId", wintypes.ULONG), ("SessionState", ctypes.c_int), ("SessionFlags", ctypes.c_long)]
+
+    class LEVELS(ctypes.Union):  # the union is 8-byte aligned (it has a LARGE_INTEGER), so Level1 sits at offset 8
+        _fields_ = [("Level1", LEVEL1), ("align", ctypes.c_longlong)]
+
+    class WTSINFOEXW(ctypes.Structure):
+        _fields_ = [("Level", wintypes.DWORD), ("Data", LEVELS)]
+
+    mine = windows_session_id()
+    if not mine:  # None, or 0: an SSH session or a service
+        return None
+    w = wtsapi32()
+    buf = ctypes.c_void_p()
+    size = wintypes.DWORD()
+    if not w.WTSQuerySessionInformationW(None, mine, 25, ctypes.byref(buf), ctypes.byref(size)):  # WTSSessionInfoEx
+        return None
+    try:
+        info = ctypes.cast(buf, ctypes.POINTER(WTSINFOEXW)).contents
+        flags = info.Data.Level1.SessionFlags if info.Level == 1 else None
+    finally:
+        w.WTSFreeMemory(buf)
+    return {0: True, 1: False}.get(flags)  # WTS_SESSIONSTATE_LOCK is 0, _UNLOCK is 1, _UNKNOWN is -1
 
 
 def windows_unlocked():
-    """Windows: whether this session's screen is unlocked. Locked while the lock screen runs or the input desktop can't be
-    opened (it is the secure one then). Only means something in the interactive session: an SSH session has no input
-    desktop of its own, so it reads as locked there."""
+    """Windows: whether this session's screen is unlocked. The terminal service's lock flag for the session says it; where
+    it doesn't (it can't tell, or this is an SSH session), it is locked while the lock screen runs or the input desktop
+    can't be opened (it is the secure one then). Only means something in the interactive session: an SSH session has no
+    input desktop of its own, so it reads as locked there."""
     try:
+        locked = windows_session_locked()
+        if locked is not None:
+            return not locked
         if windows_lock_screen():
             return False
         desktop = user32().OpenInputDesktop(0, False, 0x100)  # DESKTOP_SWITCHDESKTOP
