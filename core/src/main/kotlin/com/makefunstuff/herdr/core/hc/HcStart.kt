@@ -105,7 +105,8 @@ object HcStart {
                 answer = when {
                     now != null && !now.live -> "it ended"
                     now?.status?.state in setOf("idle", "done") -> READY
-                    now?.status?.state in setOf("blocked", "error") -> "it asks something first"
+                    now?.status?.state == "blocked" -> "it asks something first"
+                    now?.status?.state == "error" -> "it reports an error"
                     else -> null
                 }
                 if (answer == null) delay(500)

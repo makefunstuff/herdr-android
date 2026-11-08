@@ -303,6 +303,7 @@ fun scenes(): List<Scene> = listOf(
     Scene("start-desktop-only", route = Routes.start(Demo.MINI, "Check every link on the website and fix the broken ones"), setup = { desktopApp() }, actions = { tapExact("Agent now") }),
     Scene("chat-desktop-more", route = Routes.agent(Demo.MINI, "hc:t2"), setup = { desktopApp() }, actions = { tapLabel("More") }),
     Scene("chat-desktop-close", route = Routes.agent(Demo.MINI, "hc:t2"), setup = { desktopApp() }, actions = { tapLabel("More"); tapExact("Close terminal") }),
+    Scene("terminal-desktop-menu", route = Routes.terminal(DEVBOX, DemoCore.SHELL), setup = { desktopApp() }, actions = { tapLabel("More") }),
     Scene("machine-desktop-only-close", route = Routes.machine(Demo.MINI), setup = { desktopApp() }, actions = { settle(); tapText("blog"); longPressText("codex") }),
     // Shepherdr 3 on devbox: its agents run in herdr-core beside classic herdr, called by their task or space (from
     // Shepherdr's labels); on the Agents list with the rest (tapping one opens its task's chat), and on the machine screen.

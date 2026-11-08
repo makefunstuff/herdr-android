@@ -119,7 +119,7 @@ A machine's screen opens with its places as tiles in one row, each with a live l
 
 Everything that exists in a session is editable from the app, not just readable. A workspace or tab header has an actions button (a workspace's one tab is under its actions, **Its tab**), and panes and agents answer to a long press: rename, focus, reorder, move, swap, zoom, clear a pane's scrollback, read what a pane is running, and ask `agent.explain` why an agent is in the state it shows. Closing a workspace, tab or pane asks first. herdr's own refusals ("There's no pane in that direction.") come back as plain sentences.
 
-The Herdr desktop app's terminals (herdr-core) have none of classic herdr's layouts, but they start and close from the phone too: a space's **⋯ › New › Terminal** opens a shell in the space's folder as a tab of its own (`hc run`), and **Close terminal** (an agent's **⋯**, or a long press on a terminal on the machine screen) ends it with `hc kill`, asking first.
+The Herdr desktop app's terminals (herdr-core) have none of classic herdr's layouts, but they start and close from the phone too: a space's **⋯ › New › Terminal** opens a shell in the space's folder as a tab of its own (`hc run`), and **Close terminal** (an agent's or a terminal's **⋯**, or a long press on a terminal on the machine screen) ends it with `hc kill`, asking first.
 
 The screens follow herdr's `events.subscribe` stream, so a change made anywhere — desktop or phone — appears here. Notifications are the exception: herdr has no list of them, so the app derives them from agents finishing or blocking and shows them behind the bell in the top bar; the menu can also show a notification on the desktop running herdr.
 

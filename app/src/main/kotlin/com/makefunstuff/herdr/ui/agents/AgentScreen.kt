@@ -654,7 +654,8 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
             paneLabel = pane?.displayName ?: paneId,
             onDismiss = { menu = false },
             screenMenu = true,
-            onClosed = if (inBubble) null else ({ nav.popBackStack() }),
+            // Back from the chat, unless the person has gone elsewhere while it closed.
+            onClosed = if (inBubble) null else nav.currentBackStackEntry.let { entry -> { if (nav.currentBackStackEntry == entry) nav.popBackStack() } },
             tabRows = tab?.takeIf { !inBubble }?.let { (space, t) ->
                 {
                     TabMenuRows(tabMenu, machineId, space, t, onPicked = { menu = false }) { label, icon, destructive, onClick ->
