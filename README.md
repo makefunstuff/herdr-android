@@ -81,6 +81,14 @@ How it works and what it touches: [`host/herdr-push/README.md`](host/herdr-push/
 2. Add it to `~/.ssh/authorized_keys` on the machine running herdr.
 3. In **Machines**, tap **Add machine**, then **Type the address instead**, and enter `user@host[:port]`. The app pins the host key on first connect.
 
+**A Windows machine** works with the Herdr desktop app's herdr-core (the Agents, chat and Terminal screens; classic herdr, notifications and the health screen need Linux or macOS). It needs OpenSSH Server running with [Git for Windows](https://gitforwindows.org)' Bash as its shell, once, in a PowerShell opened as administrator:
+
+```powershell
+New-ItemProperty -Path HKLM:\SOFTWARE\OpenSSH -Name DefaultShell -Value 'C:\Program Files\Git\bin\bash.exe' -PropertyType String -Force
+```
+
+Then pair as above with `python herdr-push pair`. For a user in Administrators, Windows' sshd reads keys from `C:\ProgramData\ssh\administrators_authorized_keys`, so run `pair` in a terminal opened as administrator too (or add the key there by hand).
+
 Machines reachable only through another one can use it as a jump host ("Connect through"). For zero-touch or read-only machines, **Allow host scripts** (on by default) can be turned off so the app skips copying its helper scripts (`herdr-usage`, `herdr-logins`, `herdr-push`) there. From a machine's menu, **Import herdr machines** adds the machines its herdr already knows (`herdr machine list`).
 
 ## How it talks to herdr

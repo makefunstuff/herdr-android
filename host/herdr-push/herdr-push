@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# version: 11
+# version: 12
 """herdr-push: tells your phone when a herdr agent needs you.
 
 It runs on the machine with herdr, watches its agents (`herdr api snapshot`, and the Herdr desktop
@@ -42,11 +42,12 @@ that wasn't sealed with it. Python 3 alone, no packages.
   herdr-push pair [--host NAME[,NAME…]] [--port N] [--session NAME] [--name NAME]
                                  show a QR code a phone scans to add this machine (one-time, 5 minutes)
 
+On Windows (OpenSSH with Git Bash as its shell) only `pair` runs: notifications need Linux or macOS.
+
 See host/herdr-push/README.md in the herdr-android repo.
 """
 
 import base64
-import fcntl
 import hashlib
 import hmac
 import json
@@ -63,7 +64,12 @@ import urllib.parse
 import urllib.request
 import zlib
 
-VERSION = "11"
+try:
+    import fcntl
+except ImportError:  # Windows: only `pair` runs there
+    fcntl = None
+
+VERSION = "12"
 NAME = "herdr-push"
 
 HOME = os.path.expanduser("~")
@@ -77,6 +83,9 @@ LOCK = os.path.join(STATE_DIR, "run.lock")
 LOG = os.path.join(STATE_DIR, NAME + ".log")
 # Touched by anything that knows you are here (a shell prompt, an editor hook): counts as typing in herdr.
 PRESENT = os.path.join(STATE_DIR, "present")
+WINDOWS = os.name == "nt"
+# Where sshd keeps its config and host keys: Win32-OpenSSH's under ProgramData.
+SSHD_DIR = os.path.join(os.environ.get("PROGRAMDATA") or "C:\\ProgramData", "ssh") if WINDOWS else "/etc/ssh"
 
 INTERVAL = float(os.environ.get("HERDR_PUSH_INTERVAL", "4"))
 # ntfy and most push servers take 4 KB; the sealed text stays under this.
@@ -1470,7 +1479,24 @@ _KEY_IN_LINE = re.compile(r"(?:^|\s)(" + "|".join(re.escape(t) for t in PAIR_KEY
 
 
 def authorized_keys_path():
-    return os.environ.get("HERDR_PAIR_AUTHORIZED_KEYS") or os.path.join(HOME, ".ssh", "authorized_keys")
+    return os.environ.get("HERDR_PAIR_AUTHORIZED_KEYS") or (WINDOWS and windows_admin_keys()) or os.path.join(HOME, ".ssh", "authorized_keys")
+
+
+def windows_admin_keys():
+    """Win32-OpenSSH's own file for administrators' keys when sshd_config's stock `Match Group
+    administrators` block names it and this user is one; None otherwise."""
+    try:
+        with open(os.path.join(SSHD_DIR, "sshd_config")) as f:
+            config = f.read()
+    except OSError:
+        return None
+    hit = re.search(r"^[ \t]*Match[ \t]+Group[ \t]+administrators[ \t]*\r?\n[ \t]+AuthorizedKeysFile[ \t]+(\S+)", config, re.I | re.M)
+    if not hit:
+        return None
+    groups = _out(["whoami", "/groups"], timeout=10) or ""
+    if "S-1-5-32-544" not in groups:  # the local Administrators group
+        return None
+    return hit.group(1).replace("__PROGRAMDATA__", os.environ.get("PROGRAMDATA") or "C:\\ProgramData")
 
 
 def parse_public_key(line):
@@ -1498,7 +1524,7 @@ def key_fingerprint(blob):
 def ssh_port():
     """The port sshd listens on, as its config says (the first Port line), else 22."""
     try:
-        with open("/etc/ssh/sshd_config") as f:
+        with open(os.path.join(SSHD_DIR, "sshd_config")) as f:
             for line in f:
                 hit = re.match(r"\s*Port\s+(\d+)\s*$", line, re.I)
                 if hit:
@@ -1510,7 +1536,7 @@ def ssh_port():
 
 def host_key_fingerprints(port):
     """This machine's SSH host keys' fingerprints, Ed25519 first: from /etc/ssh, else as sshd shows them."""
-    where = os.environ.get("HERDR_PAIR_HOST_KEYS") or "/etc/ssh"
+    where = os.environ.get("HERDR_PAIR_HOST_KEYS") or SSHD_DIR
     blobs = []
     for kind in ("ed25519", "ecdsa", "rsa"):
         try:
@@ -1657,7 +1683,12 @@ def edit_authorized_keys(path, state_dir, change):
     keeping its mode) only when it changed. A one-time key whose time is over goes on the way."""
     os.makedirs(state_dir, exist_ok=True)
     with open(os.path.join(state_dir, "pair.lock"), "a") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
+        if fcntl:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+        else:
+            import msvcrt
+            lock.seek(0)
+            msvcrt.locking(lock.fileno(), msvcrt.LK_LOCK, 1)
         try:
             with open(path) as f:
                 lines = f.read().splitlines()
@@ -1736,7 +1767,11 @@ def cmd_pair(rest):
               "  python3 herdr-push pair", file=sys.stderr)
         return 2
     keys = authorized_keys_path()
-    for path in (script, sys.executable, STATE_DIR, keys):
+    python, state_dir = sys.executable, STATE_DIR
+    if WINDOWS:
+        # Git Bash runs the one-time key's command: Windows paths with forward slashes read the same there.
+        script, python, state_dir, keys = (p.replace("\\", "/") for p in (script, python, state_dir, keys))
+    for path in (script, python, state_dir, keys):
         if any(c in path for c in '"\\\n'):
             print("herdr-push pair: the path %s can't go in authorized_keys (a quote or a backslash in it)." % path, file=sys.stderr)
             return 2
@@ -1755,7 +1790,7 @@ def cmd_pair(rest):
         import pwd
         user = pwd.getpwuid(os.getuid()).pw_name
     except (ImportError, KeyError):
-        user = os.environ.get("USER") or "me"
+        user = os.environ.get("USER") or os.environ.get("USERNAME") or "me"
     name = opts["name"] or socket.gethostname().split(".")[0] or addresses[0]
     try:
         seed, blob = one_time_key()
@@ -1767,7 +1802,7 @@ def cmd_pair(rest):
     expires = int(time.time()) + opts["ttl"]
     state_path = pair_state_path(STATE_DIR, token)
     write_json(state_path, {"expires": expires, "used": False}, private=True)
-    command = " ".join(_sh_quote(p) for p in (sys.executable, script, "pair-accept", token, STATE_DIR, keys))
+    command = " ".join(_sh_quote(p) for p in (python, script, "pair-accept", token, state_dir, keys))
     version = openssh_version()
     options = []
     if version is None or version >= (8, 2):
@@ -1781,6 +1816,8 @@ def cmd_pair(rest):
     except OSError as e:
         _remove(state_path)
         print("herdr-push pair: can't add the one-time key to %s: %s" % (keys, e), file=sys.stderr)
+        if WINDOWS and keys == (windows_admin_keys() or "").replace("\\", "/"):
+            print("sshd reads administrators' keys from that file: run herdr-push pair in a terminal opened as administrator.", file=sys.stderr)
         return 1
 
     link = pair_link(name, user, addresses, port, fingerprints, seed, expires, opts["session"])
@@ -1883,6 +1920,8 @@ def cmd_pair_accept(rest):
 
 def system_localtime(when):
     """`when` in the system's time zone, as sshd reads expiry-time, whatever TZ this shell has."""
+    if not hasattr(time, "tzset"):  # Windows: no TZ to set aside
+        return time.localtime(when)
     tz = os.environ.pop("TZ", None)
     try:
         time.tzset()
@@ -2166,6 +2205,12 @@ LAUNCHD = """<?xml version="1.0" encoding="UTF-8"?>
 def main(argv):
     cmd = argv[1] if len(argv) > 1 else "help"
     rest = argv[2:]
+    if WINDOWS and cmd not in ("pair", "pair-accept", "version", "_qr", "_seal", "help", "-h", "--help"):
+        print("herdr-push %s: Windows runs only `herdr-push pair`; notifications need Linux or macOS." % cmd, file=sys.stderr)
+        return 2
+    if WINDOWS and hasattr(sys.stdout, "reconfigure"):
+        # A pipe there is in the ANSI code page, which has no block characters for the QR code.
+        sys.stdout.reconfigure(encoding="utf-8")
     if cmd == "run":
         return run()
     if cmd == "subscribe":

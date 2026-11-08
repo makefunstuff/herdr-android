@@ -217,7 +217,7 @@ class HerdrPushTest {
     @Test
     fun bundledScriptIsTheOneInHost() {
         assertEquals(script.readText(), HerdrPush.script)
-        assertEquals("11", HerdrPush.version)
+        assertEquals("12", HerdrPush.version)
     }
 
     @Test

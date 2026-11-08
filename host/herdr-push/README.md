@@ -103,6 +103,8 @@ Anyone who sees the code within its five minutes could pair with it, as with any
 
 It touches one line in `~/.ssh/authorized_keys` while it waits (then the phone's key is there instead), and `pair-<token>.json` and `pair.lock` in `~/.local/state/herdr-push/`. It needs neither the watcher running nor a phone subscribed.
 
+On Windows (OpenSSH Server with Git Bash as its `DefaultShell`), `pair` is the one command that runs: `python herdr-push pair`. It reads the host keys and `sshd_config` in `C:\ProgramData\ssh`, writes the one-time key's command with forward-slash paths for Bash, and, for a user in Administrators while the stock `Match Group administrators` block is there, uses `administrators_authorized_keys`, which only a terminal opened as administrator can change.
+
 It can't help when sshd reads keys from elsewhere (`AuthorizedKeysFile` in `/etc/ssh/sshd_config`; the phone then says the machine still refuses its key), or when the phone reaches the machine only through another one (a jump host): add those by hand.
 
 ## Your own push server
