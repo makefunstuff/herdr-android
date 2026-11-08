@@ -99,10 +99,13 @@ object HcStart {
      * blind: an agent that says nothing within [readyMs] (most kinds don't report), asks something first (`blocked`,
      * such as whether to trust the folder), reports an error or ends gets no Enter it could take as an answer.
      * [wanted] says whether the words are still to go (the person may have sent them, or others, or discarded them
-     * meanwhile): it is asked while waiting and again just before sending. Returns why the words didn't go in, null
-     * when they did or are no longer wanted.
+     * meanwhile): it is asked while waiting. [claim] takes them just before sending, at once, so no one else sends them
+     * too; false: they went another way. Returns why the words didn't go in, null when they did or are no longer wanted.
      */
-    suspend fun deliver(client: HcClient, paneId: String, text: String, readyMs: Long = 20_000, wanted: suspend () -> Boolean = { true }): String? {
+    suspend fun deliver(
+        client: HcClient, paneId: String, text: String, readyMs: Long = 20_000,
+        wanted: suspend () -> Boolean = { true }, claim: suspend () -> Boolean = wanted,
+    ): String? {
         val address = HcMapping.address(paneId) ?: return "it isn't herdr-core's"
         // Why not to type now, or READY.
         val wait: String = withTimeoutOrNull(readyMs) {
@@ -121,7 +124,7 @@ object HcStart {
             }
             answer
         } ?: "it didn't say it was ready"
-        if (wait == TAKEN || (wait == READY && !wanted())) return null
+        if (wait == TAKEN || (wait == READY && !claim())) return null
         if (wait != READY) return wait
         return try { client.send(address, text.trim()); null } catch (e: java.io.IOException) { e.message ?: "it didn't take them" }
     }

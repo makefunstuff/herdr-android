@@ -161,9 +161,16 @@ fun StartWorkScreen(nav: NavController, machineId: String? = null, text: String 
                         val key = com.makefunstuff.herdr.data.DraftStore.agent(m, pane)
                         val held = container.composer.hold(key, said, container.clock())
                         container.scope.launch {
-                            val why = HcStart.deliver(client, pane, said) { container.composer.held(key).any { it.id == held.id } }
-                            if (why == null) container.composer.drop(key, held.id)
-                            else kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                            var claimed = false
+                            val why = HcStart.deliver(
+                                client, pane, said,
+                                wanted = { container.composer.held(key).any { it.id == held.id } },
+                                // Taken off the list as it goes, so Send now can't send it as well.
+                                claim = { (container.composer.take(key, held.id) != null).also { claimed = it } },
+                            )
+                            // Claimed and refused: back above the box.
+                            if (why != null && claimed) container.composer.restore(key, held)
+                            if (why != null) kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                                 com.makefunstuff.herdr.ui.design.Toasts.show("What you said didn't go in to $k ($why): it waits above its chat's box")
                             }
                         }

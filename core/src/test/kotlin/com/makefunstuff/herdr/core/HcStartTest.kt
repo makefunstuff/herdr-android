@@ -182,6 +182,14 @@ class HcStartTest {
     }
 
     @Test
+    fun wordsClaimedElsewhereAsTheyGoAreNotSentTwice() = runBlocking {
+        // Still wanted while it waits, but Send now took them in the moment it said it was ready.
+        val core = Core { _, _ -> terminal("t9", status = "idle") }
+        assertNull(HcStart.deliver(HcClient(core), "hc:t9", "fix it", wanted = { true }, claim = { false }))
+        assertTrue(core.calls.none { it.first == "terminal.send" })
+    }
+
+    @Test
     fun aRefusedSendIsSaid() = runBlocking {
         val core = Core { method, _ ->
             when (method) {
