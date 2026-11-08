@@ -154,6 +154,13 @@ class HcStartTest {
     }
 
     @Test
+    fun anErrorIsSaidAsOne() = runBlocking {
+        val core = Core { method, _ -> if (method == "terminal.run" || method == "terminal.get") terminal("t9", status = if (method == "terminal.get") "error" else null) else JsonObject(emptyMap()) }
+        assertEquals("it reports an error", HcStart.deliver(HcClient(core), "hc:t9", "fix it"))
+        assertTrue(core.calls.none { it.first == "terminal.send" })
+    }
+
+    @Test
     fun aRefusedSendIsSaid() = runBlocking {
         val core = Core { method, _ ->
             when (method) {

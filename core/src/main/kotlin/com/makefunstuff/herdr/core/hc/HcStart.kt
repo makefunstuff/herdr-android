@@ -68,6 +68,7 @@ object HcStart {
      * ([com.makefunstuff.herdr.core.start.StartWork.probeCommand]): a desktop app's core may have a
      * shorter `PATH` than the person's shell. `exec` leaves the agent itself in the terminal.
      */
+    // POSIX only: hc runs a line with cmd.exe on Windows (the Windows-over-herdr-core PRs #108-#115 would need argv there).
     fun programLine(program: String): String = "exec \"\${SHELL:-/bin/sh}\" -lc " + quote("exec " + quote(program))
 
     /** A name hc takes (1-32 of a-z 0-9 - _), or null. */
@@ -80,13 +81,14 @@ object HcStart {
         return HcMapping.paneId(t.address, place.session)
     }
 
-    /**
-     * Starts [program] as [name] in [folder] in [place], then gives it [text] once it is ready: once it reports
-     * that it waits (OSC 7501 `idle` or `done`). Nothing is typed blind: an agent that says nothing within [readyMs]
-     * (most kinds don't report), asks something first (`blocked`, such as whether to trust the folder) or ends
-     * still gets no Enter it could take as an answer; [Started.unsent] says why the words didn't go in.
-     */
+    /** Starts [program] as [name] in [folder] in [place], then gives it [text] ([launch], then [deliver]). */
     suspend fun agent(client: HcClient, place: Place, folder: String, program: String, name: String, text: String, readyMs: Long = 20_000): Started {
+        val pane = launch(client, place, folder, program, name)
+        return Started(pane, if (text.isBlank()) null else deliver(client, pane, text, readyMs))
+    }
+
+    /** Starts [program] as [name] in [folder] in [place]: its pane id, as soon as it runs. */
+    suspend fun launch(client: HcClient, place: Place, folder: String, program: String, name: String): String {
         val line = programLine(program)
         val t = try {
             client.run(line, folder, place.labels, hcName(name), place.machine, ENV)
@@ -95,13 +97,22 @@ object HcStart {
             if (e.kind != "name_taken") throw e
             client.run(line, folder, place.labels, null, place.machine, ENV)
         }
-        val pane = HcMapping.paneId(t.address, place.session)
-        if (text.isBlank()) return Started(pane, null)
+        return HcMapping.paneId(t.address, place.session)
+    }
+
+    /**
+     * Gives the agent in [paneId] [text] once it reports that it waits (OSC 7501 `idle` or `done`). Nothing is typed
+     * blind: an agent that says nothing within [readyMs] (most kinds don't report), asks something first (`blocked`,
+     * such as whether to trust the folder), reports an error or ends gets no Enter it could take as an answer.
+     * Returns why the words didn't go in, null when they did.
+     */
+    suspend fun deliver(client: HcClient, paneId: String, text: String, readyMs: Long = 20_000): String? {
+        val address = HcMapping.address(paneId) ?: return "it isn't herdr-core's"
         // Why not to type now, or READY.
         val wait: String = withTimeoutOrNull(readyMs) {
             var answer: String? = null
             while (answer == null) {
-                val now = try { client.get(t.address) } catch (e: java.io.IOException) { null }
+                val now = try { client.get(address) } catch (e: java.io.IOException) { null }
                 answer = when {
                     now != null && !now.live -> "it ended"
                     now?.status?.state in setOf("idle", "done") -> READY
@@ -113,9 +124,8 @@ object HcStart {
             }
             answer
         } ?: "it didn't say it was ready"
-        if (wait != READY) return Started(pane, wait)
-        val sent = try { client.send(t.address, text.trim()); null } catch (e: java.io.IOException) { e.message ?: "it didn't take them" }
-        return Started(pane, sent)
+        if (wait != READY) return wait
+        return try { client.send(address, text.trim()); null } catch (e: java.io.IOException) { e.message ?: "it didn't take them" }
     }
 
     /** An agent started: its [paneId]; [unsent] why what was said didn't go in, null when it did (or nothing was said). */

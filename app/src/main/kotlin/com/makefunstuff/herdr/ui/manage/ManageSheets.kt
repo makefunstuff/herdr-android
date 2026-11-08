@@ -103,7 +103,7 @@ fun manage(
  * [scope], the app's, so a sheet or screen closing meanwhile doesn't call it off; [onDone] (on the main thread) gets
  * whether it went. Its core then drops it from the lists; a refusal is said in a toast.
  */
-fun closeHcTerminal(context: Context, scope: CoroutineScope, session: HostSession, paneId: String, onDone: (Boolean) -> Unit) {
+fun closeHcTerminal(scope: CoroutineScope, session: HostSession, paneId: String, onDone: (Boolean) -> Unit) {
     val address = HcMapping.address(paneId) ?: return
     scope.launch {
         val failed = try {
@@ -113,16 +113,26 @@ fun closeHcTerminal(context: Context, scope: CoroutineScope, session: HostSessio
             e.message ?: "herdr-core didn't answer"
         }
         withContext(Dispatchers.Main) {
-            failed?.let { context.toast(it) }
+            failed?.let { com.makefunstuff.herdr.ui.design.Toasts.show(it) }
             onDone(failed == null)
         }
     }
 }
 
+/**
+ * A space of Shepherdr's (one holding its Assistant or a task's worker): its herdr-core terminals close as Shepherdr
+ * closes them, in its tab menu, not with Close terminal. One rule for the agent's ⋯, the terminal's and the machine screen.
+ */
+fun SessionSnapshot?.shepherdrsSpace(workspaceId: String?): Boolean =
+    this != null && workspaceId != null && agents.any { it.workspaceId == workspaceId && (it.shepherdrTask != null || it.shepherdrSpace != null) }
+
+/** [paneId] is in a space of Shepherdr's ([shepherdrsSpace]). */
+fun SessionSnapshot?.shepherdrsPane(paneId: String): Boolean =
+    shepherdrsSpace(this?.let { s -> s.panes.firstOrNull { it.paneId == paneId }?.workspaceId ?: s.agents.firstOrNull { it.paneId == paneId }?.workspaceId })
+
 /** Asks before a herdr-core terminal is closed, as the classic Close pane does; [onClosed] once it is. */
 @Composable
 fun CloseHcTerminalDialog(session: HostSession, paneId: String, label: String, onDismiss: () -> Unit, onClosed: () -> Unit = {}) {
-    val context = LocalContext.current
     val app = com.makefunstuff.herdr.ui.common.LocalContainer.current.scope
     ConfirmDialog(
         "Close $label?",
@@ -131,7 +141,7 @@ fun CloseHcTerminalDialog(session: HostSession, paneId: String, label: String, o
         onDismiss = onDismiss,
     ) {
         onDismiss()
-        closeHcTerminal(context, app, session, paneId) { if (it) onClosed() }
+        closeHcTerminal(app, session, paneId) { if (it) onClosed() }
     }
 }
 
@@ -637,7 +647,7 @@ fun AgentActionsSheet(
         }
         // herdr-core's terminal closes with `hc kill`; classic herdr's panes close from the machine screen. Shepherdr's own
         // agents (a task's worker, a space's Assistant) close as Shepherdr closes them, in its tab menu.
-        val shepherdrs = tabRows != null || agent?.shepherdrTask != null || agent?.shepherdrSpace != null
+        val shepherdrs = tabRows != null || agent?.shepherdrTask != null || agent?.shepherdrSpace != null || session.state.value.view.shepherdrsPane(target ?: "")
         if (target != null && HcMapping.address(target) != null && !shepherdrs) {
             ManageHeading("Danger")
             ManageRow("Close terminal", detail = "End the agent and its terminal", icon = HerdrIcons.Trash2, destructive = true) { confirmClose = true }

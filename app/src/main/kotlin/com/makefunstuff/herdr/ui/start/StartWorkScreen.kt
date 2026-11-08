@@ -151,11 +151,20 @@ fun StartWorkScreen(nav: NavController, machineId: String? = null, text: String 
                     val ws = HcStart.spaceIn(snapshot, dir)
                     val space = ws?.let { id -> snapshot?.workspaces?.firstOrNull { it.workspaceId == id } }
                     val place = ws?.let { HcStart.place(it, space?.label.orEmpty(), name) } ?: HcStart.Place(null, null, emptyMap())
-                    val started = HcStart.agent(s.awaitHerdrCore(10_000, ws), place, dir, StartWork.STARTABLE[k] ?: k, name, said)
-                    started.unsent?.let { why -> context.toast("$k started, but what you said didn't go in: $why") }
-                    // Its chat opens once its core lists it.
-                    kotlinx.coroutines.withTimeoutOrNull(10_000) { s.state.first { st -> st.view?.panes?.any { it.paneId == started.paneId } == true } }
-                    started.paneId
+                    val client = s.awaitHerdrCore(10_000, ws)
+                    val pane = HcStart.launch(client, place, dir, StartWork.STARTABLE[k] ?: k, name)
+                    // The chat opens now; the sentence goes in once the agent says it waits, on the app's scope so leaving
+                    // the chat doesn't lose it. Where it can't go in, it waits in the chat's box.
+                    if (said.isNotBlank()) container.scope.launch {
+                        HcStart.deliver(client, pane, said)?.let { why ->
+                            container.drafts.add(com.makefunstuff.herdr.data.DraftStore.agent(m, pane), said)
+                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                com.makefunstuff.herdr.ui.design.Toasts.show("What you said didn't go in to $k ($why): it waits in its chat's box")
+                            }
+                        }
+                    }
+                    kotlinx.coroutines.withTimeoutOrNull(10_000) { s.state.first { st -> st.view?.panes?.any { it.paneId == pane } == true } }
+                    pane
                 }
             }
                 .onSuccess { pane ->

@@ -6,6 +6,7 @@ import androidx.compose.ui.graphics.RectangleShape
 import com.makefunstuff.herdr.core.terminal.LiveTerminal
 import com.makefunstuff.herdr.core.hc.HcTerminalStream
 import com.makefunstuff.herdr.core.hc.HcMapping
+import com.makefunstuff.herdr.ui.manage.shepherdrsPane
 import com.makefunstuff.herdr.ui.design.confirmTap
 import com.makefunstuff.herdr.core.chat.PasswordPrompt
 import com.makefunstuff.herdr.ui.common.PasswordCard
@@ -457,8 +458,7 @@ fun TerminalScreen(nav: NavController, machineId: String, paneId: String) {
                     MenuRow(if (bar.keepScreenOn) "Let the screen sleep" else "Keep screen on", HerdrIcons.Sun, { menu = false; container.keyBar.setKeepScreenOn(!bar.keepScreenOn) })
                     MenuRow("Reconnect", HerdrIcons.RefreshCcw, { menu = false; generation++ })
                     // A herdr-core terminal (one New › Terminal opened, say) closes here too; Shepherdr's agents close as Shepherdr closes them.
-                    val shepherdrs = state.view?.agents?.any { it.paneId == paneId && (it.shepherdrTask != null || it.shepherdrSpace != null) } == true
-                    if (core != null && !shepherdrs) MenuRow("Close terminal", HerdrIcons.Trash2, { menu = false; confirmClose = true })
+                    if (core != null && !state.view.shepherdrsPane(paneId)) MenuRow("Close terminal", HerdrIcons.Trash2, { menu = false; confirmClose = true })
                     ChangeScreenRow { menu = false }
                 }
                 if (confirmClose) {

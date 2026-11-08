@@ -81,6 +81,7 @@ import com.makefunstuff.herdr.ui.design.QuietCard
 import com.makefunstuff.herdr.ui.manage.PaneActionsSheet
 import com.makefunstuff.herdr.ui.manage.TabActionsSheet
 import com.makefunstuff.herdr.ui.manage.WorkspaceActionsSheet
+import com.makefunstuff.herdr.ui.manage.shepherdrsSpace
 import com.makefunstuff.herdr.ui.theme.Herdr
 import com.makefunstuff.herdr.ui.theme.statusWord
 import com.makefunstuff.herdr.ui.theme.Space
@@ -192,9 +193,7 @@ fun MachineScreen(nav: NavController, machineId: String) {
                     onTerminal = { nav.navigate(Routes.terminal(machineId, it.paneId)) },
                     backend = if (both) "herdr-core ${core?.version.orEmpty()}".trim() else null,
                     // A space of Shepherdr's (its Assistant's, its tasks' workers') closes as Shepherdr closes them, not here.
-                    onPaneMenu = { p: PaneInfo -> coreClose = p }.takeIf {
-                        from.agents.none { it.workspaceId == ws.workspaceId && (it.shepherdrTask != null || it.shepherdrSpace != null) }
-                    },
+                    onPaneMenu = { p: PaneInfo -> coreClose = p }.takeIf { !from.shepherdrsSpace(ws.workspaceId) },
                 )
             }
         }
