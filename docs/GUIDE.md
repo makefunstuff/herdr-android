@@ -165,7 +165,7 @@ Each card shows which tasks and agents used it most. You get notifications at 80
 
 **Logins.** Which agent CLIs are signed in (Claude Code, Codex, pi, opencode, Gemini CLI) and when each login runs out. Sign in again, paste a key, or sign out from the phone. A key found in a shell profile gets a warning.
 
-**Spaces and panes.** Each space lists its panes: an agent and its state, or a shell and its folder. Tap a pane to open its chat or terminal. On classic herdr, a long press renames, moves, zooms or closes panes, tabs and workspaces. herdr-core's spaces open their panes only.
+**Spaces and panes.** Each space lists its panes: an agent and its state, or a shell and its folder. Tap a pane to open its chat or terminal. On classic herdr, a long press renames, moves, swaps, zooms or closes panes, tabs and workspaces. herdr-core's spaces open their panes only.
 
 **Edit machine** (in **⋯**) changes its name, address, jump host, herdr session, board and **Allow host scripts**. Turn that off for a machine where the app should copy no helper scripts.
 
@@ -225,7 +225,7 @@ The app can change itself, with the work done on one of your machines.
 
 ## Settings and security
 
-**Fingerprint and app lock** asks for your fingerprint (or face, or PIN) before what can't be undone: **Always allow** on a question, **Approve and merge**, **Stop a process**, **Remove a worktree**, **Agent logins** and **Replace the SSH key**. Each can be turned off.
+**Fingerprint and app lock** asks for your fingerprint (or face, or PIN) before what can't be undone: **Always allow** on a question, **Approve and merge**, **Stop a process**, **Agent logins** and **Replace the SSH key**. Each can be turned off.
 
 **App lock** asks when the app opens, and again after it was away for a while. It hides the app in recent apps, and a locked phone's notifications only say "Something needs you".
 

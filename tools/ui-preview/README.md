@@ -21,12 +21,12 @@ The README's gallery is these scenes, made smaller as WebP:
 ```sh
 ./gradlew -p tools/ui-preview render -Ponly=agents-v2,chat-tab,chat,chat-blocked,task-v2-ready,task-v2-pr,task-v2-browser,doc,machines,machine,terminal
 cd tools/ui-preview/build/shots
-# the tall ones, cut to their first screen first
-for s in agents-v2 agents-v2-light doc; do magick $s.png -gravity north -crop 824x1784+0+0 +repage $s.png; done
+# the tall ones, cut to their first screen into a copy
+for s in agents-v2 agents-v2-light doc; do magick $s.png -gravity north -crop 824x1784+0+0 +repage $s-top.png; done
 shot() { magick "$1.png" -strip -resize 540x -quality 82 "../../../../docs/screenshots/$2.webp"; }
-shot agents-v2 tasks; shot agents-v2-light tasks-light; shot chat-tab assistant; shot chat chat
+shot agents-v2-top tasks; shot agents-v2-light-top tasks-light; shot chat-tab assistant; shot chat chat
 shot chat-blocked blocked; shot task-v2-ready task; shot task-v2-pr pull-request; shot task-v2-browser browser
-shot doc doc; shot machines spaces; shot machine machine; shot terminal terminal
+shot doc-top doc; shot machines spaces; shot machine machine; shot terminal terminal
 ```
 
 ## How it works
