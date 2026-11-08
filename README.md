@@ -23,7 +23,7 @@ A native Android client for [herdr](https://herdr.dev) hosts: see your agents ac
   </tr>
 </table>
 
-The screenshots are the [screen previews](#screen-previews): the app's own screens rendered against a fake machine with made-up projects. `./gradlew -p tools/ui-preview render -Ponly=agents-v2,chat-tab,chat,chat-blocked,task-v2-ready,task-v2-pr,task-v2-browser,doc,machines,machine,terminal`, then each shot `magick <scene>.png -strip -resize 540x -quality 82 <name>.webp`, the tall `agents-v2`, `agents-v2-light` and `doc` cut to their first screen first (`-gravity north -crop 824x1784+0+0 +repage` before `-strip`).
+The screenshots are the [screen previews](#screen-previews): the app's own screens rendered against a fake machine with made-up projects. `./gradlew -p tools/ui-preview render -Ponly=agents-v2,chat-tab,chat,chat-blocked,task-v2-ready,task-v2-pr,task-v2-browser,doc,machines,machine,terminal`, then each shot `magick <scene>.png -strip -resize 540x -quality 82 <name>.webp` (agents-v2 → tasks, agents-v2-light → tasks-light, chat-tab → assistant, chat → chat, chat-blocked → blocked, task-v2-ready → task, task-v2-pr → pull-request, task-v2-browser → browser, doc → doc, machines → spaces, machine → machine, terminal → terminal), the tall `agents-v2`, `agents-v2-light` and `doc` cut to their first screen first (`-gravity north -crop 824x1784+0+0 +repage` before `-strip`).
 
 ## Getting the app
 
