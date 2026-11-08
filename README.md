@@ -179,7 +179,7 @@ A machine's screen has a **Health** tile (the busiest of RAM, CPU and its fulles
 - **Stop Gradle daemons**: every Gradle and Kotlin daemon of yours; the next build starts one again.
 - **A warning** when RAM or a disk runs low: under 10% of RAM available, or a disk with less than a tenth free (at most 20 GB, so a big disk isn't "low" with 50 GB left). It names what uses the most memory, on the screen and as a notification through herdr-push (and the app's own looks while closed), which comes down once there is room again (15% of RAM, one and a half times the disk's mark). It needs you, so it comes through quiet hours; a tap opens the machine's health.
 
-The full readings and process labels are Linux's (`/proc`); on macOS the screen shows memory, load, disks and the processes from `ps`, without whose they are.
+The full readings and process labels are Linux's (`/proc`); on macOS the screen shows memory, load, disks and the processes from `ps`, without whose they are. On Windows the disks are the fixed drives (as `/c`, `/d`), the processes with their CPU and memory come from `Win32_Process` through PowerShell, a process is yours when it runs in one of your logon sessions, and **Stop process** uses `taskkill` (asking first, then `taskkill /F` for one that refuses or still runs after 5 seconds); there is no working folder or herdr pane for a process there.
 
 ## Usage and limits
 

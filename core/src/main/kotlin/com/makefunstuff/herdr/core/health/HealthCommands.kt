@@ -249,8 +249,9 @@ object HealthCommands {
 
     /**
      * Stops processes: each one only while it is still the program it was ([Target.comm]), so a pid
-     * reused since the look is left alone. SIGTERM first; what still runs after 5 seconds gets SIGKILL
-     * (on Windows `taskkill`, then `taskkill /F`). Prints `sent|gone|fail|forced <pid>` per process.
+     * reused since the look is left alone. SIGTERM first; what still runs after 5 seconds gets SIGKILL.
+     * On Windows `taskkill` asks first, a process that refuses is ended at once with `taskkill /F`, and
+     * what still runs after 5 seconds is ended with `taskkill /F` too. Prints `sent|gone|fail|forced <pid>` per process.
      */
     fun kill(targets: List<Target>): String {
         val args = targets.joinToString(" ") { quote("${it.pid}\t${it.comm}") }
