@@ -262,7 +262,7 @@ fun SearchScreen(nav: NavController, machineId: String? = null, initial: String 
                         modifier = Modifier.padding(horizontal = Space.screen + Space.xs, vertical = Space.l),
                     )
                 }
-                val ws = results.workspaces.firstOrNull()
+                val ws = results.workspaces.firstOrNull { it.opensTerminal }
                 actions(
                     listOfNotNull(
                         Action("New task about “${query.trim()}”…", "Add it to a board, or start an agent now", HerdrIcons.Plus, accent = true) { startWork(query) },
