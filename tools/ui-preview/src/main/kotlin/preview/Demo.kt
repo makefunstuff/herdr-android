@@ -1,5 +1,5 @@
-// The made-up world every scene starts from: the README screenshots' demo host
-// (docs/screenshots/demo-host) as fixed data. devbox runs three agents and the work board;
+// The made-up world every scene starts from: the demo host the README's screenshots were once
+// taken on (containers, since retired) as fixed data. devbox runs three agents and the work board;
 // gpu-box and ci-runner are reached through it; mac-mini refuses the app's key.
 package preview
 
@@ -160,13 +160,15 @@ object Demo {
     fun sharedFile(): java.io.File = kotlin.io.path.createTempFile("shared", ".png").toFile().apply { writeBytes(picture("task").readBytes()) }
 
     /**
-     * A screenshot on the phone, for the composer and the chat's pictures: the README's own
-     * screenshots of the app (540×1200, `docs/screenshots/<name>.webp`), as a phone's would be.
+     * A screenshot on the phone, for the composer and the chat's pictures: old screenshots of the app
+     * (540×1200, `src/main/resources/demo/pictures/<name>.webp`), as a phone's would be.
      */
     fun picture(name: String): java.io.File {
         val start = java.io.File("").absoluteFile
-        val repo = generateSequence(start) { it.parentFile }.firstOrNull { java.io.File(it, "docs/screenshots").isDirectory } ?: error("no docs/screenshots above $start")
-        return java.io.File(repo, "docs/screenshots/$name.webp")
+        val dir = generateSequence(start) { it.parentFile }.flatMap {
+            sequenceOf(java.io.File(it, "src/main/resources/demo/pictures"), java.io.File(it, "tools/ui-preview/src/main/resources/demo/pictures"))
+        }.firstOrNull { it.isDirectory } ?: error("no demo pictures above $start")
+        return java.io.File(dir, "$name.webp")
     }
 
     /** Where devbox keeps the pictures sent to its agents, as `HostSession.upload` puts them. */
