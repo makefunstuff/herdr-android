@@ -57,6 +57,7 @@ import re
 import shutil
 import signal
 import socket
+import struct
 import subprocess
 import sys
 import threading
@@ -86,6 +87,7 @@ LOG = os.path.join(STATE_DIR, NAME + ".log")
 # Touched by anything that knows you are here (a shell prompt, an editor hook): counts as typing in herdr.
 PRESENT = os.path.join(STATE_DIR, "present")
 WINDOWS = os.name == "nt"
+_KERNEL32 = None  # kernel32 once loaded, see kernel32()
 # Where sshd keeps its config and host keys: Win32-OpenSSH's under ProgramData.
 SSHD_DIR = os.path.join(os.environ.get("PROGRAMDATA") or "C:\\ProgramData", "ssh") if WINDOWS else "/etc/ssh"
 
@@ -621,8 +623,148 @@ def live_event(st, agents, now, first):
 
 # ---- health (RAM, CPU, disks) --------------------------------------------------------------------
 
+def kernel32():
+    """Windows: kernel32 with the signatures of the calls health uses (64-bit safe), loaded once."""
+    global _KERNEL32
+    if _KERNEL32 is None:
+        import ctypes
+        from ctypes import wintypes
+        k = ctypes.WinDLL("kernel32", use_last_error=True)
+        k.GlobalMemoryStatusEx.argtypes = [ctypes.c_void_p]
+        k.GlobalMemoryStatusEx.restype = wintypes.BOOL
+        k.GetSystemTimes.argtypes = [ctypes.POINTER(wintypes.FILETIME)] * 3
+        k.GetSystemTimes.restype = wintypes.BOOL
+        k.GetLogicalDrives.argtypes = []
+        k.GetLogicalDrives.restype = wintypes.DWORD
+        k.GetDriveTypeW.argtypes = [wintypes.LPCWSTR]
+        k.GetDriveTypeW.restype = wintypes.UINT
+        k.GetDiskFreeSpaceExW.argtypes = [wintypes.LPCWSTR] + [ctypes.POINTER(ctypes.c_ulonglong)] * 3
+        k.GetDiskFreeSpaceExW.restype = wintypes.BOOL
+        k.SetThreadErrorMode.argtypes = [wintypes.DWORD, ctypes.POINTER(wintypes.DWORD)]
+        k.SetThreadErrorMode.restype = wintypes.BOOL
+        _KERNEL32 = k
+    return _KERNEL32
+
+
+def windows_swap():
+    """(total, in use) bytes of the page files, from NtQuerySystemInformation(SystemPageFileInformation); None if not told."""
+    import ctypes
+    ntdll = ctypes.WinDLL("ntdll")
+    ntdll.NtQuerySystemInformation.argtypes = [ctypes.c_ulong, ctypes.c_void_p, ctypes.c_ulong, ctypes.POINTER(ctypes.c_ulong)]
+    ntdll.NtQuerySystemInformation.restype = ctypes.c_long
+    size = 4096
+    for _ in range(4):
+        buf = ctypes.create_string_buffer(size)
+        need = ctypes.c_ulong()
+        status = ntdll.NtQuerySystemInformation(18, buf, size, ctypes.byref(need))  # SystemPageFileInformation
+        if status & 0xFFFFFFFF == 0xC0000004:  # STATUS_INFO_LENGTH_MISMATCH
+            size = max(need.value, size * 2)
+            continue
+        if status != 0:
+            return None
+        # A chain of entries: next entry's offset, then size, in use and peak in 4 KiB pages.
+        total = used = offset = 0
+        while True:
+            nxt, pages, in_use = struct.unpack_from("<III", buf, offset)
+            total, used = total + pages * 4096, used + in_use * 4096
+            if not nxt:
+                return total, used
+            offset += nxt
+    return None
+
+
+def windows_memory():
+    """read_memory on Windows: GlobalMemoryStatusEx for the RAM, the page files for the swap."""
+    import ctypes
+
+    class MemoryStatus(ctypes.Structure):
+        _fields_ = [("length", ctypes.c_ulong), ("load", ctypes.c_ulong), ("total_phys", ctypes.c_ulonglong),
+                    ("avail_phys", ctypes.c_ulonglong), ("total_page", ctypes.c_ulonglong),
+                    ("avail_page", ctypes.c_ulonglong), ("total_virtual", ctypes.c_ulonglong),
+                    ("avail_virtual", ctypes.c_ulonglong), ("avail_extended", ctypes.c_ulonglong)]
+
+    m = MemoryStatus()
+    m.length = ctypes.sizeof(m)
+    if not kernel32().GlobalMemoryStatusEx(ctypes.byref(m)):
+        return None
+    try:
+        swap = windows_swap()
+    except Exception:  # noqa: BLE001
+        swap = None
+    swap_total, swap_used = swap or (0, 0)
+    return {"total": m.total_phys // 1024, "available": min(m.avail_phys, m.total_phys) // 1024,
+            "swap_total": swap_total // 1024, "swap_free": max(swap_total - swap_used, 0) // 1024}
+
+
+def windows_cpu():
+    """read_cpu on Windows, from GetSystemTimes: the kernel time already includes the idle time."""
+    from ctypes import wintypes
+    idle, kernel, user = wintypes.FILETIME(), wintypes.FILETIME(), wintypes.FILETIME()
+    if not kernel32().GetSystemTimes(idle, kernel, user):
+        return None
+
+    def ticks(t):
+        return (t.dwHighDateTime << 32) | t.dwLowDateTime
+    return (ticks(kernel) + ticks(user), ticks(idle))
+
+
+def windows_disks():
+    """read_disks on Windows: each fixed drive (not a card reader, a network drive or a CD) as /c, /d. A drive that
+    can't be read is left out."""
+    import ctypes
+    from ctypes import wintypes
+    k = kernel32()
+    # No "insert a disk" dialog for a drive that is not ready: the call just fails.
+    old = wintypes.DWORD()
+    k.SetThreadErrorMode(0x0001, ctypes.byref(old))  # SEM_FAILCRITICALERRORS
+    disks = []
+    try:
+        mask = k.GetLogicalDrives()
+        for i in range(26):
+            letter = chr(ord("a") + i)
+            root = letter.upper() + ":\\"
+            if not mask & (1 << i) or k.GetDriveTypeW(root) != 3:  # DRIVE_FIXED
+                continue
+            avail, total, free = ctypes.c_ulonglong(), ctypes.c_ulonglong(), ctypes.c_ulonglong()
+            if not k.GetDiskFreeSpaceExW(root, ctypes.byref(avail), ctypes.byref(total), ctypes.byref(free)) or total.value <= 0:
+                continue
+            disks.append({"mount": "/" + letter, "device": letter.upper() + ":", "total": total.value // 1024,
+                          "used": (total.value - free.value) // 1024, "avail": avail.value // 1024})
+    finally:
+        k.SetThreadErrorMode(old, None)
+    return disks
+
+
+def windows_proc_name(name, cmdline):
+    """proc_name for a Windows process: its image name without .exe, or the nicer name proc_name gives."""
+    exe = name[:-4] if name.lower().endswith(".exe") else name
+    label = proc_name((name.replace(" ", "") + " " + cmdline).replace("\\", "/"))
+    return exe if label == name.replace(" ", "") else label
+
+
+def windows_top_memory(n):
+    """top_memory on Windows: the working set of each process, from CIM through PowerShell."""
+    script = ("[Console]::OutputEncoding = [Text.Encoding]::UTF8; Get-CimInstance Win32_Process | "
+              "Sort-Object WorkingSetSize -Descending | Select-Object -First %d | ForEach-Object { "
+              "\"$($_.WorkingSetSize)`t$($_.Name)`t$($_.CommandLine)\" -replace '[\\r\\n]+', ' ' }" % n)
+    try:
+        r = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script], stdin=subprocess.DEVNULL,
+                           stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=30, creationflags=0x08000000)  # CREATE_NO_WINDOW
+    except Exception:  # noqa: BLE001
+        return []
+    rows = []
+    for line in r.stdout.decode("utf-8", "replace").splitlines():
+        parts = line.split("\t", 2)
+        if len(parts) == 3 and parts[0].strip().isdigit():
+            rows.append([windows_proc_name(parts[1], parts[2]), int(parts[0]) // 1024])
+    return rows[:n]
+
+
 def read_memory():
-    """{"total", "available", "swap_total", "swap_free"} in KiB, from /proc/meminfo; None elsewhere."""
+    """{"total", "available", "swap_total", "swap_free"} in KiB, from /proc/meminfo (GlobalMemoryStatusEx on Windows);
+    None elsewhere."""
+    if WINDOWS:
+        return windows_memory()
     try:
         with open(MEMINFO) as f:
             m = {}
@@ -641,7 +783,9 @@ def read_memory():
 
 
 def read_cpu():
-    """(total, idle) CPU ticks so far, from /proc/stat; None elsewhere."""
+    """(total, idle) CPU ticks so far, from /proc/stat (GetSystemTimes on Windows); None elsewhere."""
+    if WINDOWS:
+        return windows_cpu()
     try:
         with open("/proc/stat") as f:
             x = [int(v) for v in f.readline().split()[1:9]]
@@ -652,6 +796,8 @@ def read_cpu():
 
 def read_disks():
     """The real filesystems from `df -kPT` (or `-kP`), as the app picks them: [{"mount", "total", "used", "avail"}]."""
+    if WINDOWS:
+        return windows_disks()
     out = ""
     if DF:
         with open(DF) as f:
@@ -711,6 +857,8 @@ def proc_name(args):
 
 def top_memory(n=3):
     """The [n] processes using the most memory: [name, KiB], biggest first."""
+    if WINDOWS:
+        return windows_top_memory(n)
     try:
         r = subprocess.run(["ps", "-axo", "rss=,args="], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                            stderr=subprocess.DEVNULL, timeout=15)
