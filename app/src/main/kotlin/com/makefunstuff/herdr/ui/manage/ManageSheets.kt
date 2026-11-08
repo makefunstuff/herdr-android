@@ -75,6 +75,8 @@ import com.makefunstuff.herdr.ui.common.copyToClipboard
 import com.makefunstuff.herdr.ui.common.toast
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
 
 /**
  * Runs one management call and tells the person what happened: herdr's own words when it refuses
@@ -97,25 +99,31 @@ fun manage(
 }
 
 /**
- * Ends a herdr-core terminal ([paneId], `hc:t7`) as `hc kill` does: hangup, then terminate, then kill. Its core
- * then drops it from the lists; a refusal is said in a toast.
+ * Ends a herdr-core terminal ([paneId], `hc:t7`) as `hc kill` does: hangup, then terminate, then kill. It runs on
+ * [scope], the app's, so a sheet or screen closing meanwhile doesn't call it off; [onDone] (on the main thread) gets
+ * whether it went. Its core then drops it from the lists; a refusal is said in a toast.
  */
-fun closeHcTerminal(context: Context, scope: CoroutineScope, session: HostSession, paneId: String, onDone: () -> Unit) {
+fun closeHcTerminal(context: Context, scope: CoroutineScope, session: HostSession, paneId: String, onDone: (Boolean) -> Unit) {
     val address = HcMapping.address(paneId) ?: return
     scope.launch {
-        runCatching { session.awaitHerdrCore(10_000, paneId).kill(address) }
-            .onFailure { context.toast(it.message ?: "herdr-core didn't answer") }
-        onDone()
+        val failed = try {
+            session.awaitHerdrCore(10_000, paneId).kill(address)
+            null
+        } catch (e: java.io.IOException) {
+            e.message ?: "herdr-core didn't answer"
+        }
+        withContext(Dispatchers.Main) {
+            failed?.let { context.toast(it) }
+            onDone(failed == null)
+        }
     }
 }
 
-/**
- * Asks before a herdr-core terminal is closed, as the classic Close pane does. [scope] is the screen's or sheet's,
- * which outlives the dialog.
- */
+/** Asks before a herdr-core terminal is closed, as the classic Close pane does; [onClosed] once it is. */
 @Composable
-fun CloseHcTerminalDialog(session: HostSession, scope: CoroutineScope, paneId: String, label: String, onDismiss: () -> Unit, onDone: () -> Unit = {}) {
+fun CloseHcTerminalDialog(session: HostSession, paneId: String, label: String, onDismiss: () -> Unit, onClosed: () -> Unit = {}) {
     val context = LocalContext.current
+    val app = com.makefunstuff.herdr.ui.common.LocalContainer.current.scope
     ConfirmDialog(
         "Close $label?",
         "Its program ends and the terminal closes, on the desktop too.",
@@ -123,7 +131,7 @@ fun CloseHcTerminalDialog(session: HostSession, scope: CoroutineScope, paneId: S
         onDismiss = onDismiss,
     ) {
         onDismiss()
-        closeHcTerminal(context, scope, session, paneId, onDone)
+        closeHcTerminal(context, app, session, paneId) { if (it) onClosed() }
     }
 }
 
@@ -582,6 +590,8 @@ fun AgentActionsSheet(
     tabRows: (@Composable () -> Unit)? = null,
     /** It is a chat's ⋯ menu: "Change this screen" is in it. */
     screenMenu: Boolean = false,
+    /** Its herdr-core terminal was closed (Close terminal): the chat goes back. */
+    onClosed: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -635,7 +645,7 @@ fun AgentActionsSheet(
     }
 
     if (confirmClose && target != null) {
-        CloseHcTerminalDialog(session, scope, target, title, onDismiss = { confirmClose = false }, onDone = onDismiss)
+        CloseHcTerminalDialog(session, target, title, onDismiss = { confirmClose = false }, onClosed = { onDismiss(); onClosed?.invoke() })
     }
 
     if (rename && target != null) {

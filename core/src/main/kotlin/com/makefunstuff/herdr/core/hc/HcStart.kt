@@ -38,7 +38,7 @@ object HcStart {
             rest = rest.substringAfter('/')
         }
         val where = "$spaceName / $tabName"
-        val labels = if (rest.startsWith(WHERE)) mapOf("where" to "${rest.removePrefix(WHERE)} / $tabName")
+        val labels = if (rest.startsWith(WHERE)) mapOf("herdr.tab" to tabId, "where" to "${rest.removePrefix(WHERE)} / $tabName")
         else mapOf("herdr.space" to rest, "herdr.tab" to tabId, "where" to where)
         return Place(session, machine, labels)
     }
@@ -50,12 +50,14 @@ object HcStart {
     }
 
     /**
-     * The herdr-core space on [snapshot] whose terminals sit in [folder] (its first terminal's folder), so an
-     * agent started there opens in it; null when none does.
+     * The desktop app's space on [snapshot] whose terminals sit in [folder] (its first terminal's folder), so an
+     * agent started there opens in it; null when none does. Only the default session's: another session's core is
+     * another program's (Shepherdr's), and Other terminals is no space.
      */
     fun spaceIn(snapshot: SessionSnapshot?, folder: String): String? {
         val f = folder.trimEnd('/')
-        return snapshot?.workspaces?.filter { it.workspaceId.startsWith(HcMapping.PREFIX) && !it.workspaceId.contains(OTHER) }?.firstOrNull { ws ->
+        fun desktops(id: String) = id.startsWith(HcMapping.PREFIX) && HcMapping.session(id) == null && !id.removePrefix(HcMapping.PREFIX).startsWith(OTHER)
+        return snapshot?.workspaces?.filter { desktops(it.workspaceId) }?.firstOrNull { ws ->
             // A space on a machine hc added (`rohan/t7`) has that machine's folders, not this one's.
             snapshot.panes.firstOrNull { it.workspaceId == ws.workspaceId }?.takeIf { '/' !in it.terminalId }?.cwd?.trimEnd('/') == f
         }?.workspaceId
@@ -74,41 +76,57 @@ object HcStart {
 
     /** Starts a shell in [place] in [cwd]. Returns its pane id. */
     suspend fun shell(client: HcClient, place: Place, cwd: String?): String {
-        val t = client.run(cwd = cwd?.ifBlank { null }, labels = place.labels, on = place.machine)
+        val t = client.run(cwd = cwd?.ifBlank { null }, labels = place.labels, on = place.machine, env = ENV)
         return HcMapping.paneId(t.address, place.session)
     }
 
     /**
-     * Starts [program] as [name] in [folder] in [place], then gives it [text] once it is ready: once it
-     * reports a status (OSC 7501), else after [readyMs]. A program that refuses the words (it asks something
-     * first, such as whether to trust the folder) still runs: [Started.unsent] says why they didn't go in.
+     * Starts [program] as [name] in [folder] in [place], then gives it [text] once it is ready: once it reports
+     * that it waits (OSC 7501 `idle` or `done`). Nothing is typed blind: an agent that says nothing within [readyMs]
+     * (most kinds don't report), asks something first (`blocked`, such as whether to trust the folder) or ends
+     * still gets no Enter it could take as an answer; [Started.unsent] says why the words didn't go in.
      */
     suspend fun agent(client: HcClient, place: Place, folder: String, program: String, name: String, text: String, readyMs: Long = 20_000): Started {
         val line = programLine(program)
         val t = try {
-            client.run(line, folder, place.labels, hcName(name), place.machine)
+            client.run(line, folder, place.labels, hcName(name), place.machine, ENV)
         } catch (e: HcException) {
             // Another live terminal has the name: hc numbers none for us, so it goes without one.
             if (e.kind != "name_taken") throw e
-            client.run(line, folder, place.labels, null, place.machine)
+            client.run(line, folder, place.labels, null, place.machine, ENV)
         }
-        if (text.isNotBlank()) {
-            withTimeoutOrNull(readyMs) {
-                while (true) {
-                    val now = runCatching { client.get(t.address) }.getOrNull()
-                    if (now != null && (now.status != null || !now.live)) break
-                    delay(500)
+        val pane = HcMapping.paneId(t.address, place.session)
+        if (text.isBlank()) return Started(pane, null)
+        // Why not to type now, or READY.
+        val wait: String = withTimeoutOrNull(readyMs) {
+            var answer: String? = null
+            while (answer == null) {
+                val now = try { client.get(t.address) } catch (e: java.io.IOException) { null }
+                answer = when {
+                    now != null && !now.live -> "it ended"
+                    now?.status?.state in setOf("idle", "done") -> READY
+                    now?.status?.state in setOf("blocked", "error") -> "it asks something first"
+                    else -> null
                 }
+                if (answer == null) delay(500)
             }
-            val sent = runCatching { client.send(t.address, text.trim()) }
-            return Started(HcMapping.paneId(t.address, place.session), sent.exceptionOrNull()?.let { it.message ?: "it didn't take them" })
-        }
-        return Started(HcMapping.paneId(t.address, place.session), null)
+            answer
+        } ?: "it didn't say it was ready"
+        if (wait != READY) return Started(pane, wait)
+        val sent = try { client.send(t.address, text.trim()); null } catch (e: java.io.IOException) { e.message ?: "it didn't take them" }
+        return Started(pane, sent)
     }
 
     /** An agent started: its [paneId]; [unsent] why what was said didn't go in, null when it did (or nothing was said). */
     data class Started(val paneId: String, val unsent: String?)
 
+    /**
+     * The terminal the program is told it runs in: hc's core may have no `TERM` of its own (a desktop app's), and
+     * the phone draws what it writes with an xterm-like emulator in colour.
+     */
+    val ENV = mapOf("TERM" to "xterm-256color", "COLORTERM" to "truecolor")
+
+    private const val READY = "ready"
     private const val OTHER = "!other"
     private const val WHERE = "where:"
 }

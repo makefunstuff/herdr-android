@@ -191,15 +191,17 @@ fun MachineScreen(nav: NavController, machineId: String) {
                     onOpenPane = ::openPane,
                     onTerminal = { nav.navigate(Routes.terminal(machineId, it.paneId)) },
                     backend = if (both) "herdr-core ${core?.version.orEmpty()}".trim() else null,
-                    // Shepherdr's own agents close as Shepherdr closes them, not here.
-                    onPaneMenu = { p -> if (core?.snapshot?.agents?.any { it.paneId == p.paneId && (it.shepherdrTask != null || it.shepherdrSpace != null) } != true) coreClose = p },
+                    // A space of Shepherdr's (its Assistant's, its tasks' workers') closes as Shepherdr closes them, not here.
+                    onPaneMenu = { p: PaneInfo -> coreClose = p }.takeIf {
+                        from.agents.none { it.workspaceId == ws.workspaceId && (it.shepherdrTask != null || it.shepherdrSpace != null) }
+                    },
                 )
             }
         }
     }
 
     coreClose?.let { pane ->
-        com.makefunstuff.herdr.ui.manage.CloseHcTerminalDialog(session, scope, pane.paneId, pane.displayName, onDismiss = { coreClose = null })
+        com.makefunstuff.herdr.ui.manage.CloseHcTerminalDialog(session, pane.paneId, pane.displayName, onDismiss = { coreClose = null })
     }
     snap?.let { s ->
         workspaceMenu?.let { ws ->

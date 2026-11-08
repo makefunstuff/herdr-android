@@ -66,7 +66,10 @@ class HcStartTest {
         assertEquals("sp2", remote.labels["herdr.space"])
         val named = HcStart.place("hc:where:a/b", "a/b", "Terminal")!!
         assertNull(named.machine)
-        assertEquals(mapOf("where" to "a/b / Terminal"), named.labels)
+        // Its own tab too: a second terminal there doesn't land in the first one's.
+        assertEquals("a/b / Terminal", named.labels["where"])
+        assertTrue(named.labels["herdr.tab"]!!.startsWith("tb"))
+        assertTrue(HcStart.place("hc:where:a/b", "a/b", "Terminal")!!.labels["herdr.tab"] != named.labels["herdr.tab"])
         assertEquals(HcStart.Place(null, null, emptyMap()), HcStart.place(HcMapping.OTHER, "Other terminals", "Terminal"))
         assertEquals(HcStart.Place(null, "rohan", emptyMap()), HcStart.place("${HcMapping.OTHER}@rohan", "Other terminals on rohan", "Terminal"))
     }
@@ -75,6 +78,11 @@ class HcStartTest {
     fun anAgentStartsInTheSpaceThatSitsInItsFolder() {
         assertEquals("hc:sp1", HcStart.spaceIn(snapshot, "/home/dev/src/demo/"))
         assertNull(HcStart.spaceIn(snapshot, "/elsewhere"))
+        // Only the desktop app's own (default) session: not Shepherdr's session, not Other terminals.
+        val shepherdr = HcMapping.snapshot(listOf(HcTerminal(address = "t5", cwd = "/srv/app", labels = mapOf("herdr.space" to "sp9", "where" to "app / 1"))), session = "shepherdr")
+        val other = HcMapping.snapshot(listOf(HcTerminal(address = "t6", cwd = "/srv/loose")))
+        assertNull(HcStart.spaceIn(shepherdr, "/srv/app"))
+        assertNull(HcStart.spaceIn(other, "/srv/loose"))
     }
 
     @Test
@@ -97,6 +105,7 @@ class HcStartTest {
         assertEquals("/home/dev/src/demo", params["cwd"]!!.jsonPrimitive.content)
         assertEquals("true", params["no_parent"]!!.jsonPrimitive.content)
         assertNull(params["line"], "no line: the machine's own shell")
+        assertEquals("xterm-256color", params["env"]!!.jsonObject["TERM"]!!.jsonPrimitive.content)
         assertEquals("sp1", params["labels"]!!.jsonObject["herdr.space"]!!.jsonPrimitive.content)
     }
 
@@ -106,14 +115,14 @@ class HcStartTest {
         val core = Core { method, _ ->
             when (method) {
                 "terminal.run" -> terminal("t9")
-                "terminal.get" -> terminal("t9", status = if (++gets >= 2) "idle" else null)
+                "terminal.get" -> terminal("t9", status = when (++gets) { 1 -> null; 2 -> "working"; else -> "idle" })
                 "terminal.send" -> JsonObject(mapOf("sent" to JsonPrimitive(true)))
                 else -> JsonObject(emptyMap())
             }
         }
         val started = HcStart.agent(HcClient(core), HcStart.Place(null, null, emptyMap()), "/src", "claude", "Fix the login", "fix the login")
         assertEquals(HcStart.Started("hc:t9", null), started)
-        assertEquals(listOf("terminal.run", "terminal.get", "terminal.get", "terminal.send"), core.calls.map { it.first })
+        assertEquals(listOf("terminal.run", "terminal.get", "terminal.get", "terminal.get", "terminal.send"), core.calls.map { it.first })
         val run = core.calls.first().second
         assertEquals("fix-the-login", run["name"]!!.jsonPrimitive.content)
         assertEquals(HcStart.programLine("claude"), run["line"]!!.jsonPrimitive.content)
@@ -121,20 +130,40 @@ class HcStartTest {
     }
 
     @Test
-    fun aTakenNameStartsItWithoutOneAndARefusalIsSaid() = runBlocking {
+    fun aTakenNameStartsItWithoutOneAndAQuestionGetsNoEnter() = runBlocking {
         val core = Core { method, params ->
             when {
                 method == "terminal.run" && params["name"] != null -> throw HcException("name_taken", "name taken")
                 method == "terminal.run" -> terminal("t9")
                 method == "terminal.get" -> terminal("t9", status = "blocked")
-                method == "terminal.send" -> throw HcException("blocked", "it waits for an answer")
                 else -> JsonObject(emptyMap())
             }
         }
         val started = HcStart.agent(HcClient(core), HcStart.Place(null, null, emptyMap()), "/src", "codex", "fix", "fix it")
-        assertEquals("hc:t9", started.paneId)
-        assertEquals("It waits for an answer.", started.unsent)
+        assertEquals(HcStart.Started("hc:t9", "it asks something first"), started)
         assertEquals(2, core.calls.count { it.first == "terminal.run" })
+        assertTrue(core.calls.none { it.first == "terminal.send" }, "an Enter could answer its question")
+    }
+
+    @Test
+    fun anAgentThatNeverSaysItIsReadyIsTypedNothing() = runBlocking {
+        val core = Core { method, _ -> if (method == "terminal.run" || method == "terminal.get") terminal("t9") else JsonObject(emptyMap()) }
+        val started = HcStart.agent(HcClient(core), HcStart.Place(null, null, emptyMap()), "/src", "pi", "fix", "fix it", readyMs = 1_200)
+        assertEquals(HcStart.Started("hc:t9", "it didn't say it was ready"), started)
+        assertTrue(core.calls.none { it.first == "terminal.send" })
+    }
+
+    @Test
+    fun aRefusedSendIsSaid() = runBlocking {
+        val core = Core { method, _ ->
+            when (method) {
+                "terminal.run" -> terminal("t9")
+                "terminal.get" -> terminal("t9", status = "idle")
+                "terminal.send" -> throw HcException("blocked", "it waits for an answer")
+                else -> JsonObject(emptyMap())
+            }
+        }
+        assertEquals("It waits for an answer.", HcStart.agent(HcClient(core), HcStart.Place(null, null, emptyMap()), "/src", "claude", "fix", "fix it").unsent)
     }
 
     @Test

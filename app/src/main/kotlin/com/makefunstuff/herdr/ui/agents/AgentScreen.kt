@@ -654,6 +654,7 @@ fun AgentScreen(nav: NavController, machineId: String, paneId: String) {
             paneLabel = pane?.displayName ?: paneId,
             onDismiss = { menu = false },
             screenMenu = true,
+            onClosed = if (inBubble) null else ({ nav.popBackStack() }),
             tabRows = tab?.takeIf { !inBubble }?.let { (space, t) ->
                 {
                     TabMenuRows(tabMenu, machineId, space, t, onPicked = { menu = false }) { label, icon, destructive, onClick ->
