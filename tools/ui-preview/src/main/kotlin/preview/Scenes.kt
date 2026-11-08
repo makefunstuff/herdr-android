@@ -597,6 +597,8 @@ fun scenes(): List<Scene> = listOf(
     // Shepherdr's tasks are found too, and open as their agents' chats.
     Scene("search-v2", route = Routes.search(q = "export"), setup = { home(); v2() }, actions = { settle() }),
     Scene("search-v2-open", route = Routes.search(q = "export"), setup = { home(); v2() }, actions = { settle(); tapText("Rate-limit the export endpoint") }),
+    // A word only in a herdr-core agent's chat (its Claude Code's transcript, found from its process): "In chats" finds it too.
+    Scene("search-core", route = Routes.search(q = "sequential"), setup = { home(); shepherdr3() }, actions = { settle() }),
     Scene("search-needs", route = Routes.search(q = "jobs"), setup = { home() }, actions = { settle(); tapText("Needs you") }),
 
     // Start work from a sentence: as a board task on devbox; as an agent now (its folders and the agents
