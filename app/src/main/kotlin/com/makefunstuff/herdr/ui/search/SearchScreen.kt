@@ -118,8 +118,8 @@ fun SearchScreen(nav: NavController, machineId: String? = null, initial: String 
     // Words in the chats: asked of the machines a moment after typing stops, each in its own time.
     val chatHits = remember { mutableStateMapOf<String, List<ChatSearch.Hit>>() }
     var looking by remember { mutableStateOf(0) }
-    val online = hosts.filter { it.online && it.snapshot != null && (scoped == null || it.machine.id == scoped) }
-    val chatKey = online.joinToString(",") { h -> h.machine.id + ":" + h.snapshot!!.agents.joinToString { it.paneId + it.agentSession?.value.orEmpty() } }
+    val online = hosts.filter { it.online && it.view != null && (scoped == null || it.machine.id == scoped) }
+    val chatKey = online.joinToString(",") { h -> h.machine.id + ":" + h.view!!.agents.joinToString { it.paneId + it.agentSession?.value.orEmpty() } }
     LaunchedEffect(query.trim(), chatKey) {
         chatHits.clear()
         val q = query.trim()
@@ -128,13 +128,13 @@ fun SearchScreen(nav: NavController, machineId: String? = null, initial: String 
         coroutineScope {
             online.map { h ->
                 async {
-                    val chats = h.snapshot!!.agents.mapNotNull { a -> a.agentSession?.let { ChatSearch.Chat(a.paneId, it) } }
+                    val chats = h.view!!.agents.mapNotNull { a -> a.agentSession?.let { ChatSearch.Chat(a.paneId, it) } }
                     val command = ChatSearch.command(q, chats) ?: return@async
                     looking++
                     try {
                         val session = container.hosts.session(h.machine.id) ?: return@async
                         val out = runCatching { session.awaitConnection(10_000).run(command, timeoutSeconds = 15).stdout }.getOrNull() ?: return@async
-                        val kinds = h.snapshot!!.agents.associate { it.paneId to (it.agentSession?.agent ?: it.agent.orEmpty()) }
+                        val kinds = h.view!!.agents.associate { it.paneId to (it.agentSession?.agent ?: it.agent.orEmpty()) }
                         chatHits[h.machine.id] = ChatSearch.parse(out, q, kinds)
                     } finally {
                         looking--
