@@ -230,8 +230,9 @@ class HealthTest {
             """
             echo "${'$'}HERDR_UID ${'$'}HERDR_HZ" > "${'$'}d/env.log"
             [ -f "${'$'}d/hang" ] && exec sleep 30
-            while [ ${'$'}# -gt 1 ]; do [ "${'$'}1" = -EncodedCommand ] && break; shift; done
-            script="${'$'}(printf %s "${'$'}2" | base64 -d | tr -d '\000')"
+            # The drives' script is in the arguments as it is; the processes' is packed: gzip in Base64 in a line that runs it.
+            script="${'$'}*"
+            case "${'$'}script" in *FromBase64String*) script="${'$'}(printf %s "${'$'}script" | sed "s/.*FromBase64String('\([^']*\)').*/\1/" | base64 -d | gunzip)" ;; esac
             case "${'$'}script" in
               *Win32_LogicalDisk*) cat "${'$'}d/disks.txt" ;;
               *Win32_Process*) echo M1; sleep 1; echo M2; sed "s/@UID@/${'$'}HERDR_UID/" "${'$'}d/procs.txt" ;;
@@ -435,6 +436,58 @@ class HealthTest {
         } finally {
             bin.deleteRecursively()
         }
+    }
+
+    // ---- the Windows command line --------------------------------------------------------------------
+
+    private val gitBash = File("C:\\Program Files\\Git\\bin\\bash.exe")
+
+    /** Each look as the app sends it: through the login shell, so quoted twice. */
+    private val sent = mapOf(
+        "probe" to HealthCommands.probe(listOf("herdr-android/work-22-", "demo/work-7-")),
+        "quick" to HealthCommands.quick(),
+        "kill" to HealthCommands.kill((1..5).map { HealthCommands.Target(40_000 + it, "Adobe Crash Processor") }),
+    ).mapValues { com.makefunstuff.herdr.core.ssh.HerdrCommands.login(it.value) }
+
+    /**
+     * On a Windows machine SSH hands the command to Git's bash as `bash.exe -c "<command>"` with each `"`
+     * written `\"`, and the command line is cut at 8191 characters: a command longer than that arrives
+     * without its end (bash then says "unexpected EOF while looking for matching `'`"). So every look
+     * must stay under it, with some room for the folders in the probe's list.
+     */
+    @Test
+    fun theLooksFitTheWindowsCommandLine() {
+        val room = 8191 - "\"C:\\Program Files\\Git\\bin\\bash.exe\" -c \"".length - 1 - 300
+        for ((name, command) in sent) {
+            val line = command.replace("\"", "\\\"")
+            assertTrue(line.length <= room, "$name is ${line.length} characters, the room is $room")
+        }
+    }
+
+    /** The same path as SSH on Windows: Git's bash started with the command line Windows builds for `-c "<command>"`. */
+    @Test
+    fun windowsLooksSurviveGitBashsCommandLine() {
+        assumeTrue(System.getProperty("os.name").startsWith("Windows") && gitBash.canExecute(), "Windows with Git for Windows")
+        fun run(command: String): CommandResult {
+            val err = File.createTempFile("health-bash", ".err").apply { deleteOnExit() }
+            // Java passes an argument that is already in quotes as it is, so the line is the one SSH builds.
+            val p = ProcessBuilder(gitBash.path, "-c", "\"" + command.replace("\"", "\\\"") + "\"").redirectError(err).start()
+            p.outputStream.close()
+            val out = p.inputStream.readBytes().toString(Charsets.UTF_8)
+            assertTrue(p.waitFor(60, TimeUnit.SECONDS))
+            return CommandResult(p.exitValue(), out, err.readText())
+        }
+        for (name in listOf("probe", "quick")) {
+            val r = run(sent.getValue(name))
+            assertEquals(0, r.exitStatus, r.stderr.take(500))
+            assertFalse("unexpected EOF" in r.stderr, r.stderr.take(500))
+            assertTrue(HealthCommands.MARK in r.stdout && "@end-df" in r.stdout, "$name: ${r.stdout.take(300)} / ${r.stderr.take(300)}")
+            val s = HealthReader.sample(r.stdout)
+            assertTrue(s.disks.isNotEmpty(), name)
+            if (name == "probe") assertTrue(s.procs.isNotEmpty(), "the processes of Windows are listed")
+        }
+        // Pids that are not these programs: the stop command ran to its end.
+        assertEquals("gone 40001", run(sent.getValue("kill")).stdout.lines().first().trim())
     }
 
     // ---- worktrees ----------------------------------------------------------------------------------

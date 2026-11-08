@@ -29,21 +29,21 @@ object HealthCommands {
     fun quick(): String = "sh -c ${quote(QUICK)} herdr-health"
 
     /**
-     * A PowerShell script as `powershell.exe` takes it with `-EncodedCommand` (Base64 of UTF-16LE), so no
-     * quoting of its own travels through the shell and Windows' command line. It is written with `~` for
+     * A PowerShell script for `powershell.exe -Command`, packed (gzip, Base64) inside a line that unpacks and
+     * runs it. The command line SSH hands to Git's bash is cut at 8191 characters, quotes counting twice, and
+     * the whole probe must fit: packed, a script costs about a quarter of its Base64 `-EncodedCommand` form. The
+     * line has no `$` or double quote, so it goes in double quotes. Scripts are written with `~` for
      * PowerShell's `$`, which Kotlin would read as its own.
      */
-    private fun encoded(script: String): String =
-        java.util.Base64.getEncoder().encodeToString(script.trimIndent().replace('~', '$').toByteArray(Charsets.UTF_16LE))
+    private fun packed(script: String): String {
+        val gz = java.io.ByteArrayOutputStream()
+        java.util.zip.GZIPOutputStream(gz).use { it.write(script.trimIndent().replace('~', '$').toByteArray(Charsets.UTF_8)) }
+        val b64 = java.util.Base64.getEncoder().encodeToString(gz.toByteArray())
+        return "iex ([IO.StreamReader]::new([IO.Compression.GZipStream]::new([IO.MemoryStream]::new([Convert]::FromBase64String('$b64')),[IO.Compression.CompressionMode]::Decompress)).ReadToEnd())"
+    }
 
     /** The local fixed drives (`DriveType=3`; a network drive that is down is never asked): `C:<TAB>NTFS<TAB>bytes<TAB>free bytes`. */
-    private val WIN_DISKS = encoded(
-        """
-        ~ErrorActionPreference = "SilentlyContinue"
-        ~ProgressPreference = "SilentlyContinue"
-        Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" | ForEach-Object { ~_.DeviceID + "`t" + ~_.FileSystem + "`t" + ~_.Size + "`t" + ~_.FreeSpace }
-        """,
-    )
+    private val WIN_DISKS = "Get-CimInstance Win32_LogicalDisk -Filter DriveType=3 | % { ~_.DeviceID + [char]9 + ~_.FileSystem + [char]9 + ~_.Size + [char]9 + ~_.FreeSpace }".replace('~', '$')
 
     /**
      * Two looks at every process a second apart, printed as the rows [JOIN] reads: `M1` and `M2` as
@@ -53,7 +53,7 @@ object HealthCommands {
      * sessions, else 0), RAM in KiB, age in seconds and the command line (the name when it has none).
      * A name loses its `.exe`. The System Idle Process (pid 0) is the idle time of every core, not a program.
      */
-    private val WIN_PROCS = encoded(
+    private val WIN_PROCS = packed(
         """
         ~ErrorActionPreference = "SilentlyContinue"
         ~ProgressPreference = "SilentlyContinue"
@@ -84,6 +84,12 @@ object HealthCommands {
         ~o.Flush()
         """,
     )
+
+    /**
+     * A shell script without its comment lines: they say why, in the source, and every character of a
+     * look counts against the command line Windows allows (see [packed]).
+     */
+    private fun String.bare(): String = lines().filter { !it.trimStart().startsWith("#") }.joinToString("\n")
 
     /**
      * `lim <seconds> <command…>` for the Windows tools: coreutils' `timeout` where it is (Windows has a
@@ -120,13 +126,13 @@ object HealthCommands {
           $LIM
           MSYS2_ARG_CONV_EXCL='*'; export MSYS2_ARG_CONV_EXCL
           echo @df; echo "Filesystem Type 1024-blocks Used Available Capacity Mounted on"
-          lim 10 powershell.exe -NoProfile -NonInteractive -EncodedCommand $WIN_DISKS </dev/null 2>/dev/null | tr -d '\r' |
+          lim 10 powershell.exe -NoProfile -NonInteractive -Command '$WIN_DISKS' </dev/null 2>/dev/null | tr -d '\r' |
             awk -F'\t' '$3 + 0 > 0 && $4 != "" { t = $3 / 1024; f = $4 / 1024; printf "%s %s %.0f %.0f %.0f %d%% /%s\n", $1, ($2 == "" ? "unknown" : $2), t, t - f, f, 100 * (t - f) / t + 0.5, tolower(substr($1, 1, 1)) }'
         else
           echo @df; df -kPT 2>/dev/null || df -kP 2>/dev/null
         fi
         echo @end-df
-    """.trimIndent()
+    """.trimIndent().bare()
 
     private val QUICK = "$HEAD\n" + """
         if [ -r /proc/stat ]; then
@@ -189,19 +195,21 @@ object HealthCommands {
               printf "P\t%s\t%s\t%s\t%s\t%.1f\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", p, ppid[p], uid[p], rss[p], cpu, age[p], c, d, w, pn, sp, args[p]
           }
         }
-    """.trimIndent()
+    """.trimIndent().bare()
 
     private val PROBE = "$HEAD\n$TICKS\n" + """
+        # The awk that joins the looks, once: it is the same on every system.
+        jp=${quote(JOIN)}
         if [ "${'$'}win" = 1 ]; then
           # One PowerShell look: it says when each of its two looks is taken, and /proc/stat (in ticks of CLK_TCK) is read then.
           # If it is cut short (20 s) the CPU is still measured over a second of its own, only the processes are missing.
           HERDR_HZ="$(getconf CLK_TCK 2>/dev/null || echo 100)"; HERDR_UID="$(id -u)"; export HERDR_HZ HERDR_UID
-          lim 20 powershell.exe -NoProfile -NonInteractive -EncodedCommand $WIN_PROCS </dev/null 2>/dev/null | {
+          lim 20 powershell.exe -NoProfile -NonInteractive -Command "$WIN_PROCS" </dev/null 2>/dev/null | {
             read -r m; read -r c1 < /proc/stat
             read -r m || sleep 1; read -r c2 < /proc/stat
             echo "C1 ${'$'}c1"; echo "C2 ${'$'}c2"
             cat
-          } | awk -v keep="$1" -v me="$(id -u)" -v cores="$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)" ${quote(JOIN)}
+          } | awk -v keep="$1" -v me="$(id -u)" -v cores="$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)" "${'$'}jp"
         elif [ -r /proc/stat ]; then
           set -- "$1" "$(head -n 1 /proc/stat)" "$(t)"; sleep 1
           {
@@ -211,12 +219,12 @@ object HealthCommands {
             ps -eo pid=,ppid=,uid=,rss=,etimes=,args= 2>/dev/null | sed 's/^/P	/'
             find /proc -mindepth 2 -maxdepth 2 -name cwd -user "$(id -u)" -printf 'D\t%h\t%l\n' 2>/dev/null
             grep -a -s -z -H -E '^(PWD|HERDR_PANE_ID|HERDR_WORKSPACE_ID)=' /proc/[0-9]*/environ 2>/dev/null | tr '\000' '\n' | sed 's/^/E	/'
-          } | awk -v keep="$1" -v me="$(id -u)" -v cores="$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)" ${quote(JOIN)}
+          } | awk -v keep="$1" -v me="$(id -u)" -v cores="$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)" "${'$'}jp"
         else
           echo @ps
           ps -axo pid=,ppid=,uid=,rss=,%cpu=,etime=,args= 2>/dev/null | awk -v me="$(id -u)" '${'$'}4 >= 65536 || ${'$'}5 >= 2 || (${'$'}3 == me && /GradleDaemon|KotlinCompileDaemon|qemu-system|emulator/)' | cut -c1-300
         fi
-    """.trimIndent()
+    """.trimIndent().bare()
 
     /**
      * The worktrees under `~/.herdr/worktrees/<repo>/` (where herdr and the board make them): `W path
@@ -278,7 +286,7 @@ object HealthCommands {
         for p in ${'$'}sent; do lim 10 taskkill /F /PID "${'$'}p" >/dev/null 2>&1 && echo "forced ${'$'}p"; done
         exit 0 ;;
         esac
-    """.trimIndent()
+    """.trimIndent().bare()
 
     private val KILL = "$WIN_KILL\n" + """
         LC_ALL=C; export LC_ALL
