@@ -88,6 +88,7 @@ LOG = os.path.join(STATE_DIR, NAME + ".log")
 PRESENT = os.path.join(STATE_DIR, "present")
 WINDOWS = os.name == "nt"
 _KERNEL32 = None  # kernel32 once loaded, see kernel32()
+_USER32 = None  # user32 once loaded, see user32()
 # Where sshd keeps its config and host keys: Win32-OpenSSH's under ProgramData.
 SSHD_DIR = os.path.join(os.environ.get("PROGRAMDATA") or "C:\\ProgramData", "ssh") if WINDOWS else "/etc/ssh"
 
@@ -642,8 +643,39 @@ def kernel32():
         k.GetDiskFreeSpaceExW.restype = wintypes.BOOL
         k.SetThreadErrorMode.argtypes = [wintypes.DWORD, ctypes.POINTER(wintypes.DWORD)]
         k.SetThreadErrorMode.restype = wintypes.BOOL
+        k.GetTickCount64.argtypes = []
+        k.GetTickCount64.restype = ctypes.c_ulonglong
+        k.GetCurrentProcessId.argtypes = []
+        k.GetCurrentProcessId.restype = wintypes.DWORD
+        k.ProcessIdToSessionId.argtypes = [wintypes.DWORD, ctypes.POINTER(wintypes.DWORD)]
+        k.ProcessIdToSessionId.restype = wintypes.BOOL
+        k.CreateToolhelp32Snapshot.argtypes = [wintypes.DWORD, wintypes.DWORD]
+        k.CreateToolhelp32Snapshot.restype = ctypes.c_void_p
+        k.Process32FirstW.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+        k.Process32FirstW.restype = wintypes.BOOL
+        k.Process32NextW.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+        k.Process32NextW.restype = wintypes.BOOL
+        k.CloseHandle.argtypes = [ctypes.c_void_p]
+        k.CloseHandle.restype = wintypes.BOOL
         _KERNEL32 = k
     return _KERNEL32
+
+
+def user32():
+    """Windows: user32 with the signatures of the calls presence uses (64-bit safe), loaded once."""
+    global _USER32
+    if _USER32 is None:
+        import ctypes
+        from ctypes import wintypes
+        u = ctypes.WinDLL("user32", use_last_error=True)
+        u.GetLastInputInfo.argtypes = [ctypes.c_void_p]
+        u.GetLastInputInfo.restype = wintypes.BOOL
+        u.OpenInputDesktop.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+        u.OpenInputDesktop.restype = ctypes.c_void_p
+        u.CloseDesktop.argtypes = [ctypes.c_void_p]
+        u.CloseDesktop.restype = wintypes.BOOL
+        _USER32 = u
+    return _USER32
 
 
 def windows_swap():
@@ -1066,13 +1098,39 @@ def herdr_client(argv):
     return True
 
 
+def windows_last_input(now=None):
+    """Windows: when this session last had keyboard or mouse input, or None if it can't tell. There is no input to read
+    from an SSH session, so this only means something where the watcher runs in the interactive one."""
+    import ctypes
+    from ctypes import wintypes
+
+    class LASTINPUTINFO(ctypes.Structure):
+        _fields_ = [("cbSize", wintypes.UINT), ("dwTime", wintypes.DWORD)]
+
+    info = LASTINPUTINFO(ctypes.sizeof(LASTINPUTINFO), 0)
+    try:
+        if not user32().GetLastInputInfo(ctypes.byref(info)):
+            return None
+        # dwTime is a 32-bit tick count that wraps every 49.7 days, so take the difference modulo 2**32.
+        idle_ms = ((kernel32().GetTickCount64() & 0xFFFFFFFF) - info.dwTime) % 2 ** 32
+    except Exception:  # noqa: BLE001 - no user32 or no desktop: it can't tell
+        return None
+    return (time.time() if now is None else now) - idle_ms / 1000.0
+
+
 def typed_at(ps=None):
-    """When someone last typed in a herdr client here (its terminal's last input), or touched the presence file; None."""
+    """When someone last typed in a herdr client here (its terminal's last input), or touched the presence file; None.
+    On Windows it is the last keyboard or mouse input of the session instead (see windows_last_input)."""
     times = []
     try:
         times.append(os.stat(PRESENT).st_mtime)
     except OSError:
         pass
+    if WINDOWS:
+        last = windows_last_input()
+        if last is not None:
+            times.append(last)
+        return max(times) if times else None
     ps = _out(["ps", "-A", "-o", "tty=,args="]) if ps is None else ps
     for line in (ps or "").splitlines():
         parts = line.split()
@@ -1090,6 +1148,8 @@ def screen_unlocked():
     forced = os.environ.get("HERDR_PUSH_SCREEN")  # tests: locked, unlocked or none
     if forced:
         return {"locked": False, "unlocked": True}.get(forced)
+    if WINDOWS:
+        return windows_unlocked()
     if sys.platform == "darwin":
         return _mac_unlocked()
     sessions = _out(["loginctl", "list-sessions", "--no-legend"])
@@ -1111,6 +1171,56 @@ def screen_unlocked():
         if any(l.strip() in LOCKERS for l in running.splitlines()):
             return False
     return desktop
+
+
+def windows_lock_screen():
+    """Windows: whether LogonUI.exe, the lock screen, runs in this session. It runs once per session, so the lock screen of
+    another signed-in user doesn't count. Walks the process list with Toolhelp (a few milliseconds, no process spawned)."""
+    import ctypes
+    from ctypes import wintypes
+
+    class PROCESSENTRY32W(ctypes.Structure):
+        _fields_ = [("dwSize", wintypes.DWORD), ("cntUsage", wintypes.DWORD), ("th32ProcessID", wintypes.DWORD),
+                    ("th32DefaultHeapID", ctypes.c_size_t), ("th32ModuleID", wintypes.DWORD), ("cntThreads", wintypes.DWORD),
+                    ("th32ParentProcessID", wintypes.DWORD), ("pcPriClassBase", wintypes.LONG), ("dwFlags", wintypes.DWORD),
+                    ("szExeFile", wintypes.WCHAR * 260)]
+
+    k = kernel32()
+    mine = wintypes.DWORD()
+    if not k.ProcessIdToSessionId(k.GetCurrentProcessId(), ctypes.byref(mine)):
+        mine = None
+    snap = k.CreateToolhelp32Snapshot(0x2, 0)  # TH32CS_SNAPPROCESS
+    if snap is None or snap == ctypes.c_void_p(-1).value:  # INVALID_HANDLE_VALUE
+        return False
+    try:
+        entry = PROCESSENTRY32W()
+        entry.dwSize = ctypes.sizeof(entry)
+        ok = k.Process32FirstW(snap, ctypes.byref(entry))
+        while ok:
+            if entry.szExeFile.lower() == "logonui.exe":
+                theirs = wintypes.DWORD()
+                if mine is None or (k.ProcessIdToSessionId(entry.th32ProcessID, ctypes.byref(theirs)) and theirs.value == mine.value):
+                    return True
+            ok = k.Process32NextW(snap, ctypes.byref(entry))
+    finally:
+        k.CloseHandle(snap)
+    return False
+
+
+def windows_unlocked():
+    """Windows: whether this session's screen is unlocked. Locked while the lock screen runs or the input desktop can't be
+    opened (it is the secure one then). Only means something in the interactive session: an SSH session has no input
+    desktop of its own, so it reads as locked there."""
+    try:
+        if windows_lock_screen():
+            return False
+        desktop = user32().OpenInputDesktop(0, False, 0x100)  # DESKTOP_SWITCHDESKTOP
+        if not desktop:
+            return False
+        user32().CloseDesktop(desktop)
+        return True
+    except Exception:  # noqa: BLE001 - it can't tell
+        return None
 
 
 def _mac_unlocked():
@@ -2462,8 +2572,8 @@ LAUNCHD = """<?xml version="1.0" encoding="UTF-8"?>
 def main(argv):
     cmd = argv[1] if len(argv) > 1 else "help"
     rest = argv[2:]
-    if WINDOWS and cmd not in ("pair", "pair-accept", "once", "version", "_qr", "_seal", "help", "-h", "--help"):
-        print("herdr-push %s: on Windows only `herdr-push pair` and `herdr-push once` run so far." % cmd, file=sys.stderr)
+    if WINDOWS and cmd not in ("pair", "pair-accept", "once", "presence", "version", "_qr", "_seal", "help", "-h", "--help"):
+        print("herdr-push %s: on Windows only `herdr-push pair`, `once` and `presence` run so far." % cmd, file=sys.stderr)
         return 2
     if WINDOWS and hasattr(sys.stdout, "reconfigure"):
         # A pipe there is in the ANSI code page, which has no block characters for the QR code.
