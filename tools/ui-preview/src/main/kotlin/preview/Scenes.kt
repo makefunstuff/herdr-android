@@ -391,6 +391,7 @@ fun scenes(): List<Scene> = listOf(
     // Low on memory: the warning names what uses the most.
     Scene("health-low", route = Routes.health(DEVBOX), setup = { host(DEVBOX).health.availKb = 3_600_000 }),
     Scene("health-process", route = Routes.health(DEVBOX), actions = { tapText("Android emulator · Pixel_8") }),
+    Scene("health-stop", route = Routes.health(DEVBOX), actions = { tapText("Android emulator · Pixel_8"); tapText("Stop process") }),
 
     // A machine's AI providers: Claude Code near its 5-hour limit, Codex, the API accounts, a local model;
     // each with its 7-day chart and the tasks and agents that used it most. Taller, to show every card.
