@@ -10,7 +10,7 @@ A native Android client for [herdr](https://herdr.dev) hosts: see your agents ac
     <td align="center" width="25%"><img src="docs/screenshots/blocked.webp" alt="A blocked agent asking for approval" width="200"><br><sub><b>Needs you</b>: the question docked over the composer, answered with a thumb</sub></td>
   </tr>
   <tr>
-    <td align="center"><img src="docs/screenshots/accept.webp" alt="A task's Accept card" width="200"><br><sub><b>Accept</b>: summary, commits, checks and proof before it merges</sub></td>
+    <td align="center"><img src="docs/screenshots/task.webp" alt="A task ready to accept" width="200"><br><sub><b>A task</b>: its chat, files, changes, PR and browser as tabs, Accept on top</sub></td>
     <td align="center"><img src="docs/screenshots/pull-request.webp" alt="A task's pull request" width="200"><br><sub><b>Pull request</b>: checks, approve or request changes from the phone</sub></td>
     <td align="center"><img src="docs/screenshots/browser.webp" alt="A task's live browser" width="200"><br><sub><b>Browser</b>: what the task's agent sees in its browser, live</sub></td>
     <td align="center"><img src="docs/screenshots/doc.webp" alt="A herdr.doc investigation" width="200"><br><sub><b>Docs</b>: the agents' herdr.doc write-ups, drawn natively</sub></td>
@@ -23,7 +23,7 @@ A native Android client for [herdr](https://herdr.dev) hosts: see your agents ac
   </tr>
 </table>
 
-The screenshots are the [screen previews](#screen-previews): the app's own screens rendered against a fake machine with made-up projects (`./gradlew -p tools/ui-preview render -Ponly=agents-v2,chat-tab,chat,chat-blocked,task-v2-accept,task-v2-pr,task-v2-browser,doc,machines,machine,terminal`, the tall `agents-v2` and `doc` cut to their first screen and `task-v2-accept` to its last, converted with `magick in.png -strip -resize 540x -quality 82 out.webp`). The look (colours, type, icons, spacing, components) is described in [`docs/DESIGN.md`](docs/DESIGN.md); the theme and art are the Herdr desktop's workbench (Apache 2.0), and the fonts and icons are credited in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
+The screenshots are the [screen previews](#screen-previews): the app's own screens rendered against a fake machine with made-up projects. `./gradlew -p tools/ui-preview render -Ponly=agents-v2,chat-tab,chat,chat-blocked,task-v2-ready,task-v2-pr,task-v2-browser,doc,machines,machine,terminal`, then each shot `magick <scene>.png -strip -resize 540x -quality 82 <name>.webp`, the tall `agents-v2`, `agents-v2-light` and `doc` cut to their first screen first (`-gravity north -crop 824x1784+0+0 +repage` before `-strip`).
 
 ## Getting the app
 
@@ -343,7 +343,7 @@ UI changes are checked, and shown in review, with screen previews instead of an 
 
 ```sh
 ./gradlew -p tools/ui-preview render                     # every scene → tools/ui-preview/build/shots/*.png
-./gradlew -p tools/ui-preview render -Ponly=board,chat   # some of them
+./gradlew -p tools/ui-preview render -Ponly=agents,chat  # some of them
 ```
 
 It needs JDK 17, no Android SDK, and takes about half an hour for all 343 scenes (the Tasks list and what waits on it, the spaces drawer, search, start work, the Chat tab and a space's tab menu, the Assistants' chats with their plans, news lines, Accept cards, reactions, replies, find and voice, artifacts, docs and a document, a task's Chat, Files, Changes, Pull request (its review, approving, replying, a refusal) and Browser tabs, simple-herdr-projects' board and tasks, machines and adding one by its code or by hand, a machine, its health, usage and agent logins, agent chats (turns, held messages, `/` and `@`, the model pill, voice messages, dictation, pictures), the blocked agent's question, an agent's activity timeline, floating chats, the brief, the code screens, the terminal (its menu, a password, sticky keys, the key bar's editor, selected text), settings with notifications, Autopilot and the fingerprint, changing the app from the phone, machines on the Herdr desktop's herdr-core, the owner's real data's shape (`real-*`), TalkBack's actions, and the wide window). CI renders them too, a quarter of them on each of four runners, and uploads them as the `herdr-screens-<run>` artifact. See [`tools/ui-preview/README.md`](tools/ui-preview/README.md) for how it works and how to add a scene, and [`AGENTS.md`](AGENTS.md) for how changes are reviewed.

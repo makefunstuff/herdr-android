@@ -49,7 +49,7 @@ spaces, Chat · Tasks · Artifacts), README "Needs you, first".
 | F12 "Not connected yet" on launch | **Done**, HERD-9: *Connecting to N machines* |
 | F13 herdr-core chat is its screen | **Done**, HERD-14, and HERD-30 for the right conversation |
 | F14 herdr-core terminal without Find | **Done**, HERD-15 |
-| F15 a space's dot vs. its row | HERD-9's layout; not checked again here |
+| F15 a space's dot vs. its row | **Done**, HERD-9: on a machine's screen the tab that needs you (or works, or finished) carries its own light on its chip |
 | F16 "Working" three times | **Done**, HERD-9: one working line |
 | F17 placeholders differ | **Done**, HERD-9: "Message <agent>", "Message the Assistant" |
 | A1 task alerts | **Done**, HERD-21 |
