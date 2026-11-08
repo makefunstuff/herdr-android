@@ -111,7 +111,7 @@ object Demo {
             .withSpace(com.makefunstuff.herdr.core.push.Notify.key(DEVBOX, "herdr-android"), com.makefunstuff.herdr.core.push.Notify.All),
     )
 
-    /** Notifications on: devbox and gpu-box send, ci-runner is left out, mac-mini has no python3. */
+    /** Notifications on: devbox and gpu-box send, ci-runner is left out, mac-mini has no Python 3. */
     fun push(): PushState {
         val endpoint = "https://ntfy.sh/upDemoTopic?up=1"
         return PushState(
@@ -120,7 +120,7 @@ object Demo {
                 DEVBOX to MachinePush(key = "demo", sentTo = endpoint, version = "1"),
                 GPU to MachinePush(key = "demo", sentTo = endpoint, version = "1", note = "it stops when you log out (loginctl enable-linger keeps it running)"),
                 CI to MachinePush(off = true),
-                MINI to MachinePush(key = "demo", problem = "herdr-push needs python3 on mac-mini, and it isn't installed"),
+                MINI to MachinePush(key = "demo", problem = "herdr-push needs Python 3 on mac-mini, and it isn't installed"),
             ),
         )
     }
