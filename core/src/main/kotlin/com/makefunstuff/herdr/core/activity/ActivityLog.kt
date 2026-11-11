@@ -143,6 +143,7 @@ abstract class ActivityLog(private val prefix: String = "") {
             "claude" -> ClaudeActivity(prefix)
             "codex" -> CodexActivity(prefix)
             "pi", "omp" -> PiActivity(prefix)
+            "qwen" -> QwenActivity(prefix)
             else -> null
         }
 
@@ -583,5 +584,56 @@ class PiActivity(prefix: String = "") : ActivityLog(prefix) {
             else -> ToolSummary.detail(args)
         }
         return Step(id, kind, title, at, at, StepState.Running, detail = detail, path = path, tool = name)
+    }
+}
+
+/** Qwen Code's chat file (`~/.qwen/projects/<cwd>/chats/<session>.jsonl`). */
+class QwenActivity(prefix: String = "") : ActivityLog(prefix) {
+    override fun read(o: JsonObject) {
+        val at = time(o.str("timestamp"))
+        o.str("cwd")?.takeIf { it.isNotBlank() }?.let { cwd = it }
+        when (o.str("type")) {
+            "user" -> {
+                val parts = o.obj("message")?.arr("parts") ?: return
+                val text = parts.filterIsInstance<JsonObject>().mapNotNull { it.str("text") }.joinToString("\n").trim()
+                if (text.isNotEmpty() && !isInjected(text)) turn(o.str("uuid") ?: return, text, at)
+            }
+            "assistant" -> {
+                val id = o.str("uuid") ?: return
+                o.obj("message")?.arr("parts")?.filterIsInstance<JsonObject>()?.forEachIndexed { i, block ->
+                    val call = block.obj("functionCall")
+                    if (call != null) {
+                        val callId = call.str("id") ?: return@forEachIndexed
+                        step(call(callId, call.str("name").orEmpty(), call.obj("args") ?: JsonObject(emptyMap()), at))
+                    } else if (!block.bool("thought")) {
+                        block.str("text")?.trim()?.takeIf { it.isNotEmpty() }
+                            ?.let { step(Step("$id/$i", StepKind.Message, firstLine(it), at, at, detail = it)) }
+                    }
+                }
+            }
+            "tool_result" -> {
+                val result = o.obj("toolCallResult") ?: return
+                val callId = result.str("callId") ?: return
+                val failed = result.str("status") == "error" || result.str("executionStatus") == "error"
+                val output = o.obj("message")?.arr("parts")?.filterIsInstance<JsonObject>()
+                    ?.firstNotNullOfOrNull { it.obj("functionResponse") }?.obj("response")?.str("output")?.ifBlank { null }
+                finish(callId, at, failed, output = output)
+            }
+            "system" -> if (o.str("subtype") == "chat_compression") notice(o.str("uuid") ?: return, "Conversation compacted", at)
+        }
+        touch(at)
+    }
+
+    private fun call(id: String, name: String, args: JsonObject, at: Long): Step {
+        val command = args.str("command") ?: args.str("cmd")
+        val kind = Tools.kind(name, command)
+        val path = (args.str("path") ?: args.str("file_path") ?: args.str("file"))?.substringBefore(':')?.let(::short)
+        val title = when {
+            command != null -> Tools.commandTitle(command)
+            kind == StepKind.Read && name == "read" && path != null -> path
+            kind == StepKind.Edit && path != null -> path
+            else -> ToolSummary.of(name, args).ifEmpty { name }
+        }
+        return Step(id, kind, title, at, at, StepState.Running, detail = command ?: ToolSummary.detail(args), path = path, tool = name)
     }
 }

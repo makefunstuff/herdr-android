@@ -9,6 +9,7 @@ import com.makefunstuff.herdr.core.chat.ChatItem
 import com.makefunstuff.herdr.core.chat.ClaudeTranscript
 import com.makefunstuff.herdr.core.chat.CodexTranscript
 import com.makefunstuff.herdr.core.chat.PiTranscript
+import com.makefunstuff.herdr.core.chat.QwenTranscript
 import com.makefunstuff.herdr.core.chat.ToolState
 import com.makefunstuff.herdr.core.chat.TranscriptFollower
 import kotlinx.coroutines.cancel
@@ -344,6 +345,35 @@ class TranscriptTest {
         assertEquals("/model opus", (items[3] as ChatItem.User).text)
         assertIs<ChatItem.Notice>(items[4])
         assertEquals(5, items.size)
+    }
+
+    @Test
+    fun qwen() {
+        val t = QwenTranscript()
+        listOf(
+            """{"type":"user","uuid":"u1","cwd":"/home/demo/app","message":{"role":"user","parts":[{"text":"shrink the bundle"}]}}""",
+            """{"type":"assistant","uuid":"a1","message":{"role":"assistant","parts":[{"text":"Checking the build file.","thought":true},{"text":"Reading the build file."},{"functionCall":{"id":"call_1","name":"read_file","args":{"file_path":"/home/demo/app/vite.config.ts"}}}]}}""",
+            """{"type":"tool_result","uuid":"r1","toolCallResult":{"callId":"call_1","status":"success","executionStatus":"success"},"message":{"role":"tool","parts":[{"functionResponse":{"id":"call_1","name":"read_file","response":{"output":"build: { minify: false }"}}}]}}""",
+            """{"type":"assistant","uuid":"a2","message":{"role":"assistant","parts":[{"text":"Minify is off; turning it on halves the bundle."}]}}""",
+            """{"type":"system","uuid":"s1","subtype":"ui_telemetry","systemPayload":{"rows":20}}""",
+            """{"type":"system","uuid":"s2","subtype":"chat_compression","systemPayload":{}}""",
+            """{"type":"system","uuid":"s3","subtype":"slash_command","systemPayload":{"phase":"invocation","rawCommand":"/compact"}}""",
+            """{"type":"user","uuid":"u2","message":{"role":"user","parts":[{"text":"<system-reminder>cache</system-reminder>"}]}}""",
+            "not json",
+        ).forEach(t::feed)
+        val items = t.items()
+        assertEquals("shrink the bundle", (items[0] as ChatItem.User).text)
+        assertEquals("Checking the build file.", (items[1] as ChatItem.Reasoning).text)
+        assertEquals("Reading the build file.", (items[2] as ChatItem.Agent).text)
+        val tool = items[3] as ChatItem.Tool
+        assertEquals("read_file", tool.name)
+        assertEquals("/home/demo/app/vite.config.ts", tool.summary)
+        assertEquals(ToolState.Done, tool.state)
+        assertTrue(tool.output!!.contains("minify"))
+        assertEquals("Minify is off; turning it on halves the bundle.", (items[4] as ChatItem.Agent).text)
+        assertIs<ChatItem.Notice>(items[5])
+        assertEquals("/compact", (items[6] as ChatItem.User).text)
+        assertEquals(7, items.size)
     }
 
     @Test
