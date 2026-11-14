@@ -13,7 +13,7 @@ import java.io.IOException
  */
 object HerdrUsage {
     /** The script's `# version:` line; the app copies its own over one that says otherwise. */
-    const val VERSION = "1"
+    const val VERSION = "2"
 
     const val DIR = "\$HOME/.local/share/herdr-usage"
     const val FILE = "$DIR/herdr-usage"

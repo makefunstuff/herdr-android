@@ -407,8 +407,8 @@ class UsageTest {
             val t = System.currentTimeMillis() / 1000
             fun write(path: String, text: String) = File(dir, path).apply { parentFile.mkdirs(); writeText(text) }
             write(".claude/.credentials.json", """{"claudeAiOauth":{"accessToken":"tok","expiresAt":${(t + 86400) * 1000},"subscriptionType":"max"}}""")
-            fun limits(vararg args: String): UsageReport {
-                val pb = ProcessBuilder(listOf("python3", usageScript.path, "limits") + args).directory(dir)
+            fun usage(vararg args: String): UsageReport {
+                val pb = ProcessBuilder(listOf("python3", usageScript.path) + args).directory(dir)
                 pb.environment().putAll(
                     mapOf(
                         "HOME" to dir.path, "XDG_CACHE_HOME" to File(dir, "cache").path, "XDG_DATA_HOME" to File(dir, "data").path,
@@ -424,6 +424,7 @@ class UsageTest {
                 assertTrue(p.waitFor(90, TimeUnit.SECONDS))
                 return UsageReader.parse(out)
             }
+            fun limits(vararg args: String) = usage("limits", *args)
             fun cache(at: Long, reading: String) = write("cache/herdr-usage/live.json", """{"claude":{"at":$at,"p":$reading}}""")
             val expired = """{"id":"claude","name":"Claude Code","kind":"subscription","error":"Claude Code's login has expired","readAt":%d}"""
 
@@ -464,6 +465,12 @@ class UsageTest {
             assertTrue(kept.stale)
             assertEquals(listOf(11.0), kept.limits.map { it.percent })
             assertTrue(kept.readAt <= t + 60, "read at ${kept.readAt}, now $t")
+            // But not an error from then (a login "expired" by the fast clock): it says why it can't be read now.
+            cache(t + 6500, expired.format(t + 6500))
+            val unread = limits().providers.single { it.id == "claude" }
+            assertFalse(unread.error.contains("expired"), unread.error)
+            assertTrue(unread.error.isNotEmpty())
+            assertFalse(File(dir, "cache/herdr-usage/live.json").readText().contains("expired"))
 
             // Codex's limits as its sessions wrote them stand in for its usage API, but not ones stamped in the future.
             val jwt = "x." + Base64.getUrlEncoder().withoutPadding().encodeToString("""{"exp":${t + 86400}}""".toByteArray()) + ".y"
@@ -480,6 +487,19 @@ class UsageTest {
             val ahead = limits().providers.single { it.id == "codex" }
             assertTrue(ahead.limits.isEmpty(), "${ahead.limits}")
             assertTrue(ahead.error.isNotEmpty())
+
+            // Reading the sessions: one written while the clock ran fast doesn't outrank the one written since.
+            fun session(name: String, at: Long, percent: Double) = write(
+                ".codex/sessions/2026/11/14/rollout-$name.jsonl",
+                """{"timestamp":"${Instant.ofEpochSecond(at)}","type":"event_msg","payload":{"type":"token_count","rate_limits":{"primary":{"used_percent":$percent,"window_minutes":300,"resets_at":${t + 3600}}}}}""" + "\n",
+            )
+            session("fast-clock", t + 6500, 90.0)
+            session("since", t - 600, 40.0)
+            File(dir, "cache/herdr-usage").deleteRecursively()
+            val read = usage("read").providers.single { it.id == "codex" }
+            assertEquals(listOf(40.0), read.limits.map { it.percent })
+            assertEquals(t - 600, read.readAt)
+            assertTrue(File(dir, "cache/herdr-usage/codex-limits.json").readText().startsWith("[${t - 600}"))
         } finally {
             server.stop(0)
             dir.deleteRecursively()
