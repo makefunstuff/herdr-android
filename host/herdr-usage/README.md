@@ -45,7 +45,7 @@ The days are the machine's.
 
 ## The cache
 
-`~/.cache/herdr-usage/` (`$XDG_CACHE_HOME`): `live.json` keeps each provider's answer for 4 minutes (`HERDR_USAGE_TTL`), so the app, its widget and herdr-push don't ask a usage API more than that (`--fresh` asks again, but not twice within 20 seconds); a provider that can't be asked keeps its last good answer, marked older. `scan.json` keeps how far each session file was read and what it added up to, so a look reads only what was written since (the first look on a busy machine takes a few seconds; one pass stops after 40 seconds, `HERDR_USAGE_BUDGET`, and the next goes on). `last.json` is the last full answer. All of it is mode 600 and holds no key.
+`~/.cache/herdr-usage/` (`$XDG_CACHE_HOME`): `live.json` keeps each provider's answer for 4 minutes (`HERDR_USAGE_TTL`), so the app, its widget and herdr-push don't ask a usage API more than that (`--fresh` asks again, but not twice within 20 seconds); a provider that can't be asked keeps its last good answer, marked older. An answer stamped more than a minute ahead of the clock (the clock ran fast when it was written, and was set right since) is never taken as fresh: the provider is asked again, and Codex's session limits stamped so are left out. `scan.json` keeps how far each session file was read and what it added up to, so a look reads only what was written since (the first look on a busy machine takes a few seconds; one pass stops after 40 seconds, `HERDR_USAGE_BUDGET`, and the next goes on). `last.json` is the last full answer. All of it is mode 600 and holds no key.
 
 The phone keeps the last answer per machine too, so the usage page, the top bar's glance and the agent choices show something the moment they open.
 
