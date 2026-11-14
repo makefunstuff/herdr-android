@@ -491,7 +491,7 @@ class UsageTest {
             // Reading the sessions: one written while the clock ran fast doesn't outrank the one written since.
             fun session(name: String, at: Long, percent: Double) = write(
                 ".codex/sessions/2026/11/14/rollout-$name.jsonl",
-                """{"timestamp":"${Instant.ofEpochSecond(at)}","type":"event_msg","payload":{"type":"token_count","rate_limits":{"primary":{"used_percent":$percent,"window_minutes":300,"resets_at":${t + 3600}}}}}""" + "\n",
+                """{"timestamp":"${Instant.ofEpochSecond(at)}","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":1000,"cached_input_tokens":0,"output_tokens":200,"total_tokens":1200}},"rate_limits":{"primary":{"used_percent":$percent,"window_minutes":300,"resets_at":${t + 3600}}}}}""" + "\n",
             )
             session("fast-clock", t + 6500, 90.0)
             session("since", t - 600, 40.0)
@@ -500,6 +500,12 @@ class UsageTest {
             assertEquals(listOf(40.0), read.limits.map { it.percent })
             assertEquals(t - 600, read.readAt)
             assertTrue(File(dir, "cache/herdr-usage/codex-limits.json").readText().startsWith("[${t - 600}"))
+            // With only the fast clock's session left, its limits aren't kept on disk.
+            File(dir, ".codex/sessions/2026/11/14/rollout-since.jsonl").delete()
+            File(dir, "cache/herdr-usage/live.json").delete()
+            write("cache/herdr-usage/codex-limits.json", """[${t + 6500},{"primary":{"used_percent":90.0,"window_minutes":300}}]""")
+            assertTrue(usage("read").providers.single { it.id == "codex" }.limits.isEmpty())
+            assertFalse(File(dir, "cache/herdr-usage/codex-limits.json").exists())
         } finally {
             server.stop(0)
             dir.deleteRecursively()

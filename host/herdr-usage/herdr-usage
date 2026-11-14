@@ -510,7 +510,7 @@ class Scanner:
         jobs.sort(key=lambda j: -os.path.getmtime(j[0]) if os.path.exists(j[0]) else 0)
         keep = {}
         tally = Tally({})
-        t = now()
+        clock = now()
         for path, size, kind in jobs:
             c = self.file(path, size, kind)
             keep[path] = c
@@ -522,7 +522,7 @@ class Scanner:
                     t[2] += r[2]
             lim = (c.get("state") or {}).get("limits")
             # A session stamped in the future (the clock ran fast) doesn't outrank the ones written since.
-            if kind == "codex" and lim and not in_future(lim[0], t) and (self.codex_limits is None or lim[0] > self.codex_limits[0]):
+            if kind == "codex" and lim and not in_future(lim[0], clock) and (self.codex_limits is None or lim[0] > self.codex_limits[0]):
                 self.codex_limits = lim
         self.opencode(tally)
         # Files not seen any more (older than the week, or gone) leave the cache.
@@ -1016,8 +1016,13 @@ def scan(full=True):
     tally = s.run()
     try:
         write_json(path, cache)
+        limits_path = os.path.join(CACHE, "codex-limits.json")
         if s.codex_limits:
-            write_json(os.path.join(CACHE, "codex-limits.json"), s.codex_limits)
+            write_json(limits_path, s.codex_limits)
+        else:
+            old = read_json(limits_path)
+            if isinstance(old, list) and old and in_future(old[0], now()):
+                os.remove(limits_path)
     except OSError:
         pass
     return tally, s.partial
