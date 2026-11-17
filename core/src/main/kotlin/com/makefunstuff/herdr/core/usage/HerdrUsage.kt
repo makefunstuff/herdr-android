@@ -9,8 +9,9 @@ import java.io.IOException
 
 /**
  * herdr-usage (host/herdr-usage) on a machine: the app copies it there over SSH as it first reads the
- * machine's usage (and again when it carries a newer one; never over a newer one), and runs it there, so each provider is asked
- * with the keys and logins already on that machine; none of them comes to the phone.
+ * machine's usage (and again when it carries a newer one; never over a newer one), and runs it there,
+ * so each provider is asked with the keys and logins already on that machine; none of them comes to
+ * the phone.
  */
 object HerdrUsage {
     /** The script's `# version:` line; the app copies its own over an older one, never a newer one ([HostScript]). */

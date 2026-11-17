@@ -14,9 +14,11 @@ object HostScript {
      */
     fun older(machine: String?, app: String): Boolean {
         val have = machine?.trim()?.toLongOrNull() ?: return true
-        val want = app.trim().toLongOrNull() ?: return false
-        return have < want
+        return have < number(app)
     }
+
+    /** The app's own version, which must be a number (a bundled script without one is a build mistake). */
+    private fun number(app: String): Long = requireNotNull(app.trim().toLongOrNull()) { "A helper script's version must be a number, not \"$app\"" }
 
     /**
      * Writes stdin to [file] in [dir] in one step, unless the file there says (in its `# version: N`
@@ -24,7 +26,7 @@ object HostScript {
      * Either way it exits 0. The check is on the machine, so an install never downgrades, whoever asks.
      */
     fun installCommand(dir: String, file: String, version: String): String {
-        val n = version.trim().toLongOrNull() ?: 0L
+        val n = number(version)
         return "sh -c " + quote(
             "mkdir -p \"$dir\" || exit 1; " +
                 "v=\$(head -n 5 \"$file\" 2>/dev/null | sed -n 's/^# version: *\\([0-9][0-9]*\\) *\$/\\1/p' | head -n 1); " +

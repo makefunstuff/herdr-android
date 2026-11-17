@@ -1,5 +1,7 @@
 package com.makefunstuff.herdr.core
 
+import com.makefunstuff.herdr.core.change.HerdrAppBuild
+import com.makefunstuff.herdr.core.logins.HerdrLogins
 import com.makefunstuff.herdr.core.push.HerdrPush
 import com.makefunstuff.herdr.core.ssh.CommandResult
 import com.makefunstuff.herdr.core.ssh.HostScript
@@ -10,6 +12,7 @@ import java.nio.file.Files
 import java.util.concurrent.TimeUnit
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -93,54 +96,63 @@ class HostScriptTest {
         assertEquals(1, m.copies)
     }
 
-    /** The install command itself, run by sh in a fresh HOME: it never writes over a newer script. */
+    /** Each helper's install command, run by sh in a fresh HOME: it never writes over a newer script. */
     @Test
     fun installCommandKeepsANewerScript() {
-        val home = Files.createTempDirectory("host-script").toFile()
-        try {
-            val file = File(home, ".local/share/herdr-usage/herdr-usage")
-            fun install(): CommandResult {
-                val pb = ProcessBuilder("sh", "-c", HerdrUsage.installCommand()).directory(home)
-                pb.environment()["HOME"] = home.path
-                val p = pb.start()
-                p.outputStream.use { it.write(HerdrUsage.script.toByteArray()) }
-                val out = p.inputStream.readBytes().toString(Charsets.UTF_8)
-                val err = p.errorStream.readBytes().toString(Charsets.UTF_8)
-                assertTrue(p.waitFor(30, TimeUnit.SECONDS))
-                return CommandResult(p.exitValue(), out, err)
+        data class Helper(val path: String, val version: String, val command: String, val script: String)
+        val helpers = listOf(
+            Helper(".local/share/herdr-usage/herdr-usage", HerdrUsage.VERSION, HerdrUsage.installCommand(), HerdrUsage.script),
+            Helper(".local/share/herdr-push/herdr-push", HerdrPush.version, HerdrPush.installCommand(), HerdrPush.script),
+            Helper(".local/share/herdr-logins/herdr-logins", HerdrLogins.VERSION, HerdrLogins.installCommand(), HerdrLogins.script),
+            Helper(".local/share/herdr-android/herdr-app-build", HerdrAppBuild.VERSION, HerdrAppBuild.installCommand(), HerdrAppBuild.script),
+        )
+        for (h in helpers) {
+            val home = Files.createTempDirectory("host-script").toFile()
+            try {
+                val file = File(home, h.path)
+                fun install(): CommandResult {
+                    val pb = ProcessBuilder("sh", "-c", h.command).directory(home)
+                    pb.environment()["HOME"] = home.path
+                    val p = pb.start()
+                    p.outputStream.use { it.write(h.script.toByteArray()) }
+                    val out = p.inputStream.readBytes().toString(Charsets.UTF_8)
+                    val err = p.errorStream.readBytes().toString(Charsets.UTF_8)
+                    assertTrue(p.waitFor(30, TimeUnit.SECONDS))
+                    return CommandResult(p.exitValue(), out, err)
+                }
+                fun script(v: String?) = "#!/usr/bin/env python3\n" + (v?.let { "# version: $it\n" } ?: "") + "print('mine')\n"
+
+                // None there: copied.
+                assertEquals(0, install().exitStatus, h.path)
+                assertEquals(h.script, file.readText(), h.path)
+
+                // Older, or one without a version line: replaced.
+                for (old in listOf((h.version.toInt() - 1).toString(), null)) {
+                    file.writeText(script(old))
+                    assertEquals(0, install().exitStatus, h.path)
+                    assertEquals(h.script, file.readText(), h.path)
+                }
+
+                // The same version: written again (harmless), so the file is the app's.
+                assertEquals(0, install().exitStatus, h.path)
+                assertEquals(h.script, file.readText(), h.path)
+
+                // Newer, compared as a number (e.g. "10" over "2", though "10" < "2" as text): kept as it is.
+                val newer = script("${h.version.toInt() + 8}")
+                file.writeText(newer)
+                val r = install()
+                assertEquals(0, r.exitStatus, r.stderr)
+                assertEquals(newer, file.readText(), h.path)
+                assertFalse(File(file.path + ".new").exists(), h.path)
+            } finally {
+                home.deleteRecursively()
             }
-            fun script(v: String?) = "#!/usr/bin/env python3\n" + (v?.let { "# version: $it\n" } ?: "") + "print('mine')\n"
-
-            // None there: copied.
-            assertEquals(0, install().exitStatus)
-            assertEquals(HerdrUsage.script, file.readText())
-
-            // Older, or one without a version line: replaced.
-            for (old in listOf((HerdrUsage.VERSION.toInt() - 1).toString(), null)) {
-                file.writeText(script(old))
-                assertEquals(0, install().exitStatus)
-                assertEquals(HerdrUsage.script, file.readText())
-            }
-
-            // Newer (compared as a number: 10 is newer than 2, though "10" < "2" as text): kept as it is.
-            val newer = script("${HerdrUsage.VERSION.toInt() + 8}")
-            file.writeText(newer)
-            val r = install()
-            assertEquals(0, r.exitStatus, r.stderr)
-            assertEquals(newer, file.readText())
-            assertFalse(File(file.path + ".new").exists())
-        } finally {
-            home.deleteRecursively()
         }
     }
 
     @Test
-    fun everyHelperInstallsWithTheGuard() {
-        // herdr-push is set up again for each change of subscription; it too keeps a newer one.
-        assertTrue("kept version" in HerdrPush.installCommand())
-        assertTrue("-gt ${HerdrPush.version}" in HerdrPush.installCommand())
-        assertTrue("-gt ${HerdrUsage.VERSION}" in HerdrUsage.installCommand())
-        assertTrue("-gt ${com.makefunstuff.herdr.core.logins.HerdrLogins.VERSION}" in com.makefunstuff.herdr.core.logins.HerdrLogins.installCommand())
-        assertTrue("-gt ${com.makefunstuff.herdr.core.change.HerdrAppBuild.VERSION}" in com.makefunstuff.herdr.core.change.HerdrAppBuild.installCommand())
+    fun theAppsOwnVersionMustBeANumber() {
+        assertFailsWith<IllegalArgumentException> { HostScript.older("1", "two") }
+        assertFailsWith<IllegalArgumentException> { HostScript.installCommand("d", "f", "") }
     }
 }
