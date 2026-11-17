@@ -23,7 +23,9 @@ object HostScript {
     /**
      * Writes stdin to [file] in [dir] in one step, unless the file there says (in its `# version: N`
      * line near the top) it is newer than [version]: then stdin is read and dropped and the file stays.
-     * Either way it exits 0. The check is on the machine, so an install never downgrades, whoever asks.
+     * Either way it exits 0 (keeping a newer one is a successful install; it then prints `kept version N`,
+     * which only a person reading by hand needs). The check is on the machine, so an install never
+     * downgrades, whoever asks.
      */
     fun installCommand(dir: String, file: String, version: String): String {
         val n = number(version)
