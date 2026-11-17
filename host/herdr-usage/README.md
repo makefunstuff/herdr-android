@@ -1,6 +1,6 @@
 # herdr-usage
 
-What the AI providers a machine uses have left, read on that machine. Herdr for Android copies it there over SSH (as it first opens the machine's usage, and beside [herdr-push](../herdr-push/README.md)) and runs it, so each provider is asked with the logins and keys already on the machine: **no key or token ever comes to the phone**, only the readings. It changes nothing: it renews no login and writes only its own cache.
+What the AI providers a machine uses have left, read on that machine. Herdr for Android copies it there over SSH (as it first opens the machine's usage, and beside [herdr-push](../herdr-push/README.md); again when it carries a newer version, never over a newer one) and runs it, so each provider is asked with the logins and keys already on the machine: **no key or token ever comes to the phone**, only the readings. It changes nothing: it renews no login and writes only its own cache.
 
 It is one Python 3 file (3.6 or newer), standard library only.
 
