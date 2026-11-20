@@ -85,6 +85,7 @@ abstract class Transcript {
             "claude" -> ClaudeTranscript()
             "codex" -> CodexTranscript()
             "pi", "omp" -> PiTranscript()
+            "qwen" -> QwenTranscript()
             else -> null
         }
 
@@ -443,6 +444,65 @@ class PiTranscript : Transcript() {
             )
         }
     }
+}
+
+/**
+ * Qwen Code's chat file (`~/.qwen/projects/<cwd>/chats/<session>.jsonl`). Every record carries the
+ * session's bookkeeping (`uuid`, `cwd`, `timestamp`); most of them are telemetry snapshots the chat
+ * shows nothing of.
+ */
+class QwenTranscript : Transcript() {
+    override fun read(obj: JsonObject) {
+        when (obj.str("type")) {
+            "user" -> user(obj.str("uuid") ?: return, obj.obj("message") ?: return)
+            "assistant" -> assistant(obj.str("uuid") ?: return, obj.obj("message") ?: return)
+            "tool_result" -> {
+                val result = obj.obj("toolCallResult") ?: return
+                finishTool(
+                    result.str("callId") ?: return,
+                    response(obj.obj("message")),
+                    result.str("status") == "error" || result.str("executionStatus") == "error",
+                )
+            }
+            "system" -> when (obj.str("subtype")) {
+                "chat_compression" -> put(ChatItem.Notice(obj.str("uuid") ?: return, "Conversation compacted"))
+                "slash_command" -> obj.obj("systemPayload")?.str("rawCommand")?.takeIf { it.isNotBlank() }
+                    ?.let { put(ChatItem.User(obj.str("uuid") ?: return, it)) }
+            }
+        }
+    }
+
+    private fun user(uuid: String, message: JsonObject) {
+        val parts = message.arr("parts") ?: return
+        val texts = parts.filterIsInstance<JsonObject>().mapNotNull { it.str("text") }
+        val images = parts.count { (it as? JsonObject)?.obj("inlineData") != null }
+        val text = texts.joinToString("\n").trim()
+        if ((text.isNotEmpty() || images > 0) && !isInjected(text)) put(ChatItem.User(uuid, text, images))
+    }
+
+    private fun assistant(uuid: String, message: JsonObject) {
+        val parts = message.arr("parts") ?: return
+        parts.filterIsInstance<JsonObject>().forEachIndexed { i, block ->
+            val call = block.obj("functionCall")
+            when {
+                call != null -> {
+                    val id = call.str("id") ?: return@forEachIndexed
+                    val name = call.str("name").orEmpty()
+                    val args = call.obj("args") ?: JsonObject(emptyMap())
+                    put(ChatItem.Tool(id, name, ToolSummary.of(name, args), ToolSummary.detail(args), diffs = EditCalls.of(name, args).orEmpty()))
+                }
+                // Qwen keeps the model's reasoning in a `thought` part, in front of its words.
+                block.bool("thought") -> thought("$uuid/$i", block.str("text"))
+                else -> block.str("text")?.trim()?.takeIf { it.isNotEmpty() }?.let { put(ChatItem.Agent("$uuid/$i", it)) }
+            }
+        }
+    }
+
+    /** A tool's answer, from the `functionResponse` part of the record's message. */
+    private fun response(message: JsonObject?): String? =
+        message?.arr("parts")?.filterIsInstance<JsonObject>()
+            ?.firstNotNullOfOrNull { it.obj("functionResponse") }
+            ?.let { fr -> fr.obj("response")?.str("output")?.ifBlank { null } ?: textOf(fr["response"]).ifBlank { null } }
 }
 
 /** Picks the one line worth showing for a tool call. */

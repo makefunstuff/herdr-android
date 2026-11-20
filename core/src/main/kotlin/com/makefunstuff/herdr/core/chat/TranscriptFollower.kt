@@ -68,6 +68,13 @@ object TranscriptFollower {
                 [ -n "${'$'}id" ] || continue
                 for c in "${'$'}d"/projects/*/"${'$'}id".jsonl; do [ -f "${'$'}c" ] && f="${'$'}c" && break; done
                 break ;;
+              qwen)
+                d="${'$'}{QWEN_HOME:-${'$'}HOME/.qwen}"
+                [ -f "${'$'}d/sessions/${'$'}p.json" ] || continue
+                id=${'$'}(sed -n 's/.*"sessionId": *"\([0-9a-fA-F-]*\)".*/\1/p' "${'$'}d/sessions/${'$'}p.json" | head -n 1)
+                [ -n "${'$'}id" ] || continue
+                for c in "${'$'}d"/projects/*/chats/"${'$'}id".jsonl; do [ -f "${'$'}c" ] && f="${'$'}c" && break; done
+                break ;;
               codex)
                 if [ -d "/proc/${'$'}p/fd" ]; then
                   f=${'$'}(for x in /proc/"${'$'}p"/fd/*; do readlink "${'$'}x"; done 2>/dev/null | grep '/rollout-.*\.jsonl${'$'}' | head -n 1)
@@ -83,6 +90,7 @@ object TranscriptFollower {
             codex) f=${'$'}(find "${'$'}{CODEX_HOME:-${'$'}HOME/.codex}/sessions" -name "*${'$'}value.jsonl" 2>/dev/null | head -n 1) ;;
             pi) for c in "${'$'}HOME"/.pi/agent/sessions/*/*_"${'$'}value".jsonl; do [ -f "${'$'}c" ] && f="${'$'}c" && break; done ;;
             omp) for c in "${'$'}HOME"/.omp/agent/sessions/*/*_"${'$'}value".jsonl; do [ -f "${'$'}c" ] && f="${'$'}c" && break; done ;;
+            qwen) for c in "${'$'}{QWEN_HOME:-${'$'}HOME/.qwen}"/projects/*/chats/"${'$'}value".jsonl; do [ -f "${'$'}c" ] && f="${'$'}c" && break; done ;;
           esac
         fi
     """.trimIndent()
